@@ -1,9 +1,11 @@
 # Hybrid analysis: agreed direction and implementation boundaries
 
-Status after v1.5.0: local DICOM, 2D, MPR, volume rendering and bounded import of
+Status after v1.6.0: local DICOM, 2D, MPR, volume rendering and bounded import of
 precomputed NIfTI-1 label masks are implemented. Labels overlay MPR after strict
 physical-grid checks; no automatic segmentation model or 3D mask surface is
-connected. Pathology detection, external visual analysis and clinical synthesis
+connected. Full selected-series NIfTI export and checksum-bound result import are
+implemented ([handoff contract](ANALYSIS_HANDOFF.md)); checksums are not signatures.
+Pathology detection, external visual analysis and clinical synthesis
 are not connected. The disabled analysis controls must stay disabled until a real
 provider is implemented and its results can be traced to source evidence.
 

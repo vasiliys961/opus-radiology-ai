@@ -9,6 +9,8 @@ import { applyVolumeDisplay, buildVolumeTransfer, getVolumeSampling, getVolumeSc
 import { createAsyncViewportToggle } from "../lib/async-viewport";
 import SegmentationControls, { type MaskDisplay } from "./SegmentationControls";
 import { assertMaskMatchesSource, renderMaskPlane, sourceGeometry, type LabelMask, type Point3 } from "../lib/segmentation-mask";
+import { prepareAnalysisPackage, type AnalysisPackage } from "../lib/analysis-package";
+import type { DicomSeries } from "../lib/dicom-series";
 
 const PLANE_NAMES = ["axial", "coronal", "sagittal"] as const;
 type Plane = typeof PLANE_NAMES[number];
@@ -29,6 +31,7 @@ type Runtime = {
   importMask: (mask: LabelMask, display: MaskDisplay) => void;
   setMaskDisplay: (display: MaskDisplay) => void;
   clearMask: () => void;
+  preparePackage: (signal: AbortSignal) => Promise<AnalysisPackage>;
 };
 
 const emptyReadouts = (): Readouts => ({ axial:{index:0,total:1}, coronal:{index:0,total:1}, sagittal:{index:0,total:1} });
@@ -40,7 +43,7 @@ const captions: Record<Plane,string> = { axial:"АКСИАЛЬНАЯ", coronal:"
  * All input stays in the browser and is gated by checkMprEligibility upstream.
  * This is NOT a calibrated diagnostic viewer or a measurement instrument.
  */
-export default function CornerstoneMPR({ files, quality, show3D, onShow3DChange }: { files: File[]; quality: MprQuality; show3D: boolean; onShow3DChange: (enabled: boolean) => void }) {
+export default function CornerstoneMPR({ files, sourceSeries, quality, show3D, onShow3DChange }: { files: File[]; sourceSeries: DicomSeries; quality: MprQuality; show3D: boolean; onShow3DChange: (enabled: boolean) => void }) {
   const axial = useRef<HTMLDivElement>(null);
   const coronal = useRef<HTMLDivElement>(null);
   const sagittal = useRef<HTMLDivElement>(null);
@@ -372,6 +375,16 @@ export default function CornerstoneMPR({ files, quality, show3D, onShow3DChange 
         };
         ownedRuntime = {
           step, pick, set3DActive, orbit3D, update3D, zoom3D, reset3D,
+          preparePackage: signal => {
+            const manager=volume.voxelManager;
+            if (cancelled || !manager || manager.numberOfComponents !== 1) throw new Error("Нужен активный скалярный объём.");
+            return prepareAnalysisPackage(sourceSeries,getMaskSource(),i=>{
+              if (cancelled) throw new DOMException("Серия закрыта.","AbortError");
+              const value=manager.getAtIndex(i);
+              if (typeof value!=="number") throw new Error("Объём содержит многокомпонентные пиксели.");
+              return value;
+            },signal);
+          },
           importMask: (mask, display) => {
             if (cancelled) throw new Error("Выбранная серия уже закрыта.");
             assertMaskMatchesSource(mask,getMaskSource());
@@ -413,7 +426,7 @@ export default function CornerstoneMPR({ files, quality, show3D, onShow3DChange 
       dispose?.();
     });
     return () => { cancelled = true; if (runtime.current === ownedRuntime) runtime.current = null; dispose?.(); };
-  }, [files]);
+  }, [files,sourceSeries]);
 
   // The 3D panel is opt-in; do not create its GPU actor while hidden. When
   // leaving 3D, disable that viewport but preserve the three MPR viewports.
@@ -513,6 +526,10 @@ export default function CornerstoneMPR({ files, quality, show3D, onShow3DChange 
       <small>{interpolation === "linear" ? "Линейная интерполяция сглаживает границы между вокселями." : "Ближайший сосед показывает ступенчатость дискретных данных, но не добавляет деталей."}</small>
     </div>
     <SegmentationControls ready={ready}
+      onPrepare={signal=>{
+        if (!runtime.current) throw new Error("Объём ещё не готов.");
+        return runtime.current.preparePackage(signal);
+      }}
       onImport={(mask,display)=>{
         if (!runtime.current) throw new Error("Сначала дождитесь загрузки MPR.");
         runtime.current.importMask(mask,display);

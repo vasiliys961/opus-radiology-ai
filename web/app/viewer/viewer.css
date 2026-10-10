@@ -179,3 +179,15 @@
 .ora-mask-quantification{font-variant-numeric:tabular-nums;color:#d9f4e5;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .ora-mask-quantification i{width:10px;height:10px;border-radius:2px;display:inline-block}
 @media(max-width:650px){.ora-mask-settings{grid-template-columns:1fr}}
+.ora-analysis-package{border-top:1px solid #426a60;margin-top:14px;padding-top:12px}
+.ora-analysis-package .ora-mask-actions{margin-top:10px}
+.ora-package-downloads{display:flex;gap:8px;flex-wrap:wrap;margin:9px 0}
+.ora-package-downloads a{display:inline-block;border:1px solid #498676;background:#224f44;color:#d5f5e5;padding:7px 10px;border-radius:5px;text-decoration:none}
+.ora-package-downloads a:hover{background:#2b6654}
+.ora-mask-controls .ora-package-ready{color:#8ce1b6}
+.ora-mask-controls .ora-package-error{color:#ffc7ac}
+.ora-mask-provenance{padding:10px;border:1px solid #488675;background:#183f36;border-radius:6px;margin-top:10px;overflow-wrap:anywhere}
+.ora-mask-provenance strong{color:#a3ebc5}
+.ora-mask-provenance ul{padding-left:18px;margin:7px 0}
+.ora-mask-binding-note{color:#c8d8b7}
+.ora-analysis-package small{overflow-wrap:anywhere}

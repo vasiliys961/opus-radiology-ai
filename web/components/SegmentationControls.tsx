@@ -1,30 +1,70 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { maskColor, readNiftiMaskFile, type LabelMask } from "../lib/segmentation-mask";
+import { maskColor, MAX_MASK_FILE_BYTES, readNiftiMaskFile, type LabelMask } from "../lib/segmentation-mask";
+import { assertResultBinding, MAX_RESULT_JSON_BYTES, parseSegmentationResult, sha256, type AnalysisPackage, type AnalysisRequest, type SegmentationResult } from "../lib/analysis-package";
 
 export type MaskDisplay = { visible: boolean; opacity: number; label: number | null };
-type Summary = { name: string; labels: LabelMask["labels"] };
+type Summary = { name: string; labels: LabelMask["labels"]; result?: SegmentationResult };
+type DownloadPackage = { request: AnalysisRequest; volumeUrl: string; manifestUrl: string };
 
-export default function SegmentationControls({ ready, onImport, onDisplay, onClear }: {
+export default function SegmentationControls({ ready, onPrepare, onImport, onDisplay, onClear }: {
   ready: boolean;
+  onPrepare: (signal: AbortSignal) => Promise<AnalysisPackage>;
   onImport: (mask: LabelMask, display: MaskDisplay) => void;
   onDisplay: (display: MaskDisplay) => void;
   onClear: () => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
+  const resultInput = useRef<HTMLInputElement>(null);
   const version = useRef(0);
-  const callbacks = useRef({ onImport, onDisplay, onClear });
-  callbacks.current = { onImport, onDisplay, onClear };
+  const preparation = useRef<AbortController | null>(null);
+  const packageRef = useRef<DownloadPackage | null>(null);
+  const callbacks = useRef({ onPrepare, onImport, onDisplay, onClear });
+  callbacks.current = { onPrepare, onImport, onDisplay, onClear };
   const [summary, setSummary] = useState<Summary | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [display, setDisplay] = useState<MaskDisplay>({visible:true,opacity:0.4,label:null});
+  const [packet, setPacket] = useState<DownloadPackage | null>(null);
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportError, setExportError] = useState("");
 
-  useEffect(() => () => { version.current++; }, []);
+  const releasePackage = () => {
+    const previous = packageRef.current;
+    if (previous) {URL.revokeObjectURL(previous.volumeUrl);URL.revokeObjectURL(previous.manifestUrl);}
+    packageRef.current=null;
+  };
+
+  useEffect(() => () => { version.current++;preparation.current?.abort();releasePackage(); }, []);
   useEffect(() => {
-    if (!ready) { version.current++; setSummary(null); setBusy(false); setError(""); }
+    if (!ready) {
+      version.current++;preparation.current?.abort();releasePackage();
+      setPacket(null);setExportBusy(false);setExportError("");setSummary(null);setBusy(false);setError("");
+    }
   }, [ready]);
+
+  const prepare = async () => {
+    const request=++version.current, controller=new AbortController();
+    preparation.current?.abort();preparation.current=controller;
+    setExportBusy(true);setExportError("");
+    let volumeUrl: string | null=null, manifestUrl: string | null=null;
+    try {
+      const generated=await callbacks.current.onPrepare(controller.signal);
+      if (request!==version.current || controller.signal.aborted) return;
+      volumeUrl=URL.createObjectURL(new Blob([generated.buffer],{type:"application/octet-stream"}));
+      manifestUrl=URL.createObjectURL(new Blob([JSON.stringify(generated.request,null,2)],{type:"application/json"}));
+      releasePackage();
+      const next={request:generated.request,volumeUrl,manifestUrl};
+      packageRef.current=next;setPacket(next);volumeUrl=null;manifestUrl=null;
+    } catch(cause) {
+      if (request===version.current && !controller.signal.aborted) setExportError(cause instanceof Error?cause.message:String(cause));
+    } finally {
+      if (volumeUrl) URL.revokeObjectURL(volumeUrl);
+      if (manifestUrl) URL.revokeObjectURL(manifestUrl);
+      if (request===version.current) {setExportBusy(false);preparation.current=null;}
+    }
+  };
 
   const load = async (file: File) => {
     const request = ++version.current;
@@ -40,6 +80,28 @@ export default function SegmentationControls({ ready, onImport, onDisplay, onCle
       if (request === version.current) setError(cause instanceof Error ? cause.message : String(cause));
     } finally { if (request === version.current) setBusy(false); }
   };
+  const loadResult = async (files: File[]) => {
+    const request=++version.current;
+    setBusy(true);setError("");
+    try {
+      const active=packageRef.current;
+      if (!active) throw new Error("Сначала подготовьте пакет выбранной серии.");
+      const json=files.filter(f=>f.name.toLowerCase().endsWith(".json"));
+      const masks=files.filter(f=>/\.nii(\.gz)?$/i.test(f.name));
+      if (files.length!==2||json.length!==1||masks.length!==1) throw new Error("Выберите вместе одну NIfTI-маску и один JSON-паспорт результата.");
+      if (json[0].size>MAX_RESULT_JSON_BYTES||masks[0].size>MAX_MASK_FILE_BYTES) throw new Error("Превышен лимит размера маски или паспорта.");
+      const result=parseSegmentationResult(await json[0].text());
+      const maskSha256=await sha256(await masks[0].arrayBuffer());
+      const mask=await readNiftiMaskFile(masks[0]);
+      if (request!==version.current) return;
+      assertResultBinding(result,active.request,mask,maskSha256);
+      const next={visible:true,opacity:0.4,label:mask.labels[0]?.id??null};
+      callbacks.current.onImport(mask,next);
+      setSummary({name:masks[0].name,labels:mask.labels,result});setDisplay(next);
+    } catch(cause) {
+      if (request===version.current) setError(cause instanceof Error?cause.message:String(cause));
+    } finally {if (request===version.current) setBusy(false);}
+  };
   const change = (next: MaskDisplay) => {
     try { callbacks.current.onDisplay(next);setDisplay(next);setError(""); }
     catch(cause) {setError(cause instanceof Error ? cause.message : String(cause));}
@@ -52,8 +114,8 @@ export default function SegmentationControls({ ready, onImport, onDisplay, onCle
     <div className="ora-mask-heading"><strong>Сегментация · готовая маска</strong><span>Локальный импорт</span></div>
     <p>Загрузите NIfTI-маску именно выбранной DICOM-серии. Проверяются размеры, положение и ориентация. Автоматическая нейросеть пока не подключена.</p>
     <div className="ora-mask-actions">
-      <button type="button" disabled={!ready||busy} onClick={()=>input.current?.click()}>{busy ? "Проверка маски…" : summary ? "Заменить маску .nii / .nii.gz" : "Загрузить маску .nii / .nii.gz"}</button>
-      {summary && <button type="button" onClick={()=>{
+      <button type="button" disabled={!ready||busy||exportBusy} onClick={()=>input.current?.click()}>{busy ? "Проверка маски…" : summary ? "Заменить маску .nii / .nii.gz" : "Загрузить маску .nii / .nii.gz"}</button>
+      {summary && <button type="button" disabled={exportBusy} onClick={()=>{
         version.current++; callbacks.current.onClear();setSummary(null);setBusy(false);setError("");
       }}>Удалить маску</button>}
       <input ref={input} type="file" accept=".nii,.nii.gz" hidden onChange={event=>{
@@ -65,18 +127,50 @@ export default function SegmentationControls({ ready, onImport, onDisplay, onCle
     {summary && <>
       <p className="ora-mask-success" role="status">Сетка совмещена · {summary.name} · меток: {summary.labels.length}</p>
       <small>Совпадение геометрии не подтверждает пациента или правильность сегментации. Проверьте принадлежность файла выбранной серии и границы на всех плоскостях.</small>
+      {summary.result ? <div className="ora-mask-provenance" role="status">
+        <strong>Контрольные суммы пакета и маски совпали</strong>
+        <p>Заявленная модель: {summary.result.model.id} · {summary.result.model.version}. Задача: {summary.result.model.task}.</p>
+        <small>Запрос: {summary.result.requestId}<br/>SHA-256 весов: {summary.result.model.weightsSha256}</small>
+        {summary.result.limitations.length>0 && <ul>{summary.result.limitations.map((s,i)=><li key={i}>{s}</li>)}</ul>}
+        <small>Паспорт не подписан. Контрольные суммы не удостоверяют автора модели, клиническую точность или применимость к последовательности.</small>
+      </div> : <p className="ora-mask-binding-note">Проверена только геометрия. Связь с пакетом серии и сведения о модели не проверены.</p>}
       {summary.labels.length ? <>
         <div className="ora-mask-settings">
           <label className="ora-mask-visible"><input type="checkbox" checked={display.visible} onChange={event=>change({...display,visible:event.target.checked})}/> Показать на MPR</label>
           <label>Метка<select value={display.label??"all"} onChange={event=>change({...display,label:event.target.value==="all" ? null : Number(event.target.value)})}>
             <option value="all">Все метки</option>
-            {summary.labels.map(l=><option value={l.id} key={l.id}>Метка {l.id} · {l.voxels.toLocaleString("ru-RU")} вокселей</option>)}
+            {summary.labels.map(l=><option value={l.id} key={l.id}>Метка {l.id}{summary.result ? ` · ${summary.result.labels.find(item=>item.id===l.id)?.name}` : ""} · {l.voxels.toLocaleString("ru-RU")} вокселей</option>)}
           </select></label>
           <label>Непрозрачность: {Math.round(display.opacity*100)}%<input type="range" min="0" max="80" value={Math.round(display.opacity*100)} onChange={event=>change({...display,opacity:Number(event.target.value)/100})}/></label>
         </div>
         <p className="ora-mask-quantification">{selected && <i aria-hidden="true" style={{background:`rgb(${maskColor(selected.id).join(",")})`}}/>}{selected ? `Метка ${selected.id}` : "Все метки"}: {voxels.toLocaleString("ru-RU")} вокселей · объём разметки ≈ {volumeMl.toFixed(3)} мл.</p>
-        <small>Объём рассчитан по меткам и геометрии маски; это не оценка точности модели. Названия анатомических структур не назначаются без словаря модели. Маска отображается поверх MPR, без 3D-поверхностей.</small>
+        <small>Объём рассчитан по меткам и геометрии маски; это не оценка точности модели. Названия из паспорта заявлены поставщиком результата. Маска отображается поверх MPR, без 3D-поверхностей.</small>
       </> : <p>Маска не содержит ненулевых меток. Это не подтверждает отсутствие патологических изменений.</p>}
     </>}
+    <div className="ora-analysis-package">
+      <strong>Полный объём для отдельного AI Engine</strong>
+      <p>Подготовьте выбранную серию как NIfTI и паспорт. Оба файла скачиваются отдельно; приложение не отправляет их на сервер.</p>
+      <small>В пакет входит одна серия. Последовательность и полнота анатомического покрытия не подтверждены. Изображение может содержать идентифицирующую информацию; удаление DICOM-тегов не гарантирует обезличивания.</small>
+      <div className="ora-mask-actions">
+        <button type="button" disabled={!ready||busy||exportBusy} onClick={()=>void prepare()}>{exportBusy ? "Подготовка объёма…" : packet ? "Подготовить новый пакет" : "Подготовить пакет серии"}</button>
+        {exportBusy && <button type="button" onClick={()=>{
+          version.current++;preparation.current?.abort();preparation.current=null;setExportBusy(false);
+        }}>Отменить подготовку</button>}
+      </div>
+      {exportError && <p className="ora-package-error" role="alert">{exportError}</p>}
+      {packet && <>
+        <p className="ora-package-ready" role="status">Пакет готов · {packet.request.frameCount} кадров · {packet.request.geometry.dimensions.join(" × ")} · {packet.request.modality}</p>
+        <div className="ora-package-downloads">
+          <a href={packet.volumeUrl} download={`opus-${packet.request.requestId}_0000.nii`}>Скачать объём .nii</a>
+          <a href={packet.manifestUrl} download={`opus-${packet.request.requestId}.request.json`}>Скачать паспорт .json</a>
+        </div>
+        <small>Запрос: {packet.request.requestId}. Для импорта выберите вместе маску и паспорт результата этого пакета.</small>
+        <div className="ora-mask-actions"><button type="button" disabled={busy||exportBusy||!ready} onClick={()=>resultInput.current?.click()}>Импортировать результат модели</button></div>
+        <input ref={resultInput} type="file" accept=".json,.nii,.nii.gz" multiple hidden onChange={event=>{
+          const files=Array.from(event.target.files??[]);event.target.value="";
+          if (files.length && ready) void loadResult(files);
+        }}/>
+      </>}
+    </div>
   </section>;
 }
