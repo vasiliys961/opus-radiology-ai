@@ -37,7 +37,11 @@ type ActiveViewport = {
   resetCamera(): void;
 };
 
-export default function CornerstoneStack({ files }: { files: File[] }) {
+export default function CornerstoneStack({ files, selectedIndex, onSliceChange }: {
+  files: File[];
+  selectedIndex?: number;
+  onSliceChange?: (index: number) => void;
+}) {
   const element = useRef<HTMLDivElement>(null);
   const viewport = useRef<ActiveViewport | null>(null);
   const [current, setCurrent] = useState(0);
@@ -45,6 +49,12 @@ export default function CornerstoneStack({ files }: { files: File[] }) {
   const [status, setStatus] = useState("Выберите DICOM-серию слева.");
   const [error, setError] = useState("");
   const request = useRef(0);
+  const onSliceChangeRef = useRef(onSliceChange);
+  onSliceChangeRef.current = onSliceChange;
+  const initialIndex = useRef(selectedIndex ?? 0);
+  const lastExternal = useRef(selectedIndex);
+  // External slice selection is handled by a separate effect, without reinitializing the engine.
+  // The ref is used only at the start of a new mounted series.
 
   useEffect(() => {
     if (!files.length || !element.current) {
@@ -86,9 +96,11 @@ export default function CornerstoneStack({ files }: { files: File[] }) {
       });
       const stack = engine.getViewport(viewportId) as Types.IStackViewport;
       setStatus(`Загрузка первого кадра (${files.length} файлов в серии)…`);
-      await stack.setStack(imageIds, 0);
+      const firstIndex = Math.min(Math.max(0, initialIndex.current), files.length - 1);
+      await stack.setStack(imageIds, firstIndex);
       if (cancelled) return;
       viewport.current = stack;
+      setCurrent(firstIndex);
       stack.render();
       setStatus("Просмотр через Cornerstone3D · локально в браузере");
     })().catch((err: unknown) => {
@@ -119,6 +131,7 @@ export default function CornerstoneStack({ files }: { files: File[] }) {
       if (serial === request.current) {
         target.render();
         setCurrent(bounded);
+        onSliceChangeRef.current?.(bounded);
       }
     } catch (err: unknown) {
       if (serial === request.current) setError(`Ошибка загрузки среза ${bounded + 1}: ${errorText(err)}`);
@@ -126,6 +139,19 @@ export default function CornerstoneStack({ files }: { files: File[] }) {
       if (serial === request.current) setBusy(false);
     }
   }, [busy, files.length]);
+
+  // A slice chosen in the dashboard's file list should move the already mounted
+  // viewport, not instantiate a second rendering engine.
+  useEffect(() => {
+    if (selectedIndex === undefined) return;
+    if (selectedIndex === current) {
+      lastExternal.current = selectedIndex;
+      return;
+    }
+    if (selectedIndex === lastExternal.current || busy || !viewport.current) return;
+    lastExternal.current = selectedIndex;
+    void goTo(selectedIndex);
+  }, [selectedIndex, current, busy, goTo]);
 
   return <section className="cs-stack" aria-label="DICOM-серия">
     <div className="cs-view-header">

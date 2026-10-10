@@ -160,3 +160,20 @@ button:disabled { cursor: not-allowed; }
 .ora-stack-controls input { flex:1; min-width:30px; accent-color:#4bd0ac; }
 .ora-stack-controls button { border:1px solid #496071; border-radius:6px; background:#2f4a59; color:#c0d2dc; font-size:20px; width:31px; height:29px; cursor:pointer; }
 .ora-stack-controls button:disabled { opacity:.3; cursor:default; }
+
+/* Unified dashboard + Cornerstone3D laboratory adapter (v0.5). */
+.ora-cornerstone-host .cs-stack { border:0; border-radius:0; box-shadow:none; }
+.ora-cornerstone-host .cs-view-header { padding:9px 15px; min-height:49px; background:#1b3040; gap:9px; }
+.ora-cornerstone-host .cs-view-header strong { font-size:11px; }
+.ora-cornerstone-host .cs-view-header span { font-size:9px; }
+.ora-cornerstone-host .cs-view-header button { padding:6px 8px; font-size:10px; }
+.ora-cornerstone-host .cs-image { min-height:370px; height:clamp(370px,38vw,510px); }
+.ora-cornerstone-host .cs-slider-row { padding:10px 14px; font-size:11px; gap:8px; }
+.ora-cornerstone-host .cs-slider-row input { min-width:50px; }
+.ora-cornerstone-host .cs-loading { top:58px; }
+.ora-viewer-engine { font-size:10px; white-space:nowrap; color:#8be3d0; border:1px solid #42636b; border-radius:6px; padding:6px 9px; }
+.ora-viewer-wait { min-height:410px; color:#9dcac6; }
+.ora-series-summary { color:#2d7277; font-weight:650; font-size:10px; margin:9px 0 5px; }
+.ora-footer a { color:inherit; text-decoration:underline; }
+.ora-link-danger:disabled { opacity:.5; cursor:not-allowed; }
+@media(max-width:670px){.ora-viewer-engine { display:none; }.ora-cornerstone-host .cs-view-header { flex-wrap:wrap; }.ora-cornerstone-host .cs-view-header span { flex-basis:100%; }.ora-cornerstone-host .cs-image { height:365px; min-height:340px; }}
