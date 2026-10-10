@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, type ChangeEvent, type DragEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type ReactNode } from "react";
 import "./radiology.css";
 import { decodeDicomPreview, type DicomPreviewMetadata } from "../lib/dicom-lite";
+import { readDicomSeriesHeader, groupDicomSeries, type TechnicalDicomMetadata } from "../lib/dicom-series";
 
 type Kind = "image" | "dicom" | "nifti" | "archive";
-type StudyFile = { id: string; file: File; kind: Kind; previewUrl?: string };
+type StudyFile = { id: string; file: File; kind: Kind; previewUrl?: string; dicomMeta?: TechnicalDicomMetadata; indexWarning?: string };
 type IconName = "pulse" | "scan" | "folder" | "grid" | "upload" | "search" | "settings" | "layers" | "sparkles" | "file" | "plus" | "minus" | "fit" | "trash" | "shield" | "arrow" | "info" | "check" | "brain" | "clipboard" | "cloud" | "chevron";
 
 function Icon({ name, size = 19 }: { name: IconName; size?: number }) {
@@ -40,7 +41,7 @@ const formatSize = (size: number) => size >= 1024 * 1024 ? `${(size / 1024 / 102
 const detectKind = (file: File): Kind | null => {
   const name = file.name.toLowerCase();
   if (/\.(png|jpg|jpeg|webp)$/.test(name) && file.type.startsWith("image/")) return "image";
-  if (/\.(dcm|dicom)$/.test(name)) return "dicom";
+  if (/\.(dcm|dicom)$/.test(name) || file.type === "application/dicom") return "dicom";
   if (/\.nii(\.gz)?$/.test(name)) return "nifti";
   if (/\.zip$/.test(name)) return "archive";
   return null;
@@ -49,6 +50,7 @@ const kindLabel: Record<Kind, string> = { image: "Изображение", dicom
 
 export default function Home() {
   const inputRef = useRef<HTMLInputElement>(null);
+  const folderRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<StudyFile[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const allocatedUrls = useRef<string[]>([]);
@@ -56,12 +58,23 @@ export default function Home() {
   const [zoom, setZoom] = useState(1);
   const [dicomPreview, setDicomPreview] = useState<{ id: string; url: string; metadata: DicomPreviewMetadata } | null>(null);
   const [dicomLoading, setDicomLoading] = useState(false);
+  const [indexing, setIndexing] = useState(false);
   const [dicomError, setDicomError] = useState("");
   const [notice, setNotice] = useState("");
   const [context, setContext] = useState("");
   const [studyName, setStudyName] = useState("");
   const [modality, setModality] = useState("Не определена");
   const active = files.find((item) => item.id === activeId) ?? null;
+  const series = useMemo(() => groupDicomSeries(files.filter((f) => f.kind === "dicom" && f.dicomMeta).map((f) => ({
+    id: f.id, name: f.file.name, metadata: f.dicomMeta!,
+  }))), [files]);
+  const activeSeries = series.find((group) => group.members.some((m) => m.id === activeId)) ?? null;
+  const sliceIndex = activeSeries?.members.findIndex((m) => m.id === activeId) ?? -1;
+  const selectSlice = (index: number) => {
+    if (!activeSeries) return;
+    const next = activeSeries.members[Math.max(0, Math.min(activeSeries.members.length - 1, index))];
+    if (next) { setActiveId(next.id); setZoom(1); }
+  };
 
   const url = active?.kind === "dicom" ? (dicomPreview?.id === active.id ? dicomPreview.url : null) : (active?.previewUrl ?? null);
 
@@ -84,36 +97,56 @@ export default function Home() {
     return () => currentUrls.forEach((objectUrl) => URL.revokeObjectURL(objectUrl));
   }, []);
 
-  const addFiles = (incoming: File[]) => {
-    if (!incoming.length) return;
+  const addFiles = async (incoming: File[]) => {
+    if (!incoming.length || indexing) return;
+    setIndexing(true);
     const accepted: StudyFile[] = [];
     let rejected = 0;
-    for (const file of incoming.slice(0, 500)) {
-      const kind = detectKind(file);
-      if (!kind) { rejected++; continue; }
-      const id = `${file.name}:${file.size}:${file.lastModified}`;
-      if (files.some((item) => item.id === id) || accepted.some((item) => item.id === id)) continue;
-      const previewUrl = kind === "image" ? URL.createObjectURL(file) : undefined;
-      if (previewUrl) allocatedUrls.current.push(previewUrl);
-      accepted.push({ id, file, kind, previewUrl });
-    }
-    if (incoming.length > 500) rejected += incoming.length - 500;
-    if (accepted.length) {
-      setFiles((prev) => [...prev, ...accepted]);
-      setActiveId(accepted[0].id);
-      setZoom(1);
-      if (accepted.some((item) => item.kind === "dicom" || item.kind === "nifti")) setModality("КТ / МРТ — уточнить");
-      setNotice(`${accepted.length} файл(ов) добавлено локально.${rejected ? ` Пропущено: ${rejected}.` : ""}`);
-    } else setNotice(rejected ? "Поддерживаются DICOM, NIfTI, ZIP, JPG, PNG и WEBP." : "Эти файлы уже добавлены.");
+    let warningCount = 0;
+    const limited = incoming.slice(0, 500);
+    try {
+      // Limit memory use on 8 GB M1: inspect only header fragments, sequentially.
+      for (const file of limited) {
+        let kind = detectKind(file);
+        if (!kind) {
+          try {
+            const signature = new Uint8Array(await file.slice(128, 132).arrayBuffer());
+            if (signature.length === 4 && String.fromCharCode(...signature) === "DICM") kind = "dicom";
+          } catch { /* Unsupported file: skip. */ }
+        }
+        if (!kind) { rejected++; continue; }
+        const item: StudyFile = { id: crypto.randomUUID(), file, kind };
+        if (kind === "image") {
+          item.previewUrl = URL.createObjectURL(file);
+          allocatedUrls.current.push(item.previewUrl);
+        }
+        if (kind === "dicom") {
+          try { item.dicomMeta = await readDicomSeriesHeader(file); }
+          catch (error: unknown) {
+            warningCount++;
+            item.indexWarning = error instanceof Error ? error.message : "Не удалось прочитать технические метаданные.";
+          }
+        }
+        accepted.push(item);
+      }
+      rejected += incoming.length - limited.length;
+      if (accepted.length) {
+        setFiles((prev) => [...prev, ...accepted]);
+        setActiveId(accepted[0].id);
+        setZoom(1);
+        if (accepted.some((item) => item.kind === "dicom" || item.kind === "nifti")) setModality("КТ / МРТ — уточнить");
+        setNotice(`${accepted.length} файл(ов) добавлено локально.${rejected ? ` Пропущено: ${rejected}.` : ""}${warningCount ? ` Не удалось индексировать DICOM: ${warningCount}.` : ""}`);
+      } else setNotice(rejected ? "Поддерживаются DICOM, NIfTI, ZIP, JPG, PNG и WEBP." : "Файлы не выбраны.");
+    } finally { setIndexing(false); }
   };
 
   const pickFiles = (event: ChangeEvent<HTMLInputElement>) => {
-    addFiles(Array.from(event.target.files ?? []));
+    void addFiles(Array.from(event.target.files ?? []));
     event.target.value = "";
   };
   const onDrop = (event: DragEvent<HTMLElement>) => {
     event.preventDefault(); setDragged(false);
-    addFiles(Array.from(event.dataTransfer.files));
+    void addFiles(Array.from(event.dataTransfer.files));
   };
   const clearFiles = () => {
     allocatedUrls.current.forEach((objectUrl) => URL.revokeObjectURL(objectUrl));
@@ -133,7 +166,7 @@ export default function Home() {
       <div className="ora-nav-heading ora-nav-spaced">ПЛАТФОРМА</div>
       <div className="ora-nav-muted"><Icon name="clipboard" size={19}/> Отчёты <span>Скоро</span></div>
       <div className="ora-nav-muted"><Icon name="settings" size={19}/> Настройки <span>Скоро</span></div>
-      <div className="ora-sidebar-bottom"><div className="ora-device-mark"><span className="ora-status-dot"/> Локальный режим</div><p>На этом этапе изображения не передаются в облачные сервисы.</p><div className="ora-version">LOCAL PREVIEW · 0.1</div></div>
+      <div className="ora-sidebar-bottom"><div className="ora-device-mark"><span className="ora-status-dot"/> Локальный режим</div><p>На этом этапе изображения не передаются в облачные сервисы.</p><div className="ora-version">LOCAL PREVIEW · 0.2</div></div>
     </aside>
 
     <main className="ora-main">
@@ -155,7 +188,9 @@ export default function Home() {
               <div className="ora-section-title"><div><span className="ora-heading-icon"><Icon name="folder" size={19}/></span><div><h2>Новое исследование</h2><p>Подготовьте данные для анализа</p></div></div><span className="ora-label-soft">ШАГ 01</span></div>
               <div className={`ora-dropzone ${dragged ? "ora-drop-active" : ""}`} onDragOver={(event) => {event.preventDefault(); setDragged(true);}} onDragLeave={() => setDragged(false)} onDrop={onDrop}>
                 <div className="ora-upload-icon"><Icon name="upload" size={26}/></div><strong>Перетащите медицинские изображения</strong><p>или выберите файлы на вашем устройстве</p>
-                <button className="ora-primary-button" type="button" onClick={() => inputRef.current?.click()}><Icon name="plus" size={17}/> Выбрать файлы</button>
+                <button className="ora-primary-button" type="button" disabled={indexing} onClick={() => inputRef.current?.click()}><Icon name="plus" size={17}/> {indexing ? "Читаем заголовки..." : "Выбрать файлы"}</button>
+                <button className="ora-folder-button" type="button" disabled={indexing} onClick={() => folderRef.current?.click()}>Выбрать папку DICOM</button>
+                <input ref={folderRef} type="file" className="ora-hidden-input" multiple {...{webkitdirectory: "", directory: ""}} onChange={pickFiles} />
                 <input ref={inputRef} className="ora-hidden-input" type="file" accept=".dcm,.dicom,.zip,.nii,.gz,.png,.jpg,.jpeg,.webp" multiple onChange={pickFiles}/>
                 <div className="ora-accepted">DICOM · NIfTI · ZIP · PNG · JPEG · WEBP</div>
               </div>
@@ -163,14 +198,29 @@ export default function Home() {
               <div className="ora-fields"><label>Название исследования<input value={studyName} onChange={e => setStudyName(e.target.value)} placeholder="Например, МРТ головного мозга" /></label><label>Модальность<select value={modality} onChange={e=>setModality(e.target.value)}><option>Не определена</option><option>КТ</option><option>МРТ</option><option>КТ / МРТ — уточнить</option></select></label></div>
               <div className="ora-files-head"><strong>Файлы исследования <span>{files.length}</span></strong>{files.length > 0 && <button type="button" className="ora-link-danger" onClick={clearFiles}><Icon name="trash" size={14}/> Очистить список</button>}</div>
               <div className="ora-file-list">{files.length === 0 ? <div className="ora-files-empty">Пока не загружено ни одного файла</div> : files.slice(0, 12).map(item => <button type="button" className={`ora-file-row ${activeId === item.id ? "ora-file-selected" : ""}`} key={item.id} onClick={()=> {setActiveId(item.id); setZoom(1);}}><Icon name="file" size={17}/><span className="ora-file-name" title={item.file.name}>{item.file.name}</span><small>{kindLabel[item.kind]}</small><small>{formatSize(item.file.size)}</small></button>)}{files.length > 12 && <div className="ora-more-files">Ещё {files.length - 12} файлов в исследовании</div>}</div>
+              {series.length > 0 && <div className="ora-series-panel"><label htmlFor="ora-series-choice">DICOM-серии · {series.length}</label>
+                <select id="ora-series-choice" value={activeSeries?.key ?? ""} onChange={(e) => {
+                  const found = series.find((g) => g.key === e.target.value);
+                  if (found?.members[0]) { setActiveId(found.members[0].id); setZoom(1); }
+                }}><option value="">Выберите серию</option>{series.map(group => <option key={group.key} value={group.key}>{group.label}</option>)}</select>
+                {activeSeries && <p className={activeSeries.spatiallySorted ? "ora-series-ok" : "ora-series-warning"}>
+                  {activeSeries.spatiallySorted ? "✓ Порядок срезов рассчитан по DICOM-координатам" : activeSeries.warning ?? "Одиночный срез"}
+                </p>}
+              </div>}
               <div className="ora-file-summary"><Icon name="shield" size={16}/> Файлы остаются в браузере. Общий размер: {files.length ? formatSize(totalSize) : "0 МБ"}</div>
             </div>
           </section>
 
           <section className="ora-center-col">
             <div className="ora-viewer-card"><div className="ora-viewer-head"><div><span className="ora-heading-icon ora-heading-icon-dark"><Icon name="scan" size={18}/></span><div><h2>Просмотр изображения</h2><p>{active ? active.file.name : "Нет выбранного исследования"}</p></div></div><div className="ora-viewer-tools"><button type="button" title="Уменьшить" disabled={!url} onClick={()=>setZoom(z=>Math.max(.5,Number((z-.25).toFixed(2))))}><Icon name="minus" size={17}/></button><span>{Math.round(zoom*100)}%</span><button type="button" title="Увеличить" disabled={!url} onClick={()=>setZoom(z=>Math.min(4,Number((z+.25).toFixed(2))))}><Icon name="plus" size={17}/></button><button type="button" title="Сбросить масштаб" disabled={!url} onClick={()=>setZoom(1)}><Icon name="fit" size={17}/></button></div></div>
-              <div className="ora-viewer-body">{url && active ? <div className="ora-image-scroll"><img src={url} alt={`Предпросмотр: ${active.file.name}`} className="ora-medical-img" style={{transform: `scale(${zoom})`}} /></div> : <div className="ora-viewer-placeholder"><div className="ora-rings"><span className="ora-ring-a"/><span className="ora-ring-b"/><span className="ora-ring-c"/><div className="ora-crosshair">+</div></div><div className="ora-viewer-empty-icon"><Icon name={active ? "file" : "scan"} size={27}/></div><h3>{active ? "Файл добавлен в исследование" : "Область медицинских изображений"}</h3><p>{active ? dicomLoading ? "Читаем DICOM локально..." : (dicomError || "Этот формат пока нельзя отобразить. Несжатые одиночные DICOM поддерживаются, сжатые серии требуют Cornerstone3D.") : "Загрузите JPG/PNG или несжатый одиночный DICOM-файл. Поддержку JPEG2000, RLE, мультифреймовых DICOM и объёмных серий добавим позднее."}</p></div>}
+              <div className="ora-viewer-body" tabIndex={0} onKeyDown={(event) => { if (activeSeries && (event.key === "ArrowUp" || event.key === "ArrowLeft" || event.key === "ArrowDown" || event.key === "ArrowRight")) { event.preventDefault(); selectSlice(sliceIndex + ((event.key === "ArrowDown" || event.key === "ArrowRight") ? 1 : -1)); } }}>{url && active ? <div className="ora-image-scroll"><img src={url} alt={`Предпросмотр: ${active.file.name}`} className="ora-medical-img" style={{transform: `scale(${zoom})`}} /></div> : <div className="ora-viewer-placeholder"><div className="ora-rings"><span className="ora-ring-a"/><span className="ora-ring-b"/><span className="ora-ring-c"/><div className="ora-crosshair">+</div></div><div className="ora-viewer-empty-icon"><Icon name={active ? "file" : "scan"} size={27}/></div><h3>{active ? "Файл добавлен в исследование" : "Область медицинских изображений"}</h3><p>{active ? dicomLoading ? "Читаем DICOM локально..." : (dicomError || (active?.indexWarning || "Этот формат пока нельзя отобразить. Несжатые одиночные DICOM поддерживаются, сжатые кадры требуют Cornerstone3D.")) : "Загрузите JPG/PNG или папку с несжатыми одиночными DICOM-файлами. Сжатые DICOM, MPR и 3D появятся на следующем этапе."}</p></div>}
                 <div className="ora-viewer-axis"><span>AXIAL / DICOM VIEW</span><span>{url ? "ЛОКАЛЬНЫЙ ПРОСМОТР" : "ОЖИДАНИЕ ДАННЫХ"}</span></div></div>
+              {activeSeries && activeSeries.members.length > 1 && <div className="ora-stack-controls">
+                <button title="Предыдущий срез" disabled={sliceIndex <= 0} onClick={() => selectSlice(sliceIndex - 1)}>‹</button>
+                <label htmlFor="ora-slice-slider">Срез {sliceIndex + 1} / {activeSeries.members.length}</label>
+                <input id="ora-slice-slider" type="range" min={0} max={activeSeries.members.length - 1} value={sliceIndex} onChange={e => selectSlice(Number(e.target.value))}/>
+                <button title="Следующий срез" disabled={sliceIndex >= activeSeries.members.length - 1} onClick={() => selectSlice(sliceIndex + 1)}>›</button>
+              </div>}
               <div className="ora-viewer-footer"><span><span className="ora-tiny-dot"/> {dicomPreview?.id === activeId ? `${dicomPreview.metadata.modality || "DICOM"} · ${dicomPreview.metadata.width}×${dicomPreview.metadata.height} · ${dicomPreview.metadata.bitsAllocated} bit · WC ${dicomPreview.metadata.windowCenter ?? "auto"} / WW ${dicomPreview.metadata.windowWidth ?? "auto"}` : "Локальный предпросмотр · исследовательский режим"}</span><span>3D / MPR <b>скоро</b></span></div>
             </div>
             <div className="ora-finding-strip"><div className="ora-finding-icon"><Icon name="sparkles" size={21}/></div><div><strong>AI-анализ готов к интеграции</strong><p>После подключения Python-сервиса здесь появятся маски, измерения и найденные изменения.</p></div><span className="ora-coming-soon">НЕ ПОДКЛЮЧЁН</span></div>

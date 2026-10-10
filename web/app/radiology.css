@@ -144,3 +144,19 @@ button:disabled { cursor: not-allowed; }
 @media(max-width:1400px) { .ora-sidebar { width:220px; flex-basis:220px; } .ora-content { padding:26px 23px 14px; } .ora-topbar { padding: 0 23px; } .ora-workgrid { grid-template-columns: minmax(270px, 1fr) minmax(360px, 1.3fr); } .ora-right-col { grid-column:1/-1; display:grid; grid-template-columns:1fr 1fr; gap:16px; } }
 @media(max-width:930px) { .ora-sidebar { width:70px; flex-basis:70px; padding: 18px 9px; } .ora-brand { margin:0 auto 33px; } .ora-brand >div:last-child, .ora-nav-heading, .ora-nav-current, .ora-nav-muted, .ora-sidebar-bottom { display:none; } .ora-logo { margin:auto; } .ora-workgrid { grid-template-columns:1fr; } .ora-right-col { grid-column: auto; display:grid; grid-template-columns:1fr 1fr; } .ora-viewer-body { height:420px; } }
 @media(max-width:670px) { .ora-sidebar { display:none; } .ora-topbar { height:59px; padding: 0 15px; } .ora-header-chip { display:none; } .ora-topbar-right { gap:6px; }.ora-header-pill { font-size:9px; padding:7px; } .ora-content { padding:20px 13px 16px; } .ora-heading { align-items:start; }.ora-heading h1 {font-size:26px;} .ora-heading p {font-size:11px;}.ora-preview-label {display:none;} .ora-pipeline { padding:13px; gap:6px; }.ora-pipeline-step {gap:5px;} .ora-pipeline-step strong {font-size:9px; white-space:normal; }.ora-pipeline-step small {font-size:8px;}.ora-step-number {width:22px;height:22px;flex-basis:22px;font-size:9px;}.ora-pipeline-divider {display:none;} .ora-right-col {display:flex;} .ora-viewer-head p {max-width:125px;} .ora-viewer-tools {gap:2px;} .ora-viewer-tools button {width:25px;height:25px;} .ora-viewer-body {height:350px;} .ora-footer {font-size:8px; letter-spacing:0;} .ora-coming-soon {display:none;} }
+
+/* Local DICOM series navigation — no external transmission */
+.ora-folder-button { margin-top:8px; border:1px solid #c7dfda; background:white; color:#168579; padding:8px 14px; border-radius:7px; font-weight:700; font-size:11px; cursor:pointer; }
+.ora-folder-button:hover { background:#ebf8f3; }
+.ora-folder-button:disabled { opacity:.5; cursor:not-allowed; }
+.ora-series-panel { border-top:1px solid #edf0f2; padding-top:13px; margin-top:15px; }
+.ora-series-panel label { display:block; font-size:11px; font-weight:700; color:#405767; margin-bottom:7px; }
+.ora-series-panel select { width:100%; padding:9px 8px; border:1px solid #d9e6e8; border-radius:7px; font-size:11px; background:#fff; color:#385367; }
+.ora-series-panel p { font-size:10px; line-height:1.5; padding:7px 9px; margin:8px 0 0; border-radius:6px; }
+.ora-series-warning { color:#93672b; background:#fff3df; }
+.ora-series-ok { color:#187963; background:#e8f8ee; }
+.ora-stack-controls { background:#203747; border-top:1px solid #405767; padding:11px 14px; display:flex; align-items:center; gap:12px; color:#c0d2dc; }
+.ora-stack-controls label { white-space:nowrap; font-size:11px; font-weight:700; }
+.ora-stack-controls input { flex:1; min-width:30px; accent-color:#4bd0ac; }
+.ora-stack-controls button { border:1px solid #496071; border-radius:6px; background:#2f4a59; color:#c0d2dc; font-size:20px; width:31px; height:29px; cursor:pointer; }
+.ora-stack-controls button:disabled { opacity:.3; cursor:default; }
