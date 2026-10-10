@@ -82,3 +82,21 @@
 .ora-mpr-controls button{border:1px solid #3d6270;border-radius:5px;background:#284758;color:#e5f4f5;width:28px;height:28px;cursor:pointer}
 .ora-mpr-controls button:disabled{opacity:.4;cursor:not-allowed}
 @media(max-width:700px){.ora-mpr-plane>.ora-mpr-surface,.ora-mpr-plane:first-child>.ora-mpr-surface{height:250px}}
+
+/* v1.0: show sampling limitations explicitly and prioritize the source plane. */
+.ora-mpr-quality{border:1px solid #456271;background:#173240;color:#b9d5db;border-radius:7px;padding:10px 12px;margin-bottom:10px;font-size:11px;line-height:1.5}
+.ora-mpr-quality-top{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.ora-mpr-quality-top strong{color:#e6f4f2}.ora-mpr-quality-top span{font-variant-numeric:tabular-nums;color:#9ce2ce}
+.ora-mpr-quality p{margin:7px 0;color:#b6cbd3}.ora-mpr-quality p.ora-mpr-quality-warn{color:#ffd29f}
+.ora-mpr-interpolation{display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin:10px 0 5px}
+.ora-mpr-interpolation span{color:#c9e0e5;margin-right:5px}
+.ora-mpr-interpolation button{background:#294a58;border:1px solid #587785;color:#d5e6e8;border-radius:5px;padding:5px 9px;font-size:11px;cursor:pointer}
+.ora-mpr-interpolation button.active{background:#0d887b;border-color:#42b5a2;color:white}
+.ora-mpr-interpolation button:disabled{opacity:.45;cursor:not-allowed}
+.ora-mpr-quality small{color:#92afbc;display:block;font-size:10px}
+.ora-mpr-plane:first-child:not(.ora-mpr-featured){grid-column:auto}
+.ora-mpr-plane.ora-mpr-featured{grid-column:1/-1;grid-row:1}
+.ora-mpr-plane:first-child:not(.ora-mpr-featured)>.ora-mpr-surface{height:225px}
+.ora-mpr-plane.ora-mpr-featured>.ora-mpr-surface{height:310px}
+.ora-mpr-native-label{position:static;background:#17323a;color:#87d6c8;font-size:10px;padding:6px 10px;border-bottom:1px solid #355665}
+@media(max-width:700px){.ora-mpr-plane.ora-mpr-featured{grid-column:auto}.ora-mpr-plane.ora-mpr-featured>.ora-mpr-surface{height:250px}}

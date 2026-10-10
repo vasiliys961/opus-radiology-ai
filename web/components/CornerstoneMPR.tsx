@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type WheelEvent } from "react";
 import type { Types } from "@cornerstonejs/core";
 import { alignCameraWithPoint, crosshairAfterScroll, insideImageExtent, safeSliceIndex, type Vec3 } from "../lib/mpr-navigation";
+import type { MprQuality } from "../lib/mpr-quality";
 
 const PLANE_NAMES = ["axial", "coronal", "sagittal"] as const;
 type Plane = typeof PLANE_NAMES[number];
@@ -14,6 +15,7 @@ type Runtime = {
   step: (plane: Plane, delta: number) => void;
   pick: (plane: Plane, x: number, y: number) => void;
   reset: () => void;
+  setInterpolation: (mode: "linear" | "nearest") => void;
 };
 
 const emptyReadouts = (): Readouts => ({ axial:{index:0,total:1}, coronal:{index:0,total:1}, sagittal:{index:0,total:1} });
@@ -25,7 +27,7 @@ const captions: Record<Plane,string> = { axial:"АКСИАЛЬНАЯ", coronal:"
  * All input stays in the browser and is gated by checkMprEligibility upstream.
  * This is NOT a calibrated diagnostic viewer or a measurement instrument.
  */
-export default function CornerstoneMPR({ files }: { files: File[] }) {
+export default function CornerstoneMPR({ files, quality }: { files: File[]; quality: MprQuality }) {
   const axial = useRef<HTMLDivElement>(null);
   const coronal = useRef<HTMLDivElement>(null);
   const sagittal = useRef<HTMLDivElement>(null);
@@ -35,6 +37,8 @@ export default function CornerstoneMPR({ files }: { files: File[] }) {
   const [ready, setReady] = useState(false);
   const [readouts, setReadouts] = useState<Readouts>(emptyReadouts);
   const [crosshairs, setCrosshairs] = useState<Crosshairs>(emptyCrosshairs);
+  const [interpolation, setInterpolation] = useState<"linear" | "nearest">("linear");
+  const featuredPlane = quality.nativePlane ?? "axial";
 
   useEffect(() => {
     const elements = { axial:axial.current, coronal:coronal.current, sagittal:sagittal.current };
@@ -109,11 +113,7 @@ export default function CornerstoneMPR({ files }: { files: File[] }) {
         if (cancelled) return;
         const views = Object.fromEntries(PLANE_NAMES.map((p,i) => [p, engine!.getViewport(ids[i]) as Types.IVolumeViewport])) as Record<Plane,Types.IVolumeViewport>;
         for (const p of PLANE_NAMES) views[p].resetCamera();
-        const initialFocal = views.axial.getCamera().focalPoint;
-        if (!initialFocal || !initialFocal.every(Number.isFinite)) {
-          throw new Error("Не удалось получить начальный центр MPR-объёма.");
-        }
-        let point = [...initialFocal] as Vec3;
+        let point = [...views.axial.getCamera().focalPoint] as Vec3;
 
         const synchronize = (next: Vec3) => {
           if (cancelled) return;
@@ -124,9 +124,6 @@ export default function CornerstoneMPR({ files }: { files: File[] }) {
           for (const p of PLANE_NAMES) {
             const v = views[p];
             const camera = v.getCamera();
-            if (!camera.focalPoint || !camera.position || !camera.viewPlaneNormal) {
-              throw new Error("Отсутствуют параметры пространственной камеры MPR.");
-            }
             const pose = alignCameraWithPoint(camera.focalPoint as Vec3, camera.position as Vec3,
               camera.viewPlaneNormal as Vec3, point);
             v.setCamera(pose);
@@ -151,14 +148,9 @@ export default function CornerstoneMPR({ files }: { files: File[] }) {
             const current = safeSliceIndex(info.currentStepIndex, total);
             const next = safeSliceIndex(current + Math.trunc(delta), total);
             if (next === current) return;
-            const beforeFocal = v.getCamera().focalPoint;
-            if (!beforeFocal) throw new Error("Неизвестно начальное положение MPR-камеры.");
-            const before = [...beforeFocal] as Vec3;
+            const before = [...v.getCamera().focalPoint] as Vec3;
             core.utilities.scroll(v as Parameters<typeof core.utilities.scroll>[0], {delta:next - current, volumeId});
             const afterCamera = v.getCamera();
-            if (!afterCamera.focalPoint || !afterCamera.viewPlaneNormal) {
-              throw new Error("Неизвестно положение MPR-камеры после прокрутки.");
-            }
             const updated = crosshairAfterScroll(point, before, afterCamera.focalPoint as Vec3,
               afterCamera.viewPlaneNormal as Vec3);
             synchronize(updated);
@@ -183,14 +175,22 @@ export default function CornerstoneMPR({ files }: { files: File[] }) {
             setError(`Не удалось выбрать точку: ${cause instanceof Error ? cause.message : String(cause)}`);
           }
         };
+        const setRenderingInterpolation = (mode: "linear" | "nearest") => {
+          const interpolationType = mode === "nearest" ? core.Enums.InterpolationType.NEAREST : core.Enums.InterpolationType.LINEAR;
+          for (const p of PLANE_NAMES) {
+            views[p].setProperties({ interpolationType }, volumeId);
+            views[p].render();
+          }
+        };
         runtime.current = {
           step, pick,
+          setInterpolation: setRenderingInterpolation,
           reset: () => {
             for (const p of PLANE_NAMES) views[p].resetCamera();
-            const resetFocal = views.axial.getCamera().focalPoint;
-            if (resetFocal) synchronize([...resetFocal] as Vec3);
+            synchronize([...views.axial.getCamera().focalPoint] as Vec3);
           },
         };
+        setRenderingInterpolation("linear");
         synchronize(point);
         observer = new ResizeObserver(() => {
           if (cancelled || !engine) return;
@@ -234,12 +234,29 @@ export default function CornerstoneMPR({ files }: { files: File[] }) {
   return <section className="ora-mpr" aria-label="Экспериментальная мультипланарная реконструкция">
     <div className="ora-mpr-status" role="status">{status} <button type="button" disabled={!ready} onClick={() => runtime.current?.reset()}>Центрировать</button></div>
     {error && <div role="alert" className="cs-error">Ошибка MPR: {error}. Вернитесь в 2D-просмотр, если ошибка сохраняется.</div>}
+    <div className="ora-mpr-quality">
+      <div className="ora-mpr-quality-top">
+        <strong>Геометрия исходной серии</strong>
+        {quality.pixelSpacingMm && quality.sliceSpacingMm !== null ?
+          <span>{quality.pixelSpacingMm.map(v=>v.toFixed(2)).join(" × ")} × {quality.sliceSpacingMm.toFixed(2)} мм</span> :
+          <span>Шаги неизвестны</span>}
+      </div>
+      <p className={quality.interpolationRisk === "high" ? "ora-mpr-quality-warn" : ""}>{quality.message}</p>
+      <div className="ora-mpr-interpolation" role="group" aria-label="Интерполяция MPR">
+        <span>Интерполяция:</span>
+        <button type="button" disabled={!ready} aria-pressed={interpolation === "linear"} className={interpolation === "linear" ? "active" : ""}
+          onClick={() => { try { runtime.current?.setInterpolation("linear"); setInterpolation("linear"); } catch (e) {setError(e instanceof Error ? e.message : String(e));} }}>Плавная</button>
+        <button type="button" disabled={!ready} aria-pressed={interpolation === "nearest"} className={interpolation === "nearest" ? "active" : ""}
+          onClick={() => { try { runtime.current?.setInterpolation("nearest"); setInterpolation("nearest"); } catch (e) {setError(e instanceof Error ? e.message : String(e));} }}>Без сглаживания</button>
+      </div>
+      <small>{interpolation === "linear" ? "Линейная интерполяция сглаживает границы между вокселями." : "Ближайший сосед показывает ступенчатость дискретных данных, но не добавляет деталей."}</small>
+    </div>
     <div className="ora-mpr-grid">
       {PLANE_NAMES.map((plane) => {
         const ref = plane === "axial" ? axial : plane === "coronal" ? coronal : sagittal;
         const position = crosshairs[plane];
         const info = readouts[plane];
-        return <div className={`ora-mpr-plane ora-mpr-${plane}`} key={plane}>
+        return <div className={`ora-mpr-plane ora-mpr-${plane} ${featuredPlane === plane ? "ora-mpr-featured" : ""}`} key={plane}>
           <div className="ora-mpr-surface" tabIndex={ready ? 0 : -1}
             aria-label={`${captions[plane]} плоскость: колесо мыши — листать срезы, клик — выбрать точку`}
             onWheel={event => onWheel(event, plane)} onClick={event => onClick(event, plane)}
@@ -248,6 +265,7 @@ export default function CornerstoneMPR({ files }: { files: File[] }) {
             <span className="ora-mpr-plane-label">{plane.toUpperCase()} · {captions[plane]}</span>
             {ready && position && <div className="ora-mpr-crosshair" aria-hidden="true" style={{left:position.x,top:position.y}}/>}
           </div>
+          {featuredPlane === plane && <div className="ora-mpr-native-label">{quality.nativePlane ? "Плоскость исходной серии · приоритетный просмотр" : "Ориентация исходной серии неизвестна / косая"}</div>}
           <div className="ora-mpr-controls">
             <button type="button" aria-label={`Предыдущий срез: ${captions[plane]}`} disabled={!ready || info.index === 0} onClick={() => runtime.current?.step(plane,-1)}>−</button>
             <label htmlFor={`ora-mpr-slider-${plane}`}>Срез {info.index + 1} / {info.total}</label>

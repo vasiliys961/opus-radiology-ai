@@ -8,6 +8,7 @@ import { decodeDicomPreview, type DicomPreviewMetadata } from "../lib/dicom-lite
 import { readDicomSeriesHeader, groupDicomSeries, type TechnicalDicomMetadata } from "../lib/dicom-series";
 import { validateViewerFileSelection, MAX_DICOM_FILES } from "../lib/viewer-limits";
 import { checkMprEligibility } from "../lib/mpr-eligibility";
+import { assessMprQuality } from "../lib/mpr-quality";
 
 // Keep the sizable Cornerstone engine outside the initial dashboard bundle.
 const CornerstoneMPR = dynamic(() => import("../components/CornerstoneMPR"), {
@@ -92,6 +93,7 @@ export default function Home() {
     return activeSeries.members.map((item) => byId.get(item.id)).filter((file): file is File => !!file);
   }, [activeSeries, files]);
   const mprCheck = useMemo(() => checkMprEligibility(activeSeries, cornerstoneFiles.map(f => f.size)), [activeSeries, cornerstoneFiles]);
+  const mprQuality = useMemo(() => assessMprQuality(activeSeries), [activeSeries]);
   const hasCornerstone = active?.kind === "dicom" && cornerstoneFiles.length > 0;
   const showMpr = hasCornerstone && mprEnabled && mprCheck.eligible;
   // Reset MPR on series changes and preserve normal 2D stack as the fallback.
@@ -274,7 +276,7 @@ export default function Home() {
               </div>
               {hasCornerstone ?
                 <div className="ora-cornerstone-host">{showMpr
-                  ? <CornerstoneMPR key={`mpr-${activeSeries!.key}`} files={cornerstoneFiles}/>
+                  ? <CornerstoneMPR key={`mpr-${activeSeries!.key}`} files={cornerstoneFiles} quality={mprQuality}/>
                   : <CornerstoneStack key={activeSeries!.key} files={cornerstoneFiles} selectedIndex={sliceIndex >= 0 ? sliceIndex : 0} modality={activeSeries!.modality} onSliceChange={(index) => { const member = activeSeries!.members[index]; if (member) setActiveId(member.id); }}/>}</div>
                 : <>
                   <div className="ora-viewer-body" tabIndex={0}>
