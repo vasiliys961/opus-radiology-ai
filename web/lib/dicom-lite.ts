@@ -22,6 +22,7 @@ type DicomFrame = {
   pixelLength: number;
   signed: boolean;
   bitsStored: number;
+  highBit: number;
   slope: number;
   intercept: number;
   inverse: boolean;
@@ -32,6 +33,7 @@ const LONG_VR = new Set(["OB", "OD", "OF", "OL", "OV", "OW", "SQ", "UC", "UR", "
 const EXPLICIT_LE = "1.2.840.10008.1.2.1";
 const IMPLICIT_LE = "1.2.840.10008.1.2";
 const MAX_PIXELS = 4096 * 4096;
+const MAX_PREVIEW_FILE_BYTES = 64 * 1024 * 1024; // Guard 8 GB Macs from huge / unsupported multi-frame objects
 
 export class DicomPreviewError extends Error {
   constructor(message: string) {
@@ -64,6 +66,8 @@ export function parseDicomFrame(buffer: ArrayBuffer): DicomFrame {
   let height = 0;
   let bitsAllocated = 0;
   let bitsStored = 0;
+  let highBit: number | null = null;
+  let photometric = "";
   let signed = false;
   let samples = 1;
   let frames = 1;
@@ -116,12 +120,17 @@ export function parseDicomFrame(buffer: ArrayBuffer): DicomFrame {
         break;
       }
       case 0x00280002: if (length >= 2) samples = view.getUint16(valueOffset, true); break;
-      case 0x00280004: inverse = ascii(bytes, valueOffset, length) === "MONOCHROME1"; break;
-      case 0x00280008: frames = Number.parseInt(ascii(bytes, valueOffset, length), 10) || 1; break;
+      case 0x00280004: {
+        photometric = ascii(bytes, valueOffset, length);
+        inverse = photometric === "MONOCHROME1";
+        break;
+      }
+      case 0x00280008: frames = Number.parseInt(ascii(bytes, valueOffset, length), 10); break;
       case 0x00280010: if (length >= 2) height = view.getUint16(valueOffset, true); break;
       case 0x00280011: if (length >= 2) width = view.getUint16(valueOffset, true); break;
       case 0x00280100: if (length >= 2) bitsAllocated = view.getUint16(valueOffset, true); break;
       case 0x00280101: if (length >= 2) bitsStored = view.getUint16(valueOffset, true); break;
+      case 0x00280102: if (length >= 2) highBit = view.getUint16(valueOffset, true); break;
       case 0x00280103: if (length >= 2) signed = view.getUint16(valueOffset, true) === 1; break;
       case 0x00281050: {
         const v = Number.parseFloat(ascii(bytes, valueOffset, length).split("\\")[0]);
@@ -149,15 +158,21 @@ export function parseDicomFrame(buffer: ArrayBuffer): DicomFrame {
     offset = valueOffset + length;
   }
   if (pixelOffset < 0) throw new DicomPreviewError("Pixel Data не найдены.");
-  if (samples !== 1 || frames !== 1) throw new DicomPreviewError("Доступен только один монохромный кадр на файл. Мультифреймовые серии требуют полноценного декодера.");
+  if (samples !== 1 || frames !== 1 || !["MONOCHROME1", "MONOCHROME2"].includes(photometric)) {
+    throw new DicomPreviewError("Поддерживаются только одиночные MONOCHROME1/2 кадры. Цветные, палитровые и мультифреймовые изображения требуют полноценного декодера.");
+  }
   if (!width || !height || width * height > MAX_PIXELS) throw new DicomPreviewError("Неподдерживаемый размер изображения.");
   if (bitsAllocated !== 8 && bitsAllocated !== 16) throw new DicomPreviewError("Поддерживаются только пиксели 8/16 bit.");
   if (!bitsStored) bitsStored = bitsAllocated;
   if (bitsStored < 1 || bitsStored > bitsAllocated) throw new DicomPreviewError("Некорректное значение Bits Stored.");
+  highBit ??= bitsStored - 1;
+  if (highBit >= bitsAllocated || highBit + 1 < bitsStored) {
+    throw new DicomPreviewError("Некорректное положение значащих бит (High Bit).");
+  }
   if (pixelLength < width * height * (bitsAllocated / 8)) throw new DicomPreviewError("Недостаточный объём пиксельных данных.");
   return {
     metadata: { width, height, bitsAllocated: bitsAllocated as 8 | 16, transferSyntax: syntax, modality, instanceNumber, windowCenter, windowWidth },
-    bytes: buffer, pixelOffset, pixelLength, signed, bitsStored, slope, intercept, inverse,
+    bytes: buffer, pixelOffset, pixelLength, signed, bitsStored, highBit, slope, intercept, inverse,
   };
 }
 
@@ -174,7 +189,8 @@ export function renderDicomPixels(frame: DicomFrame): Uint8ClampedArray {
   for (let i = 0; i < size; i++) {
     const at = frame.pixelOffset + i * (bitsAllocated / 8);
     let value = bitsAllocated === 8 ? view.getUint8(at) : view.getUint16(at, true);
-    value %= modulus;
+    // DICOM High Bit may describe left-justified samples; do not discard their high bits.
+    value = Math.floor(value / (2 ** (frame.highBit + 1 - frame.bitsStored))) % modulus;
     if (frame.signed && value >= signBit) value -= modulus;
     const result = value * frame.slope + frame.intercept;
     intensities[i] = result;
@@ -190,7 +206,10 @@ export function renderDicomPixels(frame: DicomFrame): Uint8ClampedArray {
   }
   const output = new Uint8ClampedArray(size * 4);
   for (let i = 0; i < size; i++) {
-    const v = high <= low ? 0 : Math.round(Math.max(0, Math.min(255, ((intensities[i] - low) / (high - low)) * 255)));
+    // DICOM LINEAR VOI WC/WW=1 is a threshold, not an all-black image.
+    const v = high <= low
+      ? (windowCenter !== null && intensities[i] > windowCenter - 0.5 ? 255 : 0)
+      : Math.round(Math.max(0, Math.min(255, ((intensities[i] - low) / (high - low)) * 255)));
     const grey = frame.inverse ? 255 - v : v;
     const j = i * 4;
     output[j] = grey; output[j + 1] = grey; output[j + 2] = grey; output[j + 3] = 255;
@@ -199,6 +218,9 @@ export function renderDicomPixels(frame: DicomFrame): Uint8ClampedArray {
 }
 
 export async function decodeDicomPreview(file: File): Promise<{url: string; metadata: DicomPreviewMetadata}> {
+  if (file.size > MAX_PREVIEW_FILE_BYTES) {
+    throw new DicomPreviewError("Файл больше 64 МБ. Не загружаем его целиком в память; нужен потоковый DICOM-декодер.");
+  }
   const frame = parseDicomFrame(await file.arrayBuffer());
   const pixels = renderDicomPixels(frame);
   const canvas = document.createElement("canvas");

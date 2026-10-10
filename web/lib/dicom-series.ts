@@ -5,11 +5,13 @@
  * image decoding remains deliberately limited in dicom-lite.ts.
  */
 export type TechnicalDicomMetadata = {
+  sopInstanceUid: string | null;
   studyUid: string | null;
   seriesUid: string | null;
   frameOfReferenceUid: string | null;
   modality: string;
   instanceNumber: number | null;
+  numberOfFrames: number | null;
   rows: number | null;
   columns: number | null;
   imagePositionPatient: [number, number, number] | null;
@@ -30,6 +32,8 @@ export type DicomSeries = {
   modality: string;
   members: SeriesMember[];
   spatiallySorted: boolean;
+  volumeReady: boolean;
+  sliceSpacingMm: number | null;
   warning: string | null;
 };
 
@@ -60,8 +64,8 @@ export function parseDicomSeriesHeader(buffer: ArrayBuffer): TechnicalDicomMetad
   }
 
   const result: TechnicalDicomMetadata = {
-    studyUid: null, seriesUid: null, frameOfReferenceUid: null,
-    modality: '', instanceNumber: null, rows: null, columns: null,
+    sopInstanceUid: null, studyUid: null, seriesUid: null, frameOfReferenceUid: null,
+    modality: '', instanceNumber: null, numberOfFrames: null, rows: null, columns: null,
     imagePositionPatient: null, imageOrientationPatient: null,
     pixelSpacing: null, transferSyntax: '',
   };
@@ -109,6 +113,12 @@ export function parseDicomSeriesHeader(buffer: ArrayBuffer): TechnicalDicomMetad
     switch (tag) {
       case 0x00020010: result.transferSyntax = getText(); break;
       case 0x00080060: result.modality = getText().slice(0, 16); break;
+      case 0x00080018: result.sopInstanceUid = getText() || null; break;
+      case 0x00280008: {
+        const n = Number.parseInt(getText(), 10);
+        result.numberOfFrames = Number.isFinite(n) && n > 0 ? n : null;
+        break;
+      }
       case 0x0020000d: result.studyUid = getText() || null; break;
       case 0x0020000e: result.seriesUid = getText() || null; break;
       case 0x00200052: result.frameOfReferenceUid = getText() || null; break;
@@ -146,49 +156,100 @@ export async function readDicomSeriesHeader(file: File): Promise<TechnicalDicomM
 
 function normal(orientation: NonNullable<TechnicalDicomMetadata['imageOrientationPatient']>): [number, number, number] | null {
   const [rx, ry, rz, cx, cy, cz] = orientation;
+  const rowLength = Math.hypot(rx, ry, rz);
+  const columnLength = Math.hypot(cx, cy, cz);
+  const dot = rx * cx + ry * cy + rz * cz;
+  if (Math.abs(rowLength - 1) > 0.01 || Math.abs(columnLength - 1) > 0.01 || Math.abs(dot) > 0.01) return null;
   const [x, y, z] = [ry * cz - rz * cy, rz * cx - rx * cz, rx * cy - ry * cx];
   const magnitude = Math.hypot(x, y, z);
-  if (magnitude < .98 || magnitude > 1.02) return null;
+  if (!Number.isFinite(magnitude) || magnitude < 0.98 || magnitude > 1.02) return null;
   return [x / magnitude, y / magnitude, z / magnitude];
 }
 
-function sortMembers(members: SeriesMember[]): { members: SeriesMember[]; spatiallySorted: boolean; warning: string | null } {
+/**
+ * A verified spatial ORDER is not enough for an un-resampled 3D VOLUME.
+ * Keep the two flags separate; never silently invent missing slice geometry.
+ */
+function sortMembers(members: SeriesMember[]): {
+  members: SeriesMember[];
+  spatiallySorted: boolean;
+  volumeReady: boolean;
+  sliceSpacingMm: number | null;
+  warning: string | null;
+} {
   const result = [...members];
   const first = members[0]?.metadata;
-  const referenceOrientation = first?.imageOrientationPatient;
-  const axis = referenceOrientation ? normal(referenceOrientation) : null;
+  const orientation = first?.imageOrientationPatient;
+  const axis = orientation ? normal(orientation) : null;
   let spatiallySorted = Boolean(axis && members.length > 1);
   if (spatiallySorted) {
-    for (const m of members) {
-      const v = m.metadata;
-      if (!v.imagePositionPatient || !v.imageOrientationPatient || v.rows !== first.rows || v.columns !== first.columns ||
-        v.imageOrientationPatient.some((n, i) => Math.abs(n - referenceOrientation![i]) > 0.001)) {
+    for (const {metadata: v} of members) {
+      if (!v.imagePositionPatient || !v.imageOrientationPatient ||
+        !v.imagePositionPatient.every(Number.isFinite) ||
+        v.rows == null || v.columns == null || v.rows < 1 || v.columns < 1 ||
+        v.rows !== first?.rows || v.columns !== first?.columns ||
+        v.imageOrientationPatient.some((n, i) => !Number.isFinite(n) || Math.abs(n - orientation![i]) > 0.001)) {
         spatiallySorted = false;
         break;
       }
     }
   }
+  let sliceSpacingMm: number | null = null;
+  let volumeReady = false;
+  let warning: string | null = null;
   if (spatiallySorted && axis) {
     const project = (m: SeriesMember) => m.metadata.imagePositionPatient!.reduce((acc, pos, i) => acc + pos * axis[i], 0);
     result.sort((a, b) => project(a) - project(b));
-    for (let i = 1; i < result.length; i++) {
-      if (Math.abs(project(result[i]) - project(result[i - 1])) < 0.01) {
-        spatiallySorted = false;
-        break;
-      }
+    const gaps = result.slice(1).map((m, i) => project(m) - project(result[i]));
+    if (gaps.some((gap) => !Number.isFinite(gap) || gap < 0.01)) {
+      spatiallySorted = false;
+      warning = 'В серии совпадают или некорректны координаты срезов. Порядок условный; MPR/3D запрещены.';
+    } else {
+      const sortedGaps = [...gaps].sort((a, b) => a - b);
+      const median = sortedGaps[Math.floor(sortedGaps.length / 2)];
+      sliceSpacingMm = median;
+      const tolerance = Math.max(0.05, median * 0.05);
+      const irregular = gaps.some((gap) => Math.abs(gap - median) > tolerance);
+      const spacing = first?.pixelSpacing;
+      const pixelSpacingValid = Boolean(spacing && spacing.every((v) => Number.isFinite(v) && v > 0) &&
+        result.every(({metadata: v}) => v.pixelSpacing && v.pixelSpacing.every((n, i) => Number.isFinite(n) && Math.abs(n - spacing![i]) <= 0.01)));
+      const duplicates = new Set(result.map((m) => m.metadata.sopInstanceUid).filter(Boolean)).size !==
+        result.filter((m) => m.metadata.sopInstanceUid).length;
+      const singleFrames = result.every((m) => (m.metadata.numberOfFrames ?? 1) === 1);
+      const identifiable = Boolean(first?.studyUid && first.seriesUid && first.frameOfReferenceUid &&
+        result.every((m) => m.metadata.sopInstanceUid));
+      const singleModality = result.every((m) => m.metadata.modality === first?.modality);
+      // A tilted acquisition can drift within the axial plane. Sorting still works,
+      // but naive orthogonal 3D grids would misplace anatomy without resampling.
+      const origin = result[0].metadata.imagePositionPatient!;
+      const inPlaneDrift = result.some((m) => {
+        const delta = m.metadata.imagePositionPatient!.map((p, i) => p - origin[i]);
+        const along = delta.reduce((acc, pos, i) => acc + pos * axis[i], 0);
+        return Math.hypot(...delta.map((d, i) => d - along * axis[i])) > 0.1;
+      });
+      volumeReady = result.length >= 3 && !irregular && pixelSpacingValid && !duplicates && singleFrames &&
+        singleModality && !inPlaneDrift && identifiable;
+      if (irregular) warning = 'Срезы отсортированы, но шаг между ними неравномерный. MPR/3D требуют проверки и ресэмплинга.';
+      else if (!pixelSpacingValid) warning = 'Срезы отсортированы, но Pixel Spacing отсутствует или различается. MPR/3D недоступны.';
+      else if (duplicates) warning = 'Повторяющиеся SOP Instance UID: возможны дубли кадров. MPR/3D недоступны.';
+      else if (!singleFrames) warning = 'Обнаружен мультифреймовый DICOM: требуется полноценный декодер для MPR/3D.';
+      else if (!singleModality) warning = 'В одной серии обнаружены разные модальности. MPR/3D недоступны.';
+      else if (inPlaneDrift) warning = 'Смещение срезов в плоскости (наклон/движение): перед MPR/3D нужна коррекция геометрии.';
+      else if (!identifiable) warning = 'Недостаточно DICOM UID (исследования/серии/кадров). Требуется проверка перед построением объёма.';
+      else if (result.length < 3) warning = 'Для подтверждения равномерности объёма требуется не менее трёх срезов.';
     }
   }
   if (!spatiallySorted) {
     result.sort((a, b) => (a.metadata.instanceNumber ?? Number.MAX_SAFE_INTEGER) -
       (b.metadata.instanceNumber ?? Number.MAX_SAFE_INTEGER) || a.name.localeCompare(b.name));
-  }
-  return {
-    members: result,
-    spatiallySorted,
-    warning: members.length > 1 && !spatiallySorted
+    warning ??= members.length > 1
       ? 'Геометрия серии не подтверждена. Порядок срезов условный (Instance Number/имя), не подходит для 3D и измерений.'
-      : null,
-  };
+      : null;
+  }
+  if (members.length === 1 && (first?.numberOfFrames ?? 1) > 1) {
+    warning = 'Мультифреймовый DICOM: текущий браузерный декодер не отображает отдельные кадры.';
+  }
+  return { members: result, spatiallySorted, volumeReady, sliceSpacingMm, warning };
 }
 
 /** Group strictly by study + series + frame of reference; missing UIDs stay isolated. */

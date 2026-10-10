@@ -166,7 +166,7 @@ export default function Home() {
       <div className="ora-nav-heading ora-nav-spaced">ПЛАТФОРМА</div>
       <div className="ora-nav-muted"><Icon name="clipboard" size={19}/> Отчёты <span>Скоро</span></div>
       <div className="ora-nav-muted"><Icon name="settings" size={19}/> Настройки <span>Скоро</span></div>
-      <div className="ora-sidebar-bottom"><div className="ora-device-mark"><span className="ora-status-dot"/> Локальный режим</div><p>На этом этапе изображения не передаются в облачные сервисы.</p><div className="ora-version">LOCAL PREVIEW · 0.2</div></div>
+      <div className="ora-sidebar-bottom"><div className="ora-device-mark"><span className="ora-status-dot"/> Локальный режим</div><p>На этом этапе изображения не передаются в облачные сервисы.</p><div className="ora-version">LOCAL PREVIEW · 0.3</div></div>
     </aside>
 
     <main className="ora-main">
@@ -203,9 +203,16 @@ export default function Home() {
                   const found = series.find((g) => g.key === e.target.value);
                   if (found?.members[0]) { setActiveId(found.members[0].id); setZoom(1); }
                 }}><option value="">Выберите серию</option>{series.map(group => <option key={group.key} value={group.key}>{group.label}</option>)}</select>
-                {activeSeries && <p className={activeSeries.spatiallySorted ? "ora-series-ok" : "ora-series-warning"}>
-                  {activeSeries.spatiallySorted ? "✓ Порядок срезов рассчитан по DICOM-координатам" : activeSeries.warning ?? "Одиночный срез"}
-                </p>}
+                {activeSeries && <>
+                  <p className={activeSeries.spatiallySorted ? "ora-series-ok" : "ora-series-warning"}>
+                    {activeSeries.spatiallySorted ? "✓ Срезы отсортированы по DICOM-координатам" : "⚠ Пространственный порядок не подтверждён"}
+                  </p>
+                  <p className={activeSeries.volumeReady ? "ora-series-ok" : "ora-series-warning"}>
+                    {activeSeries.volumeReady
+                      ? `✓ Геометрия однородна · шаг ${activeSeries.sliceSpacingMm?.toFixed(2)} мм · подготовлено для будущего 3D-движка`
+                      : activeSeries.warning ?? "MPR/3D недоступны без подтверждённого объёма"}
+                  </p>
+                </>}
               </div>}
               <div className="ora-file-summary"><Icon name="shield" size={16}/> Файлы остаются в браузере. Общий размер: {files.length ? formatSize(totalSize) : "0 МБ"}</div>
             </div>
