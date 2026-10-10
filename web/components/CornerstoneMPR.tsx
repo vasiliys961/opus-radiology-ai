@@ -30,7 +30,7 @@ const captions: Record<Plane,string> = { axial:"АКСИАЛЬНАЯ", coronal:"
  * All input stays in the browser and is gated by checkMprEligibility upstream.
  * This is NOT a calibrated diagnostic viewer or a measurement instrument.
  */
-export default function CornerstoneMPR({ files, quality }: { files: File[]; quality: MprQuality }) {
+export default function CornerstoneMPR({ files, quality, show3D, onShow3DChange }: { files: File[]; quality: MprQuality; show3D: boolean; onShow3DChange: (enabled: boolean) => void }) {
   const axial = useRef<HTMLDivElement>(null);
   const coronal = useRef<HTMLDivElement>(null);
   const sagittal = useRef<HTMLDivElement>(null);
@@ -43,7 +43,6 @@ export default function CornerstoneMPR({ files, quality }: { files: File[]; qual
   const [readouts, setReadouts] = useState<Readouts>(emptyReadouts);
   const [crosshairs, setCrosshairs] = useState<Crosshairs>(emptyCrosshairs);
   const [interpolation, setInterpolation] = useState<"linear" | "nearest">("linear");
-  const [show3D, setShow3D] = useState(false);
   const [threeDReady, setThreeDReady] = useState(false);
   const [threeDBusy, setThreeDBusy] = useState(false);
   const [threeDError, setThreeDError] = useState("");
@@ -59,7 +58,6 @@ export default function CornerstoneMPR({ files, quality }: { files: File[]; qual
     const volumeId = `ora-mpr-${id}`;
     runtime.current = null;
     setReady(false);
-    setShow3D(false);
     setThreeDReady(false);
     setThreeDBusy(false);
     setThreeDError("");
@@ -348,12 +346,30 @@ export default function CornerstoneMPR({ files, quality }: { files: File[]; qual
     </div>
     <div className="ora-mpr-3d-toolbar">
       <button type="button" className={show3D ? "active" : ""} disabled={!ready} aria-pressed={show3D}
-        onClick={() => setShow3D(v => !v)}>{show3D ? "Скрыть 3D" : "Показать 3D · MIP"}</button>
+        onClick={() => onShow3DChange(!show3D)}>{show3D ? "Скрыть 3D" : "Показать 3D · MIP"}</button>
       <span>3D MIP — проекция максимальной интенсивности, не сегментация и не модель поверхности.</span>
     </div>
     {show3D && quality.interpolationRisk === "high" && <p className="ora-mpr-3d-warning" role="note">
       Внимание: шаг между срезами {quality.sliceSpacingMm?.toFixed(2)} мм. Объём анизотропный: 3D-проекция условная, мелкие структуры и границы могут искажаться.
     </p>}
+      <div className={`ora-mpr-3d-panel ${show3D ? "visible" : ""}`} aria-hidden={!show3D}>
+        <div className="ora-mpr-3d-title"><strong>3D · MIP</strong><span>{threeDBusy ? "Загрузка 3D…" : threeDReady ? "Поворот мышью или кнопками" : "Экспериментально"}</span></div>
+        <div ref={volume3d} className="ora-mpr-3d-canvas" onPointerDown={(event: PointerEvent<HTMLDivElement>) => {
+          if (!threeDReady) return;
+          drag3d.current = {x:event.clientX,y:event.clientY};
+          event.currentTarget.setPointerCapture(event.pointerId);
+        }} onPointerMove={(event: PointerEvent<HTMLDivElement>) => {
+          if (!drag3d.current || !threeDReady) return;
+          runtime.current?.orbit3D((event.clientX-drag3d.current.x)*0.4, (event.clientY-drag3d.current.y)*0.4);
+          drag3d.current = {x:event.clientX,y:event.clientY};
+        }} onPointerUp={() => {drag3d.current=null;}} onPointerCancel={() => {drag3d.current=null;}}/>
+        {threeDError && <div className="cs-error" role="alert">3D недоступно: {threeDError}. MPR продолжает работать.</div>}
+        <div className="ora-mpr-3d-actions">
+          <button type="button" disabled={!threeDReady} onClick={() => runtime.current?.orbit3D(-15,0)}>↶ Повернуть</button>
+          <button type="button" disabled={!threeDReady} onClick={() => runtime.current?.orbit3D(15,0)}>Повернуть ↷</button>
+          <button type="button" disabled={!threeDReady} onClick={() => runtime.current?.orbit3D(0,15)}>Наклонить ↓</button>
+        </div>
+      </div>
     <div className="ora-mpr-grid">
       {PLANE_NAMES.map((plane) => {
         const ref = plane === "axial" ? axial : plane === "coronal" ? coronal : sagittal;
@@ -379,24 +395,7 @@ export default function CornerstoneMPR({ files, quality }: { files: File[]; qual
           </div>
         </div>;
       })}
-      <div className={`ora-mpr-3d-panel ${show3D ? "visible" : ""}`} aria-hidden={!show3D}>
-        <div className="ora-mpr-3d-title"><strong>3D · MIP</strong><span>{threeDBusy ? "Загрузка 3D…" : threeDReady ? "Поворот мышью или кнопками" : "Экспериментально"}</span></div>
-        <div ref={volume3d} className="ora-mpr-3d-canvas" onPointerDown={(event: PointerEvent<HTMLDivElement>) => {
-          if (!threeDReady) return;
-          drag3d.current = {x:event.clientX,y:event.clientY};
-          event.currentTarget.setPointerCapture(event.pointerId);
-        }} onPointerMove={(event: PointerEvent<HTMLDivElement>) => {
-          if (!drag3d.current || !threeDReady) return;
-          runtime.current?.orbit3D((event.clientX-drag3d.current.x)*0.4, (event.clientY-drag3d.current.y)*0.4);
-          drag3d.current = {x:event.clientX,y:event.clientY};
-        }} onPointerUp={() => {drag3d.current=null;}} onPointerCancel={() => {drag3d.current=null;}}/>
-        {threeDError && <div className="cs-error" role="alert">3D недоступно: {threeDError}. MPR продолжает работать.</div>}
-        <div className="ora-mpr-3d-actions">
-          <button type="button" disabled={!threeDReady} onClick={() => runtime.current?.orbit3D(-15,0)}>↶ Повернуть</button>
-          <button type="button" disabled={!threeDReady} onClick={() => runtime.current?.orbit3D(15,0)}>Повернуть ↷</button>
-          <button type="button" disabled={!threeDReady} onClick={() => runtime.current?.orbit3D(0,15)}>Наклонить ↓</button>
-        </div>
-      </div>
+
     </div>
     <p className="ora-mpr-warning">Исследовательский MPR. Все три перекрестия соответствуют одной точке в пространстве пациента; клиническая точность, измерения и геометрия требуют отдельной валидации. Изображения остаются в браузере.</p>
   </section>;

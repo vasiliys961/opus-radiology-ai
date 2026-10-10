@@ -128,3 +128,8 @@
 .ora-mpr-3d-actions button:disabled{opacity:.35;cursor:not-allowed}
 @media(max-width:700px){.ora-mpr-3d-canvas{height:270px}}
 .ora-mpr-plane:first-child > .ora-mpr-native-label{height:auto}
+
+/* v1.2: 3D is a first-class viewing mode, visible beside 2D and MPR. */
+.ora-mode-buttons{display:flex;flex-wrap:wrap;align-items:center;gap:5px}
+.ora-mode-buttons .ora-mpr-toggle{padding:7px 9px}
+.ora-mpr-3d-panel.visible{display:block;margin:9px 0 12px}

@@ -72,7 +72,7 @@ export default function Home() {
   const allocatedUrls = useRef<string[]>([]);
   const [dragged, setDragged] = useState(false);
   const [zoom, setZoom] = useState(1);
-  const [mprEnabled, setMprEnabled] = useState(false);
+  const [viewMode, setViewMode] = useState<"2d" | "mpr" | "3d">("2d");
   const [dicomPreview, setDicomPreview] = useState<{ id: string; url: string; metadata: DicomPreviewMetadata } | null>(null);
   const [dicomLoading, setDicomLoading] = useState(false);
   const [indexing, setIndexing] = useState(false);
@@ -95,9 +95,9 @@ export default function Home() {
   const mprCheck = useMemo(() => checkMprEligibility(activeSeries, cornerstoneFiles.map(f => f.size)), [activeSeries, cornerstoneFiles]);
   const mprQuality = useMemo(() => assessMprQuality(activeSeries), [activeSeries]);
   const hasCornerstone = active?.kind === "dicom" && cornerstoneFiles.length > 0;
-  const showMpr = hasCornerstone && mprEnabled && mprCheck.eligible;
+  const showMpr = hasCornerstone && viewMode !== "2d" && mprCheck.eligible;
   // Reset MPR on series changes and preserve normal 2D stack as the fallback.
-  useEffect(() => { setMprEnabled(false); }, [activeSeries?.key]);
+  useEffect(() => { setViewMode("2d"); }, [activeSeries?.key]);
   const sliceIndex = activeSeries?.members.findIndex((m) => m.id === activeId) ?? -1;
   const selectSlice = (index: number) => {
     if (!activeSeries) return;
@@ -271,12 +271,12 @@ export default function Home() {
             <div className="ora-viewer-card">
               <div className="ora-viewer-head">
                 <div><span className="ora-heading-icon ora-heading-icon-dark"><Icon name="scan" size={18}/></span><div><h2>Просмотр изображения</h2><p>{hasCornerstone ? `${activeSeries?.label ?? "DICOM"} · Cornerstone3D` : active ? active.file.name : "Нет выбранного исследования"}</p></div></div>
-                {hasCornerstone ? <div className="ora-mode-actions"><span className="ora-viewer-engine">DICOM · {cornerstoneFiles.length} кадр(ов)</span><button type="button" className={showMpr ? "ora-mpr-toggle active" : "ora-mpr-toggle"} disabled={!mprCheck.eligible && !showMpr} title={mprCheck.reason} onClick={() => setMprEnabled(value => !value)}>{showMpr ? "2D-срезы" : "MPR · 3 плоскости"}</button></div> :
+                {hasCornerstone ? <div className="ora-mode-actions"><span className="ora-viewer-engine">DICOM · {cornerstoneFiles.length} кадр(ов)</span><div className="ora-mode-buttons" role="group" aria-label="Режим просмотра"><button type="button" className={viewMode === "2d" ? "ora-mpr-toggle active" : "ora-mpr-toggle"} aria-pressed={viewMode === "2d"} onClick={() => setViewMode("2d")}>2D</button><button type="button" className={viewMode === "mpr" ? "ora-mpr-toggle active" : "ora-mpr-toggle"} aria-pressed={viewMode === "mpr"} disabled={!mprCheck.eligible} title={mprCheck.reason} onClick={() => setViewMode("mpr")}>MPR · 3 плоскости</button><button type="button" className={viewMode === "3d" ? "ora-mpr-toggle active" : "ora-mpr-toggle"} aria-pressed={viewMode === "3d"} disabled={!mprCheck.eligible} title={mprCheck.reason} onClick={() => setViewMode("3d")}>3D · MIP</button></div></div> :
                 <div className="ora-viewer-tools"><button type="button" title="Уменьшить" disabled={!url} onClick={()=>setZoom(z=>Math.max(.5,Number((z-.25).toFixed(2))))}><Icon name="minus" size={17}/></button><span>{Math.round(zoom*100)}%</span><button type="button" title="Увеличить" disabled={!url} onClick={()=>setZoom(z=>Math.min(4,Number((z+.25).toFixed(2))))}><Icon name="plus" size={17}/></button><button type="button" title="Сбросить масштаб" disabled={!url} onClick={()=>setZoom(1)}><Icon name="fit" size={17}/></button></div>}
               </div>
               {hasCornerstone ?
                 <div className="ora-cornerstone-host">{showMpr
-                  ? <CornerstoneMPR key={`mpr-${activeSeries!.key}`} files={cornerstoneFiles} quality={mprQuality}/>
+                  ? <CornerstoneMPR key={`mpr-${activeSeries!.key}`} files={cornerstoneFiles} quality={mprQuality} show3D={viewMode === "3d"} onShow3DChange={enabled => setViewMode(enabled ? "3d" : "mpr")}/>
                   : <CornerstoneStack key={activeSeries!.key} files={cornerstoneFiles} selectedIndex={sliceIndex >= 0 ? sliceIndex : 0} modality={activeSeries!.modality} onSliceChange={(index) => { const member = activeSeries!.members[index]; if (member) setActiveId(member.id); }}/>}</div>
                 : <>
                   <div className="ora-viewer-body" tabIndex={0}>
@@ -285,7 +285,7 @@ export default function Home() {
                     <div className="ora-viewer-axis"><span>IMAGING / LOCAL VIEW</span><span>{url ? "ЛОКАЛЬНЫЙ ПРОСМОТР" : "ОЖИДАНИЕ ДАННЫХ"}</span></div>
                   </div>
                 </>}
-              <div className="ora-viewer-footer"><span><span className="ora-tiny-dot"/> {hasCornerstone ? "Cornerstone3D · локальный экспериментальный просмотр" : dicomPreview?.id === activeId ? `${dicomPreview.metadata.modality || "DICOM"} · ${dicomPreview.metadata.width}×${dicomPreview.metadata.height} · WC ${dicomPreview.metadata.windowCenter ?? "auto"} / WW ${dicomPreview.metadata.windowWidth ?? "auto"}` : "Локальный предпросмотр · исследовательский режим"}</span><span>3D <b>скоро</b> · MPR <b>{mprCheck.eligible ? "экспериментальный" : "недоступен"}</b></span></div>
+              <div className="ora-viewer-footer"><span><span className="ora-tiny-dot"/> {hasCornerstone ? "Cornerstone3D · локальный экспериментальный просмотр" : dicomPreview?.id === activeId ? `${dicomPreview.metadata.modality || "DICOM"} · ${dicomPreview.metadata.width}×${dicomPreview.metadata.height} · WC ${dicomPreview.metadata.windowCenter ?? "auto"} / WW ${dicomPreview.metadata.windowWidth ?? "auto"}` : "Локальный предпросмотр · исследовательский режим"}</span><span>3D MIP / MPR <b>{mprCheck.eligible ? "экспериментальные" : "недоступны"}</b></span></div>
             </div>
             <div className="ora-finding-strip"><div className="ora-finding-icon"><Icon name="sparkles" size={21}/></div><div><strong>AI-анализ готов к интеграции</strong><p>После подключения Python-сервиса здесь появятся маски, измерения и найденные изменения.</p></div><span className="ora-coming-soon">НЕ ПОДКЛЮЧЁН</span></div>
           </section>
