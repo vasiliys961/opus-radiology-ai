@@ -1,7 +1,9 @@
 # Hybrid analysis: agreed direction and implementation boundaries
 
-Status after v1.4.0: local DICOM, 2D, MPR and volume rendering are implemented.
-Segmentation, pathology detection, external visual analysis and clinical synthesis
+Status after v1.5.0: local DICOM, 2D, MPR, volume rendering and bounded import of
+precomputed NIfTI-1 label masks are implemented. Labels overlay MPR after strict
+physical-grid checks; no automatic segmentation model or 3D mask surface is
+connected. Pathology detection, external visual analysis and clinical synthesis
 are not connected. The disabled analysis controls must stay disabled until a real
 provider is implemented and its results can be traced to source evidence.
 
@@ -62,7 +64,7 @@ outputs without task-specific validation on held-out reference studies.
 ## Acceptance of the next segmentation milestone
 
 Select one supported task, run an actual compatible provider, validate source-to-
-mask geometry on a legal reference dataset, overlay masks on MPR, then generate
+mask geometry on a legal reference dataset, use the MPR mask-overlay interface, then generate
 surfaces with documented interpolation. Include reproducible checks for spacing,
 coordinate alignment, unsupported inputs, cancelled jobs and resource release.
 Only after this milestone should the hybrid clinical-synthesis path be enabled.
