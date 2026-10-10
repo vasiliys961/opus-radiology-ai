@@ -261,7 +261,7 @@ export default function Home() {
                 <div className="ora-viewer-tools"><button type="button" title="Уменьшить" disabled={!url} onClick={()=>setZoom(z=>Math.max(.5,Number((z-.25).toFixed(2))))}><Icon name="minus" size={17}/></button><span>{Math.round(zoom*100)}%</span><button type="button" title="Увеличить" disabled={!url} onClick={()=>setZoom(z=>Math.min(4,Number((z+.25).toFixed(2))))}><Icon name="plus" size={17}/></button><button type="button" title="Сбросить масштаб" disabled={!url} onClick={()=>setZoom(1)}><Icon name="fit" size={17}/></button></div>}
               </div>
               {hasCornerstone ?
-                <div className="ora-cornerstone-host"><CornerstoneStack key={activeSeries!.key} files={cornerstoneFiles} selectedIndex={sliceIndex >= 0 ? sliceIndex : 0} onSliceChange={(index) => { const member = activeSeries!.members[index]; if (member) setActiveId(member.id); }}/></div>
+                <div className="ora-cornerstone-host"><CornerstoneStack key={activeSeries!.key} files={cornerstoneFiles} selectedIndex={sliceIndex >= 0 ? sliceIndex : 0} modality={activeSeries!.modality} onSliceChange={(index) => { const member = activeSeries!.members[index]; if (member) setActiveId(member.id); }}/></div>
                 : <>
                   <div className="ora-viewer-body" tabIndex={0}>
                     {url && active ? <div className="ora-image-scroll"><img src={url} alt={`Предпросмотр: ${active.file.name}`} className="ora-medical-img" style={{transform: `scale(${zoom})`}} /></div>

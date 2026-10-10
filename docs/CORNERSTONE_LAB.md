@@ -71,3 +71,22 @@ successful build establishes decoder compatibility or clinical image fidelity.
 Поддержка индексации **не гарантирует** воспроизведение изображения: возможность
 декодировать исходный Transfer Syntax (особенно raw и сжатые файлы) ещё должна
 проверяться отдельно на Cornerstone3D в Safari. Никаких внешних загрузок нет.
+
+## v0.7 — display-only imaging tools
+
+The same `CornerstoneStack` powers both the unified dashboard `/` and the lab `/viewer`.
+The toolbar adds zoom (25–800%), pointer pan, drag-to-adjust WW/WC, precise
+WW/WC inputs, CT-only brain/soft-tissue/lung/bone presets, fullscreen with
+Safari WebKit fallback, and responsive canvas resizing. The original DICOM
+buffers are never modified and no image is sent to a server. MRI does **not**
+show HU presets; its numeric display intensities have no universal HU scale.
+
+Wheel navigates slices and Shift+wheel zooms. These are **display controls, not**
+validated calibrated image measurements. Screenshot or displayed brightness
+must not be used for automated numerical inferences. The viewer maintains
+`window-level.ts` helpers with 5 unit tests; model inference remains disabled.
+
+On 8 GB Mac hardware, start testing with the user's known 20-frame subset;
+then try the full anonymized 135-file multi-series dataset. Fullscreen and
+worker decoding must be verified in Safari; unit tests cannot validate GPU
+rendering, modality LUT fidelity or pixel geometry.

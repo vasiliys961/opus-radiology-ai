@@ -84,7 +84,7 @@ export default function ViewerPage() {
           <button type="button" className="cs-clear" disabled={reading || indexed.length === 0} onClick={() => { setIndexed([]); setCurrentSeriesKey(""); setMessage("Список очищен, файлы на диске не изменены."); }}>Очистить загруженное</button>
         </aside>
         <div className="cs-stage">
-          {selectedFiles.length ? <CornerstoneStack key={selected?.key} files={selectedFiles}/> : <div className="cs-placeholder"><span>✚</span><strong>Область DICOM-изображений</strong><p>Выберите файлы или папку DICOM, чтобы проверить работу Cornerstone3D.</p></div>}
+          {selectedFiles.length ? <CornerstoneStack key={selected?.key} files={selectedFiles} modality={selected?.modality}/> : <div className="cs-placeholder"><span>✚</span><strong>Область DICOM-изображений</strong><p>Выберите файлы или папку DICOM, чтобы проверить работу Cornerstone3D.</p></div>}
           <div className="cs-bottom-note">Важное ограничение: 2D-просмотр не означает подтверждение точности измерений, реконструкции, правильной геометрии или отсутствия патологии. Сжатые кодеки проверяются отдельно на тестовых наборах.</div>
         </div>
       </div>

@@ -27,3 +27,24 @@
 .cs-placeholder{min-height:520px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:12px;background:#142a37;border:1px solid #2d4755;border-radius:12px;color:#d0e5e8;padding:40px}.cs-placeholder span{color:#30c9a6;font-size:54px}.cs-placeholder p{font-size:12px;color:#86a3b1;max-width:300px}
 .cs-bottom-note{margin-top:14px;color:#8a9daa;font-size:11px;line-height:1.65}
 @media(max-width:950px){.cs-layout{grid-template-columns:1fr}.cs-sidebar{max-width:none}.cs-intro{display:block}.cs-watermark{display:inline-block;margin-top:15px}.cs-image{height:480px}.cs-top span:last-child{display:none}}
+
+/* Integrated workstation imaging controls. This layout is also used on /viewer. */
+.cs-tools,.cs-window-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 12px;background:#203644;border-bottom:1px solid #35515c;color:#c3e1e4}
+.cs-window-row{background:#172e3b}
+.cs-tool-group,.cs-preset-list{display:flex;align-items:center;flex-wrap:wrap;gap:4px}
+.cs-tools button,.cs-window-row button{border:1px solid #466374;background:#2b4958;border-radius:6px;color:#d6eaf0;padding:6px 9px;font-size:11px;cursor:pointer;min-height:30px}
+.cs-tools button.active{background:#117e77;border-color:#34b6a1;color:#fff}
+.cs-tools button:hover:not(:disabled),.cs-window-row button:hover:not(:disabled){border-color:#58cbb4;color:#fff}
+.cs-tools button:disabled,.cs-window-row button:disabled{opacity:.5;cursor:not-allowed}
+.cs-zoom-readout{color:#cde4e6;font-size:11px;min-width:44px;text-align:center}
+.cs-window-row label{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700}
+.cs-window-row input{background:#0d2431;border:1px solid #4b6976;color:#e4eff0;outline:none;width:76px;max-width:100px;border-radius:5px;padding:6px;font-size:11px}
+.cs-window-row input:focus{border-color:#57cdb4}
+.cs-preset-list{border-left:1px solid #385362;margin-left:3px;padding-left:9px}
+.cs-hint{font-size:10px;color:#8cb2bc;background:#132633;padding:7px 13px;line-height:1.5}
+.cs-image[data-tool="pan"]{cursor:grab}.cs-image[data-tool="pan"]:active{cursor:grabbing}
+.cs-image[data-tool="window"]{cursor:crosshair}
+.cs-stack:fullscreen,.cs-stack:-webkit-full-screen{display:flex;flex-direction:column;width:100vw;height:100vh;border-radius:0;background:#10212b}
+.cs-stack:fullscreen .cs-image,.cs-stack:-webkit-full-screen .cs-image{height:auto;min-height:0;flex:1}
+.cs-stack:fullscreen .cs-view-header,.cs-stack:-webkit-full-screen .cs-view-header{min-height:48px;padding:9px 15px}
+@media(max-width:670px){.cs-tools,.cs-window-row{padding:8px}.cs-preset-list{border-left:0;padding-left:0}.cs-hint{font-size:9px}}
