@@ -127,13 +127,13 @@ export default function SegmentationControls({ ready, onPrepare, onImport, onDis
     {summary && <>
       <p className="ora-mask-success" role="status">Сетка совмещена · {summary.name} · меток: {summary.labels.length}</p>
       <small>Совпадение геометрии не подтверждает пациента или правильность сегментации. Проверьте принадлежность файла выбранной серии и границы на всех плоскостях.</small>
-      {summary.result ? <div className="ora-mask-provenance" role="status">
-        <strong>Контрольные суммы пакета и маски совпали</strong>
+      {summary.result ? <details className="ora-mask-provenance">
+        <summary>Суммы совпали · {summary.result.model.id} · сведения о модели</summary>
         <p>Заявленная модель: {summary.result.model.id} · {summary.result.model.version}. Задача: {summary.result.model.task}.</p>
         <small>Запрос: {summary.result.requestId}<br/>SHA-256 весов: {summary.result.model.weightsSha256}</small>
         {summary.result.limitations.length>0 && <ul>{summary.result.limitations.map((s,i)=><li key={i}>{s}</li>)}</ul>}
         <small>Паспорт не подписан. Контрольные суммы не удостоверяют автора модели, клиническую точность или применимость к последовательности.</small>
-      </div> : <p className="ora-mask-binding-note">Проверена только геометрия. Связь с пакетом серии и сведения о модели не проверены.</p>}
+      </details> : <p className="ora-mask-binding-note">Проверена только геометрия. Связь с пакетом серии и сведения о модели не проверены.</p>}
       {summary.labels.length ? <>
         <div className="ora-mask-settings">
           <label className="ora-mask-visible"><input type="checkbox" checked={display.visible} onChange={event=>change({...display,visible:event.target.checked})}/> Показать на MPR</label>
@@ -147,8 +147,8 @@ export default function SegmentationControls({ ready, onPrepare, onImport, onDis
         <small>Объём рассчитан по меткам и геометрии маски; это не оценка точности модели. Названия из паспорта заявлены поставщиком результата. Маска отображается поверх MPR, без 3D-поверхностей.</small>
       </> : <p>Маска не содержит ненулевых меток. Это не подтверждает отсутствие патологических изменений.</p>}
     </>}
-    <div className="ora-analysis-package">
-      <strong>Полный объём для отдельного AI Engine</strong>
+    <details className="ora-analysis-package">
+      <summary>Пакет полного объёма для AI Engine</summary>
       <p>Подготовьте выбранную серию как NIfTI и паспорт. Оба файла скачиваются отдельно; приложение не отправляет их на сервер.</p>
       <small>В пакет входит одна серия. Последовательность и полнота анатомического покрытия не подтверждены. Изображение может содержать идентифицирующую информацию; удаление DICOM-тегов не гарантирует обезличивания.</small>
       <div className="ora-mask-actions">
@@ -171,6 +171,6 @@ export default function SegmentationControls({ ready, onPrepare, onImport, onDis
           if (files.length && ready) void loadResult(files);
         }}/>
       </>}
-    </div>
+    </details>
   </section>;
 }

@@ -60,6 +60,7 @@ try {
   await page.locator('.ora-mask-error').waitFor();
   assert.match(await page.locator('.ora-mask-error').innerText(),/не совпадает.*Предыдущая маска сохранена/);
   assert.match(await page.locator('.ora-mask-success').innerText(),/synthetic-mask\.nii/);
+  await page.locator('.ora-analysis-package>summary').click();
   await page.getByRole('button',{name:'Подготовить пакет серии',exact:true}).click();
   await page.locator('.ora-package-ready').waitFor();
   const download=async(name,path)=>{

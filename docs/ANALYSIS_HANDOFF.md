@@ -7,7 +7,8 @@ performed by preparing a package or importing a result.
 
 ## What the browser exports
 
-In MPR select “Подготовить пакет серии”, then download both files separately:
+In MPR open “Пакет полного объёма для AI Engine”, select “Подготовить пакет серии”,
+then download both files separately:
 
 - `opus-<requestId>_0000.nii`: the complete loaded scalar volume of **one selected
   series**, in Cornerstone voxel order. Single-file NIfTI-1, little endian float32,

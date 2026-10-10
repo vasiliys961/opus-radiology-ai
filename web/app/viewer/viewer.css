@@ -191,3 +191,5 @@
 .ora-mask-provenance ul{padding-left:18px;margin:7px 0}
 .ora-mask-binding-note{color:#c8d8b7}
 .ora-analysis-package small{overflow-wrap:anywhere}
+.ora-analysis-package>summary,.ora-mask-provenance>summary{cursor:pointer;font-weight:600;color:#b9e9d4}
+.ora-analysis-package[open]>summary,.ora-mask-provenance[open]>summary{margin-bottom:9px}
