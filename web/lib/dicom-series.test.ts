@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseDicomSeriesHeader, groupDicomSeries, type TechnicalDicomMetadata } from './dicom-series.ts';
+import { parseDicomSeriesHeader, readDicomSeriesHeader, groupDicomSeries, type TechnicalDicomMetadata } from './dicom-series.ts';
 
 function syntheticHeader({series = '1.2.3.4', position = '0\\0\\10', syntax = '1.2.840.10008.1.2.1'} = {}) {
   const bytes: number[] = [...Buffer.alloc(128), ...Buffer.from('DICM')];
@@ -148,4 +148,58 @@ test('flags multi-frame images although the header can be indexed', () => {
   ]);
   assert.match(series.warning ?? '',/Мультифреймовый/);
   assert.equal(series.volumeReady,false);
+});
+
+/** Real-world studies may contain sequence items before the basic image tags. */
+function complexHeader(withPreamble = true): ArrayBuffer {
+  const chunks: Buffer[] = [];
+  if (withPreamble) chunks.push(Buffer.alloc(128), Buffer.from('DICM'));
+  function elem(group: number, element: number, vr: string, value: string) {
+    const data = Buffer.from(value);
+    const padded = data.length + data.length % 2;
+    const h = Buffer.alloc(8);
+    h.writeUInt16LE(group, 0); h.writeUInt16LE(element, 2);
+    h.write(vr, 4, 'ascii'); h.writeUInt16LE(padded, 6);
+    chunks.push(h, data, Buffer.alloc(padded-data.length));
+  }
+  if (withPreamble) elem(0x0002, 0x0010, 'UI', '1.2.840.10008.1.2.1');
+  elem(0x0008, 0x0060, 'CS', 'CT');
+  // Referenced Study Sequence, undefined length, an empty item, a delimiter.
+  const sq = Buffer.alloc(12);
+  sq.writeUInt16LE(0x0008, 0); sq.writeUInt16LE(0x1110, 2);
+  sq.write('SQ', 4); sq.writeUInt32LE(0xffffffff, 8);
+  const item = Buffer.alloc(8);
+  item.writeUInt16LE(0xfffe, 0); item.writeUInt16LE(0xe000, 2);
+  const delim = Buffer.alloc(8);
+  delim.writeUInt16LE(0xfffe, 0); delim.writeUInt16LE(0xe0dd, 2);
+  chunks.push(sq, item, delim);
+  elem(0x0020, 0x000d, 'UI', '1.2.3');
+  elem(0x0020, 0x000e, 'UI', '1.2.3.4');
+  elem(0x0008, 0x0018, 'UI', '1.2.3.4.5');
+  const pixel = Buffer.alloc(12);
+  pixel.writeUInt16LE(0x7fe0, 0); pixel.writeUInt16LE(0x0010, 2);
+  pixel.write('OW', 4); pixel.writeUInt32LE(160000, 8);
+  chunks.push(pixel);
+  return Uint8Array.from(Buffer.concat(chunks)).buffer;
+}
+
+test('complex undefined-length DICOM sequence no longer blocks series indexing', async () => {
+  const file = new File([complexHeader()], 'image-000001.dcm');
+  const header = await readDicomSeriesHeader(file);
+  assert.equal(header.studyUid, '1.2.3');
+  assert.equal(header.seriesUid, '1.2.3.4');
+  assert.equal(header.modality, 'CT');
+});
+
+test('raw explicit-VR DICOM without 128-byte preamble is identified for indexing', async () => {
+  const file = new File([complexHeader(false)], 'raw-image.dcm');
+  const header = await readDicomSeriesHeader(file);
+  assert.equal(header.studyUid, '1.2.3');
+  assert.equal(header.seriesUid, '1.2.3.4');
+  assert.equal(header.transferSyntax, '1.2.840.10008.1.2.1');
+});
+
+test('non-DICOM bytes are rejected rather than invented as a series', async () => {
+  const file = new File([new Uint8Array([1,2,3,4])], 'invalid.dcm');
+  await assert.rejects(readDicomSeriesHeader(file), /Не удалось разобрать структуру DICOM/);
 });

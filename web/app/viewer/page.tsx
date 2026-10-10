@@ -34,17 +34,23 @@ export default function ViewerPage() {
     setMessage("Чтение технических DICOM-заголовков, без загрузки на сервер…");
     const parsed: Indexed[] = [];
     let rejected = 0;
+    const reasons = new Map<string, number>();
     try {
       for (const file of files) {
         try {
           const header = await readDicomSeriesHeader(file);
           parsed.push({ id: crypto.randomUUID(), file, header });
-        } catch { rejected++; }
+        } catch (error: unknown) {
+          rejected++;
+          const reason = error instanceof Error ? error.message : "Неизвестная ошибка индексации.";
+          reasons.set(reason, (reasons.get(reason) ?? 0) + 1);
+        }
       }
       // Replace, rather than merge, series so stale patient data cannot persist.
       setIndexed(parsed);
       setCurrentSeriesKey("");
-      setMessage(`Проиндексировано ${parsed.length} DICOM; пропущено ${rejected}. Изображения остаются на вашем Mac.`);
+      const mostCommon = [...reasons.entries()].sort((a, b) => b[1] - a[1])[0];
+      setMessage(`Проиндексировано ${parsed.length} DICOM; пропущено ${rejected}.${mostCommon ? ` Основная причина (${mostCommon[1]}): ${mostCommon[0]}.` : ""} Изображения остаются на вашем Mac.`);
     } finally { setReading(false); }
   }
 

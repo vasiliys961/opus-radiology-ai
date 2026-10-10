@@ -121,6 +121,7 @@ export default function Home() {
     const accepted: StudyFile[] = [];
     let rejected = 0;
     let warningCount = 0;
+    const warningReasons = new Map<string, number>();
     const limited = incoming.slice(0, MAX_DICOM_FILES);
     try {
       // Limit memory use on 8 GB M1: inspect only header fragments, sequentially.
@@ -143,6 +144,7 @@ export default function Home() {
           catch (error: unknown) {
             warningCount++;
             item.indexWarning = error instanceof Error ? error.message : "Не удалось прочитать технические метаданные.";
+            warningReasons.set(item.indexWarning, (warningReasons.get(item.indexWarning) ?? 0) + 1);
           }
         }
         accepted.push(item);
@@ -163,7 +165,9 @@ export default function Home() {
         setActiveId(accepted[0].id);
         setZoom(1);
         if (accepted.some((item) => item.kind === "dicom" || item.kind === "nifti")) setModality("КТ / МРТ — уточнить");
-        setNotice(`${accepted.length} файл(ов) добавлено локально.${rejected ? ` Пропущено: ${rejected}.` : ""}${warningCount ? ` Не удалось индексировать DICOM: ${warningCount}.` : ""}`);
+        const commonReason = [...warningReasons.entries()].sort((a, b) => b[1] - a[1])[0];
+        const details = commonReason ? ` Основная причина (${commonReason[1]}): ${commonReason[0]}` : "";
+        setNotice(`${accepted.length} файл(ов) добавлено локально.${rejected ? ` Пропущено: ${rejected}.` : ""}${warningCount ? ` Не удалось индексировать DICOM: ${warningCount}.${details}` : ""}`);
       } else setNotice(rejected ? "Поддерживаются DICOM, NIfTI, ZIP, JPG, PNG и WEBP." : "Файлы не выбраны.");
     } finally { setIndexing(false); }
   };

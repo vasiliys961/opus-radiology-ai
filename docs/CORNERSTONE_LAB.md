@@ -33,19 +33,41 @@ The original `DicomViewer.tsx` imports legacy `cornerstone-core` and references 
 
 ## Next.js 16 / Turbopack: browser-only `fs` shim
 
-Generated Emscripten codec modules (e.g. `@cornerstonejs/codec-charls`) contain
-`require("fs")` in Node-only branches. Next.js 16 Turbopack resolves this
-specifier when building browser chunks and would fail with
-`Module not found: Can't resolve 'fs'`.
+Generated Emscripten codec modules (e.g. `@cornerstonejs/codec-charls/dist/charlswasm_decode.js`)
+include `require("fs")` in their **Node-only** branches. Turbopack attempts to resolve that
+specifier while bundling for the browser, producing `Module not found: Can't resolve 'fs'`.
 
-`web/next.config.ts` uses `turbopack.resolveAlias.fs.browser` to route this
-browser-only import to the empty `web/lib/browser-fs.ts` module. Native
-server-side `fs` resolution remains unchanged. This workaround does **not**
-validate that JPEG-LS or other WASM codecs can decode all studies at runtime.
+`web/next.config.ts` now uses `turbopack.resolveAlias.fs.browser` to redirect this
+**browser-only import** to empty `web/lib/browser-fs.ts`. The server-side `fs` module
+remains available. This is a bundling compatibility shim, **not** a filesystem polyfill
+or proof that all JPEG-LS/JPEG2000 decoders work at runtime.
 
-The GitHub Actions `web-checks.yml` job runs unit tests, TypeScript checks
-and a production build after changes to the web app.
+The GitHub Actions `web-checks.yml` job runs unit tests, TypeScript checking, and
+`next build` so this class of compile failure is easier to catch before deploying.
 
-After updating the Mac, **restart** `npm run dev` for the config to apply.
-If another missing Node module or codec error appears, capture its first error
-and import trace; do not interpret a decoder failure as a negative finding.
+On a Mac after pulling, restart Next.js; changes to `next.config.ts` require a restart:
+
+```bash
+cd ~/Desktop/opus-radiology-ai-github
+# in the other terminal, stop npm run dev with Control+C first
+git pull --ff-only
+cd web
+npm run typecheck
+npm run dev
+```
+
+If the browser reports another missing Node.js module or the viewer crashes after
+uploading DICOM, capture the first error and its import trace; do not assume that a
+successful build establishes decoder compatibility or clinical image fidelity.
+
+## v0.6 — индексатор сложных DICOM
+
+При загрузке серий с последовательностями `SQ` неопределённой длины или DICOM без
+`DICM`-префикса прежний учебный парсер мог отказать на всех срезах. Для таких
+файлов используется `dicom-parser` (уже существующая зависимость), с остановкой
+перед Pixel Data и последовательным ограниченным чтением не более 8 МБ на файл.
+Ошибки выводятся с подсчётом наиболее частой причины без раскрытия метаданных.
+
+Поддержка индексации **не гарантирует** воспроизведение изображения: возможность
+декодировать исходный Transfer Syntax (особенно raw и сжатые файлы) ещё должна
+проверяться отдельно на Cornerstone3D в Safari. Никаких внешних загрузок нет.

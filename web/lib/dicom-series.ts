@@ -150,8 +150,87 @@ export function parseDicomSeriesHeader(buffer: ArrayBuffer): TechnicalDicomMetad
   return result;
 }
 
+/**
+ * Fallback for real-world Part 10 studies with SQ/undefined-length structures,
+ * and raw (no Part 10 preamble) DICOM data sets. The small handwritten parser
+ * above is kept for cheap happy-path indexing, but must not be the final word.
+ *
+ * We ask dicom-parser to stop BEFORE Pixel Data: compressed pixel streams are
+ * not decoded and patient-identifying tags are never returned or logged.
+ */
+async function parseComplexDicomHeader(buffer: ArrayBuffer): Promise<TechnicalDicomMetadata> {
+  const parserModule = await import('dicom-parser');
+  const dicomParser = parserModule.default ?? parserModule;
+  const bytes = new Uint8Array(buffer);
+  const hasPart10 = bytes.length >= 132 &&
+    bytes[128] === 68 && bytes[129] === 73 && bytes[130] === 67 && bytes[131] === 77;
+  const looksExplicit = bytes.length >= 8 &&
+    bytes[4] >= 65 && bytes[4] <= 90 && bytes[5] >= 65 && bytes[5] <= 90;
+  // Only the DICOM-standard transfer syntaxes below are inferable for raw data
+  // without File Meta Information. Never guess a compressed transfer syntax.
+  const rawSyntax = looksExplicit ? EXPLICIT_LE : IMPLICIT_LE;
+  const dataSet = dicomParser.parseDicom(bytes, {
+    untilTag: 'x7fe00010',
+    ...(hasPart10 ? {} : { TransferSyntaxUID: rawSyntax }),
+  });
+  const str = (tag: string) => dataSet.string(tag)?.trim() || null;
+  const number = (tag: string): number | null => {
+    const value = str(tag);
+    if (value === null) return null;
+    const n = Number.parseInt(value, 10);
+    return Number.isFinite(n) ? n : null;
+  };
+  const vector = (tag: string, count: number) => {
+    const value = str(tag);
+    return value === null ? null : numericVector(value, count);
+  };
+  const spacing = vector('x00280030', 2);
+  const frames = number('x00280008');
+  const rows = dataSet.uint16('x00280010');
+  const columns = dataSet.uint16('x00280011');
+  const result: TechnicalDicomMetadata = {
+    sopInstanceUid: str('x00080018'),
+    studyUid: str('x0020000d'),
+    seriesUid: str('x0020000e'),
+    frameOfReferenceUid: str('x00200052'),
+    modality: str('x00080060')?.slice(0, 16) ?? '',
+    instanceNumber: number('x00200013'),
+    numberOfFrames: frames !== null && frames > 0 ? frames : null,
+    rows: rows && rows > 0 ? rows : null,
+    columns: columns && columns > 0 ? columns : null,
+    imagePositionPatient: vector('x00200032', 3) as TechnicalDicomMetadata['imagePositionPatient'],
+    imageOrientationPatient: vector('x00200037', 6) as TechnicalDicomMetadata['imageOrientationPatient'],
+    pixelSpacing: spacing?.every((v) => v > 0) ? spacing as [number, number] : null,
+    transferSyntax: str('x00020010') ?? (hasPart10 ? '' : rawSyntax),
+  };
+  if (!result.transferSyntax || !(result.sopInstanceUid || result.studyUid || result.seriesUid || result.modality)) {
+    throw new Error('DICOM не содержит достаточных технических метаданных.');
+  }
+  return result;
+}
+
+const MAX_COMPLEX_HEADER_BYTES = 8 * 1024 * 1024;
+
 export async function readDicomSeriesHeader(file: File): Promise<TechnicalDicomMetadata> {
-  return parseDicomSeriesHeader(await file.slice(0, HEADER_BYTES).arrayBuffer());
+  const header = await file.slice(0, HEADER_BYTES).arrayBuffer();
+  try {
+    const indexed = parseDicomSeriesHeader(header);
+    if (indexed.studyUid || indexed.seriesUid || indexed.sopInstanceUid) return indexed;
+    // Metadata may be incomplete because the handwritten reader reached the
+    // limit before the relevant technical tags.
+  } catch { /* Complex SQ or raw dataset: try the standards-aware parser. */ }
+
+  try {
+    // For small slices (~300 KB), parse the complete file. For very large
+    // studies the upper bound prevents uncontrolled allocations on an 8 GB M1.
+    const size = Math.min(file.size, MAX_COMPLEX_HEADER_BYTES);
+    const contents = size <= HEADER_BYTES ? header : await file.slice(0, size).arrayBuffer();
+    return await parseComplexDicomHeader(contents);
+  } catch {
+    throw new Error(file.size > MAX_COMPLEX_HEADER_BYTES
+      ? 'Сложный DICOM-заголовок не разобран в пределах 8 МБ; требуется другой способ импорта.'
+      : 'Не удалось разобрать структуру DICOM (возможен файл без Part 10, повреждённый заголовок или неподдерживаемая кодировка).');
+  }
 }
 
 function normal(orientation: NonNullable<TechnicalDicomMetadata['imageOrientationPatient']>): [number, number, number] | null {
