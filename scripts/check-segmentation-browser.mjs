@@ -87,7 +87,7 @@ try {
   const resultPath=join(fixture,'model-result.json');
   execFileSync('python3',[join(root,'scripts/package-segmentation-result.py'),
     '--request',requestPath,'--input',inputPath,'--mask',join(fixture,'synthetic-mask.nii'),
-    '--weights-artifact',join(fixture,'synthetic-weights.test'),'--model-id','synthetic-fixture-only','--model-version','1',
+    '--weights-artifact',join(fixture,'synthetic-weights.test'),'--model-id','synthetic-fixture-only','--model-version','1','--model-modality','MR',
     '--task','geometry-test-only','--labels',join(fixture,'labels.json'),'--output',resultPath,
     '--limitation','Synthetic reference mask; no model inference was performed.'],{stdio:'pipe'});
   const resultUpload=page.locator('input[accept=".json,.nii,.nii.gz"]');

@@ -112,7 +112,7 @@ test("Python packaging CLI consumes actual input/weight/mask bytes, and refuses 
     await writeFile(join(dir,"labels.json"),JSON.stringify(r.labels));
     const args=[new URL("../../scripts/package-segmentation-result.py",import.meta.url).pathname,
       "--request",join(dir,"request.json"),"--input",join(dir,"input.nii"),"--mask",join(dir,"mask.nii"),
-      "--weights-artifact",join(dir,"weights.test"),"--model-id","synthetic-test","--model-version","1","--task","fixture-only",
+      "--weights-artifact",join(dir,"weights.test"),"--model-id","synthetic-test","--model-version","1","--model-modality","MR","--task","fixture-only",
       "--labels",join(dir,"labels.json"),"--output",join(dir,"result.json"),"--limitation",r.limitations[0]];
     const run=()=>spawnSync("python3",args,{encoding:"utf8"});
     const done=run();assert.equal(done.status,0,done.stderr);
@@ -121,5 +121,7 @@ test("Python packaging CLI consumes actual input/weight/mask bytes, and refuses 
     assertResultBinding(result,p.request,parseNiftiMask(p.buffer),r.maskSha256);
     assert.notEqual(run().status,0);await rm(join(dir,"result.json"));
     await writeFile(join(dir,"input.nii"),"altered input");assert.match(run().stderr,/do not match/);
+    await writeFile(join(dir,"input.nii"),new Uint8Array(p.buffer));
+    args[args.indexOf("--model-modality")+1]="CT";assert.match(run().stderr,/modality does not match/);
   } finally {await rm(dir,{recursive:true,force:true});}
 });

@@ -39,6 +39,7 @@ def main():
     parser.add_argument("--weights-artifact", type=Path, required=True)
     parser.add_argument("--model-id", required=True)
     parser.add_argument("--model-version", required=True)
+    parser.add_argument("--model-modality", required=True, help="Modality explicitly supported by the exact model profile")
     parser.add_argument("--task", required=True)
     parser.add_argument("--labels", type=Path, required=True, help='JSON array of {"id":1,"name":"..."}')
     parser.add_argument("--limitation", action="append", default=[])
@@ -56,6 +57,9 @@ def main():
             raise ValueError("Invalid source/input digest")
     if checksum(args.input, 352 + 4 * 8388608) != request["inputSha256"]:
         raise ValueError("Input bytes do not match the selected request")
+    modality = checked_text(args.model_modality, 16)
+    if modality != request.get("modality"):
+        raise ValueError("Model modality does not match input modality")
     labels = read_json(args.labels)
     if not isinstance(labels, list) or len(labels) > 256:
         raise ValueError("Invalid label dictionary")
@@ -79,7 +83,7 @@ def main():
             "id": checked_text(args.model_id),
             "version": checked_text(args.model_version),
             "weightsSha256": checksum(args.weights_artifact),
-            "modality": checked_text(request.get("modality"), 16),
+            "modality": modality,
             "task": checked_text(args.task),
         },
         "labels": clean_labels,

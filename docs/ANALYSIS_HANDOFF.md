@@ -53,7 +53,7 @@ python3 scripts/package-segmentation-result.py \
   --input /path/to/opus-volume_0000.nii \
   --mask /path/to/segmentation.nii.gz \
   --weights-artifact /path/to/exact-checkpoint-or-checkpoint-archive \
-  --model-id provider/model-id --model-version exact-version \
+  --model-id provider/model-id --model-version exact-version --model-modality MR \
   --task supported-segmentation-task \
   --labels /path/to/labels.json \
   --limitation 'Acquisition-specific limitation from the validated model profile' \
