@@ -7,8 +7,14 @@ import "./viewer/viewer.css";
 import { decodeDicomPreview, type DicomPreviewMetadata } from "../lib/dicom-lite";
 import { readDicomSeriesHeader, groupDicomSeries, type TechnicalDicomMetadata } from "../lib/dicom-series";
 import { validateViewerFileSelection, MAX_DICOM_FILES } from "../lib/viewer-limits";
+import { checkMprEligibility } from "../lib/mpr-eligibility";
 
 // Keep the sizable Cornerstone engine outside the initial dashboard bundle.
+const CornerstoneMPR = dynamic(() => import("../components/CornerstoneMPR"), {
+  ssr: false,
+  loading: () => <div className="ora-viewer-placeholder ora-viewer-wait">Подготовка режима MPR…</div>,
+});
+
 const CornerstoneStack = dynamic(() => import("../components/CornerstoneStack"), {
   ssr: false,
   loading: () => <div className="ora-viewer-placeholder ora-viewer-wait">Запускаем DICOM-движок Cornerstone3D…</div>,
@@ -65,6 +71,7 @@ export default function Home() {
   const allocatedUrls = useRef<string[]>([]);
   const [dragged, setDragged] = useState(false);
   const [zoom, setZoom] = useState(1);
+  const [mprEnabled, setMprEnabled] = useState(false);
   const [dicomPreview, setDicomPreview] = useState<{ id: string; url: string; metadata: DicomPreviewMetadata } | null>(null);
   const [dicomLoading, setDicomLoading] = useState(false);
   const [indexing, setIndexing] = useState(false);
@@ -84,7 +91,11 @@ export default function Home() {
     const byId = new Map(files.map((item) => [item.id, item.file]));
     return activeSeries.members.map((item) => byId.get(item.id)).filter((file): file is File => !!file);
   }, [activeSeries, files]);
+  const mprCheck = useMemo(() => checkMprEligibility(activeSeries, cornerstoneFiles.map(f => f.size)), [activeSeries, cornerstoneFiles]);
   const hasCornerstone = active?.kind === "dicom" && cornerstoneFiles.length > 0;
+  const showMpr = hasCornerstone && mprEnabled && mprCheck.eligible;
+  // Reset MPR on series changes and preserve normal 2D stack as the fallback.
+  useEffect(() => { setMprEnabled(false); }, [activeSeries?.key]);
   const sliceIndex = activeSeries?.members.findIndex((m) => m.id === activeId) ?? -1;
   const selectSlice = (index: number) => {
     if (!activeSeries) return;
@@ -247,6 +258,7 @@ export default function Home() {
                       ? `✓ Геометрия однородна · шаг ${activeSeries.sliceSpacingMm?.toFixed(2)} мм · подготовлено для будущего 3D-движка`
                       : activeSeries.warning ?? "MPR/3D недоступны без подтверждённого объёма"}
                   </p>
+                  <p className={mprCheck.eligible ? "ora-series-ok" : "ora-series-warning"}>MPR: {mprCheck.reason}</p>
                 </>}
               </div>}
               <div className="ora-file-summary"><Icon name="shield" size={16}/> Файлы остаются в браузере. Не используйте снимки с персональными данными при тестировании. Размер: {files.length ? formatSize(totalSize) : "0 МБ"}</div>
@@ -257,11 +269,13 @@ export default function Home() {
             <div className="ora-viewer-card">
               <div className="ora-viewer-head">
                 <div><span className="ora-heading-icon ora-heading-icon-dark"><Icon name="scan" size={18}/></span><div><h2>Просмотр изображения</h2><p>{hasCornerstone ? `${activeSeries?.label ?? "DICOM"} · Cornerstone3D` : active ? active.file.name : "Нет выбранного исследования"}</p></div></div>
-                {hasCornerstone ? <span className="ora-viewer-engine">DICOM · {cornerstoneFiles.length} кадр(ов)</span> :
+                {hasCornerstone ? <div className="ora-mode-actions"><span className="ora-viewer-engine">DICOM · {cornerstoneFiles.length} кадр(ов)</span><button type="button" className={showMpr ? "ora-mpr-toggle active" : "ora-mpr-toggle"} disabled={!mprCheck.eligible && !showMpr} title={mprCheck.reason} onClick={() => setMprEnabled(value => !value)}>{showMpr ? "2D-срезы" : "MPR · 3 плоскости"}</button></div> :
                 <div className="ora-viewer-tools"><button type="button" title="Уменьшить" disabled={!url} onClick={()=>setZoom(z=>Math.max(.5,Number((z-.25).toFixed(2))))}><Icon name="minus" size={17}/></button><span>{Math.round(zoom*100)}%</span><button type="button" title="Увеличить" disabled={!url} onClick={()=>setZoom(z=>Math.min(4,Number((z+.25).toFixed(2))))}><Icon name="plus" size={17}/></button><button type="button" title="Сбросить масштаб" disabled={!url} onClick={()=>setZoom(1)}><Icon name="fit" size={17}/></button></div>}
               </div>
               {hasCornerstone ?
-                <div className="ora-cornerstone-host"><CornerstoneStack key={activeSeries!.key} files={cornerstoneFiles} selectedIndex={sliceIndex >= 0 ? sliceIndex : 0} modality={activeSeries!.modality} onSliceChange={(index) => { const member = activeSeries!.members[index]; if (member) setActiveId(member.id); }}/></div>
+                <div className="ora-cornerstone-host">{showMpr
+                  ? <CornerstoneMPR key={`mpr-${activeSeries!.key}`} files={cornerstoneFiles}/>
+                  : <CornerstoneStack key={activeSeries!.key} files={cornerstoneFiles} selectedIndex={sliceIndex >= 0 ? sliceIndex : 0} modality={activeSeries!.modality} onSliceChange={(index) => { const member = activeSeries!.members[index]; if (member) setActiveId(member.id); }}/>}</div>
                 : <>
                   <div className="ora-viewer-body" tabIndex={0}>
                     {url && active ? <div className="ora-image-scroll"><img src={url} alt={`Предпросмотр: ${active.file.name}`} className="ora-medical-img" style={{transform: `scale(${zoom})`}} /></div>
@@ -269,7 +283,7 @@ export default function Home() {
                     <div className="ora-viewer-axis"><span>IMAGING / LOCAL VIEW</span><span>{url ? "ЛОКАЛЬНЫЙ ПРОСМОТР" : "ОЖИДАНИЕ ДАННЫХ"}</span></div>
                   </div>
                 </>}
-              <div className="ora-viewer-footer"><span><span className="ora-tiny-dot"/> {hasCornerstone ? "Cornerstone3D · локальный экспериментальный просмотр" : dicomPreview?.id === activeId ? `${dicomPreview.metadata.modality || "DICOM"} · ${dicomPreview.metadata.width}×${dicomPreview.metadata.height} · WC ${dicomPreview.metadata.windowCenter ?? "auto"} / WW ${dicomPreview.metadata.windowWidth ?? "auto"}` : "Локальный предпросмотр · исследовательский режим"}</span><span>3D / MPR <b>скоро</b></span></div>
+              <div className="ora-viewer-footer"><span><span className="ora-tiny-dot"/> {hasCornerstone ? "Cornerstone3D · локальный экспериментальный просмотр" : dicomPreview?.id === activeId ? `${dicomPreview.metadata.modality || "DICOM"} · ${dicomPreview.metadata.width}×${dicomPreview.metadata.height} · WC ${dicomPreview.metadata.windowCenter ?? "auto"} / WW ${dicomPreview.metadata.windowWidth ?? "auto"}` : "Локальный предпросмотр · исследовательский режим"}</span><span>3D <b>скоро</b> · MPR <b>{mprCheck.eligible ? "экспериментальный" : "недоступен"}</b></span></div>
             </div>
             <div className="ora-finding-strip"><div className="ora-finding-icon"><Icon name="sparkles" size={21}/></div><div><strong>AI-анализ готов к интеграции</strong><p>После подключения Python-сервиса здесь появятся маски, измерения и найденные изменения.</p></div><span className="ora-coming-soon">НЕ ПОДКЛЮЧЁН</span></div>
           </section>
@@ -279,7 +293,7 @@ export default function Home() {
             <div className="ora-card ora-analysis-card"><div className="ora-section-title"><div><span className="ora-heading-icon"><Icon name="brain" size={19}/></span><div><h2>Контур анализа</h2><p>Планируемые компоненты</p></div></div></div><div className="ora-model-item"><div className="ora-model-icon green"><Icon name="layers" size={17}/></div><div><strong>3D medical AI</strong><small>TotalSegmentator / MONAI</small></div><span className="ora-model-state">Позднее</span></div><div className="ora-model-item"><div className="ora-model-icon blue"><Icon name="sparkles" size={17}/></div><div><strong>Vision interpreter</strong><small>Gemini через API</small></div><span className="ora-model-state">Позднее</span></div><div className="ora-model-item"><div className="ora-model-icon purple"><Icon name="brain" size={17}/></div><div><strong>Clinical synthesis</strong><small>Claude / GPT через API</small></div><span className="ora-model-state">Позднее</span></div><button className="ora-analyze-button" type="button" disabled><Icon name="sparkles" size={18}/> Запустить гибридный анализ <Icon name="arrow" size={17}/></button><p className="ora-disabled-note">Кнопка станет доступна после подключения моделей. Никаких фиктивных заключений.</p></div>
           </section>
         </div>
-        <footer className="ora-footer"><span>OPUS RADIOLOGY AI · v0.5 · LOCAL DEVELOPMENT</span><span>Исследовательский прототип · не для клинической диагностики · <a href="/viewer">Техническая лаборатория DICOM</a></span></footer>
+        <footer className="ora-footer"><span>OPUS RADIOLOGY AI · v0.8 · LOCAL DEVELOPMENT</span><span>Исследовательский прототип · не для клинической диагностики · <a href="/viewer">Техническая лаборатория DICOM</a></span></footer>
       </div>
     </main>
   </div>;

@@ -90,3 +90,12 @@ On 8 GB Mac hardware, start testing with the user's known 20-frame subset;
 then try the full anonymized 135-file multi-series dataset. Fullscreen and
 worker decoding must be verified in Safari; unit tests cannot validate GPU
 rendering, modality LUT fidelity or pixel geometry.
+
+## Experimental MPR (v0.8)
+
+- Same three-column dashboard; default is the previously validated 2D stack. A distinct **MPR · 3 плоскости** toggle enables patient-space axial/coronal/sagittal Orthographic volume viewports.
+- Strict preflight from `web/lib/mpr-eligibility.ts`: full series `volumeReady`, consistent pixel matrix and frame count, <=200 files, <=48 MiB assumed 16-bit pixels, <=256 MiB total input. Only after explicit user action is volume data decoded.
+- The local file manager hands image IDs to Cornerstone; `loadAndCacheImage` of each instance populates metadata, then `volumeLoader.createAndCacheVolumeFromImages` creates a volume. `setVolumesForViewports` assigns the same volume to three orthogonal orientations. This may need further tuning on Safari.
+- Cleanup releases rendering engine, volume cache, image cache and file manager entries. A failure is reported, never silently interpreted as a normal image.
+- Reconstructed planes are *experimental*. Geometry checks cannot guarantee clinical accuracy; no measurements, segmentation, export or diagnosis. Real Mac/Safari MPR runtime remains unverified until user smoke test.
+- The original `/viewer` diagnostic lab and standard DICOM stack remain available as fallback.
