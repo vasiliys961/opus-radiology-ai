@@ -4,6 +4,8 @@
 **/out/
 **/.turbo/
 **/.tsbuildinfo
+**/*.tsbuildinfo
+**/next-env.d.ts
 **/npm-debug.log*
 
 # Secrets (allow only example templates)

@@ -147,3 +147,16 @@
 .ora-mpr-3d-canvas{height:clamp(320px,52vh,580px)}
 .ora-mpr-3d-actions{flex-wrap:wrap}
 @media(max-width:650px){.ora-mpr-render-controls{grid-template-columns:1fr}.ora-mpr-3d-canvas{height:310px}}
+
+/* Expanded workspace keeps the same canvas and shared volume mounted. */
+.ora-mpr-3d-title button{border:1px solid #4c7c80;background:#224b55;color:#d8f4ec;border-radius:6px;padding:7px 10px;cursor:pointer;font-size:11px;white-space:nowrap}
+.ora-mpr-3d-title button:disabled{opacity:.4;cursor:not-allowed}
+.ora-mpr-render-controls select{width:100%;min-width:0;background:#183c49;color:#e1f2ef;border:1px solid #476b77;border-radius:5px;padding:7px;font-size:11px}
+.ora-mpr-volume-stats{display:flex;gap:5px 16px;flex-wrap:wrap;margin:8px 0;font-variant-numeric:tabular-nums}
+.ora-mpr-volume-stats b{color:#a9e8d9}
+.ora-mpr-3d-panel.expanded.visible{position:fixed;inset:12px;z-index:1000;margin:0;display:flex;flex-direction:column;box-shadow:0 0 0 20px #06121de6,0 15px 60px #0009}
+.ora-mpr-3d-panel.expanded .ora-mpr-3d-title,.ora-mpr-3d-panel.expanded .ora-mpr-3d-actions{flex-shrink:0}
+.ora-mpr-3d-panel.expanded .ora-mpr-render-controls{grid-template-columns:repeat(3,minmax(0,1fr));max-height:38vh;overflow:auto;flex-shrink:0}
+.ora-mpr-3d-panel.expanded .ora-mpr-3d-canvas{flex:1;min-height:120px;height:auto;max-height:none}
+.ora-mpr-3d-panel.expanded .cs-error{flex-shrink:0}
+@media(max-width:650px){.ora-mpr-3d-panel.expanded.visible{inset:4px}.ora-mpr-3d-panel.expanded .ora-mpr-render-controls{grid-template-columns:repeat(2,minmax(0,1fr))}.ora-mpr-3d-title{flex-wrap:wrap}.ora-mpr-3d-title span{flex-basis:100%;order:3}}

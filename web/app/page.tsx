@@ -240,7 +240,7 @@ export default function Home() {
       <div className="ora-nav-heading ora-nav-spaced">ПЛАТФОРМА</div>
       <div className="ora-nav-muted"><Icon name="clipboard" size={19}/> Отчёты <span>Скоро</span></div>
       <div className="ora-nav-muted"><Icon name="settings" size={19}/> Настройки <span>Скоро</span></div>
-      <div className="ora-sidebar-bottom"><div className="ora-device-mark"><span className="ora-status-dot"/> Локальный режим</div><p>На этом этапе изображения не передаются в облачные сервисы.</p><div className="ora-version">LOCAL PREVIEW · 1.3.2</div></div>
+      <div className="ora-sidebar-bottom"><div className="ora-device-mark"><span className="ora-status-dot"/> Локальный режим</div><p>На этом этапе изображения не передаются в облачные сервисы.</p><div className="ora-version">LOCAL PREVIEW · 1.4.0</div></div>
     </aside>
 
     <main className="ora-main">
@@ -329,7 +329,7 @@ export default function Home() {
             <div className="ora-card ora-analysis-card"><div className="ora-section-title"><div><span className="ora-heading-icon"><Icon name="brain" size={19}/></span><div><h2>Контур анализа</h2><p>Планируемые компоненты</p></div></div></div><div className="ora-model-item"><div className="ora-model-icon green"><Icon name="layers" size={17}/></div><div><strong>3D medical AI</strong><small>TotalSegmentator / MONAI</small></div><span className="ora-model-state">Позднее</span></div><div className="ora-model-item"><div className="ora-model-icon blue"><Icon name="sparkles" size={17}/></div><div><strong>Vision interpreter</strong><small>Gemini через API</small></div><span className="ora-model-state">Позднее</span></div><div className="ora-model-item"><div className="ora-model-icon purple"><Icon name="brain" size={17}/></div><div><strong>Clinical synthesis</strong><small>Claude / GPT через API</small></div><span className="ora-model-state">Позднее</span></div><button className="ora-analyze-button" type="button" disabled><Icon name="sparkles" size={18}/> Запустить гибридный анализ <Icon name="arrow" size={17}/></button><p className="ora-disabled-note">Кнопка станет доступна после подключения моделей. Никаких фиктивных заключений.</p></div>
           </section>
         </div>
-        <footer className="ora-footer"><span>OPUS RADIOLOGY AI · v1.3.2 · LOCAL DEVELOPMENT</span><span>Исследовательский прототип · не для клинической диагностики · <a href="/viewer">Техническая лаборатория DICOM</a></span></footer>
+        <footer className="ora-footer"><span>OPUS RADIOLOGY AI · v1.4.0 · LOCAL DEVELOPMENT</span><span>Исследовательский прототип · не для клинической диагностики · <a href="/viewer">Техническая лаборатория DICOM</a></span></footer>
       </div>
     </main>
   </div>;

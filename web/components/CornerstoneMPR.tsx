@@ -5,7 +5,8 @@ import type { Types } from "@cornerstonejs/core";
 import { alignCameraWithPoint, crosshairAfterScroll, insideImageExtent, safeSliceIndex, type Vec3 } from "../lib/mpr-navigation";
 import type { MprQuality } from "../lib/mpr-quality";
 import { orbitCamera } from "../lib/mpr-orbit";
-import { buildVolumeTransfer, getVolumeScalarRange, type VolumeRenderMode } from "../lib/volume-rendering";
+import { applyVolumeDisplay, buildVolumeTransfer, getVolumeSampling, getVolumeScalarRange, type VolumeDisplayActor, type VolumePalette, type VolumeRenderMode, type VolumeRenderQuality } from "../lib/volume-rendering";
+import { createAsyncViewportToggle } from "../lib/async-viewport";
 
 const PLANE_NAMES = ["axial", "coronal", "sagittal"] as const;
 type Plane = typeof PLANE_NAMES[number];
@@ -18,9 +19,9 @@ type Runtime = {
   pick: (plane: Plane, x: number, y: number) => void;
   reset: () => void;
   setInterpolation: (mode: "linear" | "nearest") => void;
-  set3DActive: (enabled: boolean, target: HTMLDivElement) => Promise<void>;
+  set3DActive: (enabled: boolean, target: HTMLDivElement) => Promise<boolean>;
   orbit3D: (horizontal: number, vertical: number) => void;
-  update3D: (mode: VolumeRenderMode, threshold: number, opacity: number) => void;
+  update3D: (mode: VolumeRenderMode, threshold: number, opacity: number, palette: VolumePalette, quality: VolumeRenderQuality, interpolation: "linear" | "nearest") => void;
   zoom3D: (factor: number) => void;
   reset3D: () => void;
 };
@@ -53,6 +54,12 @@ export default function CornerstoneMPR({ files, quality, show3D, onShow3DChange 
   const [renderMode, setRenderMode] = useState<VolumeRenderMode>("composite");
   const [threshold, setThreshold] = useState(28);
   const [opacity, setOpacity] = useState(48);
+  const [palette, setPalette] = useState<VolumePalette>("neutral");
+  const [renderQuality, setRenderQuality] = useState<VolumeRenderQuality>("balanced");
+  const [volumeInterpolation, setVolumeInterpolation] = useState<"linear" | "nearest">("linear");
+  const [expanded3D, setExpanded3D] = useState(false);
+  const [volumeStats, setVolumeStats] = useState<{ dimensions: number[]; decodedMiB: number } | null>(null);
+  const [intensityRange, setIntensityRange] = useState<[number, number] | null>(null);
   const featuredPlane = quality.nativePlane ?? "axial";
 
   useEffect(() => {
@@ -61,6 +68,7 @@ export default function CornerstoneMPR({ files, quality, show3D, onShow3DChange 
     let cancelled = false;
     let dispose: (() => void) | null = null;
     let observer: ResizeObserver | null = null;
+    let ownedRuntime: Runtime | null = null;
     const id = crypto.randomUUID();
     const volumeId = `ora-mpr-${id}`;
     runtime.current = null;
@@ -70,6 +78,10 @@ export default function CornerstoneMPR({ files, quality, show3D, onShow3DChange 
     setThreeDError("");
     setCrosshairs(emptyCrosshairs());
     setReadouts(emptyReadouts());
+    setInterpolation("linear");
+    setVolumeStats(null);
+    setIntensityRange(null);
+    drag3d.current = null;
     setStatus("Подготовка MPR…");
     setError("");
 
@@ -87,11 +99,15 @@ export default function CornerstoneMPR({ files, quality, show3D, onShow3DChange 
       let engine: import("@cornerstonejs/core").RenderingEngine | null = null;
       const viewport3dId = `ora-3d-viewport-${id}`;
       let viewport3d: Types.IVolumeViewport | null = null;
+      let target3d: HTMLDivElement | null = null;
+      let requestedTarget3d: HTMLDivElement | null = null;
+      let toggle3d: ReturnType<typeof createAsyncViewportToggle> | null = null;
       let volumeAllocated = false;
       const release = () => {
         observer?.disconnect();
         observer = null;
-        runtime.current = null;
+        if (runtime.current === ownedRuntime) runtime.current = null;
+        toggle3d?.dispose();
         viewport3d = null;
         try { engine?.destroy(); } catch { /* GPU device may be lost */ }
         engine = null;
@@ -123,6 +139,7 @@ export default function CornerstoneMPR({ files, quality, show3D, onShow3DChange 
         if (!volume || volume.dimensions?.[2] !== imageIds.length) {
           throw new Error("Полученный объём не соответствует количеству кадров серии.");
         }
+        setVolumeStats({ dimensions: [...volume.dimensions], decodedMiB: volume.sizeInBytes / 1048576 });
         engine = new core.RenderingEngine(`ora-mpr-engine-${id}`);
         const ids = PLANE_NAMES.map(plane => `ora-mpr-${plane}-${id}`);
         engine.setViewports([
@@ -215,16 +232,21 @@ export default function CornerstoneMPR({ files, quality, show3D, onShow3DChange 
             views[p].render();
           }
         };
-        const set3DActive = async (enabled: boolean, target: HTMLDivElement) => {
-          if (cancelled || !engine) return;
-          if (!enabled) {
+        const disable3D = () => {
+          if (target3d) observer?.unobserve(target3d);
+          target3d = null;
+          if (engine?.getViewport(viewport3dId)) {
             try { engine.disableElement(viewport3dId); } catch { /* not mounted */ }
-            viewport3d = null;
-            return;
           }
+          viewport3d = null;
+        };
+        toggle3d = createAsyncViewportToggle(async isCurrent => {
+          if (cancelled || !engine || !requestedTarget3d || !isCurrent()) return;
           if (viewport3d) return;
+          const target = requestedTarget3d;
+          target3d = target;
           // Same source volume and same rendering engine: avoid decoding a second
-          // copy of the study on an 8 GiB Mac. This is a MIP projection, NOT an
+          // copy of the study on an 8 GiB Mac. This is volume rendering, NOT an
           // anatomical segmentation or a clinically validated surface model.
           engine.enableElement({
             viewportId: viewport3dId,
@@ -232,43 +254,38 @@ export default function CornerstoneMPR({ files, quality, show3D, onShow3DChange 
             element: target,
             defaultOptions: { background: [0.01, 0.04, 0.06] },
           });
-          try {
-            await core.setVolumesForViewports(engine, [{ volumeId }], [viewport3dId]);
-            if (cancelled) return;
-            const vp = engine.getViewport(viewport3dId) as Types.IVolumeViewport;
-            viewport3d = vp;
-            vp.resetCamera();
-            update3D("composite", 28, 48);
-          } catch (cause) {
-            try { engine.disableElement(viewport3dId); } catch { /* partial GPU init */ }
-            viewport3d = null;
-            throw cause;
-          }
+          await core.setVolumesForViewports(engine, [{ volumeId }], [viewport3dId]);
+          if (cancelled || !engine || !isCurrent()) return;
+          const vp = engine.getViewport(viewport3dId) as Types.IVolumeViewport;
+          viewport3d = vp;
+          vp.resetCamera();
+          observer?.observe(target);
+          engine.resize(false, false);
+          update3D("composite", 28, 48, "neutral", "balanced", "linear");
+        }, disable3D);
+        const set3DActive = (enabled: boolean, target: HTMLDivElement) => {
+          if (cancelled || !toggle3d) return Promise.resolve(false);
+          if (enabled) requestedTarget3d = target;
+          return toggle3d.setActive(enabled);
         };
         // All display mappings act only on the VTK actor. Source DICOM pixels
         // and the three MPR viewports are never modified.
-        const update3D = (mode: VolumeRenderMode, thresholdPercent: number, opacityPercent: number) => {
+        let scalarRange: [number, number] | null = null;
+        const update3D = (mode: VolumeRenderMode, thresholdPercent: number, opacityPercent: number,
+          displayPalette: VolumePalette, displayQuality: VolumeRenderQuality, displayInterpolation: "linear" | "nearest") => {
           if (!viewport3d) return;
           // ImageVolume.imageData is not a vtkImageData scalar buffer in
           // Cornerstone3D 4.x. Volumes access intensities via VoxelManager.
           // getRange() avoids expanding/reallocating the entire 3D voxel array.
-          const range = getVolumeScalarRange(volume);
-          const mapping = buildVolumeTransfer([range[0], range[1]], mode === "mip" ? 0 : thresholdPercent, mode === "mip" ? 100 : opacityPercent);
-          const actor = viewport3d.getDefaultActor()?.actor as unknown as {
-            getProperty?: () => {
-              getScalarOpacity: (channel: number) => { removeAllPoints(): void; addPoint(x: number, y: number): void } | null;
-              getRGBTransferFunction: (channel: number) => { removeAllPoints(): void; addRGBPoint(x: number, r: number, g: number, b: number): void } | null;
-            };
-          };
-          const property = actor?.getProperty?.();
-          const scalar = property?.getScalarOpacity(0);
-          const color = property?.getRGBTransferFunction(0);
-          if (!scalar || !color) throw new Error("Объёмный актор не предоставляет функции цвета и прозрачности.");
-          scalar.removeAllPoints();
-          for (const [intensity, alpha] of mapping.opacity) scalar.addPoint(intensity, alpha);
-          color.removeAllPoints();
-          for (const [intensity, r, g, b] of mapping.color) color.addRGBPoint(intensity, r, g, b);
-          viewport3d.setBlendMode(mode === "mip" ? core.Enums.BlendModes.MAXIMUM_INTENSITY_BLEND : core.Enums.BlendModes.COMPOSITE);
+          const range = scalarRange ??= getVolumeScalarRange(volume);
+          setIntensityRange(previous => previous ?? range);
+          const mapping = buildVolumeTransfer(range, mode === "mip" ? 0 : thresholdPercent, mode === "mip" ? 100 : opacityPercent, displayPalette);
+          const actor = viewport3d.getDefaultActor()?.actor as unknown as VolumeDisplayActor;
+          applyVolumeDisplay(actor, mapping, {
+            ...getVolumeSampling(volume.spacing, volume.dimensions, displayQuality),
+            blendMode: mode === "mip" ? core.Enums.BlendModes.MAXIMUM_INTENSITY_BLEND : core.Enums.BlendModes.COMPOSITE,
+            interpolationType: displayInterpolation === "nearest" ? core.Enums.InterpolationType.NEAREST : core.Enums.InterpolationType.LINEAR,
+          });
           viewport3d.render();
         };
         const zoom3D = (factor: number) => {
@@ -294,7 +311,7 @@ export default function CornerstoneMPR({ files, quality, show3D, onShow3DChange 
           viewport3d.setCamera(pose);
           viewport3d.render();
         };
-        runtime.current = {
+        ownedRuntime = {
           step, pick, set3DActive, orbit3D, update3D, zoom3D, reset3D,
           setInterpolation: setRenderingInterpolation,
           reset: () => {
@@ -303,13 +320,16 @@ export default function CornerstoneMPR({ files, quality, show3D, onShow3DChange 
             if (resetFocal) synchronize([...resetFocal] as Vec3);
           },
         };
+        runtime.current = ownedRuntime;
         setRenderingInterpolation("linear");
         synchronize(point);
         observer = new ResizeObserver(() => {
           if (cancelled || !engine) return;
           try {
-            engine.resize(true,false);
+            // Preserve orbit and zoom when the 3D panel changes size.
+            engine.resize(false,false);
             synchronize(point);
+            viewport3d?.render();
           } catch { /* resize during teardown */ }
         });
         for (const p of PLANE_NAMES) observer.observe(elements[p]!);
@@ -326,7 +346,7 @@ export default function CornerstoneMPR({ files, quality, show3D, onShow3DChange 
       }
       dispose?.();
     });
-    return () => { cancelled = true; runtime.current = null; dispose?.(); };
+    return () => { cancelled = true; if (runtime.current === ownedRuntime) runtime.current = null; dispose?.(); };
   }, [files]);
 
   // The 3D panel is opt-in; do not create its GPU actor while hidden. When
@@ -334,30 +354,56 @@ export default function CornerstoneMPR({ files, quality, show3D, onShow3DChange 
   useEffect(() => {
     if (!ready || !volume3d.current || !runtime.current) return;
     let active = true;
+    const currentRuntime = runtime.current;
     if (show3D) {
       setThreeDBusy(true);
       setThreeDError("");
       const target = volume3d.current;
       // Wait for the visible panel to receive dimensions in the new layout.
       const frame = requestAnimationFrame(() => {
-        runtime.current?.set3DActive(true, target).then(() => {
-          if (active) setThreeDReady(true);
+        currentRuntime.set3DActive(true, target).then(enabled => {
+          if (active) setThreeDReady(enabled);
         }).catch((cause: unknown) => {
           if (active) setThreeDError(cause instanceof Error ? cause.message : String(cause));
         }).finally(() => { if (active) setThreeDBusy(false); });
       });
-      return () => { active = false; cancelAnimationFrame(frame); runtime.current?.set3DActive(false, target).catch(() => {}); setThreeDReady(false); };
+      return () => { active = false; cancelAnimationFrame(frame); currentRuntime.set3DActive(false, target).catch(() => {}); setThreeDReady(false); };
     }
-    runtime.current.set3DActive(false, volume3d.current).catch(() => {});
+    currentRuntime.set3DActive(false, volume3d.current).catch(() => {});
     setThreeDReady(false);
   }, [ready, show3D]);
 
   // Changing rendering presets must not recreate or re-decode the shared volume.
   useEffect(() => {
     if (!show3D || !threeDReady) return;
-    try { runtime.current?.update3D(renderMode, threshold, opacity); setThreeDError(""); }
+    try { runtime.current?.update3D(renderMode, threshold, opacity, palette, renderQuality, volumeInterpolation); setThreeDError(""); }
     catch (cause: unknown) { setThreeDError(cause instanceof Error ? cause.message : String(cause)); }
-  }, [show3D, threeDReady, renderMode, threshold, opacity]);
+  }, [show3D, threeDReady, renderMode, threshold, opacity, palette, renderQuality, volumeInterpolation]);
+
+  useEffect(() => {
+    if (!show3D) { setExpanded3D(false); drag3d.current = null; }
+  }, [show3D]);
+
+  useEffect(() => {
+    if (!expanded3D) return;
+    const onEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") setExpanded3D(false);
+    };
+    window.addEventListener("keydown", onEscape);
+    return () => window.removeEventListener("keydown", onEscape);
+  }, [expanded3D]);
+
+  useEffect(() => {
+    const target = volume3d.current;
+    if (!show3D || !threeDReady || !target) return;
+    const wheel = (event: globalThis.WheelEvent) => {
+      if (event.ctrlKey || event.metaKey || !event.deltaY) return;
+      event.preventDefault();
+      runtime.current?.zoom3D(event.deltaY < 0 ? 1.08 : 1 / 1.08);
+    };
+    target.addEventListener("wheel", wheel, { passive: false });
+    return () => target.removeEventListener("wheel", wheel);
+  }, [show3D, threeDReady]);
 
   const onWheel = (event: WheelEvent<HTMLDivElement>, plane: Plane) => {
     if (!ready) return;
@@ -385,6 +431,12 @@ export default function CornerstoneMPR({ files, quality, show3D, onShow3DChange 
           <span>Шаги неизвестны</span>}
       </div>
       <p className={quality.interpolationRisk === "high" ? "ora-mpr-quality-warn" : ""}>{quality.message}</p>
+      <div className="ora-mpr-volume-stats">
+        <span>Исходные срезы: <b>{files.length}</b></span>
+        {volumeStats && <><span>Сетка: <b>{volumeStats.dimensions.join(" × ")}</b></span>
+          <span>Декодированные пиксели: <b>{Number.isFinite(volumeStats.decodedMiB) ? volumeStats.decodedMiB.toFixed(1) + " МиБ" : "неизвестно"}</b></span></>}
+      </div>
+      <small>Это размер пиксельных данных, а не общее потребление RAM/GPU. Файлы, текстуры и буферы рендеринга требуют дополнительной памяти.</small>
       <div className="ora-mpr-interpolation" role="group" aria-label="Интерполяция MPR">
         <span>Интерполяция:</span>
         <button type="button" disabled={!ready} aria-pressed={interpolation === "linear"} className={interpolation === "linear" ? "active" : ""}
@@ -402,8 +454,10 @@ export default function CornerstoneMPR({ files, quality, show3D, onShow3DChange 
     {show3D && quality.interpolationRisk === "high" && <p className="ora-mpr-3d-warning" role="note">
       Внимание: шаг между срезами {quality.sliceSpacingMm?.toFixed(2)} мм. Объём анизотропный: 3D-проекция условная, мелкие структуры и границы могут искажаться.
     </p>}
-      <div className={`ora-mpr-3d-panel ${show3D ? "visible" : ""}`} aria-hidden={!show3D}>
-        <div className="ora-mpr-3d-title"><strong>3D · {renderMode === "composite" ? "Объём" : "MIP"}</strong><span>{threeDBusy ? "Загрузка 3D…" : threeDReady ? "Поворот мышью или кнопками" : "Экспериментально"}</span></div>
+      <div className={`ora-mpr-3d-panel ${show3D ? "visible" : ""} ${expanded3D ? "expanded" : ""}`} aria-hidden={!show3D}>
+        <div className="ora-mpr-3d-title"><strong>3D · {renderMode === "composite" ? "Объём" : "MIP"}</strong><span>{threeDBusy ? "Загрузка 3D…" : threeDReady ? "Мышь — поворот · колесо — масштаб" : "Экспериментально"}</span>
+          <button type="button" disabled={!threeDReady} aria-pressed={expanded3D} onClick={() => setExpanded3D(!expanded3D)}>{expanded3D ? "Свернуть · Esc" : "Развернуть 3D"}</button>
+        </div>
         <div className="ora-mpr-render-controls">
           <div className="ora-mpr-render-modes" role="group" aria-label="Способ отображения 3D">
             <button type="button" className={renderMode === "composite" ? "active" : ""} aria-pressed={renderMode === "composite"} disabled={!threeDReady} onClick={() => setRenderMode("composite")}>Объём · прозрачность</button>
@@ -412,20 +466,41 @@ export default function CornerstoneMPR({ files, quality, show3D, onShow3DChange 
           <label>Порог интенсивности <b>{threshold}%</b>
             <input type="range" min="0" max="85" step="1" value={threshold} disabled={!threeDReady || renderMode === "mip"} onChange={event => setThreshold(Number(event.target.value))}/>
           </label>
-          <label>Прозрачность / плотность <b>{opacity}%</b>
+          <label>Непрозрачность <b>{opacity}%</b>
             <input type="range" min="5" max="100" step="1" value={opacity} disabled={!threeDReady || renderMode === "mip"} onChange={event => setOpacity(Number(event.target.value))}/>
           </label>
+          <label>Цветовая шкала
+            <select value={palette} disabled={!threeDReady} onChange={event => setPalette(event.target.value as VolumePalette)}>
+              <option value="neutral">Нейтральная · серый</option><option value="cool">Холодная · голубой</option>
+            </select>
+          </label>
+          <label>Качество рендеринга
+            <select value={renderQuality} disabled={!threeDReady} onChange={event => setRenderQuality(event.target.value as VolumeRenderQuality)}>
+              <option value="economy">Экономное</option><option value="balanced">Сбалансированное</option><option value="fine">Детальное · выше нагрузка</option>
+            </select>
+          </label>
+          <label>Интерполяция 3D
+            <select value={volumeInterpolation} disabled={!threeDReady} onChange={event => setVolumeInterpolation(event.target.value as "linear" | "nearest")}>
+              <option value="linear">Линейная · плавная</option><option value="nearest">Ближайший сосед · без сглаживания</option>
+            </select>
+          </label>
+          {intensityRange && <p>Диапазон сигнала: {intensityRange[0].toFixed(1)} … {intensityRange[1].toFixed(1)}. Порог задан относительно этого диапазона; значения МРТ не обозначают плотность ткани.</p>}
+          <p>Качество меняет шаг расчёта лучей, интерполяция — отображение границ вокселей. Эти настройки не восстанавливают отсутствующие срезы.</p>
           <p>{renderMode === "mip" ? "MIP показывает максимальные интенсивности вдоль луча; настройки прозрачности не применяются." : "Интерактивная прозрачность и цветовая шкала. Параметры только отображения, не сегментация тканей."}</p>
         </div>
         <div ref={volume3d} className="ora-mpr-3d-canvas" onPointerDown={(event: PointerEvent<HTMLDivElement>) => {
-          if (!threeDReady) return;
+          if (!threeDReady || event.button !== 0) return;
+          event.preventDefault();
           drag3d.current = {x:event.clientX,y:event.clientY};
           event.currentTarget.setPointerCapture(event.pointerId);
         }} onPointerMove={(event: PointerEvent<HTMLDivElement>) => {
           if (!drag3d.current || !threeDReady) return;
           runtime.current?.orbit3D((event.clientX-drag3d.current.x)*0.4, (event.clientY-drag3d.current.y)*0.4);
           drag3d.current = {x:event.clientX,y:event.clientY};
-        }} onPointerUp={() => {drag3d.current=null;}} onPointerCancel={() => {drag3d.current=null;}}/>
+        }} onPointerUp={(event: PointerEvent<HTMLDivElement>) => {
+          drag3d.current = null;
+          if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+        }} onPointerCancel={() => {drag3d.current=null;}} onLostPointerCapture={() => {drag3d.current=null;}}/>
         {threeDError && <div className="cs-error" role="alert">3D недоступно: {threeDError}. MPR продолжает работать.</div>}
         <div className="ora-mpr-3d-actions">
           <button type="button" disabled={!threeDReady} onClick={() => runtime.current?.orbit3D(-15,0)}>↶ Повернуть</button>
