@@ -160,13 +160,14 @@ export default function Home() {
       <div className="ora-brand"><div className="ora-logo"><Icon name="scan" size={25}/></div><div><strong>OPUS<span>RADIOLOGY</span></strong><small>AI DIAGNOSTIC WORKSPACE</small></div></div>
       <div className="ora-nav-heading">РАБОЧЕЕ ПРОСТРАНСТВО</div>
       <div className="ora-nav-current"><Icon name="grid" size={19}/> Обзор исследования <span className="ora-nav-dot" /></div>
+      <a className="ora-nav-muted" href="/viewer" style={{ textDecoration: "none" }}><Icon name="scan" size={19}/> DICOM Viewer <span>β</span></a>
       <div className="ora-nav-muted"><Icon name="folder" size={19}/> Архив исследований <span>Скоро</span></div>
       <div className="ora-nav-muted"><Icon name="brain" size={19}/> Центр AI-анализа <span>Скоро</span></div>
       <div className="ora-nav-muted"><Icon name="layers" size={19}/> 3D-лаборатория <span>Скоро</span></div>
       <div className="ora-nav-heading ora-nav-spaced">ПЛАТФОРМА</div>
       <div className="ora-nav-muted"><Icon name="clipboard" size={19}/> Отчёты <span>Скоро</span></div>
       <div className="ora-nav-muted"><Icon name="settings" size={19}/> Настройки <span>Скоро</span></div>
-      <div className="ora-sidebar-bottom"><div className="ora-device-mark"><span className="ora-status-dot"/> Локальный режим</div><p>На этом этапе изображения не передаются в облачные сервисы.</p><div className="ora-version">LOCAL PREVIEW · 0.3</div></div>
+      <div className="ora-sidebar-bottom"><div className="ora-device-mark"><span className="ora-status-dot"/> Локальный режим</div><p>На этом этапе изображения не передаются в облачные сервисы.</p><div className="ora-version">LOCAL PREVIEW · 0.4</div></div>
     </aside>
 
     <main className="ora-main">

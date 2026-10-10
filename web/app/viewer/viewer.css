@@ -1,0 +1,29 @@
+.cs-page{min-height:100vh;background:#edf3f6;color:#283e4e;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.cs-page *{box-sizing:border-box}
+.cs-top{height:67px;background:#142733;display:flex;align-items:center;justify-content:space-between;gap:20px;color:#9eb8c3;padding:0 3.5%;font-size:11px;letter-spacing:.07em}
+.cs-top a{color:#71e0c2;text-decoration:none;font-weight:800;font-size:16px;letter-spacing:-.04em}
+.cs-container{max-width:1660px;margin:auto;padding:34px 3.5% 70px}
+.cs-intro{display:flex;justify-content:space-between;align-items:center;gap:22px;margin-bottom:30px}
+.cs-intro h1{font-size:clamp(30px,3vw,43px);letter-spacing:-.055em;margin:3px 0 5px;line-height:1.1}.cs-intro h1 em{font-style:normal;color:#159d89}
+.cs-intro p{color:#7f909d;font-size:13px;margin:7px 0 0}
+.cs-kicker{font-size:10px;letter-spacing:.19em;color:#0d998c;font-weight:800}
+.cs-watermark{font-weight:700;color:#a26848;font-size:10px;background:#fff4ea;border:1px solid #efded0;padding:10px;border-radius:7px;text-align:center}
+.cs-layout{display:grid;grid-template-columns:315px minmax(0,1fr);gap:20px}
+.cs-sidebar{background:white;border:1px solid #dfe8ed;border-radius:13px;padding:20px;align-self:start}
+.cs-sidebar h2{font-size:17px;margin:0 0 5px}.cs-sidebar h3{font-size:12px;margin:20px 0 9px}.cs-sidebar>p{font-size:11px;color:#8296a4;margin:0 0 22px}
+.cs-picker{display:block;background:#109d8b;color:white;text-align:center;font-size:12px;font-weight:700;padding:12px;border-radius:7px;cursor:pointer}.cs-picker input{display:none}
+.cs-outline,.cs-clear{display:block;width:100%;background:white;border:1px solid #bcd7d4;color:#087d72;text-align:center;padding:11px;margin-top:9px;border-radius:7px;font-size:12px;cursor:pointer}
+.cs-clear{color:#7f909d;border-color:#e0e8eb;margin-top:20px}
+.cs-hidden{display:none}.cs-page button:disabled{opacity:.5;cursor:not-allowed}
+.cs-message{background:#eff6f5;padding:12px 13px;color:#526d77;border-radius:8px;font-size:11px;line-height:1.6;margin-top:15px;overflow-wrap:anywhere}
+.cs-series-list{display:grid;gap:6px;max-height:350px;overflow:auto}.cs-series{width:100%;border:1px solid #e2eaec;border-radius:7px;background:#f7fafb;padding:10px;text-align:left;color:#547182;font-size:11px;cursor:pointer}.cs-series.active{background:#e0f6ed;border-color:#79d5c2;color:#087d6d}
+.cs-geometry{border-top:1px solid #e7eef1;margin-top:22px}.cs-geometry p{font-size:11px;color:#6f8290;line-height:1.6;margin:6px 0}
+.cs-stage{min-width:0}.cs-stack{border-radius:12px;background:#132633;overflow:hidden;border:1px solid #304656;box-shadow:0 10px 30px #243f4911;position:relative}
+.cs-view-header{display:flex;align-items:center;gap:16px;padding:15px 20px;min-height:64px;color:white;background:#1b3442}.cs-view-header strong{white-space:nowrap}.cs-view-header span{font-size:10px;color:#a9c0cb;flex:1}.cs-view-header button{font-size:11px;background:#244654;color:#b8e9df;border:1px solid #406174;padding:7px 12px;border-radius:6px;cursor:pointer}
+.cs-image{height:min(68vh,680px);min-height:410px;width:100%;position:relative;background:#070f17;outline:none;overscroll-behavior:contain;touch-action:none}.cs-image:focus{outline:1px solid #41d4ae;outline-offset:-1px}
+.cs-loading{position:absolute;top:78px;right:15px;color:#6ae5c6;background:#1c3844;padding:6px 11px;border-radius:6px;font-size:11px;pointer-events:none}
+.cs-error{font-size:12px;background:#53272d;color:#ffd5d8;padding:12px 15px;overflow-wrap:anywhere}
+.cs-slider-row{display:flex;align-items:center;gap:13px;padding:15px 20px;color:#d5e5eb;font-size:12px;background:#172c3a}.cs-slider-row input{flex:1;accent-color:#18c4a2;min-width:90px}.cs-slider-row button{width:32px;height:32px;border:1px solid #47616b;background:#264352;color:white;border-radius:7px;cursor:pointer}
+.cs-placeholder{min-height:520px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:12px;background:#142a37;border:1px solid #2d4755;border-radius:12px;color:#d0e5e8;padding:40px}.cs-placeholder span{color:#30c9a6;font-size:54px}.cs-placeholder p{font-size:12px;color:#86a3b1;max-width:300px}
+.cs-bottom-note{margin-top:14px;color:#8a9daa;font-size:11px;line-height:1.65}
+@media(max-width:950px){.cs-layout{grid-template-columns:1fr}.cs-sidebar{max-width:none}.cs-intro{display:block}.cs-watermark{display:inline-block;margin-top:15px}.cs-image{height:480px}.cs-top span:last-child{display:none}}
