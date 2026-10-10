@@ -118,3 +118,12 @@ MPR показывает фактические Pixel Spacing и межсрез�
 дискретность. **Ни один режим не восстанавливает отсутствующие анатомические
 данные и не повышает клиническую точность.**
 
+
+
+## v1.1 — opt-in 3D MIP and compact MPR controls
+
+- A fourth **3D MIP** viewport can be enabled inside the working MPR panel, using the same cached voxel volume without a second image decode. It is an intensity projection, **not** a surface mesh, AI segmentation or an anatomically validated 3D reconstruction.
+- Mouse-drag and rotation buttons adjust the 3D camera; hiding the panel disables its GPU viewport. MPR plane synchronization remains independent.
+- Fixed legacy CSS selector that expanded slice-control rows to 225–310 px and produced large blank blocks under MPR slices.
+- Thick-slice series display a high-visibility warning before 3D. On 8 GB Mac M1, the MPR resource gate still applies, and opening the 3D viewport adds GPU pressure.
+- A browser-only Safari/WebGL test is still required; automated build cannot validate interactive 3D pixel correctness.

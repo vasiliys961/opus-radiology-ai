@@ -100,3 +100,31 @@
 .ora-mpr-plane.ora-mpr-featured>.ora-mpr-surface{height:310px}
 .ora-mpr-native-label{position:static;background:#17323a;color:#87d6c8;font-size:10px;padding:6px 10px;border-bottom:1px solid #355665}
 @media(max-width:700px){.ora-mpr-plane.ora-mpr-featured{grid-column:auto}.ora-mpr-plane.ora-mpr-featured>.ora-mpr-surface{height:250px}}
+
+/* v1.1: previous `.ora-mpr-plane > div` sized ALL divs, including the
+   controls. Only the image surface should have a fixed viewing height. */
+.ora-mpr-grid{align-items:start}
+.ora-mpr-plane{display:flex;flex-direction:column;align-self:start}
+.ora-mpr-plane > .ora-mpr-controls,
+.ora-mpr-plane:first-child > .ora-mpr-controls{
+  height:auto;min-height:44px;flex:0 0 auto;touch-action:auto;
+}
+.ora-mpr-plane > .ora-mpr-native-label{height:auto;flex:none}
+.ora-mpr-plane > .ora-mpr-surface{flex:0 0 auto}
+.ora-mpr-3d-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#16313d;border:1px solid #385b61;border-radius:7px;padding:10px;margin:9px 0}
+.ora-mpr-3d-toolbar button{border:1px solid #36a898;border-radius:6px;background:#0f766f;color:white;font-size:11px;font-weight:700;padding:8px 12px;cursor:pointer}
+.ora-mpr-3d-toolbar button.active{background:#214655}
+.ora-mpr-3d-toolbar button:disabled{opacity:.45}
+.ora-mpr-3d-toolbar span{color:#9fbdc4;font-size:10px;flex:1}
+.ora-mpr-3d-warning{font-size:11px;line-height:1.55;color:#ffce98;background:#46331e;border:1px solid #85603d;border-radius:7px;padding:10px 12px}
+.ora-mpr-3d-panel{display:none;grid-column:1/-1;min-width:0;border:1px solid #41616a;background:#041015;border-radius:8px;overflow:hidden}
+.ora-mpr-3d-panel.visible{display:block}
+.ora-mpr-3d-title{display:flex;justify-content:space-between;gap:6px;align-items:center;padding:9px 12px;background:#183443;color:#e1f1f2;font-size:12px}
+.ora-mpr-3d-title span{font-size:10px;color:#93b7c0}
+.ora-mpr-3d-canvas{height:360px;max-height:65vh;width:100%;position:relative;touch-action:none;cursor:grab;background:#030c12}
+.ora-mpr-3d-canvas:active{cursor:grabbing}
+.ora-mpr-3d-actions{display:flex;gap:8px;padding:8px 10px;background:#142e3a}
+.ora-mpr-3d-actions button{padding:7px 12px;background:#274958;color:#d6f0eb;border:1px solid #406c77;border-radius:6px;font-size:11px;cursor:pointer}
+.ora-mpr-3d-actions button:disabled{opacity:.35;cursor:not-allowed}
+@media(max-width:700px){.ora-mpr-3d-canvas{height:270px}}
+.ora-mpr-plane:first-child > .ora-mpr-native-label{height:auto}

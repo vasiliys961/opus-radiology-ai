@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type WheelEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type WheelEvent, type PointerEvent } from "react";
 import type { Types } from "@cornerstonejs/core";
 import { alignCameraWithPoint, crosshairAfterScroll, insideImageExtent, safeSliceIndex, type Vec3 } from "../lib/mpr-navigation";
 import type { MprQuality } from "../lib/mpr-quality";
+import { orbitCamera } from "../lib/mpr-orbit";
 
 const PLANE_NAMES = ["axial", "coronal", "sagittal"] as const;
 type Plane = typeof PLANE_NAMES[number];
@@ -16,6 +17,8 @@ type Runtime = {
   pick: (plane: Plane, x: number, y: number) => void;
   reset: () => void;
   setInterpolation: (mode: "linear" | "nearest") => void;
+  set3DActive: (enabled: boolean, target: HTMLDivElement) => Promise<void>;
+  orbit3D: (horizontal: number, vertical: number) => void;
 };
 
 const emptyReadouts = (): Readouts => ({ axial:{index:0,total:1}, coronal:{index:0,total:1}, sagittal:{index:0,total:1} });
@@ -31,6 +34,8 @@ export default function CornerstoneMPR({ files, quality }: { files: File[]; qual
   const axial = useRef<HTMLDivElement>(null);
   const coronal = useRef<HTMLDivElement>(null);
   const sagittal = useRef<HTMLDivElement>(null);
+  const volume3d = useRef<HTMLDivElement>(null);
+  const drag3d = useRef<{ x: number; y: number } | null>(null);
   const runtime = useRef<Runtime | null>(null);
   const [status, setStatus] = useState("Подготовка MPR…");
   const [error, setError] = useState("");
@@ -38,6 +43,10 @@ export default function CornerstoneMPR({ files, quality }: { files: File[]; qual
   const [readouts, setReadouts] = useState<Readouts>(emptyReadouts);
   const [crosshairs, setCrosshairs] = useState<Crosshairs>(emptyCrosshairs);
   const [interpolation, setInterpolation] = useState<"linear" | "nearest">("linear");
+  const [show3D, setShow3D] = useState(false);
+  const [threeDReady, setThreeDReady] = useState(false);
+  const [threeDBusy, setThreeDBusy] = useState(false);
+  const [threeDError, setThreeDError] = useState("");
   const featuredPlane = quality.nativePlane ?? "axial";
 
   useEffect(() => {
@@ -50,6 +59,10 @@ export default function CornerstoneMPR({ files, quality }: { files: File[]; qual
     const volumeId = `ora-mpr-${id}`;
     runtime.current = null;
     setReady(false);
+    setShow3D(false);
+    setThreeDReady(false);
+    setThreeDBusy(false);
+    setThreeDError("");
     setCrosshairs(emptyCrosshairs());
     setReadouts(emptyReadouts());
     setStatus("Подготовка MPR…");
@@ -67,11 +80,14 @@ export default function CornerstoneMPR({ files, quality }: { files: File[]; qual
       const imageIds = files.map(file => loader.wadouri.fileManager.add(file));
       const fileIndices = imageIds.map(imageId => Number(imageId.split(":").pop()));
       let engine: import("@cornerstonejs/core").RenderingEngine | null = null;
+      const viewport3dId = `ora-3d-viewport-${id}`;
+      let viewport3d: Types.IVolumeViewport | null = null;
       let volumeAllocated = false;
       const release = () => {
         observer?.disconnect();
         observer = null;
         runtime.current = null;
+        viewport3d = null;
         try { engine?.destroy(); } catch { /* GPU device may be lost */ }
         engine = null;
         if (volumeAllocated) {
@@ -194,8 +210,51 @@ export default function CornerstoneMPR({ files, quality }: { files: File[]; qual
             views[p].render();
           }
         };
+        const set3DActive = async (enabled: boolean, target: HTMLDivElement) => {
+          if (cancelled || !engine) return;
+          if (!enabled) {
+            try { engine.disableElement(viewport3dId); } catch { /* not mounted */ }
+            viewport3d = null;
+            return;
+          }
+          if (viewport3d) return;
+          // Same source volume and same rendering engine: avoid decoding a second
+          // copy of the study on an 8 GiB Mac. This is a MIP projection, NOT an
+          // anatomical segmentation or a clinically validated surface model.
+          engine.enableElement({
+            viewportId: viewport3dId,
+            type: core.Enums.ViewportType.VOLUME_3D,
+            element: target,
+            defaultOptions: { background: [0.01, 0.04, 0.06] },
+          });
+          try {
+            await core.setVolumesForViewports(engine, [{ volumeId }], [viewport3dId]);
+            if (cancelled) return;
+            const vp = engine.getViewport(viewport3dId) as Types.IVolumeViewport;
+            vp.setBlendMode(core.Enums.BlendModes.MAXIMUM_INTENSITY_BLEND);
+            vp.resetCamera();
+            vp.render();
+            viewport3d = vp;
+          } catch (cause) {
+            try { engine.disableElement(viewport3dId); } catch { /* partial GPU init */ }
+            viewport3d = null;
+            throw cause;
+          }
+        };
+        const orbit3D = (horizontal: number, vertical: number) => {
+          if (!viewport3d || !Number.isFinite(horizontal) || !Number.isFinite(vertical)) return;
+          const camera = viewport3d.getCamera();
+          if (!camera.position || !camera.focalPoint || !camera.viewUp) return;
+          const pose = orbitCamera({
+            position: [...camera.position] as Vec3,
+            focalPoint: [...camera.focalPoint] as Vec3,
+            viewUp: [...camera.viewUp] as Vec3,
+          }, horizontal, vertical);
+          viewport3d.setCamera(pose);
+          viewport3d.render();
+        };
         runtime.current = {
-          step, pick,
+          step, pick, set3DActive, orbit3D,
           setInterpolation: setRenderingInterpolation,
           reset: () => {
             for (const p of PLANE_NAMES) views[p].resetCamera();
@@ -228,6 +287,29 @@ export default function CornerstoneMPR({ files, quality }: { files: File[]; qual
     });
     return () => { cancelled = true; runtime.current = null; dispose?.(); };
   }, [files]);
+
+  // The 3D panel is opt-in; do not create its GPU actor while hidden. When
+  // leaving 3D, disable that viewport but preserve the three MPR viewports.
+  useEffect(() => {
+    if (!ready || !volume3d.current || !runtime.current) return;
+    let active = true;
+    if (show3D) {
+      setThreeDBusy(true);
+      setThreeDError("");
+      const target = volume3d.current;
+      // Wait for the visible panel to receive dimensions in the new layout.
+      const frame = requestAnimationFrame(() => {
+        runtime.current?.set3DActive(true, target).then(() => {
+          if (active) setThreeDReady(true);
+        }).catch((cause: unknown) => {
+          if (active) setThreeDError(cause instanceof Error ? cause.message : String(cause));
+        }).finally(() => { if (active) setThreeDBusy(false); });
+      });
+      return () => { active = false; cancelAnimationFrame(frame); runtime.current?.set3DActive(false, target).catch(() => {}); setThreeDReady(false); };
+    }
+    runtime.current.set3DActive(false, volume3d.current).catch(() => {});
+    setThreeDReady(false);
+  }, [ready, show3D]);
 
   const onWheel = (event: WheelEvent<HTMLDivElement>, plane: Plane) => {
     if (!ready) return;
@@ -264,6 +346,14 @@ export default function CornerstoneMPR({ files, quality }: { files: File[]; qual
       </div>
       <small>{interpolation === "linear" ? "Линейная интерполяция сглаживает границы между вокселями." : "Ближайший сосед показывает ступенчатость дискретных данных, но не добавляет деталей."}</small>
     </div>
+    <div className="ora-mpr-3d-toolbar">
+      <button type="button" className={show3D ? "active" : ""} disabled={!ready} aria-pressed={show3D}
+        onClick={() => setShow3D(v => !v)}>{show3D ? "Скрыть 3D" : "Показать 3D · MIP"}</button>
+      <span>3D MIP — проекция максимальной интенсивности, не сегментация и не модель поверхности.</span>
+    </div>
+    {show3D && quality.interpolationRisk === "high" && <p className="ora-mpr-3d-warning" role="note">
+      Внимание: шаг между срезами {quality.sliceSpacingMm?.toFixed(2)} мм. Объём анизотропный: 3D-проекция условная, мелкие структуры и границы могут искажаться.
+    </p>}
     <div className="ora-mpr-grid">
       {PLANE_NAMES.map((plane) => {
         const ref = plane === "axial" ? axial : plane === "coronal" ? coronal : sagittal;
@@ -289,6 +379,24 @@ export default function CornerstoneMPR({ files, quality }: { files: File[]; qual
           </div>
         </div>;
       })}
+      <div className={`ora-mpr-3d-panel ${show3D ? "visible" : ""}`} aria-hidden={!show3D}>
+        <div className="ora-mpr-3d-title"><strong>3D · MIP</strong><span>{threeDBusy ? "Загрузка 3D…" : threeDReady ? "Поворот мышью или кнопками" : "Экспериментально"}</span></div>
+        <div ref={volume3d} className="ora-mpr-3d-canvas" onPointerDown={(event: PointerEvent<HTMLDivElement>) => {
+          if (!threeDReady) return;
+          drag3d.current = {x:event.clientX,y:event.clientY};
+          event.currentTarget.setPointerCapture(event.pointerId);
+        }} onPointerMove={(event: PointerEvent<HTMLDivElement>) => {
+          if (!drag3d.current || !threeDReady) return;
+          runtime.current?.orbit3D((event.clientX-drag3d.current.x)*0.4, (event.clientY-drag3d.current.y)*0.4);
+          drag3d.current = {x:event.clientX,y:event.clientY};
+        }} onPointerUp={() => {drag3d.current=null;}} onPointerCancel={() => {drag3d.current=null;}}/>
+        {threeDError && <div className="cs-error" role="alert">3D недоступно: {threeDError}. MPR продолжает работать.</div>}
+        <div className="ora-mpr-3d-actions">
+          <button type="button" disabled={!threeDReady} onClick={() => runtime.current?.orbit3D(-15,0)}>↶ Повернуть</button>
+          <button type="button" disabled={!threeDReady} onClick={() => runtime.current?.orbit3D(15,0)}>Повернуть ↷</button>
+          <button type="button" disabled={!threeDReady} onClick={() => runtime.current?.orbit3D(0,15)}>Наклонить ↓</button>
+        </div>
+      </div>
     </div>
     <p className="ora-mpr-warning">Исследовательский MPR. Все три перекрестия соответствуют одной точке в пространстве пациента; клиническая точность, измерения и геометрия требуют отдельной валидации. Изображения остаются в браузере.</p>
   </section>;

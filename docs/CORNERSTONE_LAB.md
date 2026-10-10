@@ -109,3 +109,18 @@ rendering, modality LUT fidelity or pixel geometry.
 - Crosshairs are a visual research aid, **not a calibrated measurement**. No positions are saved or transmitted.
 - Geometry helpers have isolated unit tests; validate mouse/slider/crosshair synchronization, edge slices, resizing and GPU memory in Safari.
 - The M1 memory preflight and 2D fallback remain mandatory.
+
+## v1.1: experimental 3D maximum-intensity projection (MIP)
+
+- The opt-in panel under the three MPR views uses a `VOLUME_3D` viewport and
+  Cornerstone's `MAXIMUM_INTENSITY_BLEND` against the **existing cached** volume.
+  The rendering is a ray-projection through the voxels, NOT segmentation, a
+  mesh, calibrated volume measurement or clinical 3D anatomy.
+- Camera can be rotated with the pointer or buttons. Hiding the panel removes
+  its GPU viewport. Existing conservative RAM/geometry checks still gate MPR.
+- Large between-slice gaps (e.g. 4.5 mm in an MRI acquired as 20 slices) are
+  explicitly warned about. Reconstruction/interpolation cannot reconstruct
+  missing anatomy, and intensity MIP may obscure low-intensity tissue.
+- Fixed a legacy CSS selector applying fixed image heights to MPR control rows.
+- Safari rendering, device memory, WebGL context-loss behavior and image fidelity
+  are still UNVALIDATED and require manual tests on non-identifiable datasets.
