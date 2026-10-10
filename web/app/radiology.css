@@ -177,3 +177,10 @@ button:disabled { cursor: not-allowed; }
 .ora-footer a { color:inherit; text-decoration:underline; }
 .ora-link-danger:disabled { opacity:.5; cursor:not-allowed; }
 @media(max-width:670px){.ora-viewer-engine { display:none; }.ora-cornerstone-host .cs-view-header { flex-wrap:wrap; }.ora-cornerstone-host .cs-view-header span { flex-basis:100%; }.ora-cornerstone-host .cs-image { height:365px; min-height:340px; }}
+
+/* Explain disabled MPR/3D controls where the user is looking, not only below a 300-file list. */
+.ora-mpr-blocker{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:#fff4de;color:#805829;padding:11px 15px;border-top:1px solid #efd9b7;border-bottom:1px solid #efd9b7;font-size:11px;line-height:1.5}
+.ora-mpr-blocker strong{font-weight:740}
+.ora-mpr-blocker p{margin:4px 0 0;max-width:720px}
+.ora-mpr-blocker button{border:1px solid #caac78;background:white;color:#805829;border-radius:7px;padding:9px 12px;font-weight:750;cursor:pointer;max-width:100%;white-space:normal;text-align:left}
+.ora-mpr-blocker button:hover{background:#fdf2d9}

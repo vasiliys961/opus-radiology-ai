@@ -9,6 +9,7 @@ import { readDicomSeriesHeader, groupDicomSeries, type TechnicalDicomMetadata } 
 import { validateViewerFileSelection, MAX_DICOM_FILES } from "../lib/viewer-limits";
 import { checkMprEligibility } from "../lib/mpr-eligibility";
 import { assessMprQuality } from "../lib/mpr-quality";
+import { uniqueNewFiles } from "../lib/study-files";
 
 // Keep the sizable Cornerstone engine outside the initial dashboard bundle.
 const CornerstoneMPR = dynamic(() => import("../components/CornerstoneMPR"), {
@@ -94,6 +95,14 @@ export default function Home() {
   }, [activeSeries, files]);
   const mprCheck = useMemo(() => checkMprEligibility(activeSeries, cornerstoneFiles.map(f => f.size)), [activeSeries, cornerstoneFiles]);
   const mprQuality = useMemo(() => assessMprQuality(activeSeries), [activeSeries]);
+  // Every series is checked independently. A 40-slice sequence from the same
+  // study can have a different acquisition geometry from a valid 20-slice one.
+  const compatibleSeries = useMemo(() => {
+    const sizes = new Map(files.map(item => [item.id, item.file.size]));
+    return series.filter(group =>
+      checkMprEligibility(group, group.members.map(item => sizes.get(item.id) ?? 0)).eligible);
+  }, [series, files]);
+  const compatibleAlternative = compatibleSeries.find(group => group.key !== activeSeries?.key) ?? null;
   const hasCornerstone = active?.kind === "dicom" && cornerstoneFiles.length > 0;
   const showMpr = hasCornerstone && viewMode !== "2d" && mprCheck.eligible;
   // Reset MPR on series changes and preserve normal 2D stack as the fallback.
@@ -135,8 +144,27 @@ export default function Home() {
     let rejected = 0;
     let warningCount = 0;
     const warningReasons = new Map<string, number>();
-    const limited = incoming.slice(0, MAX_DICOM_FILES);
     try {
+      // Browser folder selection often repeats already loaded instances.
+      // Deduplicate before indexing or applying per-Mac memory limits.
+      const { newFiles, duplicates } = uniqueNewFiles(files.map(item => item.file), incoming);
+      if (newFiles.length === 0) {
+        setNotice(`Все ${incoming.length} выбранных файлов уже находятся в исследовании. Выберите нужную DICOM-серию в списке ниже.`);
+        return;
+      }
+      // Never silently truncate a study folder: incomplete series can look
+      // geometrically regular although frames are missing.
+      if (newFiles.length > MAX_DICOM_FILES) {
+        setNotice(`Выбрано ${newFiles.length} новых файлов (повторы: ${duplicates}), лимит одной загрузки — ${MAX_DICOM_FILES}. Выберите отдельную DICOM-серию вместо полной папки исследования.`);
+        return;
+      }
+      const alreadyDicom = files.filter(item => item.kind === "dicom").length;
+      const newDicom = newFiles.filter(file => detectKind(file) === "dicom").length;
+      if (alreadyDicom + newDicom > MAX_DICOM_FILES) {
+        setNotice(`Файлы не добавлены: уже загружено ${alreadyDicom} DICOM, выбрано ещё ${newDicom} новых; суммарно ${alreadyDicom + newDicom}, лимит ${MAX_DICOM_FILES}. Нынешнее исследование остаётся открытым. Для другого исследования нажмите «Очистить список» или выбирайте его серии по отдельности.`);
+        return;
+      }
+      const limited = newFiles;
       // Limit memory use on 8 GB M1: inspect only header fragments, sequentially.
       for (const file of limited) {
         let kind = detectKind(file);
@@ -162,7 +190,6 @@ export default function Home() {
         }
         accepted.push(item);
       }
-      rejected += incoming.length - limited.length;
       // Guard memory before starting any Cornerstone decoder on an 8 GB Mac.
       const allDicom = [...files, ...accepted].filter((item) => item.kind === "dicom").map((item) => item.file);
       const sizeProblem = allDicom.length ? validateViewerFileSelection(allDicom) : null;
@@ -180,7 +207,7 @@ export default function Home() {
         if (accepted.some((item) => item.kind === "dicom" || item.kind === "nifti")) setModality("КТ / МРТ — уточнить");
         const commonReason = [...warningReasons.entries()].sort((a, b) => b[1] - a[1])[0];
         const details = commonReason ? ` Основная причина (${commonReason[1]}): ${commonReason[0]}` : "";
-        setNotice(`${accepted.length} файл(ов) добавлено локально.${rejected ? ` Пропущено: ${rejected}.` : ""}${warningCount ? ` Не удалось индексировать DICOM: ${warningCount}.${details}` : ""}`);
+        setNotice(`${accepted.length} файл(ов) добавлено локально.${duplicates ? ` Повторно выбранных, уже загруженных файлов: ${duplicates}.` : ""}${rejected ? ` Неподдерживаемых: ${rejected}.` : ""}${warningCount ? ` Не удалось индексировать DICOM: ${warningCount}.${details}` : ""}`);
       } else setNotice(rejected ? "Поддерживаются DICOM, NIfTI, ZIP, JPG, PNG и WEBP." : "Файлы не выбраны.");
     } finally { setIndexing(false); }
   };
@@ -213,7 +240,7 @@ export default function Home() {
       <div className="ora-nav-heading ora-nav-spaced">ПЛАТФОРМА</div>
       <div className="ora-nav-muted"><Icon name="clipboard" size={19}/> Отчёты <span>Скоро</span></div>
       <div className="ora-nav-muted"><Icon name="settings" size={19}/> Настройки <span>Скоро</span></div>
-      <div className="ora-sidebar-bottom"><div className="ora-device-mark"><span className="ora-status-dot"/> Локальный режим</div><p>На этом этапе изображения не передаются в облачные сервисы.</p><div className="ora-version">LOCAL PREVIEW · 0.5</div></div>
+      <div className="ora-sidebar-bottom"><div className="ora-device-mark"><span className="ora-status-dot"/> Локальный режим</div><p>На этом этапе изображения не передаются в облачные сервисы.</p><div className="ora-version">LOCAL PREVIEW · 1.3.2</div></div>
     </aside>
 
     <main className="ora-main">
@@ -274,6 +301,13 @@ export default function Home() {
                 {hasCornerstone ? <div className="ora-mode-actions"><span className="ora-viewer-engine">DICOM · {cornerstoneFiles.length} кадр(ов)</span><div className="ora-mode-buttons" role="group" aria-label="Режим просмотра"><button type="button" className={viewMode === "2d" ? "ora-mpr-toggle active" : "ora-mpr-toggle"} aria-pressed={viewMode === "2d"} onClick={() => setViewMode("2d")}>2D</button><button type="button" className={viewMode === "mpr" ? "ora-mpr-toggle active" : "ora-mpr-toggle"} aria-pressed={viewMode === "mpr"} disabled={!mprCheck.eligible} title={mprCheck.reason} onClick={() => setViewMode("mpr")}>MPR · 3 плоскости</button><button type="button" className={viewMode === "3d" ? "ora-mpr-toggle active" : "ora-mpr-toggle"} aria-pressed={viewMode === "3d"} disabled={!mprCheck.eligible} title={mprCheck.reason} onClick={() => setViewMode("3d")}>3D · Объём</button></div></div> :
                 <div className="ora-viewer-tools"><button type="button" title="Уменьшить" disabled={!url} onClick={()=>setZoom(z=>Math.max(.5,Number((z-.25).toFixed(2))))}><Icon name="minus" size={17}/></button><span>{Math.round(zoom*100)}%</span><button type="button" title="Увеличить" disabled={!url} onClick={()=>setZoom(z=>Math.min(4,Number((z+.25).toFixed(2))))}><Icon name="plus" size={17}/></button><button type="button" title="Сбросить масштаб" disabled={!url} onClick={()=>setZoom(1)}><Icon name="fit" size={17}/></button></div>}
               </div>
+              {hasCornerstone && !mprCheck.eligible && <div className="ora-mpr-blocker" role="status">
+                <div><strong>MPR и 3D недоступны для выбранной серии ({cornerstoneFiles.length} кадров).</strong>
+                  <p>{mprCheck.reason} Другие серии того же исследования могут иметь подходящую геометрию.</p></div>
+                {compatibleAlternative?.members[0] && <button type="button" onClick={() => {
+                  setActiveId(compatibleAlternative.members[0].id); setViewMode("2d"); setZoom(1);
+                }}>Открыть подходящую серию: {compatibleAlternative.label}</button>}
+              </div>}
               {hasCornerstone ?
                 <div className="ora-cornerstone-host">{showMpr
                   ? <CornerstoneMPR key={`mpr-${activeSeries!.key}`} files={cornerstoneFiles} quality={mprQuality} show3D={viewMode === "3d"} onShow3DChange={enabled => setViewMode(enabled ? "3d" : "mpr")}/>
@@ -295,7 +329,7 @@ export default function Home() {
             <div className="ora-card ora-analysis-card"><div className="ora-section-title"><div><span className="ora-heading-icon"><Icon name="brain" size={19}/></span><div><h2>Контур анализа</h2><p>Планируемые компоненты</p></div></div></div><div className="ora-model-item"><div className="ora-model-icon green"><Icon name="layers" size={17}/></div><div><strong>3D medical AI</strong><small>TotalSegmentator / MONAI</small></div><span className="ora-model-state">Позднее</span></div><div className="ora-model-item"><div className="ora-model-icon blue"><Icon name="sparkles" size={17}/></div><div><strong>Vision interpreter</strong><small>Gemini через API</small></div><span className="ora-model-state">Позднее</span></div><div className="ora-model-item"><div className="ora-model-icon purple"><Icon name="brain" size={17}/></div><div><strong>Clinical synthesis</strong><small>Claude / GPT через API</small></div><span className="ora-model-state">Позднее</span></div><button className="ora-analyze-button" type="button" disabled><Icon name="sparkles" size={18}/> Запустить гибридный анализ <Icon name="arrow" size={17}/></button><p className="ora-disabled-note">Кнопка станет доступна после подключения моделей. Никаких фиктивных заключений.</p></div>
           </section>
         </div>
-        <footer className="ora-footer"><span>OPUS RADIOLOGY AI · v1.3.1 · LOCAL DEVELOPMENT</span><span>Исследовательский прототип · не для клинической диагностики · <a href="/viewer">Техническая лаборатория DICOM</a></span></footer>
+        <footer className="ora-footer"><span>OPUS RADIOLOGY AI · v1.3.2 · LOCAL DEVELOPMENT</span><span>Исследовательский прототип · не для клинической диагностики · <a href="/viewer">Техническая лаборатория DICOM</a></span></footer>
       </div>
     </main>
   </div>;
