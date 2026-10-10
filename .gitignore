@@ -1,0 +1,44 @@
+# Node / Next.js
+**/node_modules/
+**/.next/
+**/out/
+**/.turbo/
+**/.tsbuildinfo
+**/npm-debug.log*
+
+# Secrets (allow only example templates)
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+*.pem
+*.key
+
+# Python / model caches
+**/.venv/
+**/venv/
+**/__pycache__/
+**/.cache/
+**/.models/
+**/models/weights/
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+
+# No research or real patient images in a public repository
+*.dcm
+*.dicom
+*.nii
+*.nii.gz
+*.nrrd
+*.mha
+*.mhd
+*.pydicom
+**/study-data/
+**/patient-data/
+**/test-data/private/
+**/.DS_Store

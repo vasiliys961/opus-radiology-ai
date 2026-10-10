@@ -1,0 +1,188 @@
+"use client";
+
+import { useEffect, useRef, useState, type ChangeEvent, type DragEvent, type ReactNode } from "react";
+import "./radiology.css";
+import { decodeDicomPreview, type DicomPreviewMetadata } from "../lib/dicom-lite";
+
+type Kind = "image" | "dicom" | "nifti" | "archive";
+type StudyFile = { id: string; file: File; kind: Kind; previewUrl?: string };
+type IconName = "pulse" | "scan" | "folder" | "grid" | "upload" | "search" | "settings" | "layers" | "sparkles" | "file" | "plus" | "minus" | "fit" | "trash" | "shield" | "arrow" | "info" | "check" | "brain" | "clipboard" | "cloud" | "chevron";
+
+function Icon({ name, size = 19 }: { name: IconName; size?: number }) {
+  const icons: Record<IconName, ReactNode> = {
+    pulse: <><path d="M3 12h4l3-7 4 14 3-7h4" /></>,
+    scan: <><path d="M7 3H5a2 2 0 0 0-2 2v2M17 3h2a2 2 0 0 1 2 2v2M3 17v2a2 2 0 0 0 2 2h2M21 17v2a2 2 0 0 1-2 2h-2" /><circle cx="12" cy="12" r="5" /><path d="M12 8v8M8 12h8" /></>,
+    folder: <path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6Z" />,
+    grid: <><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></>,
+    upload: <><path d="M12 16V3m0 0-5 5m5-5 5 5" /><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" /></>,
+    search: <><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 5 5" /></>,
+    settings: <><circle cx="12" cy="12" r="3" /><path d="m9.7 3.7.6-1h3.4l.6 1 1 1.7 2-.1 1.6 2.9-1 1.7 1 1.7-1 1.7 1 1.7-1.6 2.9-2-.1-1 1.7-.6 1h-3.4l-.6-1-1-1.7-2 .1-1.6-2.9 1-1.7-1-1.7 1-1.7-1-1.7 1.6-2.9 2 .1 1-1.7Z" transform="translate(0 1) scale(1 .94)" /></>,
+    layers: <><path d="m12 3 9 5-9 5-9-5 9-5Z" /><path d="m3 12 9 5 9-5M3 16l9 5 9-5" /></>,
+    sparkles: <><path d="m12 2 1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8L12 2ZM19 17l.7 1.3L21 19l-1.3.7L19 21l-.7-1.3L17 19l1.3-.7L19 17Z" /></>,
+    file: <><path d="M6 2h8l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Z" /><path d="M14 2v6h6M8 13h8M8 17h6" /></>,
+    plus: <path d="M12 5v14M5 12h14" />,
+    minus: <path d="M5 12h14" />,
+    fit: <><path d="M8 3H5a2 2 0 0 0-2 2v3m13-5h3a2 2 0 0 1 2 2v3M3 16v3a2 2 0 0 0 2 2h3m13-5v3a2 2 0 0 1-2 2h-3" /></>,
+    trash: <><path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15M10 10v7M14 10v7" /></>,
+    shield: <><path d="M12 2 4 5v6c0 5 3.1 8.5 8 11 4.9-2.5 8-6 8-11V5l-8-3Z" /><path d="m8.5 12 2.5 2.5 4.5-5" /></>,
+    arrow: <path d="M5 12h14m-6-6 6 6-6 6" />,
+    info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7h.01" /></>,
+    check: <path d="m4 12 5 5L20 6" />,
+    brain: <><path d="M12 19V6m0 13c-2 3-6 2-7-1-3 0-3-4-1-5-3-2-1-6 2-6 0-3 4-5 6-2 2-3 6-1 6 2 3 0 5 4 2 6 2 1 2 5-1 5-1 3-5 4-7 1Z" /><path d="M8 9c-2 1-2 3-1 4m9-4c2 1 2 3 1 4" /></>,
+    clipboard: <><rect x="5" y="4" width="14" height="18" rx="2" /><path d="M9 4V2h6v2M8 11h8M8 15h8" /></>,
+    cloud: <><path d="M7 18a5 5 0 0 1-.3-10 6 6 0 0 1 11.5 2.5A4 4 0 0 1 18 18H7Z" /></>,
+    chevron: <path d="m7 10 5 5 5-5" />,
+  };
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{icons[name]}</svg>;
+}
+
+const formatSize = (size: number) => size >= 1024 * 1024 ? `${(size / 1024 / 1024).toFixed(1)} МБ` : `${Math.max(1, Math.round(size / 1024))} КБ`;
+const detectKind = (file: File): Kind | null => {
+  const name = file.name.toLowerCase();
+  if (/\.(png|jpg|jpeg|webp)$/.test(name) && file.type.startsWith("image/")) return "image";
+  if (/\.(dcm|dicom)$/.test(name)) return "dicom";
+  if (/\.nii(\.gz)?$/.test(name)) return "nifti";
+  if (/\.zip$/.test(name)) return "archive";
+  return null;
+};
+const kindLabel: Record<Kind, string> = { image: "Изображение", dicom: "DICOM", nifti: "NIfTI", archive: "ZIP" };
+
+export default function Home() {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [files, setFiles] = useState<StudyFile[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const allocatedUrls = useRef<string[]>([]);
+  const [dragged, setDragged] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [dicomPreview, setDicomPreview] = useState<{ id: string; url: string; metadata: DicomPreviewMetadata } | null>(null);
+  const [dicomLoading, setDicomLoading] = useState(false);
+  const [dicomError, setDicomError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [context, setContext] = useState("");
+  const [studyName, setStudyName] = useState("");
+  const [modality, setModality] = useState("Не определена");
+  const active = files.find((item) => item.id === activeId) ?? null;
+
+  const url = active?.kind === "dicom" ? (dicomPreview?.id === active.id ? dicomPreview.url : null) : (active?.previewUrl ?? null);
+
+  useEffect(() => {
+    if (active?.kind !== "dicom") return;
+    let cancelled = false;
+    setDicomLoading(true);
+    setDicomError("");
+    setDicomPreview(null);
+    decodeDicomPreview(active.file).then((preview) => {
+      if (!cancelled) setDicomPreview({ id: active.id, ...preview });
+    }).catch((err: unknown) => {
+      if (!cancelled) setDicomError(err instanceof Error ? err.message : "Не удалось декодировать DICOM.");
+    }).finally(() => { if (!cancelled) setDicomLoading(false); });
+    return () => { cancelled = true; };
+  }, [active?.id, active?.kind, active?.file]);
+  useEffect(() => {
+    document.title = "Opus Radiology AI — КТ и МРТ";
+    const currentUrls = allocatedUrls.current;
+    return () => currentUrls.forEach((objectUrl) => URL.revokeObjectURL(objectUrl));
+  }, []);
+
+  const addFiles = (incoming: File[]) => {
+    if (!incoming.length) return;
+    const accepted: StudyFile[] = [];
+    let rejected = 0;
+    for (const file of incoming.slice(0, 500)) {
+      const kind = detectKind(file);
+      if (!kind) { rejected++; continue; }
+      const id = `${file.name}:${file.size}:${file.lastModified}`;
+      if (files.some((item) => item.id === id) || accepted.some((item) => item.id === id)) continue;
+      const previewUrl = kind === "image" ? URL.createObjectURL(file) : undefined;
+      if (previewUrl) allocatedUrls.current.push(previewUrl);
+      accepted.push({ id, file, kind, previewUrl });
+    }
+    if (incoming.length > 500) rejected += incoming.length - 500;
+    if (accepted.length) {
+      setFiles((prev) => [...prev, ...accepted]);
+      setActiveId(accepted[0].id);
+      setZoom(1);
+      if (accepted.some((item) => item.kind === "dicom" || item.kind === "nifti")) setModality("КТ / МРТ — уточнить");
+      setNotice(`${accepted.length} файл(ов) добавлено локально.${rejected ? ` Пропущено: ${rejected}.` : ""}`);
+    } else setNotice(rejected ? "Поддерживаются DICOM, NIfTI, ZIP, JPG, PNG и WEBP." : "Эти файлы уже добавлены.");
+  };
+
+  const pickFiles = (event: ChangeEvent<HTMLInputElement>) => {
+    addFiles(Array.from(event.target.files ?? []));
+    event.target.value = "";
+  };
+  const onDrop = (event: DragEvent<HTMLElement>) => {
+    event.preventDefault(); setDragged(false);
+    addFiles(Array.from(event.dataTransfer.files));
+  };
+  const clearFiles = () => {
+    allocatedUrls.current.forEach((objectUrl) => URL.revokeObjectURL(objectUrl));
+    allocatedUrls.current = [];
+    setFiles([]); setActiveId(null); setZoom(1); setNotice("Список очищен. Файлы на диске не изменены.");
+  };
+  const totalSize = files.reduce((sum, f) => sum + f.file.size, 0);
+
+  return <div className="ora-app">
+    <aside className="ora-sidebar">
+      <div className="ora-brand"><div className="ora-logo"><Icon name="scan" size={25}/></div><div><strong>OPUS<span>RADIOLOGY</span></strong><small>AI DIAGNOSTIC WORKSPACE</small></div></div>
+      <div className="ora-nav-heading">РАБОЧЕЕ ПРОСТРАНСТВО</div>
+      <div className="ora-nav-current"><Icon name="grid" size={19}/> Обзор исследования <span className="ora-nav-dot" /></div>
+      <div className="ora-nav-muted"><Icon name="folder" size={19}/> Архив исследований <span>Скоро</span></div>
+      <div className="ora-nav-muted"><Icon name="brain" size={19}/> Центр AI-анализа <span>Скоро</span></div>
+      <div className="ora-nav-muted"><Icon name="layers" size={19}/> 3D-лаборатория <span>Скоро</span></div>
+      <div className="ora-nav-heading ora-nav-spaced">ПЛАТФОРМА</div>
+      <div className="ora-nav-muted"><Icon name="clipboard" size={19}/> Отчёты <span>Скоро</span></div>
+      <div className="ora-nav-muted"><Icon name="settings" size={19}/> Настройки <span>Скоро</span></div>
+      <div className="ora-sidebar-bottom"><div className="ora-device-mark"><span className="ora-status-dot"/> Локальный режим</div><p>На этом этапе изображения не передаются в облачные сервисы.</p><div className="ora-version">LOCAL PREVIEW · 0.1</div></div>
+    </aside>
+
+    <main className="ora-main">
+      <header className="ora-topbar"><div className="ora-breadcrumb">Рабочая станция <span>/</span> Новое исследование</div><div className="ora-topbar-right"><span className="ora-header-pill"><span className="ora-status-dot"/> Интерфейс запущен</span><span className="ora-header-chip">M1 · DEV</span><div className="ora-avatar">OR</div></div></header>
+      <div className="ora-content">
+        <div className="ora-heading"><div><div className="ora-eyebrow"><span className="ora-eyebrow-line"/> RADIOLOGY INTELLIGENCE PLATFORM</div><h1>Рабочая станция <em>КТ / МРТ</em></h1><p>Исследование, визуализация и клинический контекст — в одном пространстве.</p></div><span className="ora-preview-label"><Icon name="info" size={15}/> Первый прототип</span></div>
+
+        <div className="ora-pipeline">
+          <div className="ora-pipeline-step ora-pipeline-active"><span className="ora-step-number">01</span><div><strong>Загрузка исследования</strong><small>Локальные файлы</small></div><Icon name="check" size={16}/></div>
+          <div className="ora-pipeline-divider"/>
+          <div className="ora-pipeline-step"><span className="ora-step-number">02</span><div><strong>Медицинские модели</strong><small>Подключим позднее</small></div></div>
+          <div className="ora-pipeline-divider"/>
+          <div className="ora-pipeline-step"><span className="ora-step-number">03</span><div><strong>Клинический синтез</strong><small>Gemini / Opus — позднее</small></div></div>
+        </div>
+
+        <div className="ora-workgrid">
+          <section className="ora-left-col">
+            <div className="ora-card ora-upload-card">
+              <div className="ora-section-title"><div><span className="ora-heading-icon"><Icon name="folder" size={19}/></span><div><h2>Новое исследование</h2><p>Подготовьте данные для анализа</p></div></div><span className="ora-label-soft">ШАГ 01</span></div>
+              <div className={`ora-dropzone ${dragged ? "ora-drop-active" : ""}`} onDragOver={(event) => {event.preventDefault(); setDragged(true);}} onDragLeave={() => setDragged(false)} onDrop={onDrop}>
+                <div className="ora-upload-icon"><Icon name="upload" size={26}/></div><strong>Перетащите медицинские изображения</strong><p>или выберите файлы на вашем устройстве</p>
+                <button className="ora-primary-button" type="button" onClick={() => inputRef.current?.click()}><Icon name="plus" size={17}/> Выбрать файлы</button>
+                <input ref={inputRef} className="ora-hidden-input" type="file" accept=".dcm,.dicom,.zip,.nii,.gz,.png,.jpg,.jpeg,.webp" multiple onChange={pickFiles}/>
+                <div className="ora-accepted">DICOM · NIfTI · ZIP · PNG · JPEG · WEBP</div>
+              </div>
+              {notice && <div className="ora-notice" role="status"><Icon name="info" size={16}/>{notice}</div>}
+              <div className="ora-fields"><label>Название исследования<input value={studyName} onChange={e => setStudyName(e.target.value)} placeholder="Например, МРТ головного мозга" /></label><label>Модальность<select value={modality} onChange={e=>setModality(e.target.value)}><option>Не определена</option><option>КТ</option><option>МРТ</option><option>КТ / МРТ — уточнить</option></select></label></div>
+              <div className="ora-files-head"><strong>Файлы исследования <span>{files.length}</span></strong>{files.length > 0 && <button type="button" className="ora-link-danger" onClick={clearFiles}><Icon name="trash" size={14}/> Очистить список</button>}</div>
+              <div className="ora-file-list">{files.length === 0 ? <div className="ora-files-empty">Пока не загружено ни одного файла</div> : files.slice(0, 12).map(item => <button type="button" className={`ora-file-row ${activeId === item.id ? "ora-file-selected" : ""}`} key={item.id} onClick={()=> {setActiveId(item.id); setZoom(1);}}><Icon name="file" size={17}/><span className="ora-file-name" title={item.file.name}>{item.file.name}</span><small>{kindLabel[item.kind]}</small><small>{formatSize(item.file.size)}</small></button>)}{files.length > 12 && <div className="ora-more-files">Ещё {files.length - 12} файлов в исследовании</div>}</div>
+              <div className="ora-file-summary"><Icon name="shield" size={16}/> Файлы остаются в браузере. Общий размер: {files.length ? formatSize(totalSize) : "0 МБ"}</div>
+            </div>
+          </section>
+
+          <section className="ora-center-col">
+            <div className="ora-viewer-card"><div className="ora-viewer-head"><div><span className="ora-heading-icon ora-heading-icon-dark"><Icon name="scan" size={18}/></span><div><h2>Просмотр изображения</h2><p>{active ? active.file.name : "Нет выбранного исследования"}</p></div></div><div className="ora-viewer-tools"><button type="button" title="Уменьшить" disabled={!url} onClick={()=>setZoom(z=>Math.max(.5,Number((z-.25).toFixed(2))))}><Icon name="minus" size={17}/></button><span>{Math.round(zoom*100)}%</span><button type="button" title="Увеличить" disabled={!url} onClick={()=>setZoom(z=>Math.min(4,Number((z+.25).toFixed(2))))}><Icon name="plus" size={17}/></button><button type="button" title="Сбросить масштаб" disabled={!url} onClick={()=>setZoom(1)}><Icon name="fit" size={17}/></button></div></div>
+              <div className="ora-viewer-body">{url && active ? <div className="ora-image-scroll"><img src={url} alt={`Предпросмотр: ${active.file.name}`} className="ora-medical-img" style={{transform: `scale(${zoom})`}} /></div> : <div className="ora-viewer-placeholder"><div className="ora-rings"><span className="ora-ring-a"/><span className="ora-ring-b"/><span className="ora-ring-c"/><div className="ora-crosshair">+</div></div><div className="ora-viewer-empty-icon"><Icon name={active ? "file" : "scan"} size={27}/></div><h3>{active ? "Файл добавлен в исследование" : "Область медицинских изображений"}</h3><p>{active ? dicomLoading ? "Читаем DICOM локально..." : (dicomError || "Этот формат пока нельзя отобразить. Несжатые одиночные DICOM поддерживаются, сжатые серии требуют Cornerstone3D.") : "Загрузите JPG/PNG или несжатый одиночный DICOM-файл. Поддержку JPEG2000, RLE, мультифреймовых DICOM и объёмных серий добавим позднее."}</p></div>}
+                <div className="ora-viewer-axis"><span>AXIAL / DICOM VIEW</span><span>{url ? "ЛОКАЛЬНЫЙ ПРОСМОТР" : "ОЖИДАНИЕ ДАННЫХ"}</span></div></div>
+              <div className="ora-viewer-footer"><span><span className="ora-tiny-dot"/> {dicomPreview?.id === activeId ? `${dicomPreview.metadata.modality || "DICOM"} · ${dicomPreview.metadata.width}×${dicomPreview.metadata.height} · ${dicomPreview.metadata.bitsAllocated} bit · WC ${dicomPreview.metadata.windowCenter ?? "auto"} / WW ${dicomPreview.metadata.windowWidth ?? "auto"}` : "Локальный предпросмотр · исследовательский режим"}</span><span>3D / MPR <b>скоро</b></span></div>
+            </div>
+            <div className="ora-finding-strip"><div className="ora-finding-icon"><Icon name="sparkles" size={21}/></div><div><strong>AI-анализ готов к интеграции</strong><p>После подключения Python-сервиса здесь появятся маски, измерения и найденные изменения.</p></div><span className="ora-coming-soon">НЕ ПОДКЛЮЧЁН</span></div>
+          </section>
+
+          <section className="ora-right-col">
+            <div className="ora-card ora-context-card"><div className="ora-section-title"><div><span className="ora-heading-icon"><Icon name="clipboard" size={18}/></span><div><h2>Клинический контекст</h2><p>Данные для интерпретации</p></div></div></div><label className="ora-context-label" htmlFor="clinical-context">Жалобы, анамнез, лабораторные данные</label><textarea id="clinical-context" value={context} onChange={e=>setContext(e.target.value)} placeholder="Например: пациент 54 лет, головные боли в течение 3 недель. Цель исследования — исключить структурную патологию..." rows={8} /><div className="ora-context-tip"><Icon name="info" size={16}/><p>Контекст пока хранится только в памяти страницы. Не вводите идентифицирующие данные реальных пациентов при тестировании.</p></div></div>
+            <div className="ora-card ora-analysis-card"><div className="ora-section-title"><div><span className="ora-heading-icon"><Icon name="brain" size={19}/></span><div><h2>Контур анализа</h2><p>Планируемые компоненты</p></div></div></div><div className="ora-model-item"><div className="ora-model-icon green"><Icon name="layers" size={17}/></div><div><strong>3D medical AI</strong><small>TotalSegmentator / MONAI</small></div><span className="ora-model-state">Позднее</span></div><div className="ora-model-item"><div className="ora-model-icon blue"><Icon name="sparkles" size={17}/></div><div><strong>Vision interpreter</strong><small>Gemini через API</small></div><span className="ora-model-state">Позднее</span></div><div className="ora-model-item"><div className="ora-model-icon purple"><Icon name="brain" size={17}/></div><div><strong>Clinical synthesis</strong><small>Claude / GPT через API</small></div><span className="ora-model-state">Позднее</span></div><button className="ora-analyze-button" type="button" disabled><Icon name="sparkles" size={18}/> Запустить гибридный анализ <Icon name="arrow" size={17}/></button><p className="ora-disabled-note">Кнопка станет доступна после подключения моделей. Никаких фиктивных заключений.</p></div>
+          </section>
+        </div>
+        <footer className="ora-footer"><span>OPUS RADIOLOGY AI · LOCAL DEVELOPMENT</span><span>Исследовательский прототип · не для клинической диагностики</span></footer>
+      </div>
+    </main>
+  </div>;
+}
