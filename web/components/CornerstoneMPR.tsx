@@ -109,7 +109,11 @@ export default function CornerstoneMPR({ files }: { files: File[] }) {
         if (cancelled) return;
         const views = Object.fromEntries(PLANE_NAMES.map((p,i) => [p, engine!.getViewport(ids[i]) as Types.IVolumeViewport])) as Record<Plane,Types.IVolumeViewport>;
         for (const p of PLANE_NAMES) views[p].resetCamera();
-        let point = [...views.axial.getCamera().focalPoint] as Vec3;
+        const initialFocal = views.axial.getCamera().focalPoint;
+        if (!initialFocal || !initialFocal.every(Number.isFinite)) {
+          throw new Error("Не удалось получить начальный центр MPR-объёма.");
+        }
+        let point = [...initialFocal] as Vec3;
 
         const synchronize = (next: Vec3) => {
           if (cancelled) return;
