@@ -99,3 +99,13 @@ rendering, modality LUT fidelity or pixel geometry.
 - Cleanup releases rendering engine, volume cache, image cache and file manager entries. A failure is reported, never silently interpreted as a normal image.
 - Reconstructed planes are *experimental*. Geometry checks cannot guarantee clinical accuracy; no measurements, segmentation, export or diagnosis. Real Mac/Safari MPR runtime remains unverified until user smoke test.
 - The original `/viewer` diagnostic lab and standard DICOM stack remain available as fallback.
+
+
+## Interactive MPR navigation (v0.9)
+
+- Orthogonal viewports are now linked by a **single physical (patient-space) crosshair point**.
+- Wheel, arrow keys, +/- controls and per-plane slider navigate each volume viewport with Cornerstone `utilities.scroll` and `getVolumeViewportScrollInfo`; index ranges are taken from the actual viewport, not guessed image orientation.
+- Clicking an image maps the canvas coordinate to patient space via `viewport.canvasToWorld`. Points outside the volume index extent are rejected. The other two viewports then align their clipping plane through the selected point.
+- Crosshairs are a visual research aid, **not a calibrated measurement**. No positions are saved or transmitted.
+- Geometry helpers have isolated unit tests; validate mouse/slider/crosshair synchronization, edge slices, resizing and GPU memory in Safari.
+- The M1 memory preflight and 2D fallback remain mandatory.
