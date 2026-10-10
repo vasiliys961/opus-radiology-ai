@@ -5,6 +5,7 @@ import type { Types } from "@cornerstonejs/core";
 import { alignCameraWithPoint, crosshairAfterScroll, insideImageExtent, safeSliceIndex, type Vec3 } from "../lib/mpr-navigation";
 import type { MprQuality } from "../lib/mpr-quality";
 import { orbitCamera } from "../lib/mpr-orbit";
+import { buildVolumeTransfer, type VolumeRenderMode } from "../lib/volume-rendering";
 
 const PLANE_NAMES = ["axial", "coronal", "sagittal"] as const;
 type Plane = typeof PLANE_NAMES[number];
@@ -19,6 +20,9 @@ type Runtime = {
   setInterpolation: (mode: "linear" | "nearest") => void;
   set3DActive: (enabled: boolean, target: HTMLDivElement) => Promise<void>;
   orbit3D: (horizontal: number, vertical: number) => void;
+  update3D: (mode: VolumeRenderMode, threshold: number, opacity: number) => void;
+  zoom3D: (factor: number) => void;
+  reset3D: () => void;
 };
 
 const emptyReadouts = (): Readouts => ({ axial:{index:0,total:1}, coronal:{index:0,total:1}, sagittal:{index:0,total:1} });
@@ -46,6 +50,9 @@ export default function CornerstoneMPR({ files, quality, show3D, onShow3DChange 
   const [threeDReady, setThreeDReady] = useState(false);
   const [threeDBusy, setThreeDBusy] = useState(false);
   const [threeDError, setThreeDError] = useState("");
+  const [renderMode, setRenderMode] = useState<VolumeRenderMode>("composite");
+  const [threshold, setThreshold] = useState(28);
+  const [opacity, setOpacity] = useState(48);
   const featuredPlane = quality.nativePlane ?? "axial";
 
   useEffect(() => {
@@ -229,15 +236,54 @@ export default function CornerstoneMPR({ files, quality, show3D, onShow3DChange 
             await core.setVolumesForViewports(engine, [{ volumeId }], [viewport3dId]);
             if (cancelled) return;
             const vp = engine.getViewport(viewport3dId) as Types.IVolumeViewport;
-            vp.setBlendMode(core.Enums.BlendModes.MAXIMUM_INTENSITY_BLEND);
-            vp.resetCamera();
-            vp.render();
             viewport3d = vp;
+            vp.resetCamera();
+            update3D("composite", 28, 48);
           } catch (cause) {
             try { engine.disableElement(viewport3dId); } catch { /* partial GPU init */ }
             viewport3d = null;
             throw cause;
           }
+        };
+        // All display mappings act only on the VTK actor. Source DICOM pixels
+        // and the three MPR viewports are never modified.
+        const update3D = (mode: VolumeRenderMode, thresholdPercent: number, opacityPercent: number) => {
+          if (!viewport3d) return;
+          const data = volume.imageData as unknown as {
+            getPointData?: () => { getScalars?: () => { getRange?: () => number[] } | null } | null;
+          };
+          const range = data.getPointData?.()?.getScalars?.()?.getRange?.();
+          if (!range || range.length < 2 || !Number.isFinite(range[0]) || !Number.isFinite(range[1]) || range[1] <= range[0]) {
+            throw new Error("Не удалось определить диапазон интенсивностей объёма.");
+          }
+          const mapping = buildVolumeTransfer([range[0], range[1]], mode === "mip" ? 0 : thresholdPercent, mode === "mip" ? 100 : opacityPercent);
+          const actor = viewport3d.getDefaultActor()?.actor as unknown as {
+            getProperty?: () => {
+              getScalarOpacity: (channel: number) => { removeAllPoints(): void; addPoint(x: number, y: number): void } | null;
+              getRGBTransferFunction: (channel: number) => { removeAllPoints(): void; addRGBPoint(x: number, r: number, g: number, b: number): void } | null;
+            };
+          };
+          const property = actor?.getProperty?.();
+          const scalar = property?.getScalarOpacity(0);
+          const color = property?.getRGBTransferFunction(0);
+          if (!scalar || !color) throw new Error("Объёмный актор не предоставляет функции цвета и прозрачности.");
+          scalar.removeAllPoints();
+          for (const [intensity, alpha] of mapping.opacity) scalar.addPoint(intensity, alpha);
+          color.removeAllPoints();
+          for (const [intensity, r, g, b] of mapping.color) color.addRGBPoint(intensity, r, g, b);
+          viewport3d.setBlendMode(mode === "mip" ? core.Enums.BlendModes.MAXIMUM_INTENSITY_BLEND : core.Enums.BlendModes.COMPOSITE);
+          viewport3d.render();
+        };
+        const zoom3D = (factor: number) => {
+          if (!viewport3d || !Number.isFinite(factor) || factor <= 0) return;
+          const current = viewport3d.getZoom();
+          viewport3d.setZoom(Math.max(0.25, Math.min(8, current * factor)));
+          viewport3d.render();
+        };
+        const reset3D = () => {
+          if (!viewport3d) return;
+          viewport3d.resetCamera();
+          viewport3d.render();
         };
         const orbit3D = (horizontal: number, vertical: number) => {
           if (!viewport3d || !Number.isFinite(horizontal) || !Number.isFinite(vertical)) return;
@@ -252,7 +298,7 @@ export default function CornerstoneMPR({ files, quality, show3D, onShow3DChange 
           viewport3d.render();
         };
         runtime.current = {
-          step, pick, set3DActive, orbit3D,
+          step, pick, set3DActive, orbit3D, update3D, zoom3D, reset3D,
           setInterpolation: setRenderingInterpolation,
           reset: () => {
             for (const p of PLANE_NAMES) views[p].resetCamera();
@@ -309,6 +355,13 @@ export default function CornerstoneMPR({ files, quality, show3D, onShow3DChange 
     setThreeDReady(false);
   }, [ready, show3D]);
 
+  // Changing rendering presets must not recreate or re-decode the shared volume.
+  useEffect(() => {
+    if (!show3D || !threeDReady) return;
+    try { runtime.current?.update3D(renderMode, threshold, opacity); setThreeDError(""); }
+    catch (cause: unknown) { setThreeDError(cause instanceof Error ? cause.message : String(cause)); }
+  }, [show3D, threeDReady, renderMode, threshold, opacity]);
+
   const onWheel = (event: WheelEvent<HTMLDivElement>, plane: Plane) => {
     if (!ready) return;
     event.preventDefault();
@@ -346,14 +399,27 @@ export default function CornerstoneMPR({ files, quality, show3D, onShow3DChange 
     </div>
     <div className="ora-mpr-3d-toolbar">
       <button type="button" className={show3D ? "active" : ""} disabled={!ready} aria-pressed={show3D}
-        onClick={() => onShow3DChange(!show3D)}>{show3D ? "Скрыть 3D" : "Показать 3D · MIP"}</button>
-      <span>3D MIP — проекция максимальной интенсивности, не сегментация и не модель поверхности.</span>
+        onClick={() => onShow3DChange(!show3D)}>{show3D ? "Скрыть 3D" : "Показать 3D"}</button>
+      <span>3D: объёмный рендеринг или MIP — без сегментации. Исходные данные не меняются.</span>
     </div>
     {show3D && quality.interpolationRisk === "high" && <p className="ora-mpr-3d-warning" role="note">
       Внимание: шаг между срезами {quality.sliceSpacingMm?.toFixed(2)} мм. Объём анизотропный: 3D-проекция условная, мелкие структуры и границы могут искажаться.
     </p>}
       <div className={`ora-mpr-3d-panel ${show3D ? "visible" : ""}`} aria-hidden={!show3D}>
-        <div className="ora-mpr-3d-title"><strong>3D · MIP</strong><span>{threeDBusy ? "Загрузка 3D…" : threeDReady ? "Поворот мышью или кнопками" : "Экспериментально"}</span></div>
+        <div className="ora-mpr-3d-title"><strong>3D · {renderMode === "composite" ? "Объём" : "MIP"}</strong><span>{threeDBusy ? "Загрузка 3D…" : threeDReady ? "Поворот мышью или кнопками" : "Экспериментально"}</span></div>
+        <div className="ora-mpr-render-controls">
+          <div className="ora-mpr-render-modes" role="group" aria-label="Способ отображения 3D">
+            <button type="button" className={renderMode === "composite" ? "active" : ""} aria-pressed={renderMode === "composite"} disabled={!threeDReady} onClick={() => setRenderMode("composite")}>Объём · прозрачность</button>
+            <button type="button" className={renderMode === "mip" ? "active" : ""} aria-pressed={renderMode === "mip"} disabled={!threeDReady} onClick={() => setRenderMode("mip")}>MIP · максимум</button>
+          </div>
+          <label>Порог интенсивности <b>{threshold}%</b>
+            <input type="range" min="0" max="85" step="1" value={threshold} disabled={!threeDReady || renderMode === "mip"} onChange={event => setThreshold(Number(event.target.value))}/>
+          </label>
+          <label>Прозрачность / плотность <b>{opacity}%</b>
+            <input type="range" min="5" max="100" step="1" value={opacity} disabled={!threeDReady || renderMode === "mip"} onChange={event => setOpacity(Number(event.target.value))}/>
+          </label>
+          <p>{renderMode === "mip" ? "MIP показывает максимальные интенсивности вдоль луча; настройки прозрачности не применяются." : "Интерактивная прозрачность и цветовая шкала. Параметры только отображения, не сегментация тканей."}</p>
+        </div>
         <div ref={volume3d} className="ora-mpr-3d-canvas" onPointerDown={(event: PointerEvent<HTMLDivElement>) => {
           if (!threeDReady) return;
           drag3d.current = {x:event.clientX,y:event.clientY};
@@ -368,6 +434,9 @@ export default function CornerstoneMPR({ files, quality, show3D, onShow3DChange 
           <button type="button" disabled={!threeDReady} onClick={() => runtime.current?.orbit3D(-15,0)}>↶ Повернуть</button>
           <button type="button" disabled={!threeDReady} onClick={() => runtime.current?.orbit3D(15,0)}>Повернуть ↷</button>
           <button type="button" disabled={!threeDReady} onClick={() => runtime.current?.orbit3D(0,15)}>Наклонить ↓</button>
+          <button type="button" disabled={!threeDReady} onClick={() => runtime.current?.zoom3D(1.2)}>Увеличить +</button>
+          <button type="button" disabled={!threeDReady} onClick={() => runtime.current?.zoom3D(1 / 1.2)}>Уменьшить −</button>
+          <button type="button" disabled={!threeDReady} onClick={() => runtime.current?.reset3D()}>Сбросить вид</button>
         </div>
       </div>
     <div className="ora-mpr-grid">

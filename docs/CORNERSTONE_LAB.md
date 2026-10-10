@@ -124,3 +124,16 @@ rendering, modality LUT fidelity or pixel geometry.
 - Fixed a legacy CSS selector applying fixed image heights to MPR control rows.
 - Safari rendering, device memory, WebGL context-loss behavior and image fidelity
   are still UNVALIDATED and require manual tests on non-identifiable datasets.
+
+
+## v1.3: Composite volume rendering (research only)
+
+The same GPU volume is shared by MPR and 3D, and may be rendered as
+`BlendModes.COMPOSITE` using an interactive grayscale color-transfer function
+and piecewise opacity curve, or `MAXIMUM_INTENSITY_BLEND`. The display mapping
+uses each volume's numeric scalar range and is not an anatomically trained
+segmentation or a tissue classifier. The controls do not modify original DICOM
+pixel data. MR pixel intensities have no universal tissue thresholds.
+The 3D panel retains a clear warning for anisotropic source geometry;
+the GPU renderer cannot infer missing structural detail between 4.5 mm slices.
+The M1 memory budget and fail-closed DICOM preflight remain unchanged.

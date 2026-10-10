@@ -133,3 +133,17 @@
 .ora-mode-buttons{display:flex;flex-wrap:wrap;align-items:center;gap:5px}
 .ora-mode-buttons .ora-mpr-toggle{padding:7px 9px}
 .ora-mpr-3d-panel.visible{display:block;margin:9px 0 12px}
+
+/* v1.3 — volume transfer-function controls; shared 3D viewport, no extra GPU volume. */
+.ora-mpr-render-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;padding:12px 14px;background:#102b37;border-bottom:1px solid #345664}
+.ora-mpr-render-modes{grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap}
+.ora-mpr-render-controls button{border:1px solid #496979;background:#2b4857;color:#d8eceb;border-radius:6px;padding:8px 10px;font-size:11px;cursor:pointer}
+.ora-mpr-render-controls button.active{background:#0b8d83;border-color:#39cfb0;color:white}
+.ora-mpr-render-controls button:disabled{opacity:.45;cursor:not-allowed}
+.ora-mpr-render-controls label{display:grid;gap:6px;color:#bfdae0;font-size:11px}
+.ora-mpr-render-controls label b{float:right;color:#8be4ca;font-variant-numeric:tabular-nums}
+.ora-mpr-render-controls input{width:100%;accent-color:#35c6a9}
+.ora-mpr-render-controls p{grid-column:1/-1;color:#8caeb8;font-size:10px;line-height:1.5;margin:0}
+.ora-mpr-3d-canvas{height:clamp(320px,52vh,580px)}
+.ora-mpr-3d-actions{flex-wrap:wrap}
+@media(max-width:650px){.ora-mpr-render-controls{grid-template-columns:1fr}.ora-mpr-3d-canvas{height:310px}}
