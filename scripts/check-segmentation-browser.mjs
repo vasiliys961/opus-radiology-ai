@@ -33,6 +33,7 @@ try {
   await mpr.click();
   await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='Загрузить маску .nii / .nii.gz'&&!b.disabled),undefined,{timeout:30000});
   console.log('MPR ready');
+  assert.match(await page.locator('.ora-mpr-volume-stats').innerText(),/0\.3 МиБ/);
   const upload=page.locator('input[accept=".nii,.nii.gz"]');
   await upload.setInputFiles(fixture+'/synthetic-mask.nii');
   await page.locator('.ora-mask-success').waitFor({timeout:30000});

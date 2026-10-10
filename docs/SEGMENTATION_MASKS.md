@@ -75,5 +75,21 @@ The generated fixture round-trip is also covered by `npm test`, using the actual
 DICOM header, pixel and mask readers. Safari/M1 and clinical reference-data testing
 remain separate from successful unit tests and a production build.
 
+GitHub Actions also runs the synthetic fixture through Chromium/SwiftShader:
+three overlays, exact label volumes, visibility, shifted-mask rejection without
+losing the previous mask, slice navigation, 3D/MIP controls and return to 2D.
+This checks integration, not clinical correctness or Safari GPU behaviour.
+To reproduce it locally after a production build:
+
+```bash
+cd web
+npx playwright install chromium
+npm run build
+npm run test:browser
+```
+
+The check uses a temporary fixture and saves a screenshot under the ignored
+`web/browser-results/` folder. Chromium is downloaded only for this explicit test.
+
 Primary format reference:
 https://github.com/NIFTI-Imaging/nifti_clib/blob/master/niftilib/nifti1.h

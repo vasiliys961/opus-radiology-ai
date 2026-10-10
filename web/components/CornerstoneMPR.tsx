@@ -146,10 +146,15 @@ export default function CornerstoneMPR({ files, quality, show3D, onShow3DChange 
       };
       dispose = release;
       try {
+        let decodedBytes = 0;
         for (let i = 0; i < imageIds.length; i++) {
           if (cancelled) return;
           if (i % 5 === 0) setStatus(`Загрузка кадров для MPR: ${i + 1} / ${imageIds.length}`);
-          await core.imageLoader.loadAndCacheImage(imageIds[i]);
+          const image = await core.imageLoader.loadAndCacheImage(imageIds[i]);
+          // Composite VoxelManager.sizeInBytes is NaN in Cornerstone 4.18.3:
+          // bytePerVoxel reads BYTES_PER_ELEMENT from a numeric voxel value.
+          // DICOM loader image.sizeInBytes is the decoded pixel buffer length.
+          decodedBytes += Number.isFinite(image.sizeInBytes) && image.sizeInBytes > 0 ? image.sizeInBytes : NaN;
         }
         if (cancelled) return;
         setStatus("Проверка геометрии и сборка объёма…");
@@ -159,7 +164,7 @@ export default function CornerstoneMPR({ files, quality, show3D, onShow3DChange 
         if (!volume || volume.dimensions?.[2] !== imageIds.length) {
           throw new Error("Полученный объём не соответствует количеству кадров серии.");
         }
-        setVolumeStats({ dimensions: [...volume.dimensions], decodedMiB: volume.sizeInBytes / 1048576 });
+        setVolumeStats({ dimensions: [...volume.dimensions], decodedMiB: decodedBytes / 1048576 });
         engine = new core.RenderingEngine(`ora-mpr-engine-${id}`);
         const ids = PLANE_NAMES.map(plane => `ora-mpr-${plane}-${id}`);
         engine.setViewports([
