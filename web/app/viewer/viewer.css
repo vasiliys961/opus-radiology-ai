@@ -160,3 +160,22 @@
 .ora-mpr-3d-panel.expanded .ora-mpr-3d-canvas{flex:1;min-height:120px;height:auto;max-height:none}
 .ora-mpr-3d-panel.expanded .cs-error{flex-shrink:0}
 @media(max-width:650px){.ora-mpr-3d-panel.expanded.visible{inset:4px}.ora-mpr-3d-panel.expanded .ora-mpr-render-controls{grid-template-columns:repeat(2,minmax(0,1fr))}.ora-mpr-3d-title{flex-wrap:wrap}.ora-mpr-3d-title span{flex-basis:100%;order:3}}
+
+/* Discrete label overlay: same physical plane, bounded display raster, no ID smoothing. */
+.ora-mpr-mask-overlay{position:absolute;inset:0;width:100%;height:100%;z-index:1;pointer-events:none;image-rendering:pixelated}
+.ora-mask-controls{border:1px solid #3d6b64;border-radius:7px;background:#14312f;margin:10px 0;padding:12px;color:#cbe3dc;font-size:11px;line-height:1.5}
+.ora-mask-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.ora-mask-heading strong{color:#ddf8eb}.ora-mask-heading span{color:#86cab0;font-size:10px}
+.ora-mask-controls p{margin:8px 0}.ora-mask-controls small{display:block;color:#9abfb2;font-size:10px;line-height:1.5}
+.ora-mask-actions{display:flex;gap:8px;flex-wrap:wrap}
+.ora-mask-actions button{background:#236752;border:1px solid #479778;color:#eefaf5;border-radius:5px;font-size:11px;padding:7px 10px;cursor:pointer}
+.ora-mask-actions button:disabled{opacity:.4;cursor:not-allowed}
+.ora-mask-controls .ora-mask-error{color:#ffc7ac}.ora-mask-controls .ora-mask-success{color:#8ce1b6;overflow-wrap:anywhere}
+.ora-mask-settings{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:10px;margin:12px 0;align-items:center}
+.ora-mask-settings label{display:grid;gap:5px;min-width:0}
+.ora-mask-settings .ora-mask-visible{display:flex;align-items:center;gap:6px}
+.ora-mask-settings select{width:100%;min-width:0;border:1px solid #416e61;border-radius:5px;padding:6px;background:#1b3e36;color:#e5f3ed;font-size:11px}
+.ora-mask-settings input{accent-color:#57d4a2}.ora-mask-settings input[type=range]{width:100%}
+.ora-mask-quantification{font-variant-numeric:tabular-nums;color:#d9f4e5;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.ora-mask-quantification i{width:10px;height:10px;border-radius:2px;display:inline-block}
+@media(max-width:650px){.ora-mask-settings{grid-template-columns:1fr}}

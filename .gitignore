@@ -43,4 +43,7 @@
 **/study-data/
 **/patient-data/
 **/test-data/private/
+**/test-data/generated-segmentation-phantom/
 **/.DS_Store
+
+web/browser-results/

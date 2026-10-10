@@ -7,6 +7,8 @@ import type { MprQuality } from "../lib/mpr-quality";
 import { orbitCamera } from "../lib/mpr-orbit";
 import { applyVolumeDisplay, buildVolumeTransfer, getVolumeSampling, getVolumeScalarRange, type VolumeDisplayActor, type VolumePalette, type VolumeRenderMode, type VolumeRenderQuality } from "../lib/volume-rendering";
 import { createAsyncViewportToggle } from "../lib/async-viewport";
+import SegmentationControls, { type MaskDisplay } from "./SegmentationControls";
+import { assertMaskMatchesSource, renderMaskPlane, sourceGeometry, type LabelMask, type Point3 } from "../lib/segmentation-mask";
 
 const PLANE_NAMES = ["axial", "coronal", "sagittal"] as const;
 type Plane = typeof PLANE_NAMES[number];
@@ -24,6 +26,9 @@ type Runtime = {
   update3D: (mode: VolumeRenderMode, threshold: number, opacity: number, palette: VolumePalette, quality: VolumeRenderQuality, interpolation: "linear" | "nearest") => void;
   zoom3D: (factor: number) => void;
   reset3D: () => void;
+  importMask: (mask: LabelMask, display: MaskDisplay) => void;
+  setMaskDisplay: (display: MaskDisplay) => void;
+  clearMask: () => void;
 };
 
 const emptyReadouts = (): Readouts => ({ axial:{index:0,total:1}, coronal:{index:0,total:1}, sagittal:{index:0,total:1} });
@@ -40,6 +45,7 @@ export default function CornerstoneMPR({ files, quality, show3D, onShow3DChange 
   const coronal = useRef<HTMLDivElement>(null);
   const sagittal = useRef<HTMLDivElement>(null);
   const volume3d = useRef<HTMLDivElement>(null);
+  const maskCanvases = useRef<Record<Plane, HTMLCanvasElement | null>>({axial:null,coronal:null,sagittal:null});
   const drag3d = useRef<{ x: number; y: number } | null>(null);
   const runtime = useRef<Runtime | null>(null);
   const [status, setStatus] = useState("Подготовка MPR…");
@@ -69,6 +75,15 @@ export default function CornerstoneMPR({ files, quality, show3D, onShow3DChange 
     let dispose: (() => void) | null = null;
     let observer: ResizeObserver | null = null;
     let ownedRuntime: Runtime | null = null;
+    let maskState: {mask:LabelMask;display:MaskDisplay} | null = null;
+    let maskFrame: number | null = null;
+    const clearMaskCanvases = () => {
+      for (const p of PLANE_NAMES) {
+        const canvas = maskCanvases.current[p];
+        canvas?.getContext("2d")?.clearRect(0,0,canvas.width,canvas.height);
+      }
+    };
+    clearMaskCanvases();
     const id = crypto.randomUUID();
     const volumeId = `ora-mpr-${id}`;
     runtime.current = null;
@@ -104,6 +119,11 @@ export default function CornerstoneMPR({ files, quality, show3D, onShow3DChange 
       let toggle3d: ReturnType<typeof createAsyncViewportToggle> | null = null;
       let volumeAllocated = false;
       const release = () => {
+        if (maskFrame !== null) cancelAnimationFrame(maskFrame);
+        maskFrame = null;
+        maskState = null;
+        // Late cleanup of an old series must not erase a newer overlay.
+        if (runtime.current === ownedRuntime || !runtime.current) clearMaskCanvases();
         observer?.disconnect();
         observer = null;
         if (runtime.current === ownedRuntime) runtime.current = null;
@@ -126,10 +146,15 @@ export default function CornerstoneMPR({ files, quality, show3D, onShow3DChange 
       };
       dispose = release;
       try {
+        let decodedBytes = 0;
         for (let i = 0; i < imageIds.length; i++) {
           if (cancelled) return;
           if (i % 5 === 0) setStatus(`Загрузка кадров для MPR: ${i + 1} / ${imageIds.length}`);
-          await core.imageLoader.loadAndCacheImage(imageIds[i]);
+          const image = await core.imageLoader.loadAndCacheImage(imageIds[i]);
+          // Composite VoxelManager.sizeInBytes is NaN in Cornerstone 4.18.3:
+          // bytePerVoxel reads BYTES_PER_ELEMENT from a numeric voxel value.
+          // DICOM loader image.sizeInBytes is the decoded pixel buffer length.
+          decodedBytes += Number.isFinite(image.sizeInBytes) && image.sizeInBytes > 0 ? image.sizeInBytes : NaN;
         }
         if (cancelled) return;
         setStatus("Проверка геометрии и сборка объёма…");
@@ -139,7 +164,7 @@ export default function CornerstoneMPR({ files, quality, show3D, onShow3DChange 
         if (!volume || volume.dimensions?.[2] !== imageIds.length) {
           throw new Error("Полученный объём не соответствует количеству кадров серии.");
         }
-        setVolumeStats({ dimensions: [...volume.dimensions], decodedMiB: volume.sizeInBytes / 1048576 });
+        setVolumeStats({ dimensions: [...volume.dimensions], decodedMiB: decodedBytes / 1048576 });
         engine = new core.RenderingEngine(`ora-mpr-engine-${id}`);
         const ids = PLANE_NAMES.map(plane => `ora-mpr-${plane}-${id}`);
         engine.setViewports([
@@ -156,6 +181,39 @@ export default function CornerstoneMPR({ files, quality, show3D, onShow3DChange 
           throw new Error("Не удалось получить начальный центр MPR-объёма.");
         }
         let point = [...initialFocal] as Vec3;
+
+        const getMaskSource = () => sourceGeometry(volume.dimensions, p=>core.utilities.transformIndexToWorld(volume.imageData,p));
+        const drawMask = () => {
+          maskFrame = null;
+          if (cancelled) return;
+          if (!maskState?.display.visible) { clearMaskCanvases(); return; }
+          const {mask,display} = maskState;
+          try {
+            for (const p of PLANE_NAMES) {
+              const canvas = maskCanvases.current[p];
+              const rect = elements[p]!.getBoundingClientRect();
+              const ctx = canvas?.getContext("2d");
+              if (!canvas || !ctx || !rect.width || !rect.height) continue;
+              // Bound display work on M1. The stored mask remains full resolution.
+              const scale = Math.min(1,384/Math.max(rect.width,rect.height));
+              const w = Math.max(1,Math.round(rect.width*scale)), h=Math.max(1,Math.round(rect.height*scale));
+              const px=rect.width/w, py=rect.height/h;
+              const origin = views[p].canvasToWorld([px/2,py/2]) as Point3;
+              const wx = views[p].canvasToWorld([px*1.5,py/2]);
+              const wy = views[p].canvasToWorld([px/2,py*1.5]);
+              const rgba = renderMaskPlane(mask,origin,wx.map((v,i)=>v-origin[i]) as Point3,wy.map((v,i)=>v-origin[i]) as Point3,w,h,display.opacity,display.label);
+              canvas.width=w;canvas.height=h;
+              const image=ctx.createImageData(w,h);image.data.set(rgba);ctx.putImageData(image,0,0);
+            }
+          } catch(cause) {
+            clearMaskCanvases();
+            setError(`Наложение маски остановлено: ${cause instanceof Error ? cause.message : String(cause)}`);
+          }
+        };
+        const scheduleMask = () => {
+          if (cancelled || maskFrame !== null) return;
+          maskFrame = requestAnimationFrame(drawMask);
+        };
 
         const synchronize = (next: Vec3) => {
           if (cancelled) return;
@@ -183,6 +241,7 @@ export default function CornerstoneMPR({ files, quality, show3D, onShow3DChange 
           }
           setReadouts(nextReadouts);
           setCrosshairs(nextCrosshairs);
+          scheduleMask();
         };
         const step = (plane: Plane, delta: number) => {
           if (cancelled || !Number.isFinite(delta) || !delta) return;
@@ -313,6 +372,13 @@ export default function CornerstoneMPR({ files, quality, show3D, onShow3DChange 
         };
         ownedRuntime = {
           step, pick, set3DActive, orbit3D, update3D, zoom3D, reset3D,
+          importMask: (mask, display) => {
+            if (cancelled) throw new Error("Выбранная серия уже закрыта.");
+            assertMaskMatchesSource(mask,getMaskSource());
+            maskState={mask,display};scheduleMask();
+          },
+          setMaskDisplay: display => {if(maskState&&!cancelled){maskState.display=display;scheduleMask();}},
+          clearMask: () => {maskState=null;scheduleMask();},
           setInterpolation: setRenderingInterpolation,
           reset: () => {
             for (const p of PLANE_NAMES) views[p].resetCamera();
@@ -446,6 +512,13 @@ export default function CornerstoneMPR({ files, quality, show3D, onShow3DChange 
       </div>
       <small>{interpolation === "linear" ? "Линейная интерполяция сглаживает границы между вокселями." : "Ближайший сосед показывает ступенчатость дискретных данных, но не добавляет деталей."}</small>
     </div>
+    <SegmentationControls ready={ready}
+      onImport={(mask,display)=>{
+        if (!runtime.current) throw new Error("Сначала дождитесь загрузки MPR.");
+        runtime.current.importMask(mask,display);
+      }}
+      onDisplay={display=>runtime.current?.setMaskDisplay(display)}
+      onClear={()=>runtime.current?.clearMask()}/>
     <div className="ora-mpr-3d-toolbar">
       <button type="button" className={show3D ? "active" : ""} disabled={!ready} aria-pressed={show3D}
         onClick={() => onShow3DChange(!show3D)}>{show3D ? "Скрыть 3D" : "Показать 3D"}</button>
@@ -522,6 +595,7 @@ export default function CornerstoneMPR({ files, quality, show3D, onShow3DChange 
             onWheel={event => onWheel(event, plane)} onClick={event => onClick(event, plane)}
             onKeyDown={event => onKeyDown(event,plane)}>
             <div className="ora-mpr-canvas" ref={ref}/>
+            <canvas className="ora-mpr-mask-overlay" aria-hidden="true" ref={canvas=>{maskCanvases.current[plane]=canvas;}}/>
             <span className="ora-mpr-plane-label">{plane.toUpperCase()} · {captions[plane]}</span>
             {ready && position && <div className="ora-mpr-crosshair" aria-hidden="true" style={{left:position.x,top:position.y}}/>}
           </div>

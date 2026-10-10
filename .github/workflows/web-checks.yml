@@ -4,10 +4,12 @@ on:
   push:
     paths:
       - "web/**"
+      - "scripts/**"
       - ".github/workflows/web-checks.yml"
   pull_request:
     paths:
       - "web/**"
+      - "scripts/**"
       - ".github/workflows/web-checks.yml"
 
 permissions:
@@ -16,6 +18,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: web
@@ -25,10 +28,21 @@ jobs:
         with:
           node-version: '24'
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
       - name: DICOM module tests
         run: npm test
       - name: Typecheck
         run: npm run typecheck
       - name: Production build
         run: npm run build
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Synthetic DICOM browser check
+        run: npm run test:browser
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: synthetic-segmentation-browser
+          path: web/browser-results/
+          if-no-files-found: ignore
+          retention-days: 7
