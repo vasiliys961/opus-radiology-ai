@@ -113,7 +113,11 @@ export default function CornerstoneMPR({ files, quality }: { files: File[]; qual
         if (cancelled) return;
         const views = Object.fromEntries(PLANE_NAMES.map((p,i) => [p, engine!.getViewport(ids[i]) as Types.IVolumeViewport])) as Record<Plane,Types.IVolumeViewport>;
         for (const p of PLANE_NAMES) views[p].resetCamera();
-        let point = [...views.axial.getCamera().focalPoint] as Vec3;
+        const initialFocal = views.axial.getCamera().focalPoint;
+        if (!initialFocal || !initialFocal.every(Number.isFinite)) {
+          throw new Error("Не удалось получить начальный центр MPR-объёма.");
+        }
+        let point = [...initialFocal] as Vec3;
 
         const synchronize = (next: Vec3) => {
           if (cancelled) return;
@@ -124,6 +128,9 @@ export default function CornerstoneMPR({ files, quality }: { files: File[]; qual
           for (const p of PLANE_NAMES) {
             const v = views[p];
             const camera = v.getCamera();
+            if (!camera.focalPoint || !camera.position || !camera.viewPlaneNormal) {
+              throw new Error("Отсутствуют параметры пространственной камеры MPR.");
+            }
             const pose = alignCameraWithPoint(camera.focalPoint as Vec3, camera.position as Vec3,
               camera.viewPlaneNormal as Vec3, point);
             v.setCamera(pose);
@@ -148,9 +155,14 @@ export default function CornerstoneMPR({ files, quality }: { files: File[]; qual
             const current = safeSliceIndex(info.currentStepIndex, total);
             const next = safeSliceIndex(current + Math.trunc(delta), total);
             if (next === current) return;
-            const before = [...v.getCamera().focalPoint] as Vec3;
+            const beforeFocal = v.getCamera().focalPoint;
+            if (!beforeFocal) throw new Error("Неизвестно начальное положение MPR-камеры.");
+            const before = [...beforeFocal] as Vec3;
             core.utilities.scroll(v as Parameters<typeof core.utilities.scroll>[0], {delta:next - current, volumeId});
             const afterCamera = v.getCamera();
+            if (!afterCamera.focalPoint || !afterCamera.viewPlaneNormal) {
+              throw new Error("Неизвестно положение MPR-камеры после прокрутки.");
+            }
             const updated = crosshairAfterScroll(point, before, afterCamera.focalPoint as Vec3,
               afterCamera.viewPlaneNormal as Vec3);
             synchronize(updated);
@@ -187,7 +199,8 @@ export default function CornerstoneMPR({ files, quality }: { files: File[]; qual
           setInterpolation: setRenderingInterpolation,
           reset: () => {
             for (const p of PLANE_NAMES) views[p].resetCamera();
-            synchronize([...views.axial.getCamera().focalPoint] as Vec3);
+            const resetFocal = views.axial.getCamera().focalPoint;
+            if (resetFocal) synchronize([...resetFocal] as Vec3);
           },
         };
         setRenderingInterpolation("linear");
