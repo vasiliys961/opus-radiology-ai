@@ -30,3 +30,22 @@
 ## Notes from Doctor Opus audit
 
 The original `DicomViewer.tsx` imports legacy `cornerstone-core` and references an unimported `cornerstoneWADOImageLoader` symbol. Its older worker initialization, 12-frame subsampling and client-side raster export are **not** suitable for faithfully rendering entire studies or voxel-space AI. The new viewer is an independent implementation based on current Cornerstone APIs; this repo does not change Doctor Opus.
+
+## Next.js 16 / Turbopack: browser-only `fs` shim
+
+Generated Emscripten codec modules (e.g. `@cornerstonejs/codec-charls`) contain
+`require("fs")` in Node-only branches. Next.js 16 Turbopack resolves this
+specifier when building browser chunks and would fail with
+`Module not found: Can't resolve 'fs'`.
+
+`web/next.config.ts` uses `turbopack.resolveAlias.fs.browser` to route this
+browser-only import to the empty `web/lib/browser-fs.ts` module. Native
+server-side `fs` resolution remains unchanged. This workaround does **not**
+validate that JPEG-LS or other WASM codecs can decode all studies at runtime.
+
+The GitHub Actions `web-checks.yml` job runs unit tests, TypeScript checks
+and a production build after changes to the web app.
+
+After updating the Mac, **restart** `npm run dev` for the config to apply.
+If another missing Node module or codec error appears, capture its first error
+and import trace; do not interpret a decoder failure as a negative finding.
