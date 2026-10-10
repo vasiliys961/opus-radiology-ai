@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildVolumeTransfer } from "./volume-rendering.ts";
+import { buildVolumeTransfer, getVolumeScalarRange } from "./volume-rendering.ts";
 
 test("composite curve maps real scalar intensities rather than guessed MR/CT values", () => {
   const curve = buildVolumeTransfer([-850, 3200], 30, 55);
@@ -27,4 +27,18 @@ test("MIP full-range mapping differs from selected composite cutoff", () => {
   const composite = buildVolumeTransfer([100,900],45,40);
   assert.ok(mip.opacity[1][0] < composite.opacity[1][0]);
   assert.equal(mip.opacity.at(-1)?.[1], 1);
+});
+
+test("reads scalar range from Cornerstone3D 4.x VoxelManager without expanding volume", () => {
+  const volume = { voxelManager: { getRange: () => [5, 5095] as [number,number], getScalarData: () => { throw new Error("Must not expand volume"); } } };
+  assert.deepEqual(getVolumeScalarRange(volume), [5,5095]);
+});
+test("falls back to VoxelManager min/max if getRange is unsupported", () => {
+  const volume = { voxelManager: { getRange: () => [0,0], getMinMax: () => ({min:-100,max:1200}) } };
+  assert.deepEqual(getVolumeScalarRange(volume), [-100,1200]);
+});
+test("fails closed on unavailable or invalid voxel intensities", () => {
+  assert.throws(() => getVolumeScalarRange({}), /VoxelManager/);
+  assert.throws(() => getVolumeScalarRange({ voxelManager: {getRange:()=>[NaN,999]} }), /VoxelManager/);
+  assert.throws(() => getVolumeScalarRange({ voxelManager: {getRange:()=>[3,3]} }), /VoxelManager/);
 });

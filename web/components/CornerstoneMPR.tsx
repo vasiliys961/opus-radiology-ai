@@ -5,7 +5,7 @@ import type { Types } from "@cornerstonejs/core";
 import { alignCameraWithPoint, crosshairAfterScroll, insideImageExtent, safeSliceIndex, type Vec3 } from "../lib/mpr-navigation";
 import type { MprQuality } from "../lib/mpr-quality";
 import { orbitCamera } from "../lib/mpr-orbit";
-import { buildVolumeTransfer, type VolumeRenderMode } from "../lib/volume-rendering";
+import { buildVolumeTransfer, getVolumeScalarRange, type VolumeRenderMode } from "../lib/volume-rendering";
 
 const PLANE_NAMES = ["axial", "coronal", "sagittal"] as const;
 type Plane = typeof PLANE_NAMES[number];
@@ -249,13 +249,10 @@ export default function CornerstoneMPR({ files, quality, show3D, onShow3DChange 
         // and the three MPR viewports are never modified.
         const update3D = (mode: VolumeRenderMode, thresholdPercent: number, opacityPercent: number) => {
           if (!viewport3d) return;
-          const data = volume.imageData as unknown as {
-            getPointData?: () => { getScalars?: () => { getRange?: () => number[] } | null } | null;
-          };
-          const range = data.getPointData?.()?.getScalars?.()?.getRange?.();
-          if (!range || range.length < 2 || !Number.isFinite(range[0]) || !Number.isFinite(range[1]) || range[1] <= range[0]) {
-            throw new Error("Не удалось определить диапазон интенсивностей объёма.");
-          }
+          // ImageVolume.imageData is not a vtkImageData scalar buffer in
+          // Cornerstone3D 4.x. Volumes access intensities via VoxelManager.
+          // getRange() avoids expanding/reallocating the entire 3D voxel array.
+          const range = getVolumeScalarRange(volume);
           const mapping = buildVolumeTransfer([range[0], range[1]], mode === "mip" ? 0 : thresholdPercent, mode === "mip" ? 100 : opacityPercent);
           const actor = viewport3d.getDefaultActor()?.actor as unknown as {
             getProperty?: () => {

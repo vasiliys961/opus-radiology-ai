@@ -1,4 +1,40 @@
 /** Deterministic, research-only scalar transfer mapping for grayscale volume rendering. */
+/** VoxelManager is the authoritative intensity source in Cornerstone3D 4.x.
+ * Do not materialize getCompleteScalarDataArray() on an 8 GiB Mac.
+ * This accepts a narrow structural interface so it can be tested without WebGL.
+ */
+export type VolumeIntensitySource = {
+  voxelManager?: {
+    getRange?: () => readonly number[];
+    getMinMax?: () => { min: number | number[]; max: number | number[] };
+  } | null;
+};
+
+export function getVolumeScalarRange(volume: VolumeIntensitySource): [number, number] {
+  const manager = volume.voxelManager;
+  if (!manager) throw new Error("DICOM-объём не содержит VoxelManager.");
+
+  const valid = (a: unknown, b: unknown): a is number =>
+    typeof a === "number" && typeof b === "number" &&
+    Number.isFinite(a) && Number.isFinite(b) && b > a;
+
+  try {
+    const range = manager.getRange?.();
+    if (range && range.length >= 2 && valid(range[0], range[1])) {
+      return [range[0], range[1]];
+    }
+  } catch { /* try the alternative manager stats API */ }
+
+  try {
+    const minMax = manager.getMinMax?.();
+    if (minMax && valid(minMax.min, minMax.max)) {
+      return [minMax.min as number, minMax.max as number];
+    }
+  } catch { /* reject below; do not invent intensity values */ }
+
+  throw new Error("Не удалось определить диапазон интенсивностей через VoxelManager.");
+}
+
 export type VolumeRenderMode = "composite" | "mip";
 export type OpacityNode = [intensity: number, alpha: number];
 export type ColorNode = [intensity: number, red: number, green: number, blue: number];

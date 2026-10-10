@@ -137,3 +137,13 @@ pixel data. MR pixel intensities have no universal tissue thresholds.
 The 3D panel retains a clear warning for anisotropic source geometry;
 the GPU renderer cannot infer missing structural detail between 4.5 mm slices.
 The M1 memory budget and fail-closed DICOM preflight remain unchanged.
+
+## v1.3.1 — 3D intensity range Safari runtime fix
+
+Cornerstone3D 4.x `IImageVolume.imageData` does not provide a VTK
+`getPointData().getScalars().getRange()` chain. The earlier Composite
+renderer incorrectly called that chain and failed on an otherwise valid MR
+series. The correct source is `volume.voxelManager.getRange()`;
+`getMinMax()` is a defensive fallback. No full scalar buffer is allocated.
+Range values are actual voxel intensities, not a tissue classifier.
+There are unit tests for both paths and invalid data.
