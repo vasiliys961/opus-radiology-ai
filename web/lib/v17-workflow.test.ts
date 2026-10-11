@@ -11,6 +11,8 @@ test("Model registry distinguishes cloud LLMs from local inference", () => {
   assert.ok(modelsForRole("clinical").some(m => m.id.includes("claude")));
   assert.ok(AI_CATALOG.find(m => m.id === "totalsegmentator")?.engine === "inference-worker");
   assert.equal(AI_CATALOG.find(m => m.id === "nv-segment-ctmr")?.status, "research");
+  assert.equal(AI_CATALOG.find(m => m.id === "medsam2")?.status, "deferred");
+  assert.equal(AI_CATALOG.some(m => m.id === "medgemma"), false);
 });
 test("Physician provider choice is explicit", () => {
   assert.equal(changeProvider("polza", "openrouter"), "openrouter");
