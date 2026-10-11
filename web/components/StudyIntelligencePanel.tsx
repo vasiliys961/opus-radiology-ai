@@ -63,6 +63,10 @@ export default function StudyIntelligencePanel({
           <p>Протокол: {item.protocolCandidate}</p>
           <p>Контраст: {item.contrast === "declared" ?
             "агент указан в DICOM; фаза не установлена" : "не подтверждён"}</p>
+          <p>Признаки DICOM: надписи {item.privacyFlags.burnedInAnnotation},
+            узнаваемые изображения {item.privacyFlags.recognizableVisualFeatures},
+            PatientIdentityRemoved {item.privacyFlags.patientIdentityRemoved}.</p>
+          <p>Даже теги NO и YES не подтверждают фактическое обезличивание.</p>
           {item.issues.map((warning, j) => <p className={warning.level === "warning" ?
             "ora-study-intel-warning" : "ora-study-intel-info"} key={warning.code + j}>
               {warning.message}
