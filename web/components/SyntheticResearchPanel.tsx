@@ -125,6 +125,14 @@ export default function SyntheticResearchPanel({diagnostic}:Props) {
       <ModelPicker id="ora-synthetic-clinical-model" label="Синтез · текст"
         models={clinicalModels} value={clinicalModel} onChange={setClinicalModel} disabled={working}/>
     </div>
+    <div className="ora-synthetic-preview" aria-label="Точные синтетические изображения для AI">
+      {[0,1].map(index=><figure key={index}>
+        <img alt={"Математический фантом "+(index+1)+", "+region+", не DICOM"}
+          src={"/api/ai/synthetic-demo/preview?region="+region+
+            "&modality="+modality+"&frame="+index}/>
+        <figcaption>Искусственный кадр {index+1}/2 · 96×96</figcaption>
+      </figure>)}
+    </div>
     <p className="ora-synthetic-warning">Это платный эксперимент: OpenRouter может списать средства
       за 5 обращений, включая неудачные. Показанные каталожные модели могут быть
       недоступны на вашем тарифе. Установите лимит расходов непосредственно в OpenRouter.</p>
