@@ -40,7 +40,7 @@ export type CatalogFetcher = typeof fetch;
 
 const CATALOG_URL = "https://openrouter.ai/api/v1/models";
 const CATALOG_MAX_BYTES = 8_000_000;
-const MODEL_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9/:._+-]{0,159}$/;
+const MODEL_ID_PATTERN = /^(?!.*:\/\/)[a-zA-Z0-9][a-zA-Z0-9/:._+-]{0,159}$/;
 const PROVIDER_ENV = {
   openrouter: {
     key: "OPENROUTER_API_KEY",
