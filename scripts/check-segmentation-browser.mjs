@@ -115,7 +115,7 @@ try {
     },
     clinicalDraft:{summary:'Nonmedical phantom. No patient findings.',limitations:['Synthetic only']},
   };
-  const reviewInput=page.locator('.ora-evidence-panel input[type="file"]');
+  const reviewInput=page.getByRole('region',{name:'Врачебная проверка AI-находок',exact:true}).locator('input[type="file"]');
   await reviewInput.setInputFiles({name:'synthetic-review.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(sampleReview))});
   await page.locator('.ora-evidence-success').waitFor();
   assert.match(await page.locator('.ora-evidence-success').innerText(),/DICOM подтверждены/);
@@ -411,11 +411,61 @@ try {
   assert.equal(await page.locator('.ora-mask-settings select').inputValue(),String(evidence.observations[1].labelId));
   assert.notDeepEqual(await page.locator('.ora-mpr-controls label').allTextContents(),beforeEvidenceNavigation);
   assert.equal(await page.locator('.ora-mpr-crosshair').count(),3);
+  // Reconciliation uses imported metadata only, never a model/provider call.
+  const comparisonPanel=evidencePanel.locator('.ora-evidence-comparison');
+  const templateDownload=page.waitForEvent('download');
+  await comparisonPanel.getByRole('button',{name:'Скачать шаблон гипотез',exact:true}).click();
+  const templateFile=await templateDownload,templatePath=join(fixture,'llm-template.json');
+  await templateFile.saveAs(templatePath);
+  const hypotheses=JSON.parse(await readFile(templatePath,'utf8'));
+  assert.equal(hypotheses.schema,'opus-llm-measurements/v1');
+  assert.equal(hypotheses.producer.model,'not-recorded');
+  assert.ok(hypotheses.claims.every(c=>c.valueMl===null&&c.scope==='unknown'));
+  hypotheses.producer={kind:'llm',provider:'synthetic-fixture',model:'no-real-LLM'};
+  hypotheses.claims[0]={...hypotheses.claims[0],scope:'loaded-slices',
+    valueMl:evidence.observations[0].volumeMl+1,statement:'Synthetic volume discrepancy; no LLM invoked.'};
+  const hypothesisInput=comparisonPanel.locator('input[type=file]');
+  const importHypotheses=async value=>hypothesisInput.setInputFiles({name:'synthetic-hypotheses.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(value))});
+  await importHypotheses(hypotheses);
+  const comparedClaim=comparisonPanel.locator('.ora-comparison-list>li').first();
+  await comparedClaim.getByText(/Числовое расхождение/).waitFor();
+  assert.match(await comparedClaim.innerText(),/Разность LLM − маска: 1\.00000 мл/);
+  const wrongHypotheses=structuredClone(hypotheses);wrongHypotheses.source.inputSha256='f'.repeat(64);
+  await importHypotheses(wrongHypotheses);
+  await comparedClaim.getByText(/Нельзя сопоставить/).waitFor();
+  assert.match(await comparedClaim.innerText(),/Не совпадают пакет/);
+  assert.doesNotMatch(await comparedClaim.innerText(),/Разность LLM/);
+  await importHypotheses(sampleReview);
+  await comparisonPanel.locator('[role=alert]').waitFor();
+  assert.match(await comparisonPanel.locator('[role=alert]').innerText(),/не содержит SHA/);
+  assert.match(await comparedClaim.innerText(),/Нельзя сопоставить/); // failed replacement preserves old import
+  await importHypotheses(hypotheses);
+  await comparedClaim.getByText(/Числовое расхождение/).waitFor();
+  assert.equal(await comparisonPanel.locator('[role=alert]').count(),0);
+  const comparisonDownload=page.waitForEvent('download');
+  await comparisonPanel.getByRole('button',{name:'Скачать сопоставление JSON',exact:true}).click();
+  const comparisonFile=await comparisonDownload,comparisonPath=join(fixture,'comparison.json');
+  await comparisonFile.saveAs(comparisonPath);
+  const compared=JSON.parse(await readFile(comparisonPath,'utf8'));
+  assert.equal(compared.schema,'opus-evidence-comparison/v1');
+  assert.equal(compared.provenance,'imported-unverified');
+  assert.equal(compared.comparisons[0].deltaMl,1);
+  assert.equal(compared.comparisons[0].review,'needs_review');
+  assert.equal(compared.specialist.observations[0].review,'requires_recheck');
+  assert.equal(compared.llm.claims[0].valueMl,evidence.observations[0].volumeMl+1);
+  assert.doesNotMatch(JSON.stringify(compared),/synthetic-test-token|sopInstanceUid|patientName/);
+  await comparisonPanel.getByRole('button',{name:'Удалить гипотезы LLM',exact:true}).click();
+  assert.equal(await comparisonPanel.locator('.ora-comparison-list').count(),0);
+  await importHypotheses(hypotheses);
+  await comparedClaim.getByText(/Числовое расхождение/).waitFor();
   await observation.getByRole('button',{name:'Отклонить метку',exact:true}).click();
   assert.match(await observation.innerText(),/Отклонено локально/);
+  assert.match(await comparedClaim.innerText(),/Нельзя сопоставить.*Целевая метка отклонена/s);
   assert.equal(await page.locator('.ora-mpr-mask-overlay').count(),3);
   await page.getByRole('button',{name:'Удалить маску',exact:true}).click();
   assert.equal(await evidencePanel.count(),0);
+  assert.equal(await comparisonPanel.count(),0);
+  console.log('Local metadata reconciliation: blank template, numeric discrepancy, source/scope abstention, failed-import retention, review-aware export and lifecycle clear (synthetic only)');
   console.log('Bound specialist Evidence -> local review/export -> occupied-point MPR navigation -> lifecycle clear passed (synthetic only)');
   console.log('Memory/disk/model errors -> retry without reload -> chunk upload -> bound mask -> three MPR planes passed (synthetic CT/prediction only)');
   assert.deepEqual(errors,[]);

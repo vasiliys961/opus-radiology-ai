@@ -53,7 +53,10 @@ cleanup. Synthetic predictions are not real-model/clinical evidence.
 
 Four execution modes remain the architecture; only the existing local adapter
 is connected automatically. No patient, remote or paid provider route is enabled.
-The existing LLM `opus-evidence/v1`/orchestra importer is a separate research
-contract: this export is not yet reimported there. A common specialist/LLM
-comparison adapter, disagreements, persistent versioned physician audit and
-clinical sign-off remain planned. R1, full native chest and Safari remain PARTIAL.
+The existing LLM `opus-evidence/v1`/orchestra importer remains a separate research
+contract. A local metadata comparison increment now imports explicit same-input
+label-volume claims beside this specialist card and displays numeric differences
+or reasons to abstain; see `EVIDENCE_RECONCILIATION.md`. It does not infer spatial
+pathology agreement from anatomy names. Spatial LLM ROI reconciliation, verified
+independent inference, persistent versioned physician audit and clinical sign-off
+remain planned. R1, full native chest and Safari remain PARTIAL.

@@ -341,7 +341,7 @@ export default function Home() {
                 </>}
               <div className="ora-viewer-footer"><span><span className="ora-tiny-dot"/> {hasCornerstone ? "Cornerstone3D · локальный экспериментальный просмотр" : dicomPreview?.id === activeId ? `${dicomPreview.metadata.modality || "DICOM"} · ${dicomPreview.metadata.width}×${dicomPreview.metadata.height} · WC ${dicomPreview.metadata.windowCenter ?? "auto"} / WW ${dicomPreview.metadata.windowWidth ?? "auto"}` : "Локальный предпросмотр · исследовательский режим"}</span><span>3D MIP / MPR <b>{mprCheck.eligible ? "экспериментальные" : "недоступны"}</b></span></div>
             </div>
-            <div className="ora-finding-strip"><div className="ora-finding-icon"><Icon name="sparkles" size={21}/></div><div><strong>AI-анализ готов к интеграции</strong><p>Готовые NIfTI-маски можно импортировать в MPR уже сейчас. Автоматические модели пока не подключены.</p></div><span className="ora-coming-soon">НЕ ПОДКЛЮЧЁН</span></div>
+            <div className="ora-finding-strip"><div className="ora-finding-icon"><Icon name="sparkles" size={21}/></div><div><strong>Локальная сегментация и Evidence</strong><p>В MPR доступны импорт масок и Lungmask R231 при установленном worker и весах. R231 разрешён только для открытой исследовательской КТ; полнота охвата и клиническая точность не подтверждены.</p></div><span className="ora-coming-soon">RESEARCH</span></div>
             <VisionFramePlanningPanel
               series={series}
               activeSeriesKey={activeSeries?.key ?? null}

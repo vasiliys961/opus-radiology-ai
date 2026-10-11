@@ -362,3 +362,24 @@ on Gemini/Claude. The optional LLM research contract stays separate pending a
 comparison/reconciliation adapter. Patient/cloud/remote gates and voxel/RAM/MPR
 caps remain unchanged. See `docs/SPECIALIST_EVIDENCE.md` for implemented behaviour
 and planned conflict checking, persistent physician audit and clinical sign-off.
+
+## Local measurement reconciliation increment — 2026-10-12
+
+Baseline main `0b84bc4` contains manually merged PR #19 and green Web Actions.
+A metadata-only adapter now imports explicit `opus-llm-measurements/v1` claims
+beside bound specialist Evidence. It compares label-volume values only with the
+same request/input/source hashes, frame count/modality, target observation/weights
+and declared loaded-slice scope. Both values and their signed difference stay
+visible; wrong binding, unknown/full-organ scope, unsupported metrics and rejected
+or absent labels yield reasons to abstain. Every result remains `needs_review`.
+
+Templates contain null measurements and unknown coverage. Imported provider,
+independence and claimed coverage are not authenticated: equal numbers are not
+clinical agreement. Legacy orchestra JSON lacks this quantitative binding and
+remains in its separate source-slice viewer. Local export includes both metadata
+snapshots and the current review. No image/mask copy, inference, paid call or
+patient/cloud activation is added; all four modes and resource caps remain.
+
+See `docs/EVIDENCE_RECONCILIATION.md`. Spatial ROI reconciliation, authenticated
+independent inference, clinical thresholds, versioned physician audit/sign-off,
+Safari and full-chest R1 acceptance remain planned or PARTIAL.
