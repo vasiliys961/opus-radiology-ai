@@ -44,10 +44,10 @@ export function parseSyntheticTrialInput(value: unknown): SyntheticTrialRequest 
   };
 }
 export class SyntheticTrialFailure extends Error {
-  constructor(
-    public readonly code: "no-key" | "catalog-unavailable" | "unsupported-model" | "invalid-result",
-  ) {
+  readonly code: "no-key" | "catalog-unavailable" | "unsupported-model" | "invalid-result";
+  constructor(code: SyntheticTrialFailure["code"]) {
     super(code);
+    this.code = code;
   }
 }
 export async function executeSyntheticTrial(
