@@ -27,6 +27,11 @@ try {
   page=await browser.newPage({viewport:{width:1600,height:1000}});
   page.on('pageerror',e=>errors.push(e.message));
   await page.goto('http://127.0.0.1:3131',{waitUntil:'networkidle'});
+  const computeModes=await page.locator('.ora-ai-compute-modes').innerText();
+  assert.match(computeModes,/На Mac · ONNX CPU/);
+  assert.match(computeModes,/Облако · OpenRouter/);
+  assert.match(computeModes,/реальных пациентских изображений.*заблокирована/s);
+
   // In production, even a same-origin read-only provider probe remains closed.
   // API credentials, DICOM and clinical context are never exposed.
   const readinessResponse=await page.request.get(
