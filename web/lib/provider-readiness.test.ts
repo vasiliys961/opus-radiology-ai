@@ -117,3 +117,22 @@ test("Oversized provider catalogue is refused regardless of declared length", as
     headers:{"content-length":"999999999"},
   })),/too large/);
 });
+
+test("Model examples include real Gemini candidates even with dozens of alphabetical Anthropic entries",async()=>{
+  const many = Array.from({length:22},(_,i)=>({
+    id:"anthropic/demo-"+String(i).padStart(2,"0"),
+    architecture:{input_modalities:["text","image"],output_modalities:["text"]},
+  }));
+  const synthetic={data:[
+    ...many,
+    {id:"google/gemini-valid-test",architecture:{
+      input_modalities:["text","image"],output_modalities:["text"]}},
+    {id:"openai/gpt-valid-test",architecture:{
+      input_modalities:["text","image"],output_modalities:["text"]}},
+  ]};
+  const report=await inspectProvider("openrouter",env,mockFetch(synthetic).stub);
+  assert.equal(report.catalogStatus,"verified-response");
+  assert.ok(report.suggestions.vision.some(x=>x.id==="google/gemini-valid-test"));
+  assert.ok(report.suggestions.vision.some(x=>x.id==="openai/gpt-valid-test"));
+  assert.ok(report.suggestions.vision.length<=14);
+});
