@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { AI_CATALOG, modelsForRole, type ProviderId, type SegmentationId } from "../lib/v17-models";
 import { PILOT_CASES, PILOT_NOTES } from "../lib/v17-pilot";
 import { deriveStudyReadiness } from "../lib/study-intelligence";
+import { PATIENT_CLOUD_REQUIREMENTS } from "../lib/patient-cloud-policy";
 import type { DicomSeries } from "../lib/dicom-series";
 import { useAnalysisSound } from "./AnalysisSoundProvider";
 import ProviderReadinessPanel from "./ProviderReadinessPanel";
@@ -138,6 +139,13 @@ export default function AiWorkflowPanel({ series }: { series: readonly DicomSeri
       <p className="ora-v17-muted">Сейчас звонок работает для локальной подготовки Vision-кадров.
         После подключения настоящего AI-инференса этот же сигнал будет вызываться только при успешном завершении анализа.</p>
     </div>
+    <details className="ora-cloud-safety">
+      <summary>Защита медицинских данных · внешняя отправка заблокирована</summary>
+      <p>Общий API для произвольных изображений отключён. Для будущей работы с пациентами необходимы:</p>
+      <ul>{PATIENT_CLOUD_REQUIREMENTS.map(requirement =>
+        <li key={requirement.id}>{requirement.label} · не подтверждено</li>)}</ul>
+      <small>Переключение Polza / OpenRouter не разрешает отправку данных и не заменяет авторизацию.</small>
+    </details>
     <button className="ora-analyze-button" type="button" disabled aria-label="Гибридный AI-анализ ещё не доступен">Запустить гибридный анализ · скоро</button>
   </div>;
 }

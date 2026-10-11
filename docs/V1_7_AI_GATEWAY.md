@@ -10,12 +10,20 @@ This is the initial server-side foundation, **not** the complete Gemini Orchestr
 
 The physician's explicit provider selection is sent as `provider` in the request. There is **no automatic fallback** to the other provider. Model IDs must be verified against the selected provider's catalogue; model IDs are not assumed interchangeable.
 
-## Endpoint
-`POST /api/ai` with `Authorization: Bearer <RADIOLOGY_AI_GATEWAY_TOKEN>`.
+## Endpoint security update (Study Intelligence milestone)
 
-JSON body: `{"provider":"openrouter","role":"vision","model":"<provider-model-id>","messages":[{"role":"user","content":"Test"}]}`.
+**The original unrestricted `POST /api/ai` endpoint has been retired.** It now always
+returns HTTP 410 and never relays caller-provided text or pixel data. Having a
+development bearer token was not sufficient to authorize patient-data export.
 
-This bearer-token gate is a development integration boundary, **not production physician authentication**. Never put the gateway token or provider keys into browser JavaScript. Production requires session-based physician authentication, authorization, quotas, auditing and an explicit consent/de-identification workflow for medical images. The API is intentionally disabled when the gateway token is not configured.
+The internal server-side `callAiGateway` adapter remains available to the
+bounded synthetic-only research route `POST /api/ai/orchestrate` described
+in [V1_7_VISION_ORCHESTRA.md](V1_7_VISION_ORCHESTRA.md).
+
+Real patient cloud transmission is still BLOCKED pending implementation of
+verified physician authentication, consent, DICOM tag and pixel de-identification,
+regional/provider agreements, server audit and independent release validation.
+See [V1_7_STUDY_INTELLIGENCE.md](V1_7_STUDY_INTELLIGENCE.md).
 
 ## Next
 1. Physician settings UI and server-side persisted provider choice.

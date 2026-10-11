@@ -12,6 +12,7 @@ import { assessMprQuality } from "../lib/mpr-quality";
 import { uniqueNewFiles } from "../lib/study-files";
 import AiWorkflowPanel from "../components/AiWorkflowPanel";
 import AiEvidenceReview from "../components/AiEvidenceReview";
+import StudyIntelligencePanel from "../components/StudyIntelligencePanel";
 import VisionFramePlanningPanel from "../components/VisionFramePlanningPanel";
 import { AnalysisSoundProvider } from "../components/AnalysisSoundProvider";
 
@@ -93,6 +94,7 @@ export default function Home() {
   const localDicomById = useMemo(() => new Map(files.filter(item => item.kind === "dicom")
     .map(item => [item.id, item.file] as const)), [files]);
   const activeSeries = series.find((group) => group.members.some((m) => m.id === activeId)) ?? null;
+  const unindexedDicomFiles = files.filter(item => item.kind === "dicom" && !item.dicomMeta).length;
   // Memoized: switching non-DICOM controls must not restart a DICOM rendering engine.
   const cornerstoneFiles = useMemo(() => {
     if (!activeSeries) return [];
@@ -262,6 +264,18 @@ export default function Home() {
           <div className="ora-pipeline-step"><span className="ora-step-number">03</span><div><strong>Клинический синтез</strong><small>Gemini → JSON → GPT / Claude</small></div></div>
         </div>
 
+        <StudyIntelligencePanel
+          series={series}
+          unindexed={unindexedDicomFiles}
+          onSelectSeries={(key) => {
+            const selected = series.find(group => group.key === key);
+            if (selected?.members[0]) {
+              setActiveId(selected.members[0].id);
+              setViewMode("2d");
+              setZoom(1);
+            }
+          }}
+        />
         <div className="ora-workgrid">
           <section className="ora-left-col">
             <div className="ora-card ora-upload-card">

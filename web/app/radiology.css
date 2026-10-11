@@ -344,3 +344,45 @@ button:disabled { cursor: not-allowed; }
 .ora-synthetic-preview figure{margin:0;background:#f0f6f5;border:1px solid #dbeae5;border-radius:9px;display:flex;align-items:center;flex-direction:column;padding:9px;gap:6px;min-width:0}
 .ora-synthetic-preview img{width:min(100%,128px);aspect-ratio:1;image-rendering:pixelated;object-fit:contain;border:1px solid #334852;background:#0c1f29;border-radius:5px}
 .ora-synthetic-preview figcaption{font-size:9px;color:#6b8692;text-align:center;line-height:1.3}
+
+
+/* v1.7 Study Intelligence — all-series local DICOM metadata review */
+.ora-study-intel{background:#fff;border:1px solid #e2ebeb;border-radius:12px;padding:15px 20px;margin-bottom:18px;box-shadow:0 3px 10px #102d3605;min-width:0}
+.ora-study-intel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.ora-study-intel-head strong{font-size:13px;color:#244853}
+.ora-study-intel-head strong span{font-size:10px;color:#0f9783}
+.ora-study-intel-head p{margin:5px 0 0;color:#91a2aa;font-size:10px}
+.ora-study-intel-toggle{border:1px solid #b9ded8;background:#eef8f4;color:#147e70;padding:9px 11px;border-radius:8px;font-weight:720;font-size:11px}
+.ora-study-intel-toggle:hover{background:#dff4eb}
+.ora-study-intel-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:13px}
+.ora-study-intel-stats>div{background:#f4f8f8;border:1px solid #edf2f2;border-radius:8px;padding:9px 10px;display:flex;align-items:center;gap:9px;min-width:0}
+.ora-study-intel-stats strong{font-size:19px;color:#176e64;font-variant-numeric:tabular-nums}
+.ora-study-intel-stats small{font-size:10px;color:#8197a1;line-height:1.3}
+.ora-study-intel-boundary{font-size:10px;line-height:1.5;color:#846c42;margin:11px 0 0}
+.ora-study-intel-filter{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:15px 0 10px;border-top:1px solid #edf1f2;padding-top:13px;color:#64808b;font-size:11px}
+.ora-study-intel-filter input{accent-color:#0b998c}
+.ora-study-intel-series{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr));gap:11px;max-height:420px;overflow:auto}
+.ora-study-intel-series-item{border:1px solid #e0ebee;background:#fcfefe;border-radius:9px;padding:12px;min-width:0}
+.ora-study-intel-row{display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap}
+.ora-study-intel-row strong{font-size:11px;color:#365365}
+.ora-study-intel-row span{font-size:9px;border-radius:5px;padding:5px 7px}
+.ora-study-intel-ready{color:#137f63;background:#e4f7ef}
+.ora-study-intel-review{color:#8d673e;background:#fff4e5}
+.ora-study-intel-description{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0}
+.ora-study-intel-description span{font-size:9px;background:#edf3f5;color:#66808f;padding:5px 6px;border-radius:4px}
+.ora-study-intel-series-item>p{font-size:10px;color:#677f8d;line-height:1.55;margin:6px 0}
+.ora-study-intel-series-item>p.ora-study-intel-warning{color:#8c603d;background:#fff3e8}
+.ora-study-intel-series-item>p.ora-study-intel-info{color:#6c8190;background:#eef5f7}
+.ora-study-intel-warning,.ora-study-intel-info{padding:7px 9px;font-size:10px;line-height:1.5;border-radius:6px;margin:7px 0}
+.ora-study-intel-warning{background:#fff3e8;color:#93603d}
+.ora-study-intel-info{background:#eef6f7;color:#617f8c}
+.ora-study-intel-series-item>button{background:#ecf8f5;color:#177e70;border:1px solid #c5e2da;border-radius:7px;padding:8px 10px;font-weight:720;font-size:10px;margin-top:8px}
+.ora-study-intel-footnote{font-size:10px;line-height:1.6;color:#8699a3;margin:12px 0 0}
+@media(max-width:670px){.ora-study-intel{padding:13px}.ora-study-intel-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Privacy features remain locked until server-side authorization and verification. */
+.ora-cloud-safety{border-top:1px solid #e4edef;margin:11px 0 0;padding:12px 0 0}
+.ora-cloud-safety summary{color:#886741;font-size:11px;line-height:1.45;font-weight:760;cursor:pointer}
+.ora-cloud-safety p,.ora-cloud-safety li,.ora-cloud-safety small{font-size:10px;line-height:1.55;color:#7e8d95}
+.ora-cloud-safety ul{margin:9px 0;padding-left:17px}
+.ora-cloud-safety li{margin:4px 0}

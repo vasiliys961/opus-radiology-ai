@@ -18,6 +18,22 @@ export type TechnicalDicomMetadata = {
   imageOrientationPatient: [number, number, number, number, number, number] | null;
   pixelSpacing: [number, number] | null;
   transferSyntax: string;
+  /** Only exact allowlisted anatomical codes. Never store raw DICOM free text. */
+  bodyRegion?: "HEAD" | "NECK" | "CHEST" | "ABDOMEN" | "PELVIS" | "SPINE" | "EXTREMITY" | null;
+  /** Derived from ImageType code tokens, not SeriesDescription or ProtocolName. */
+  imageRole?: "LOCALIZER" | "DERIVED" | "PRIMARY" | "UNKNOWN";
+  /** Standard MR scanning sequence codes, not clinical MRI weighting. */
+  mrSequenceCodes?: ("SE" | "GR" | "IR" | "EP")[];
+  repetitionTimeMs?: number | null;
+  echoTimeMs?: number | null;
+  inversionTimeMs?: number | null;
+  sliceThicknessMm?: number | null;
+  /** True only if the ContrastBolusAgent tag has a nonempty value; absence means unknown. */
+  contrastAgentDeclared?: boolean;
+  /** DICOM privacy hints. NO is a declaration, NOT proof of anonymization. */
+  burnedInAnnotation?: "YES" | "NO" | "UNKNOWN";
+  recognizableVisualFeatures?: "YES" | "NO" | "UNKNOWN";
+  patientIdentityRemoved?: "YES" | "NO" | "UNKNOWN";
 };
 
 export type SeriesMember = {
@@ -42,6 +58,38 @@ const IMPLICIT_LE = '1.2.840.10008.1.2';
 const EXPLICIT_LE = '1.2.840.10008.1.2.1';
 const BIG_ENDIAN = '1.2.840.10008.1.2.2';
 const HEADER_BYTES = 512 * 1024;
+type Region = NonNullable<TechnicalDicomMetadata["bodyRegion"]>;
+const ALLOWED_REGIONS: Readonly<Record<string, Region>> = {
+  HEAD:"HEAD", BRAIN:"HEAD", NECK:"NECK",
+  CHEST:"CHEST", THORAX:"CHEST", LUNG:"CHEST",
+  ABDOMEN:"ABDOMEN", ABD:"ABDOMEN",
+  PELVIS:"PELVIS", PELV:"PELVIS",
+  SPINE:"SPINE", C_SPINE:"SPINE", T_SPINE:"SPINE", L_SPINE:"SPINE",
+  EXTREMITY:"EXTREMITY", LEG:"EXTREMITY", ARM:"EXTREMITY",
+};
+const allowedRegion = (raw: string | null): Region | null =>
+  raw && Object.hasOwn(ALLOWED_REGIONS, raw.trim().toUpperCase()) ?
+    ALLOWED_REGIONS[raw.trim().toUpperCase()] : null;
+function imageRole(raw: string | null): NonNullable<TechnicalDicomMetadata["imageRole"]> {
+  const tokens = (raw ?? "").trim().toUpperCase().split("\\").map(s=>s.trim());
+  if (tokens.some(s => ["LOCALIZER","SCOUT","SURVEY"].includes(s))) return "LOCALIZER";
+  if (tokens.includes("DERIVED") || tokens.includes("SECONDARY")) return "DERIVED";
+  if (tokens.includes("ORIGINAL") && tokens.includes("PRIMARY")) return "PRIMARY";
+  return "UNKNOWN";
+}
+function scanCodes(raw: string | null): NonNullable<TechnicalDicomMetadata["mrSequenceCodes"]> {
+  const codes = (raw ?? "").trim().toUpperCase().split("\\");
+  return [...new Set(codes.filter((c): c is "SE"|"GR"|"IR"|"EP" =>
+    c==="SE" || c==="GR" || c==="IR" || c==="EP"))];
+}
+function privacyFlag(raw: string | null): "YES" | "NO" | "UNKNOWN" {
+  return raw === "YES" || raw === "NO" ? raw : "UNKNOWN";
+}
+function boundedDs(raw: string | null, max = 1_000_000): number | null {
+  if (!raw || !/^\d+(?:\.\d+)?$/.test(raw.trim())) return null;
+  const value = Number(raw.trim());
+  return Number.isFinite(value) && value > 0 && value <= max ? value : null;
+}
 
 function ascii(bytes: Uint8Array, start: number, length: number): string {
   if (start + length > bytes.byteLength) throw new Error('Неполный DICOM-заголовок.');
@@ -68,6 +116,11 @@ export function parseDicomSeriesHeader(buffer: ArrayBuffer): TechnicalDicomMetad
     modality: '', instanceNumber: null, numberOfFrames: null, rows: null, columns: null,
     imagePositionPatient: null, imageOrientationPatient: null,
     pixelSpacing: null, transferSyntax: '',
+    bodyRegion: null, imageRole: "UNKNOWN", mrSequenceCodes: [],
+    repetitionTimeMs:null, echoTimeMs:null, inversionTimeMs:null, sliceThicknessMm:null,
+    contrastAgentDeclared:false,
+    burnedInAnnotation:"UNKNOWN", recognizableVisualFeatures:"UNKNOWN",
+    patientIdentityRemoved:"UNKNOWN",
   };
   let offset = 132;
   let explicit = true;
@@ -113,6 +166,17 @@ export function parseDicomSeriesHeader(buffer: ArrayBuffer): TechnicalDicomMetad
     switch (tag) {
       case 0x00020010: result.transferSyntax = getText(); break;
       case 0x00080060: result.modality = getText().slice(0, 16); break;
+      case 0x00080008: result.imageRole = imageRole(getText()); break;
+      case 0x00180015: result.bodyRegion = allowedRegion(getText()); break;
+      case 0x00180020: result.mrSequenceCodes = scanCodes(getText()); break;
+      case 0x00180080: result.repetitionTimeMs = boundedDs(getText()); break;
+      case 0x00180081: result.echoTimeMs = boundedDs(getText()); break;
+      case 0x00180082: result.inversionTimeMs = boundedDs(getText()); break;
+      case 0x00180050: result.sliceThicknessMm = boundedDs(getText()); break;
+      case 0x00180010: result.contrastAgentDeclared = length > 0 && getText().length > 0; break;
+      case 0x00280301: result.burnedInAnnotation = privacyFlag(getText()); break;
+      case 0x00280302: result.recognizableVisualFeatures = privacyFlag(getText()); break;
+      case 0x00120062: result.patientIdentityRemoved = privacyFlag(getText()); break;
       case 0x00080018: result.sopInstanceUid = getText() || null; break;
       case 0x00280008: {
         const n = Number.parseInt(getText(), 10);
@@ -202,6 +266,17 @@ async function parseComplexDicomHeader(buffer: ArrayBuffer): Promise<TechnicalDi
     imageOrientationPatient: vector('x00200037', 6) as TechnicalDicomMetadata['imageOrientationPatient'],
     pixelSpacing: spacing?.every((v) => v > 0) ? spacing as [number, number] : null,
     transferSyntax: str('x00020010') ?? (hasPart10 ? '' : rawSyntax),
+    imageRole: imageRole(str('x00080008')),
+    bodyRegion: allowedRegion(str('x00180015')),
+    mrSequenceCodes: scanCodes(str('x00180020')),
+    repetitionTimeMs: boundedDs(str('x00180080')),
+    echoTimeMs: boundedDs(str('x00180081')),
+    inversionTimeMs: boundedDs(str('x00180082')),
+    sliceThicknessMm: boundedDs(str('x00180050')),
+    contrastAgentDeclared: Boolean(str('x00180010')),
+    burnedInAnnotation: privacyFlag(str('x00280301')),
+    recognizableVisualFeatures: privacyFlag(str('x00280302')),
+    patientIdentityRemoved: privacyFlag(str('x00120062')),
   };
   if (!result.transferSyntax || !(result.sopInstanceUid || result.studyUid || result.seriesUid || result.modality)) {
     throw new Error('DICOM не содержит достаточных технических метаданных.');
