@@ -1,0 +1,121 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import type { DicomSeries } from "../lib/dicom-series";
+import { planVisionFrameSamples, MAX_VISION_SAMPLE_FRAMES,
+  type VisionFramePlan } from "../lib/vision-frame-plan";
+import { useAnalysisSound } from "./AnalysisSoundProvider";
+import { decodeDicomPreview } from "../lib/dicom-lite";
+
+export default function VisionFramePlanningPanel({
+  series, activeSeriesKey, fileById, onOpenSlice,
+}: {
+  series: readonly DicomSeries[];
+  activeSeriesKey: string | null;
+  fileById: ReadonlyMap<string, File>;
+  onOpenSlice: (fileId: string) => void;
+}) {
+  const [requested, setRequested] = useState(4);
+  const [report, setReport] = useState<VisionFramePlan | null>(null);
+  const [notice, setNotice] = useState("");
+  const [thumbnails, setThumbnails] = useState<Record<string, { url?: string; error?: string }>>({});
+  const { completionChime } = useAnalysisSound();
+  const choice = useMemo(() => {
+    // Never silently choose some other series when a specific series is selected.
+    return planVisionFrameSamples(series, activeSeriesKey, requested);
+  }, [series, activeSeriesKey, requested]);
+  useEffect(() => {
+    setReport(null);
+    setNotice("");
+    setThumbnails({});
+  }, [series, activeSeriesKey, requested]);
+  useEffect(() => {
+    if (!report) return;
+    let cancelled = false;
+    setThumbnails({});
+    const render = async () => {
+      // Serial bounded decoding: never hold four full DICOM pixel arrays on M1.
+      for (const frame of report.frames) {
+        if (cancelled) return;
+        const file = fileById.get(frame.fileId);
+        let preview: { url?: string; error?: string };
+        if (!file) preview = { error: "Исходный файл отсутствует." };
+        else if (file.size > 6 * 1024 * 1024)
+          preview = { error: "Локальная миниатюра ограничена размером 6 МиБ; откройте срез в Cornerstone." };
+        else {
+          try {
+            const result = await decodeDicomPreview(file);
+            preview = { url: result.url };
+          } catch {
+            preview = { error: "Локальный декодер не поддерживает этот DICOM. Просмотр возможен в Cornerstone." };
+          }
+        }
+        if (cancelled) return;
+        setThumbnails(previous => ({ ...previous, [frame.fileId]: preview }));
+      }
+    };
+    void render();
+    return () => { cancelled = true; };
+  }, [report, fileById]);
+  const prepare = () => {
+    if (choice.status === "blocked") {
+      setNotice("Локальный план не составлен: " + choice.blockers.join(" "));
+      setReport(null);
+      return;
+    }
+    setReport(choice);
+    setNotice("Локальная подготовка завершена. Изображения НЕ анализировались AI и не отправлялись в облако.");
+    void completionChime(); // sound only after successful preparation and explicit opt-in
+  };
+  return <section className="ora-vision-plan" aria-label="Локальная подготовка кадров для Gemini">
+    <div className="ora-vision-plan-head">
+      <div><h2>Gemini Orchestra · подготовка кадров</h2>
+        <p>v1.8 · локальный предварительный этап</p></div>
+      <span>БЕЗ ОБЛАКА</span>
+    </div>
+    <p className="ora-vision-plan-lead">
+      Сформируем технический список отдельных DICOM-срезов для будущего Vision-анализа.
+      Это не диагностика, не проверка всей КТ/МРТ и не передача изображений.
+    </p>
+    <div className="ora-vision-plan-controls">
+      <label htmlFor="ora-frame-count">Кадров в выборке
+        <select id="ora-frame-count" value={requested}
+          onChange={e => setRequested(Number(e.target.value))}>
+          {Array.from({length: MAX_VISION_SAMPLE_FRAMES - 1}, (_, i) => i + 2).map(n =>
+            <option key={n} value={n}>{n}</option>)}
+        </select>
+      </label>
+      <button type="button" onClick={prepare} disabled={choice.status !== "ready-for-local-preview"}>
+        Сформировать план
+      </button>
+    </div>
+    {choice.status === "blocked" && <div className="ora-vision-plan-blocked" role="status">
+      <strong>План пока недоступен</strong>
+      {choice.blockers.map((reason, i) => <p key={i}>{reason}</p>)}
+    </div>}
+    {notice && <p className="ora-vision-plan-notice" role="status">{notice}</p>}
+    {report && <div className="ora-vision-plan-result">
+      <strong>Готов список из {report.frames.length} кадров</strong>
+      <div className="ora-vision-plan-list">
+        {report.frames.map((frame, index) => <div key={frame.sopInstanceUid + "/" + frame.frameIndex}>
+          <div><b>Кадр {index + 1}</b>
+            <span>Срез {frame.ordinal} из {frame.totalFrames}</span></div>
+          <small>Позиция по нормали: {frame.slicePositionMm === null ? "неизвестна" :
+            frame.slicePositionMm.toFixed(2) + " мм"}</small>
+          {thumbnails[frame.fileId]?.url ?
+            <img className="ora-vision-plan-thumbnail" src={thumbnails[frame.fileId].url}
+              alt={"Локальный предпросмотр DICOM, кадр " + (index + 1)} /> :
+            <div className="ora-vision-plan-thumb-placeholder">
+              {thumbnails[frame.fileId]?.error ?? "Готовим миниатюру локально…"}
+            </div>}
+          <button type="button" onClick={() => onOpenSlice(frame.fileId)}>Открыть исходный срез</button>
+        </div>)}
+      </div>
+      <p>Охват: только отдельные кадры. Количественные измерения, диагнозы и
+        отсутствие патологий этим планом не устанавливаются.</p>
+      <p>Загрузка изображений в AI: <strong>заблокирована</strong>. Обезличивание: не подтверждено.</p>
+    </div>}
+    <p className="ora-vision-plan-footnote">Отбираем по равномерным индексам геометрически проверенной серии,
+      сохраняя исходные SOPInstanceUID локально. Выборка не гарантирует обнаружения очагов между срезами.</p>
+  </section>;
+}

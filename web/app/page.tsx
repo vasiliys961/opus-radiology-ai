@@ -12,6 +12,8 @@ import { assessMprQuality } from "../lib/mpr-quality";
 import { uniqueNewFiles } from "../lib/study-files";
 import AiWorkflowPanel from "../components/AiWorkflowPanel";
 import AiEvidenceReview from "../components/AiEvidenceReview";
+import VisionFramePlanningPanel from "../components/VisionFramePlanningPanel";
+import { AnalysisSoundProvider } from "../components/AnalysisSoundProvider";
 
 // Keep the sizable Cornerstone engine outside the initial dashboard bundle.
 const CornerstoneMPR = dynamic(() => import("../components/CornerstoneMPR"), {
@@ -88,6 +90,8 @@ export default function Home() {
   const series = useMemo(() => groupDicomSeries(files.filter((f) => f.kind === "dicom" && f.dicomMeta).map((f) => ({
     id: f.id, name: f.file.name, metadata: f.dicomMeta!,
   }))), [files]);
+  const localDicomById = useMemo(() => new Map(files.filter(item => item.kind === "dicom")
+    .map(item => [item.id, item.file] as const)), [files]);
   const activeSeries = series.find((group) => group.members.some((m) => m.id === activeId)) ?? null;
   // Memoized: switching non-DICOM controls must not restart a DICOM rendering engine.
   const cornerstoneFiles = useMemo(() => {
@@ -231,7 +235,7 @@ export default function Home() {
   };
   const totalSize = files.reduce((sum, f) => sum + f.file.size, 0);
 
-  return <div className="ora-app">
+  return <AnalysisSoundProvider><div className="ora-app">
     <aside className="ora-sidebar">
       <div className="ora-brand"><div className="ora-logo"><Icon name="scan" size={25}/></div><div><strong>OPUS<span>RADIOLOGY</span></strong><small>AI DIAGNOSTIC WORKSPACE</small></div></div>
       <div className="ora-nav-heading">РАБОЧЕЕ ПРОСТРАНСТВО</div>
@@ -324,6 +328,16 @@ export default function Home() {
               <div className="ora-viewer-footer"><span><span className="ora-tiny-dot"/> {hasCornerstone ? "Cornerstone3D · локальный экспериментальный просмотр" : dicomPreview?.id === activeId ? `${dicomPreview.metadata.modality || "DICOM"} · ${dicomPreview.metadata.width}×${dicomPreview.metadata.height} · WC ${dicomPreview.metadata.windowCenter ?? "auto"} / WW ${dicomPreview.metadata.windowWidth ?? "auto"}` : "Локальный предпросмотр · исследовательский режим"}</span><span>3D MIP / MPR <b>{mprCheck.eligible ? "экспериментальные" : "недоступны"}</b></span></div>
             </div>
             <div className="ora-finding-strip"><div className="ora-finding-icon"><Icon name="sparkles" size={21}/></div><div><strong>AI-анализ готов к интеграции</strong><p>Готовые NIfTI-маски можно импортировать в MPR уже сейчас. Автоматические модели пока не подключены.</p></div><span className="ora-coming-soon">НЕ ПОДКЛЮЧЁН</span></div>
+            <VisionFramePlanningPanel
+              series={series}
+              activeSeriesKey={activeSeries?.key ?? null}
+              fileById={localDicomById}
+              onOpenSlice={(memberId) => {
+                if (series.some(group => group.members.some(m => m.id === memberId))) {
+                  setViewMode("2d"); setActiveId(memberId); setZoom(1);
+                }
+              }}
+            />
             <AiEvidenceReview series={series} onNavigate={(memberId) => {
               const source = series.some(g => g.members.some(m => m.id === memberId));
               if (source) { setViewMode("2d"); setActiveId(memberId); setZoom(1); }
@@ -338,5 +352,5 @@ export default function Home() {
         <footer className="ora-footer"><span>OPUS RADIOLOGY AI · v1.7.0 · LOCAL DEVELOPMENT</span><span>Исследовательский прототип · не для клинической диагностики · <a href="/viewer">Техническая лаборатория DICOM</a></span></footer>
       </div>
     </main>
-  </div>;
+  </div></AnalysisSoundProvider>;
 }

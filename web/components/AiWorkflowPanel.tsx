@@ -5,6 +5,7 @@ import { AI_CATALOG, modelsForRole, type ProviderId, type SegmentationId } from 
 import { PILOT_CASES, PILOT_NOTES } from "../lib/v17-pilot";
 import { deriveStudyReadiness } from "../lib/study-intelligence";
 import type { DicomSeries } from "../lib/dicom-series";
+import { useAnalysisSound } from "./AnalysisSoundProvider";
 
 const PREF_KEY = "opus-radiology-v17-ui-preferences";
 type Preferences = {
@@ -40,6 +41,8 @@ export default function AiWorkflowPanel({ series }: { series: readonly DicomSeri
   const [prefs, setPrefs] = useState<Preferences>(DEFAULTS);
   const [mounted, setMounted] = useState(false);
   const [compare, setCompare] = useState(false);
+  const { enabled: chimeEnabled, setSoundEnabled, previewChime } = useAnalysisSound();
+  const [soundFeedback, setSoundFeedback] = useState("");
   useEffect(() => {
     setPrefs(restorePrefs(window.localStorage.getItem(PREF_KEY)));
     setMounted(true);
@@ -114,6 +117,24 @@ export default function AiWorkflowPanel({ series }: { series: readonly DicomSeri
       <p className="ora-v17-caution">Режимы различались по разрешению (3 мм / 1,5 мм). Слабая сегментация поджелудочной железы на МРТ: Dice {dice(PILOT_NOTES.weakMRPancreasTotalDice)} / {dice(PILOT_NOTES.weakMRPancreasNvDice)}. Нет внешней клинической валидации; Mac M1 не тестировался.</p>
     </div>}
     <p className="ora-v17-muted">Выбор сохраняется только в этом браузере, а не в профиле врача на сервере. Доступность выбранной модели через шлюз пока не проверена.</p>
+    <div className="ora-completion-audio" aria-label="Звук после завершения операций">
+      <div className="ora-v17-heading"><strong>Звуковые уведомления</strong><span>Локально · WebAudio</span></div>
+      <label className="ora-completion-toggle">
+        <input type="checkbox" checked={chimeEnabled} onChange={e => {
+          setSoundEnabled(e.target.checked);
+          setSoundFeedback(e.target.checked ? "Звук включён. Проверьте динамики кнопкой ниже." : "Звук выключен.");
+        }}/>
+        «Дзинь» после успешного завершения операции
+      </label>
+      <button type="button" className="ora-vision-plan-audio-test" onClick={() => {
+        void previewChime().then(ok => setSoundFeedback(ok ?
+          "Тестовый сигнал воспроизведён. Если не слышно — проверьте громкость Mac." :
+          "Браузер не разрешил воспроизвести звук. Проверьте разрешения и повторите нажатие."));
+      }}>Проверить звук · дзинь</button>
+      {soundFeedback && <p className="ora-v17-muted" role="status">{soundFeedback}</p>}
+      <p className="ora-v17-muted">Сейчас звонок работает для локальной подготовки Vision-кадров.
+        После подключения настоящего AI-инференса этот же сигнал будет вызываться только при успешном завершении анализа.</p>
+    </div>
     <button className="ora-analyze-button" type="button" disabled aria-label="Гибридный AI-анализ ещё не доступен">Запустить гибридный анализ · скоро</button>
   </div>;
 }
