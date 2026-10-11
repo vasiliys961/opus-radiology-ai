@@ -72,6 +72,50 @@ try {
   assert.match(await page.locator('.ora-evidence-error').innerText(),/не связана/);
   assert.match(await page.locator('.ora-evidence-success').innerText(),/synthetic-review\.json/);
   console.log('Local AI evidence review: matched SOP, slice navigation, refused forged source');
+  // v1.8: a user-enabled WebAudio chime sounds after a successful local
+  // Vision-frame manifest. No network images, real AI or patient data involved.
+  await page.waitForFunction(() => {
+    const button=document.querySelector('.ora-vision-plan-controls button');
+    return button && !button.disabled;
+  },undefined,{timeout:30000});
+  await page.evaluate(() => {
+    window.__opusToneStarts=0;
+    class FakeAudioContext {
+      state='running';currentTime=0;destination={};
+      createOscillator(){
+        return {
+          type:'sine',
+          frequency:{setValueAtTime(){}},
+          connect(){},disconnect(){},
+          start(){window.__opusToneStarts+=1;},
+          stop(){},
+          onended:null,
+        };
+      }
+      createGain(){
+        return {gain:{setValueAtTime(){},exponentialRampToValueAtTime(){}},
+          connect(){},disconnect(){}};
+      }
+      resume(){return Promise.resolve();}
+      close(){return Promise.resolve();}
+    }
+    Object.defineProperty(window,'AudioContext',{value:FakeAudioContext,configurable:true});
+  });
+  await page.locator('.ora-completion-toggle input').check();
+  await page.getByRole('button',{name:'Проверить звук · дзинь',exact:true}).click();
+  await page.waitForFunction(()=>window.__opusToneStarts===2);
+  await page.locator('.ora-vision-plan-controls button').click();
+  await page.locator('.ora-vision-plan-result').waitFor();
+  assert.equal(await page.locator('.ora-vision-plan-list>div').count(),4);
+  assert.match(await page.locator('.ora-vision-plan-result').innerText(),/Загрузка изображений в AI:.*заблокирована/s);
+  await page.waitForFunction(()=>window.__opusToneStarts===4);
+  await page.locator('.ora-vision-plan-list button').nth(1).click();
+  assert.match(await page.locator('.ora-file-row.ora-file-selected .ora-file-name').innerText(),/synthetic-011\.dcm/);
+  const previousCount=await page.evaluate(()=>window.__opusToneStarts);
+  await page.locator('.ora-completion-toggle input').uncheck();
+  await page.locator('.ora-vision-plan-controls button').click();
+  assert.equal(await page.evaluate(()=>window.__opusToneStarts),previousCount);
+  console.log('Vision-frame manifest and WebAudio: SOP navigation, opt-in ding, no sound after opt-out');
   const mpr=page.getByRole('button',{name:'MPR · 3 плоскости',exact:true});
   await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='MPR · 3 плоскости'&&!b.disabled),undefined,{timeout:30000});
   await mpr.click();
