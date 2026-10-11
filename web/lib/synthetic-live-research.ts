@@ -1,7 +1,7 @@
-import {loadOpenRouterCatalogue, type CatalogFetcher, type ProviderEnv} from "./provider-readiness";
-import {syntheticVisionFrames, SYNTHETIC_REGIONS, type SyntheticRegion} from "./synthetic-vision-phantom";
-import {runVisionOrchestra, type CompletionCaller, type OrchestraResult} from "./vision-orchestra";
-import {validateEvidenceJson} from "./evidence-json";
+import {loadOpenRouterCatalogue, type CatalogFetcher, type ProviderEnv} from "./provider-readiness.ts";
+import {syntheticVisionFrames, SYNTHETIC_REGIONS, type SyntheticRegion} from "./synthetic-vision-phantom.ts";
+import {runVisionOrchestra, type CompletionCaller, type OrchestraResult} from "./vision-orchestra.ts";
+import {validateEvidenceJson} from "./evidence-json.ts";
 
 /**
  * Research sandbox: real provider inference, synthetic geometry ONLY.
