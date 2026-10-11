@@ -137,6 +137,24 @@ export async function readBoundedJson(response: Response): Promise<unknown> {
   for (const chunk of chunks) { bytes.set(chunk, at); at += chunk.length; }
   return JSON.parse(new TextDecoder("utf-8", {fatal: true}).decode(bytes));
 }
+/**
+ * Fetch the *current* authoritative OpenRouter catalogue for server-side
+ * validation immediately before any paid synthetic inference. This is never
+ * treated as evidence of account entitlement or clinical fitness.
+ */
+export async function loadOpenRouterCatalogue(
+  apiKey: string, fetcher: CatalogFetcher = fetch,
+): Promise<CatalogModel[]> {
+  if (!apiKey || apiKey.length > 512) throw new Error("Invalid provider configuration");
+  const response = await fetcher(CATALOG_URL, {
+    method: "GET", cache: "no-store",
+    headers: { Authorization: "Bearer " + apiKey, Accept: "application/json" },
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!response.ok) throw new Error("Provider catalogue unavailable");
+  return parseOpenRouterModels(await readBoundedJson(response));
+}
+
 /** Only a researcher-initiated metadata request is made; nothing clinical is sent. */
 export async function inspectProvider(
   provider: AiProvider,
@@ -167,16 +185,7 @@ export async function inspectProvider(
   }
   let catalogue: CatalogModel[];
   try {
-    const response = await fetcher(CATALOG_URL, {
-      method: "GET", cache: "no-store",
-      headers: {
-        Authorization: "Bearer " + env[names.key]!.trim(),
-        Accept: "application/json",
-      },
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!response.ok) throw new Error("Provider catalogue HTTP error");
-    catalogue = parseOpenRouterModels(await readBoundedJson(response));
+    catalogue = await loadOpenRouterCatalogue(env[names.key]!.trim(), fetcher);
   } catch {
     // Never return the remote response body or the API key to the browser.
     base.catalogStatus = "unavailable";
