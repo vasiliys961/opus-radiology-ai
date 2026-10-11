@@ -1,5 +1,6 @@
 """Streaming arithmetic/geometry checks; synthetic labels are not model evidence."""
 from types import SimpleNamespace
+import weakref
 
 import numpy as np
 import pytest
@@ -84,6 +85,40 @@ def test_released_skip_connections_and_inplace_relu_preserve_logits():
                 layer.inplace = True
         actual = forward_logits(model, tensor)
     torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+
+
+def test_up_block_temporaries_are_released_before_their_next_consumer():
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("lungmask.resunet")
+    model = unet_class()(n_classes=3, padding=True, depth=5, wf=2,
+                         up_mode="upsample", batch_norm=True, residual=False).eval()
+    torch.set_num_threads(1)
+    refs = {}
+
+    def remember(name):
+        def hook(_module, _inputs, output):
+            refs[name] = weakref.ref(output)
+        return hook
+
+    last_up = model.up_path[-1]
+    model.down_path[0].block[-1].register_forward_hook(remember("skip"))
+    last_up.up.register_forward_hook(remember("enlarged"))
+
+    def first_conv(_module, inputs):
+        # cat owns its output; its source tensors must no longer be held by
+        # wrapper frames when the larger convolution workspaces are allocated.
+        assert refs["skip"]() is None
+        assert refs["enlarged"]() is None
+        refs["joined"] = weakref.ref(inputs[0])
+
+    def second_conv(_module, _inputs):
+        assert refs["joined"]() is None
+
+    last_up.conv_block.block[0].register_forward_pre_hook(first_conv)
+    last_up.conv_block.block[3].register_forward_pre_hook(second_conv)
+    with torch.inference_mode():
+        result = forward_logits(model, torch.zeros(1, 1, 64, 64))
+    assert result.shape == (1, 3, 64, 64)
 
 
 def test_architecture_corruption_is_rejected_without_importing_it(tmp_path, monkeypatch):

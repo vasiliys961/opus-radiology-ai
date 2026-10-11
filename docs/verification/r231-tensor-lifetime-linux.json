@@ -1,0 +1,147 @@
+{
+  "schema": "opus-r231-tensor-lifetime-verification/v1",
+  "status": "passed",
+  "actualTrainedInference": true,
+  "baselineCommit": "490fec3dd2e651abc82dcc3b470a2cb0ba58ab9b",
+  "optimizedInferenceSourceSha256": "ef364a97d9e28dff30e355b096f85b643b89b91479db542f3e168b040d5bf507",
+  "reference": {
+    "collection": "TCIA LCTSC",
+    "license": "CC BY 3.0",
+    "sourceContentChainSha256": "bb4b90496cf2d83dac83e729ef271091962d532a18db201c6e2d99d42dcb5f61",
+    "originalFrames": 103,
+    "selectedFrames": 32,
+    "selectedIndicesZeroBased": [
+      35,
+      66
+    ],
+    "fullChest": false,
+    "selection": "32 unchanged consecutive central source slices; no resampling, pixel crop or repeated frames"
+  },
+  "inputSha256": "23d0065256550d22ccbe62a1ef4029ddf57bb0ef6334874875c244fc791a35d3",
+  "maskSha256": "0ee929a7ba4cbd1e5adc3880a15b6ad0ecbe79f465572d8dc79c39e45aa5795b",
+  "weightsSha256": "d5d2fc3df432115933491f115b283e94d1f5c841c0e82f6e7bd2d65d3ccde69f",
+  "sameSessionAdapterComparison": {
+    "baseline": {
+      "schema": "opus-worker-metrics/v1",
+      "device": "cpu",
+      "batchSize": 1,
+      "inferenceSeconds": 36.328,
+      "totalSeconds": 37.676,
+      "peakRssMiB": 763.51,
+      "memoryMeasurement": "getrusage process high-water RSS (PID namespace fallback)",
+      "platform": "Linux",
+      "machine": "x86_64",
+      "torchVersion": "2.6.0+cpu",
+      "dimensions": [
+        512,
+        512,
+        32
+      ],
+      "resourceProfile": "safe",
+      "threads": 1,
+      "interOpThreads": 1,
+      "inferenceImplementation": "slice-streamed-r231/v1",
+      "weightsLoading": "meta-assign-cpu-float32",
+      "simpleItkImported": false,
+      "clinicalStatus": "unverified_research_draft"
+    },
+    "optimized": {
+      "schema": "opus-worker-metrics/v1",
+      "device": "cpu",
+      "batchSize": 1,
+      "inferenceSeconds": 35.453,
+      "totalSeconds": 36.765,
+      "peakRssMiB": 596.06,
+      "memoryMeasurement": "process RSS sampled every 20 ms plus getrusage high-water where available",
+      "platform": "Linux",
+      "machine": "x86_64",
+      "torchVersion": "2.6.0+cpu",
+      "dimensions": [
+        512,
+        512,
+        32
+      ],
+      "resourceProfile": "safe",
+      "threads": 1,
+      "interOpThreads": 1,
+      "inferenceImplementation": "slice-streamed-r231/v1",
+      "weightsLoading": "meta-assign-cpu-float32",
+      "simpleItkImported": false,
+      "clinicalStatus": "unverified_research_draft"
+    },
+    "maskByteIdentical": true,
+    "peakRssReductionMiB": 167.45,
+    "peakRssReductionPercent": 21.93
+  },
+  "realBrowser": {
+    "status": "passed",
+    "actualTrainedInference": true,
+    "inferenceMetrics": {
+      "schema": "opus-worker-metrics/v1",
+      "device": "cpu",
+      "batchSize": 1,
+      "inferenceSeconds": 37.052,
+      "totalSeconds": 38.421,
+      "peakRssMiB": 636.2,
+      "memoryMeasurement": "getrusage process high-water RSS (PID namespace fallback)",
+      "platform": "Linux",
+      "machine": "x86_64",
+      "torchVersion": "2.6.0+cpu",
+      "dimensions": [
+        512,
+        512,
+        32
+      ],
+      "resourceProfile": "safe",
+      "threads": 1,
+      "interOpThreads": 1,
+      "inferenceImplementation": "slice-streamed-r231/v1",
+      "weightsLoading": "meta-assign-cpu-float32",
+      "simpleItkImported": false,
+      "clinicalStatus": "unverified_research_draft",
+      "preflight": {
+        "profile": "safe",
+        "estimatedModelRamBytes": 875560960,
+        "requiredRamBytes": 1278214144,
+        "requiredDiskBytes": 142606688,
+        "maxRssBytes": 1009778688,
+        "systemReserveBytes": 268435456,
+        "threads": 1,
+        "interOpThreads": 1,
+        "availableRamBytes": 8722255872,
+        "availableDiskBytes": 27113021440,
+        "guardDecision": "allow"
+      },
+      "guardDecision": "allow"
+    },
+    "labelVoxels": [
+      7703880,
+      337031,
+      347697
+    ],
+    "overlayPixels": [
+      4122,
+      3658,
+      119
+    ],
+    "chunkCount": 257,
+    "uploadedBytes": 33554784,
+    "jobDeleted": true,
+    "timings": {
+      "importMprSeconds": 2.7302120839999997,
+      "browserJobSeconds": 47.257339169,
+      "totalSeconds": 50.311530719000004
+    }
+  },
+  "clinicalDice": null,
+  "M1Acceptance": "tensor-lifetime-follow-up-not-tested-on-M1",
+  "limitations": [
+    "Two fresh sequential subprocess adapter runs on the same Linux host, checkpoint, exact input and single CPU thread; separate real browser run.",
+    "Both adapter measurements include getrusage high-water; baseline used the PID namespace fallback, optimized also sampled psutil RSS.",
+    "One comparison, not a distribution of repeated runs or a guarantee on Mac; allocator/backend variability remains.",
+    "Model process memory only; no new browser/system RAM, swap or responsiveness reduction claim.",
+    "32 of 103 native slices, not full chest, Safari or clinical accuracy acceptance.",
+    "Safe required RAM stays 1219 MiB, model ceiling 963 MiB, system reserve 256 MiB; no guard lowered.",
+    "Research-only local mode; patient/cloud/remote gates stay closed."
+  ]
+}
