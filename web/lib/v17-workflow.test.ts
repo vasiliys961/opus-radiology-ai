@@ -1,10 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { AI_CATALOG, changeProvider, modelsForRole } from "./v17-models";
-import { PILOT_CASES, PILOT_NOTES } from "./v17-pilot";
-import { deriveStudyReadiness } from "./study-intelligence";
-import { validateEvidenceJson } from "./evidence-json";
-import type { DicomSeries } from "./dicom-series";
+import { AI_CATALOG, changeProvider, modelsForRole } from "./v17-models.ts";
+import { PILOT_CASES, PILOT_NOTES } from "./v17-pilot.ts";
+import { deriveStudyReadiness } from "./study-intelligence.ts";
+import { validateEvidenceJson } from "./evidence-json.ts";
+import type { DicomSeries } from "./dicom-series.ts";
 
 test("Model registry distinguishes cloud LLMs from local inference", () => {
   assert.ok(modelsForRole("vision").some(m => m.id.includes("gemini")));
