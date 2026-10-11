@@ -14,7 +14,7 @@ const REGIONS: {id:SyntheticRegion; label:string}[] = [
   {id:"chest",label:"Грудная клетка"},
   {id:"abdomen",label:"Живот"},
 ];
-function ModelPicker({label,models,value,onChange,id}:{
+function ModelPicker({label,models,value,onChange,id,disabled}:{
   label:string;models:readonly CatalogModel[];value:string;
   onChange:(id:string)=>void;id:string;disabled?:boolean;
 }) {
