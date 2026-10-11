@@ -20,12 +20,12 @@ Canonical vision and implementation truth: **[docs/OPUS_RADIOLOGY_MASTER_SPEC.md
 | DATA-02 | P0 | Stream **large** CT/MRI (e.g., 512×512×300) via chunking/mmap without 8GB OOM; preserve voxel spacing, LPS/RAS, HU, SOP provenance and cancellation. | PLANNED — main bottleneck |
 | DATA-03 | P0 | Result returns with original study/series/frame coords and source identity; reject mismatched or fabricated masks. | IMPLEMENTED for existing NIfTI mask import; richer findings PLANNED |
 | EXEC-01 | P1 | Browser-only lightweight model via WASM without Python; must expose actual runtime compatibility and fail to unsupported. | PLANNED |
-| EXEC-02 | P1 | \`127.0.0.1\` local-worker with versioned job contract, capabilities, model registry, uploads in bounded chunks, cancel/progress, authenticated browser origin and zero external patient egress by default. | PLANNED |
-| EXEC-03 | P1 | Real model inference on Mac: CPU ONNX now; Torch CPU/MPS, MONAI, Lungmask, TotalSegmentator behind explicitly installed weights/adapters. | PARTIAL (synthetic ONNX validated; pretrained models not installed) |
+| EXEC-02 | P1 | \`127.0.0.1\` local-worker with versioned job contract, capabilities, model registry, uploads in bounded chunks, cancel/progress, authenticated browser origin and zero external patient egress by default. | PARTIAL — bounded authenticated loopback R231 research worker; patient/remote/large-volume modes blocked |
+| EXEC-03 | P1 | Real model inference on Mac: CPU ONNX now; Torch CPU/MPS, MONAI, Lungmask, TotalSegmentator behind explicitly installed weights/adapters. | PARTIAL (synthetic ONNX + actual R231 CPU public two-slice/HTTP regression; M1 pending) |
 | EXEC-04 | P1 | Private CPU server and GPU worker use the same input/output and audit, with queued isolated jobs and measured RAM/VRAM. | PLANNED |
-| EXEC-05 | P0 | Resource preflight (estimated peak memory, space, time) + concurrency cap 1 on 8GB Mac, fallback to smaller ROI/CPU if valid, cancellation without leaking buffers. | PLANNED |
-| MODEL-01 | P0 | Each model has verified version/sha/license, modalities, sequences, input intensity and geometry transform, preprocessing and test data; unknown => unsupported. | PARTIAL (ONNX profile only) |
-| MODEL-02 | P1 | First real end-to-end chest CT: Lungmask R231 → actual mask/measurements in MPR on permitted open reference study; memory/time benchmark on M1. | PLANNED — NEXT MILESTONE |
+| EXEC-05 | P0 | Resource preflight (estimated peak memory, space, time) + concurrency cap 1 on 8GB Mac, fallback to smaller ROI/CPU if valid, cancellation without leaking buffers. | PARTIAL — one job, memory/disk preflight, process RSS cap/timeout/cancel; total M1 measurement pending |
+| MODEL-01 | P0 | Each model has verified version/sha/license, modalities, sequences, input intensity and geometry transform, preprocessing and test data; unknown => unsupported. | PARTIAL (ONNX profile + pinned R231 adapter; commercial weights/data clearance pending) |
+| MODEL-02 | P1 | First real end-to-end chest CT: Lungmask R231 → actual mask/measurements in MPR on permitted open reference study; memory/time benchmark on M1. | PARTIAL — real R231 adapter + worker + browser action; full chest/R231 browser/M1 acceptance pending |
 | MODEL-03 | P1 | TotalSegmentator CT/MR in correctly licensed tasks, CPU/MPS and \`--fast\`/ROI, no universal lesion-detection claims. | PLANNED |
 | MODEL-04 | P1 | Specialty detectors/segmenters for lung nodules, abdominal organs, brain MRI BraTS, other supported localizations, with original task-specific checks. | PLANNED |
 | MODEL-05 | P1 | Reject unrelated study/model combinations; a model that cannot see a structure never outputs 'no pathology'. | PARTIAL; full model routing planned |
@@ -35,7 +35,7 @@ Canonical vision and implementation truth: **[docs/OPUS_RADIOLOGY_MASTER_SPEC.md
 | LLM-02 | P0 | LLM is **not necessary** for full offline viewer/AI tasks and may never silently substitute for missing specialist model. | PARTIAL architectural constraint |
 | LLM-03 | P1 | Parallel Vision/model calls under budget, transparent 'what was actually seen' ledger, structured comparison, independent critique and evidence review. | PARTIAL (synthetic pipeline only) |
 | PRIV-01 | P0 | Real patient cloud egress remains hard OFF until server-verified auth, lawful purpose, de-ID tags + pixel checks, retention, processor contract/jurisdiction and audit; no client checkboxes overriding. | IMPLEMENTED OFF gate / production policy PLANNED |
-| PRIV-02 | P0 | Local patient analysis isolated: loopback-only worker, access control, no analytics/PHI logs/CI, local encrypted patient storage if persisted, audit and lifecycle deletion. | PLANNED |
+| PRIV-02 | P0 | Local patient analysis isolated: loopback-only worker, access control, no analytics/PHI logs/CI, local encrypted patient storage if persisted, audit and lifecycle deletion. | PARTIAL — research-only loopback boundary; clinical patient storage/access/audit not released |
 | PRIV-03 | P0 | Server patient mode: TLS, role-based access, tenant isolation, encryption, authenticated jobs, limited retention, documented applicable jurisdiction, private provider agreements. | PLANNED |
 | COST-01 | P1 | **No mandatory subscriptions** or paid APIs to operate browser, offline AI and local evidence; code/weights licenses independently verified. | PARTIAL (core OSS components) |
 | COST-02 | P0 | For optional paid models: preflight costs and frame/token limits, explicit approval, daily/monthly hard cap, idempotent billing, retry controls and kill switch. | PARTIAL (synthetic throttles; production budget PLANNED) |
@@ -76,3 +76,7 @@ Canonical vision and implementation truth: **[docs/OPUS_RADIOLOGY_MASTER_SPEC.md
 ## Developer contract
 
 See [AGENTS.md](AGENTS.md) and [docs/OPUS_RADIOLOGY_MASTER_SPEC.md](docs/OPUS_RADIOLOGY_MASTER_SPEC.md). Use **only existing** workflow and tests as evidence of completed behavior. Every PR must state what works, what remains blocked, what is synthetic, hardware benchmark if made, licensed checkpoint provenance and exact tested commands. Merge remains manual.
+
+## R1 engineering increment — 2026-10-11
+
+See [local worker](docs/LOCAL_LUNGMASK_WORKER.md) and [verification record](docs/R1_LUNGMASK_VERIFICATION.md). Real R231 ran on the authors' two public CT slices through authenticated loopback HTTP. Browser contract/MPR regressions remain synthetic; a complete native-resolution chest/R231→MPR/Safari/M1 test has not been performed. Do not mark R1 complete or infer clinical Dice from reproducibility voxel counts. Four modes remain the architecture; remote CPU/GPU and browser WASM are not enabled by this increment.

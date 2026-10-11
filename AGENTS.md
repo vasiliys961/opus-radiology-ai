@@ -31,3 +31,15 @@ Next **R1**: run **real Lungmask R231** on licensed public CT chest on M1 via is
 ## Paste into a new chat
 
 > Продолжай проект Opus Radiology AI по \`docs/OPUS_RADIOLOGY_MASTER_SPEC.md\`, \`REQUIREMENTS.md\` и \`AGENTS.md\`. Сначала проверь реальный GitHub \`main\`, CI и состояние модели. Приоритет R1: настоящий Lungmask R231 на легальной исследовательской КТ грудной клетки, локальный AI Worker и возврат маски в MPR на Mac M1/8 GB. Реальные пациенты не отправляются в облако. Не меняй \`.env.local\` и не сливай PR сам. Разделяй готовые возможности и планы.
+
+## R1 engineering increment (verify the branch/CI, do not assume full acceptance)
+
+`services/imaging-ai/worker.py` + `r231.py` now provide an opt-in bounded research
+loopback CPU path and browser action. Actual official R231 weights/two public CT
+slices were tested on Linux, including real HTTP job/upload/result/delete.
+Default browser tests are synthetic. Export remains capped at 8,388,608 voxels.
+R1 is still PARTIAL: full chest, actual R231 browser overlay, Safari/M1 8GB system
+memory, clinical metrics and commercial model/data licence clearance are pending.
+Do not replace these missing checks with resampling, repeated slices or fabricated
+Dice. Local patient mode, remote workers and patient cloud remain blocked. See
+`docs/LOCAL_LUNGMASK_WORKER.md` and `docs/R1_LUNGMASK_VERIFICATION.md`.

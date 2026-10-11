@@ -4,7 +4,7 @@
 
 **Модель поставки:** один веб-интерфейс DICOM/2D/MPR/3D; опциональный лёгкий браузерный ONNX, локальный Mac/Windows/Linux Python AI Worker, CPU или GPU сервер; независимое доказательно-привязанное объединение результатов медицинских сетей и опциональных Gemini/Claude/GPT. Без обязательных подписок и без обязательного облачного LLM. Лицензии **конкретных весов** проверяются отдельно.
 
-**Реальный статус на 2026-10-11:** работают просмотрщик, Study Intelligence, ограниченный экспорт серии/импорт маски, экспериментальный офлайн ONNX с **только синтетической тестовой моделью**, OpenRouter-модели на **искусственных** кадрах. Готовых медицинских pretrained чекпойнтов и браузерной кнопки анализа настоящей CT/MR серии пока нет; локальный FastAPI Worker и потоковый объём — следующие этапы. **Реальных пациентов в облако не отправляем.**
+**Реальный статус на 2026-10-11:** работают просмотрщик, Study Intelligence, ограниченный экспорт серии/импорт маски, экспериментальный офлайн ONNX с **только синтетической тестовой моделью**, OpenRouter-модели на **искусственных** кадрах. Добавлен опциональный исследовательский Lungmask R231 CPU worker на 127.0.0.1 и браузерная кнопка. Настоящая R231 проверена на двух открытых CT-срезах через HTTP на Linux; полная КТ, реальная маска R231 в браузере и Mac M1 ещё не прошли приёмку. Потоковый большой объём остаётся следующим этапом. **Реальных пациентов в облако не отправляем.**
 
 **Python:** \`requirements.txt\` (минимальные CPU/ONNX-зависимости); необязательные тяжёлые семейства — \`services/imaging-ai/requirements-*.txt\`; Next.js остаётся в \`web/package.json\`. [Инструкция по установке и режимам](services/imaging-ai/README.md).
 
@@ -191,3 +191,5 @@ MPR показывает фактические Pixel Spacing и межсрез�
 - Fixed legacy CSS selector that expanded slice-control rows to 225–310 px and produced large blank blocks under MPR slices.
 - Thick-slice series display a high-visibility warning before 3D. On 8 GB Mac M1, the MPR resource gate still applies, and opening the 3D viewport adds GPU pressure.
 - A browser-only Safari/WebGL test is still required; automated build cannot validate interactive 3D pixel correctness.
+
+Экспериментальный локальный R231: [запуск и ограничения](docs/LOCAL_LUNGMASK_WORKER.md) · [проверенные результаты](docs/R1_LUNGMASK_VERIFICATION.md).

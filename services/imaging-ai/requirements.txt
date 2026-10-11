@@ -3,7 +3,7 @@
 # Base installs CPU ONNX, NIfTI/DICOM parsing and a future FastAPI service runtime.
 # Does NOT automatically install model weights, PyTorch, MONAI, TotalSegmentator,
 # subscription-based services, any external API client, or enable real patient egress.
-# Current v1.9 script works; authenticated local HTTP worker is a FUTURE milestone.
+# Bounded local HTTP R231 research worker is opt-in; medical stack remains separate.
 numpy>=1.26.4,<2.0
 onnxruntime>=1.20,<2.0
 nibabel>=5.2,<6.0
