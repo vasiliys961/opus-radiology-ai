@@ -10,6 +10,7 @@ import { validateViewerFileSelection, MAX_DICOM_FILES } from "../lib/viewer-limi
 import { checkMprEligibility } from "../lib/mpr-eligibility";
 import { assessMprQuality } from "../lib/mpr-quality";
 import { uniqueNewFiles } from "../lib/study-files";
+import AiWorkflowPanel from "../components/AiWorkflowPanel";
 
 // Keep the sizable Cornerstone engine outside the initial dashboard bundle.
 const CornerstoneMPR = dynamic(() => import("../components/CornerstoneMPR"), {
@@ -240,7 +241,7 @@ export default function Home() {
       <div className="ora-nav-heading ora-nav-spaced">ПЛАТФОРМА</div>
       <div className="ora-nav-muted"><Icon name="clipboard" size={19}/> Отчёты <span>Скоро</span></div>
       <div className="ora-nav-muted"><Icon name="settings" size={19}/> Настройки <span>Скоро</span></div>
-      <div className="ora-sidebar-bottom"><div className="ora-device-mark"><span className="ora-status-dot"/> Локальный режим</div><p>На этом этапе изображения не передаются в облачные сервисы.</p><div className="ora-version">LOCAL PREVIEW · 1.6.0</div></div>
+      <div className="ora-sidebar-bottom"><div className="ora-device-mark"><span className="ora-status-dot"/> Локальный режим</div><p>На этом этапе изображения не передаются в облачные сервисы.</p><div className="ora-version">LOCAL PREVIEW · 1.7.0</div></div>
     </aside>
 
     <main className="ora-main">
@@ -251,9 +252,9 @@ export default function Home() {
         <div className="ora-pipeline">
           <div className="ora-pipeline-step ora-pipeline-active"><span className="ora-step-number">01</span><div><strong>Загрузка исследования</strong><small>Локальные файлы</small></div><Icon name="check" size={16}/></div>
           <div className="ora-pipeline-divider"/>
-          <div className="ora-pipeline-step"><span className="ora-step-number">02</span><div><strong>Медицинские модели</strong><small>Подключим позднее</small></div></div>
+          <div className="ora-pipeline-step"><span className="ora-step-number">02</span><div><strong>Медицинские модели</strong><small>Пилот проверен · интеграция далее</small></div></div>
           <div className="ora-pipeline-divider"/>
-          <div className="ora-pipeline-step"><span className="ora-step-number">03</span><div><strong>Клинический синтез</strong><small>Gemini / Opus — позднее</small></div></div>
+          <div className="ora-pipeline-step"><span className="ora-step-number">03</span><div><strong>Клинический синтез</strong><small>Gemini → JSON → GPT / Claude</small></div></div>
         </div>
 
         <div className="ora-workgrid">
@@ -321,15 +322,15 @@ export default function Home() {
                 </>}
               <div className="ora-viewer-footer"><span><span className="ora-tiny-dot"/> {hasCornerstone ? "Cornerstone3D · локальный экспериментальный просмотр" : dicomPreview?.id === activeId ? `${dicomPreview.metadata.modality || "DICOM"} · ${dicomPreview.metadata.width}×${dicomPreview.metadata.height} · WC ${dicomPreview.metadata.windowCenter ?? "auto"} / WW ${dicomPreview.metadata.windowWidth ?? "auto"}` : "Локальный предпросмотр · исследовательский режим"}</span><span>3D MIP / MPR <b>{mprCheck.eligible ? "экспериментальные" : "недоступны"}</b></span></div>
             </div>
-            <div className="ora-finding-strip"><div className="ora-finding-icon"><Icon name="sparkles" size={21}/></div><div><strong>AI-анализ готов к интеграции</strong><p>После подключения Python-сервиса здесь появятся маски, измерения и найденные изменения.</p></div><span className="ora-coming-soon">НЕ ПОДКЛЮЧЁН</span></div>
+            <div className="ora-finding-strip"><div className="ora-finding-icon"><Icon name="sparkles" size={21}/></div><div><strong>AI-анализ готов к интеграции</strong><p>Готовые NIfTI-маски можно импортировать в MPR уже сейчас. Автоматические модели пока не подключены.</p></div><span className="ora-coming-soon">НЕ ПОДКЛЮЧЁН</span></div>
           </section>
 
           <section className="ora-right-col">
             <div className="ora-card ora-context-card"><div className="ora-section-title"><div><span className="ora-heading-icon"><Icon name="clipboard" size={18}/></span><div><h2>Клинический контекст</h2><p>Данные для интерпретации</p></div></div></div><label className="ora-context-label" htmlFor="clinical-context">Жалобы, анамнез, лабораторные данные</label><textarea id="clinical-context" value={context} onChange={e=>setContext(e.target.value)} placeholder="Например: пациент 54 лет, головные боли в течение 3 недель. Цель исследования — исключить структурную патологию..." rows={8} /><div className="ora-context-tip"><Icon name="info" size={16}/><p>Контекст пока хранится только в памяти страницы. Не вводите идентифицирующие данные реальных пациентов при тестировании.</p></div></div>
-            <div className="ora-card ora-analysis-card"><div className="ora-section-title"><div><span className="ora-heading-icon"><Icon name="brain" size={19}/></span><div><h2>Контур анализа</h2><p>Планируемые компоненты</p></div></div></div><div className="ora-model-item"><div className="ora-model-icon green"><Icon name="layers" size={17}/></div><div><strong>3D medical AI</strong><small>TotalSegmentator / MONAI</small></div><span className="ora-model-state">Позднее</span></div><div className="ora-model-item"><div className="ora-model-icon blue"><Icon name="sparkles" size={17}/></div><div><strong>Vision interpreter</strong><small>Gemini через API</small></div><span className="ora-model-state">Позднее</span></div><div className="ora-model-item"><div className="ora-model-icon purple"><Icon name="brain" size={17}/></div><div><strong>Clinical synthesis</strong><small>Claude / GPT через API</small></div><span className="ora-model-state">Позднее</span></div><button className="ora-analyze-button" type="button" disabled><Icon name="sparkles" size={18}/> Запустить гибридный анализ <Icon name="arrow" size={17}/></button><p className="ora-disabled-note">Кнопка станет доступна после подключения моделей. Никаких фиктивных заключений.</p></div>
+            <div className="ora-card ora-analysis-card"><AiWorkflowPanel series={series}/></div>
           </section>
         </div>
-        <footer className="ora-footer"><span>OPUS RADIOLOGY AI · v1.6.0 · LOCAL DEVELOPMENT</span><span>Исследовательский прототип · не для клинической диагностики · <a href="/viewer">Техническая лаборатория DICOM</a></span></footer>
+        <footer className="ora-footer"><span>OPUS RADIOLOGY AI · v1.7.0 · LOCAL DEVELOPMENT</span><span>Исследовательский прототип · не для клинической диагностики · <a href="/viewer">Техническая лаборатория DICOM</a></span></footer>
       </div>
     </main>
   </div>;
