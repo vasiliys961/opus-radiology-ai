@@ -268,3 +268,27 @@ Safari/M1 8GB system memory and independent clinical metrics remain pending.
 Four modes, optional Gemini/Claude through Evidence and patient/cloud OFF remain
 unchanged. See `docs/R1_LUNGMASK_VERIFICATION.md` for separately labelled actual
 model results and synthetic browser tests. R1 is still PARTIAL.
+
+
+## Actual browser R231 increment — 2026-10-11
+
+On baseline main `cfacb95e4610cb1d9e1bc15c1edf6b9bdad4f34c` (PR #14 merged),
+a reproducible opt-in test now verifies **actual trained R231 → browser MPR**
+on 32 unchanged native consecutive CT slices from the public TCIA LCTSC dataset
+(CC BY 3.0), explicitly selected from 103 original slices. Exact independently
+calculated full scalar input SHA, source grid, real model/mask binding, both lung
+labels, all three rendered MPR planes and job deletion were verified on Linux.
+No real reference pixels/screenshots, raw source identifiers or tokens are stored
+in GitHub/CI artifacts; only technical verification JSON. Default CI is synthetic.
+
+**R1 remains PARTIAL**: this is a declared partial slab, not complete chest.
+No full lung-volume, manual-contour Dice, M1/Safari/total system RAM or clinical
+accuracy acceptance. The 8,388,608-voxel and 48 MiB MPR guards stay unchanged.
+The UI explicitly warns that mask volume refers only to loaded slices. Four
+execution modes and specialist + optional Gemini/Claude through Evidence remain
+the architecture; cloud/patient/remote gates stay closed.
+
+See `docs/R231_BROWSER_REFERENCE.md` and the measured technical report at
+`docs/verification/r231-browser-linux.json`. After the optional environment and
+checkpoint are installed, reproduce with:
+`bash scripts/test-r231-browser.sh --download-public-reference`.

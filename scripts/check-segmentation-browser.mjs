@@ -358,6 +358,7 @@ try {
   await positive.locator('.ora-local-worker-metrics').waitFor();
   assert.match(await positive.innerText(),/Маска возвращена в MPR/);
   assert.equal(chunkCount,5);assert.equal(deleted,true);
+  assert.match(await page.locator('.ora-mask-coverage').innerText(),/только к загруженным срезам/);
   await page.locator('.ora-mask-provenance>summary').click();
   assert.match(await page.locator('.ora-mask-provenance').innerText(),/synthetic-browser-transport-only/);
   await page.waitForFunction(()=>[...document.querySelectorAll('.ora-mpr-mask-overlay')].every(c=>{

@@ -159,7 +159,17 @@ raw UIDs or patient tags**. It is a two-slice regression, not a complete chest o
 clinical Dice evaluation. Different hardware reports must not be relabelled M1.
 
 **Still required for R1:** legally cleared complete chest reference series,
-native full-resolution processing beyond the current cap, actual R231→MPR browser
+native full-resolution processing beyond the current cap, complete-chest R231→MPR browser
 end-to-end test, Safari/M1 8GB total system/browser/process memory and cancellation
 measurement, independent ground-truth metrics, documented weight/data licence
 clearance. Until these pass, R1 remains PARTIAL.
+
+
+## Actual browser reference check
+
+[The opt-in LCTSC check](R231_BROWSER_REFERENCE.md) now runs actual R231 through
+browser uploads and verifies the actual returned mask on all three MPR planes.
+It selects 32 unchanged consecutive native slices from a 103-slice public source,
+with explicit partial coverage and no resampling/repetition. Linux verified;
+full-chest/M1/Safari/system-memory acceptance is still pending. Once dependencies
+and weights are installed: `bash scripts/test-r231-browser.sh --download-public-reference`.
