@@ -1,0 +1,27 @@
+name: macOS stage chime checks
+
+on:
+  push:
+    paths:
+      - "macos/**"
+      - ".github/workflows/stage-chime-checks.yml"
+  pull_request:
+    paths:
+      - "macos/**"
+      - ".github/workflows/stage-chime-checks.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  watcher-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test Python watcher
+        run: python3 -m unittest discover -s macos -p "test_*.py" -v
+      - name: Check installer syntax
+        run: bash -n macos/install-stage-chime.sh
+      - name: Check watcher compiles
+        run: python3 -m py_compile macos/stage_chime.py
