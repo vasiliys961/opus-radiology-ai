@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import LocalLungmaskPanel from "./LocalLungmaskPanel";
+import type { AnalysisStream } from "../lib/analysis-stream";
 import { maskColor, MAX_MASK_FILE_BYTES, readNiftiMaskFile, type LabelMask } from "../lib/segmentation-mask";
 import { assertResultBinding, MAX_RESULT_JSON_BYTES, parseSegmentationResult, sha256, type AnalysisPackage, type AnalysisRequest, type SegmentationResult } from "../lib/analysis-package";
 
@@ -9,9 +10,10 @@ export type MaskDisplay = { visible: boolean; opacity: number; label: number | n
 type Summary = { name: string; labels: LabelMask["labels"]; result?: SegmentationResult };
 type DownloadPackage = { request: AnalysisRequest; volumeUrl: string; manifestUrl: string };
 
-export default function SegmentationControls({ ready, onPrepare, onImport, onDisplay, onClear }: {
+export default function SegmentationControls({ ready, onPrepare, onPrepareStream, onImport, onDisplay, onClear }: {
   ready: boolean;
   onPrepare: (signal: AbortSignal) => Promise<AnalysisPackage>;
+  onPrepareStream: (signal: AbortSignal) => Promise<AnalysisStream>;
   onImport: (mask: LabelMask, display: MaskDisplay) => void;
   onDisplay: (display: MaskDisplay) => void;
   onClear: () => void;
@@ -21,8 +23,8 @@ export default function SegmentationControls({ ready, onPrepare, onImport, onDis
   const version = useRef(0);
   const preparation = useRef<AbortController | null>(null);
   const packageRef = useRef<DownloadPackage | null>(null);
-  const callbacks = useRef({ onPrepare, onImport, onDisplay, onClear });
-  callbacks.current = { onPrepare, onImport, onDisplay, onClear };
+  const callbacks = useRef({ onPrepare, onPrepareStream, onImport, onDisplay, onClear });
+  callbacks.current = { onPrepare, onPrepareStream, onImport, onDisplay, onClear };
   const [summary, setSummary] = useState<Summary | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -129,7 +131,7 @@ export default function SegmentationControls({ ready, onPrepare, onImport, onDis
     <div className="ora-mask-heading"><strong>Сегментация · готовая маска</strong><span>Локальный импорт</span></div>
     <p>Загрузите NIfTI-маску именно выбранной DICOM-серии. Проверяются размеры, положение и ориентация. Для открытой исследовательской КТ доступна опциональная локальная Lungmask R231 после отдельной установки.</p>
     <LocalLungmaskPanel ready={ready&&!busy&&!exportBusy} onBusy={setWorkerBusy}
-      onPrepare={signal=>callbacks.current.onPrepare(signal)} onResult={(mask,result)=>{
+      onPrepare={signal=>callbacks.current.onPrepareStream(signal)} onResult={(mask,result)=>{
         const next={visible:true,opacity:0.4,label:null};
         callbacks.current.onImport(mask,next);
         setSummary({name:"Lungmask R231 · локальный worker",labels:mask.labels,result});setDisplay(next);setError("");

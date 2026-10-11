@@ -258,7 +258,7 @@ try {
       'access-control-allow-headers':'authorization,content-type','access-control-allow-methods':'GET,POST,PUT,DELETE'};
     if(r.method()==='OPTIONS'){await route.fulfill({status:204,headers});return;}
     if(r.url().endsWith('/v1/capabilities'))await route.fulfill({status:200,headers,contentType:'application/json',body:JSON.stringify({
-      schema:'opus-worker-capabilities/v1',mode:'local',device:'cpu',dataPolicy:'public-reference-only',patientMode:false,externalEgress:false,concurrency:1,maxVoxels:8388608,
+      schema:'opus-worker-capabilities/v1',mode:'local',device:'cpu',dataPolicy:'public-reference-only',patientMode:false,externalEgress:false,concurrency:1,maxVoxels:8388608,chunkUpload:{version:1,maxChunkBytes:262144},
       model:{id:'lungmask-R231',version:'0.2.20',weightsSha256:'d5d2fc3df432115933491f115b283e94d1f5c841c0e82f6e7bd2d65d3ccde69f',ready:true},
     })});
     else {localJobs++;await route.fulfill({status:500,headers});}
@@ -303,6 +303,69 @@ try {
   assert.equal(await page.locator('.ora-package-ready').count(),0);
   assert.equal(await page.locator('.ora-mask-provenance').count(),0);
   assert.equal(await page.locator('.ora-mask-success').count(),0);
+  // Positive local transport/UI test: mathematical CT-tag phantom + mocked
+  // prediction. This validates chunk production and MPR, never medical quality.
+  const ctFixture=join(fixture,'ct');
+  execFileSync(process.execPath,[join(root,'scripts/generate-segmentation-phantom.mjs'),ctFixture,'CT'],{stdio:'pipe'});
+  const ctMask=await readFile(join(ctFixture,'synthetic-mask.nii'));
+  const localId='11111111-1111-4111-8111-111111111111';
+  let localRequest,offset=0,chunkCount=0,completed=false,deleted=false;
+  const inputHash=createHash('sha256');
+  await page.unroute('http://127.0.0.1:8765/**');
+  await page.route('http://127.0.0.1:8765/**',async route=>{
+    const r=route.request(),path=new URL(r.url()).pathname;
+    const headers={'access-control-allow-origin':'http://127.0.0.1:3131',
+      'access-control-allow-headers':'authorization,content-type','access-control-allow-methods':'GET,POST,PUT,DELETE'};
+    const json=body=>route.fulfill({status:200,headers,contentType:'application/json',body:JSON.stringify(body)});
+    if(r.method()==='OPTIONS')return route.fulfill({status:204,headers});
+    if(path==='/v1/capabilities')return json({schema:'opus-worker-capabilities/v1',mode:'local',device:'cpu',
+      dataPolicy:'public-reference-only',patientMode:false,externalEgress:false,concurrency:1,maxVoxels:8388608,
+      chunkUpload:{version:1,maxChunkBytes:262144},model:{id:'lungmask-R231',version:'0.2.20',
+        weightsSha256:'d5d2fc3df432115933491f115b283e94d1f5c841c0e82f6e7bd2d65d3ccde69f',ready:true}});
+    if(path==='/v1/jobs'&&r.method()==='POST') {
+      localRequest=r.postDataJSON().request;assert.equal(localRequest.modality,'CT');return json({jobId:localId});
+    }
+    if(path.includes('/input/chunks/')) {
+      assert.equal(Number(path.split('/').at(-1)),offset);
+      const block=r.postDataBuffer();assert.ok(block.length<=131072);
+      inputHash.update(block);offset+=block.length;chunkCount++;
+      return json({state:'receiving_chunks',uploadedBytes:offset});
+    }
+    if(path.endsWith('/input/complete')) {
+      assert.equal(offset,352+64*64*32*4);assert.equal(inputHash.digest('hex'),localRequest.inputSha256);
+      completed=true;return json({state:'queued'});
+    }
+    if(r.method()==='DELETE') {deleted=true;return route.fulfill({status:204,headers});}
+    assert.ok(completed);
+    if(path.endsWith('/mask'))return route.fulfill({status:200,headers:{...headers,'content-length':String(ctMask.length)},body:ctMask});
+    return json({schema:'opus-worker-job-status/v1',jobId:localId,state:'succeeded',result:{
+      schema:'opus-segmentation-result/v1',requestId:localRequest.requestId,sourceIdentitySha256:localRequest.sourceIdentitySha256,
+      inputSha256:localRequest.inputSha256,maskSha256:createHash('sha256').update(ctMask).digest('hex'),
+      model:{id:'lungmask-R231',version:'0.2.20',weightsSha256:'d5d2fc3df432115933491f115b283e94d1f5c841c0e82f6e7bd2d65d3ccde69f',modality:'CT',task:'synthetic-browser-transport-only'},
+      labels:[{id:1,name:'Synthetic sphere'},{id:2,name:'Synthetic insert'}],limitations:['Synthetic prediction; no medical model invoked.']},
+      metrics:{device:'cpu',inferenceSeconds:0,totalSeconds:0,peakRssMiB:0,platform:'synthetic',machine:'fixture'}});
+  });
+  await page.reload({waitUntil:'networkidle'});
+  await page.locator('input[accept*=".dcm"]').setInputFiles((await readdir(ctFixture+'/dicom')).sort().map(n=>ctFixture+'/dicom/'+n));
+  await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='MPR · 3 плоскости'&&!b.disabled));
+  await page.getByRole('button',{name:'MPR · 3 плоскости',exact:true}).click();
+  await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='Подготовить пакет серии'&&!b.disabled));
+  await page.locator('.ora-local-lungmask>summary').click();
+  const positive=page.locator('.ora-local-lungmask');
+  await positive.getByLabel('Токен локального worker').fill('synthetic-test-token-for-browser-only-123456789');
+  await positive.locator('input[type=checkbox]').check();
+  await positive.getByRole('button',{name:'Сегментировать лёгкие локально',exact:true}).click();
+  await positive.locator('.ora-local-worker-metrics').waitFor();
+  assert.match(await positive.innerText(),/Маска возвращена в MPR/);
+  assert.equal(chunkCount,5);assert.equal(deleted,true);
+  await page.locator('.ora-mask-provenance>summary').click();
+  assert.match(await page.locator('.ora-mask-provenance').innerText(),/synthetic-browser-transport-only/);
+  await page.waitForFunction(()=>[...document.querySelectorAll('.ora-mpr-mask-overlay')].every(c=>{
+    const pixels=c.getContext('2d').getImageData(0,0,c.width,c.height).data;
+    return pixels.some((v,i)=>i%4===3&&v>0);
+  }));
+  assert.equal(await page.locator('.ora-mpr-mask-overlay').count(),3);
+  console.log('Positive local chunk upload -> bound mask -> three MPR planes passed (synthetic CT/prediction only)');
   assert.deepEqual(errors,[]);
   console.log('PASS: overlays, volumes, full scalar NIfTI export (all voxels), checksummed model-result handoff, wrong-package rejection, 3D/MIP controls and resource reset on 2D/MPR. No real model inference performed.');
 }catch(e){console.error('FAIL:',e);console.error('PAGE ERRORS:',errors);console.error('SERVER:',logs);if(page){console.error('ALERTS:',await page.locator('[role=alert]').allTextContents());await page.screenshot({path:join(results,'failure.png'),fullPage:true}).catch(()=>{});}process.exitCode=1;}

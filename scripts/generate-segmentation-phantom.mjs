@@ -4,6 +4,8 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const destination = process.argv[2] ? resolve(process.argv[2]) : fileURLToPath(new URL("../test-data/generated-segmentation-phantom/",import.meta.url));
+const modality=process.argv[3]??"MR";
+if(!["MR","CT"].includes(modality))throw new Error("Synthetic fixture supports only MR or CT tags");
 const slices = resolve(destination,"dicom");
 await mkdir(slices,{recursive:true});
 const nx=64,ny=64,nz=32;
@@ -18,7 +20,7 @@ const tag = (group,element,vr,payload) => {
   if(long)header.writeUInt32LE(size,8);else header.writeUInt16LE(size,6);
   return Buffer.concat([header,value,value.length%2?Buffer.from([vr==="UI"||long?0:32]):Buffer.alloc(0)]);
 };
-const sopClass="1.2.840.10008.5.1.4.1.1.4", root="2.25.1043521000001";
+const sopClass=modality==="CT"?"1.2.840.10008.5.1.4.1.1.2":"1.2.840.10008.5.1.4.1.1.4", root=modality==="CT"?"2.25.1043521000002":"2.25.1043521000001";
 for(let k=0;k<nz;k++) {
   const pixels=Buffer.alloc(nx*ny*2);
   for(let j=0;j<ny;j++)for(let i=0;i<nx;i++) {
@@ -36,7 +38,7 @@ for(let k=0;k<nz;k++) {
     tag(2,0x10,"UI","1.2.840.10008.1.2.1"),tag(2,0x12,"UI",`${root}.9`),
   ]);
   const dataset=Buffer.concat([
-    tag(8,0x16,"UI",sopClass),tag(8,0x18,"UI",instance),tag(8,0x60,"CS","MR"),
+    tag(8,0x16,"UI",sopClass),tag(8,0x18,"UI",instance),tag(8,0x60,"CS",modality),
     tag(8,0x103e,"LO","SYNTHETIC PHANTOM - NOT PATIENT DATA"),
     tag(0x18,0x50,"DS","2"),tag(0x18,0x88,"DS","2"),
     tag(0x20,0x0d,"UI",`${root}.1`),tag(0x20,0x0e,"UI",`${root}.2`),tag(0x20,0x13,"IS",String(k+1)),

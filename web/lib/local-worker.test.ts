@@ -1,10 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { checkLocalWorker, runLocalR231, workerEndpoint, R231_SHA256 } from "./local-worker.ts";
+import { scalarNiftiChunks } from "./analysis-stream.ts";
 import { sha256, writeScalarNifti, type AnalysisPackage } from "./analysis-package.ts";
 
 const session={endpoint:"http://127.0.0.1:8765",token:"a".repeat(43)};
-const caps={schema:"opus-worker-capabilities/v1",mode:"local",device:"cpu",dataPolicy:"public-reference-only",patientMode:false,externalEgress:false,concurrency:1,maxVoxels:8388608,
+const caps={schema:"opus-worker-capabilities/v1",mode:"local",device:"cpu",dataPolicy:"public-reference-only",patientMode:false,externalEgress:false,concurrency:1,maxVoxels:8388608,chunkUpload:{version:1,maxChunkBytes:262144},
   model:{id:"lungmask-R231",version:"0.2.20",weightsSha256:R231_SHA256,ready:true}};
 async function packet(): Promise<AnalysisPackage> {
   const geometry={dimensions:[3,2,3] as [number,number,number],affineLps:[1,0,0,0,0,1,0,0,0,0,-2,4] as [number,number,number,number,number,number,number,number,number,number,number,number]};
@@ -22,13 +23,14 @@ test("worker endpoint rejects outbound hosts, HTTPS proxies, paths and embedded 
 test("readiness requires installed pinned R231 and closed patient/external routes",async t=>{
   for(const change of [{patientMode:true},{externalEgress:true},{mode:"gpu-server"},{model:{...caps.model,ready:false}},{model:{...caps.model,weightsSha256:"c".repeat(64)}}]) {
     t.mock.method(globalThis,"fetch",async()=>Response.json({...caps,...change}));
-    await assert.rejects(checkLocalWorker(session),/не установлена/);
+    await assert.rejects(checkLocalWorker(session),/недоступен/);
     t.mock.restoreAll();
   }
 });
 
 test("synthetic contract fixture returns exact bound mask and deletes job; no medical inference",async t=>{
-  const p=await packet(),jobId=crypto.randomUUID(),calls:string[]=[];
+  for(const transport of ["legacy","chunks","oversized-mask"]){
+  const p=await packet(),jobId=crypto.randomUUID(),calls:string[]=[];let uploaded=0;
   const result={schema:"opus-segmentation-result/v1",requestId:p.request.requestId,sourceIdentitySha256:p.request.sourceIdentitySha256,inputSha256:p.request.inputSha256,
     maskSha256:await sha256(p.buffer),model:{id:"lungmask-R231",version:"0.2.20",weightsSha256:R231_SHA256,modality:"CT",task:"synthetic-contract-test"},labels:[{id:1,name:"test1"},{id:2,name:"test2"}],limitations:["Synthetic contract fixture, not a Lungmask prediction."]};
   t.mock.method(globalThis,"fetch",async(url: string, init: RequestInit)=>{
@@ -36,15 +38,28 @@ test("synthetic contract fixture returns exact bound mask and deletes job; no me
     assert.equal(new Headers(init.headers).get("Authorization"),`Bearer ${session.token}`);
     assert.equal(init.credentials,"omit");assert.equal(init.redirect,"error");
     if(url.endsWith("capabilities"))return Response.json(caps);
+    if(url.endsWith("/input/complete")) {assert.equal(uploaded,p.buffer.byteLength);return Response.json({state:"queued"});}
     if(init.method==="POST")return Response.json({jobId});
+    if(url.includes("/input/chunks/")) {
+      assert.equal(Number(url.split("/").at(-1)),uploaded);
+      uploaded+=(init.body as ArrayBuffer).byteLength;
+      return Response.json({state:"receiving_chunks",uploadedBytes:uploaded});
+    }
     if(init.method==="PUT")return Response.json({state:"queued"});
     if(init.method==="DELETE")return new Response(null,{status:204});
-    if(url.endsWith("mask"))return new Response(p.buffer,{headers:{"content-length":String(p.buffer.byteLength)}});
+    if(url.endsWith("mask"))return new Response(transport==="oversized-mask"?new Uint8Array(p.buffer.byteLength+1):p.buffer,{headers:{"content-length":String(p.buffer.byteLength)}});
     return Response.json({schema:"opus-worker-job-status/v1",jobId,state:"succeeded",result,metrics:{device:"cpu",inferenceSeconds:1,totalSeconds:2,peakRssMiB:3,platform:"synthetic",machine:"fixture"}});
   });
-  const out=await runLocalR231(session,p,new AbortController().signal,()=>{});
+  const input=transport==="legacy"?p:{request:p.request,byteLength:p.buffer.byteLength,
+    chunks:(signal:AbortSignal)=>scalarNiftiChunks(p.request.geometry,i=>i%3,signal)};
+  if(transport==="oversized-mask")await assert.rejects(runLocalR231(session,input,new AbortController().signal,()=>{}),/превышает заявленный/);
+  else {
+  const out=await runLocalR231(session,input,new AbortController().signal,()=>{});
   assert.deepEqual([...out.mask.data],Array.from({length:18},(_,i)=>i%3));
+  }
   assert.equal(calls.at(-1),`DELETE ${session.endpoint}/v1/jobs/${jobId}`);
+  t.mock.restoreAll();
+  }
 });
 
 test("wrong source fails before mask import and still releases worker slot",async t=>{
@@ -65,4 +80,24 @@ test("MR never creates an R231 job",async t=>{
   t.mock.method(globalThis,"fetch",async()=>{called=true;return Response.json(caps);});
   await assert.rejects(runLocalR231(session,p,new AbortController().signal,()=>{}),/только КТ/);
   assert.equal(called,false);
+});
+
+test("bad chunk acknowledgement and cancellation stop scalar production, never complete, and delete job",async t=>{
+  for(const failure of ["ack","cancel"]) {
+    const p=await packet(),jobId=crypto.randomUUID(),controller=new AbortController();
+    let reads=0,completed=false,deleted=false;
+    t.mock.method(globalThis,"fetch",async(url:string,init:RequestInit)=>{
+      if(url.endsWith("capabilities"))return Response.json(caps);
+      if(init.method==="DELETE"){deleted=true;return new Response(null,{status:204});}
+      if(url.endsWith("/input/complete")){completed=true;throw Error("must not complete");}
+      if(init.method==="POST")return Response.json({jobId});
+      if(failure==="cancel"){controller.abort();throw new DOMException("cancel","AbortError");}
+      return Response.json({state:"receiving_chunks",uploadedBytes:0});
+    });
+    const stream={request:p.request,byteLength:p.buffer.byteLength,
+      chunks:(signal:AbortSignal)=>scalarNiftiChunks(p.request.geometry,()=>{reads++;return 1;},signal)};
+    await assert.rejects(runLocalR231(session,stream,controller.signal,()=>{}));
+    assert.equal(reads,0);assert.equal(completed,false);assert.equal(deleted,true);
+    t.mock.restoreAll();
+  }
 });

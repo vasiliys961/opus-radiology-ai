@@ -3,6 +3,7 @@ import argparse
 import asyncio
 from contextlib import asynccontextmanager
 import importlib.metadata
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -22,6 +23,7 @@ from r231 import MAX_INPUT, MAX_VOXELS, VERSION, WEIGHTS_SHA256, check_weights, 
 
 JOB_TTL_SECONDS = 1800
 MAX_RSS_BYTES = 2 * 1024**3
+MAX_UPLOAD_CHUNK = 256 * 1024
 
 
 async def bounded_body(request, maximum):
@@ -130,6 +132,7 @@ def create_app(weights, token, origin="http://localhost:3000", port=8765, tempor
         return {"schema": "opus-worker-capabilities/v1", "mode": "local", "device": "cpu",
                 "model": {"id": "lungmask-R231", "version": VERSION, "weightsSha256": WEIGHTS_SHA256, "ready": ready},
                 "maxVoxels": MAX_VOXELS, "concurrency": 1,
+                "chunkUpload": {"version": 1, "maxChunkBytes": MAX_UPLOAD_CHUNK},
                 "dataPolicy": "public-reference-only", "patientMode": False, "externalEgress": False,
                 "remoteModes": "not-enabled", "status": "experimental"}
 
@@ -159,7 +162,8 @@ def create_app(weights, token, origin="http://localhost:3000", port=8765, tempor
         directory.mkdir(mode=0o700)
         (directory / "request.json").write_text(json.dumps(body["request"]))
         jobs[identifier] = {"directory": directory, "created": time.monotonic(),
-                            "state": "awaiting_input", "uploadedBytes": 0, "process": None}
+                            "state": "awaiting_input", "uploadedBytes": 0, "process": None,
+                            "inputHash": hashlib.sha256(), "uploadLock": asyncio.Lock()}
         return {"schema": "opus-worker-job-status/v1", "jobId": identifier, "state": "awaiting_input"}
 
     def find(identifier):
@@ -216,10 +220,78 @@ def create_app(weights, token, origin="http://localhost:3000", port=8765, tempor
                 await proc.wait()
             job["started"].set()
 
+    def queue(job):
+        job["state"] = "queued"
+        job["started"] = asyncio.Event()
+        job["task"] = asyncio.create_task(execute(job))
+
+    @app.put("/v1/jobs/{identifier}/input/chunks/{offset}")
+    async def upload_chunk(identifier: str, offset: int, request: Request):
+        job = find(identifier)
+        # Reject concurrent requests rather than queue an unbounded number of bodies.
+        if job["uploadLock"].locked():
+            raise HTTPException(409, "upload_busy")
+        async with job["uploadLock"]:
+            if job["state"] not in {"awaiting_input", "receiving_chunks"}:
+                raise HTTPException(409, "input_already_submitted")
+            if offset != job["uploadedBytes"]:
+                raise HTTPException(409, "chunk_offset_mismatch")
+            if request.headers.get("content-type") != "application/octet-stream":
+                raise HTTPException(415, "nifti_octet_stream_required")
+            # Buffer one bounded block before appending: a disconnected request cannot
+            # leave a partial block or advance its acknowledgement.
+            try:
+                data = await asyncio.wait_for(bounded_body(request, MAX_UPLOAD_CHUNK), timeout=30)
+            except asyncio.TimeoutError:
+                raise HTTPException(408, "chunk_timeout") from None
+            if not data:
+                raise HTTPException(422, "empty_chunk")
+            if job.get("cancelRequested"):
+                raise HTTPException(409, "job_cancelled")
+            directory = job["directory"]
+            r = json.loads((directory / "request.json").read_text())
+            expected = 352 + 4 * int(__import__("math").prod(r["geometry"]["dimensions"]))
+            if offset + len(data) > min(expected, MAX_INPUT):
+                raise HTTPException(413, "input_limit")
+            # No await between cancellation check, disk append and acknowledgement.
+            try:
+                with (directory / "input.nii").open("xb" if offset == 0 else "ab") as stream:
+                    stream.write(data)
+            except OSError:
+                job["state"] = "failed"
+                (directory / "input.nii").unlink(missing_ok=True)
+                raise HTTPException(507, "input_write_failed") from None
+            job["inputHash"].update(data)
+            job["uploadedBytes"] += len(data)
+            job["state"] = "receiving_chunks"
+            return {"uploadedBytes": job["uploadedBytes"], "state": "receiving_chunks"}
+
+    @app.post("/v1/jobs/{identifier}/input/complete")
+    async def complete_upload(identifier: str, request: Request):
+        job = find(identifier)
+        if job["uploadLock"].locked() or job["state"] != "receiving_chunks":
+            raise HTTPException(409, "input_not_ready")
+        async with job["uploadLock"]:
+            if await bounded_body(request, 0):
+                raise HTTPException(422, "empty_body_required")
+            if job.get("cancelRequested"):
+                raise HTTPException(409, "job_cancelled")
+            directory = job["directory"]
+            r = json.loads((directory / "request.json").read_text())
+            expected = 352 + 4 * int(__import__("math").prod(r["geometry"]["dimensions"]))
+            if job["uploadedBytes"] != expected:
+                raise HTTPException(422, "input_size_mismatch")
+            if job["inputHash"].hexdigest() != r["inputSha256"]:
+                job["state"] = "failed"
+                (directory / "input.nii").unlink(missing_ok=True)
+                raise HTTPException(422, "input_sha_mismatch")
+            queue(job)
+            return {"state": "queued"}
+
     @app.put("/v1/jobs/{identifier}/input")
     async def upload(identifier: str, request: Request):
         job = find(identifier)
-        if job["state"] != "awaiting_input":
+        if job["uploadLock"].locked() or job["state"] != "awaiting_input":
             raise HTTPException(409, "input_already_submitted")
         job["state"] = "uploading"
         directory = job["directory"]
@@ -238,9 +310,7 @@ def create_app(weights, token, origin="http://localhost:3000", port=8765, tempor
                     stream.write(chunk)
             if job["uploadedBytes"] != expected:
                 raise HTTPException(422, "input_size_mismatch")
-            job["state"] = "queued"
-            job["started"] = asyncio.Event()
-            job["task"] = asyncio.create_task(execute(job))
+            queue(job)
             return {"state": "queued"}
         except BaseException:
             job["state"] = "failed"

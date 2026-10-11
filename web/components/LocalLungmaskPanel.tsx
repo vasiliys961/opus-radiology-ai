@@ -1,11 +1,12 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { checkLocalWorker, runLocalR231, type WorkerMetrics } from "../lib/local-worker";
-import type { AnalysisPackage, SegmentationResult } from "../lib/analysis-package";
+import type { AnalysisStream } from "../lib/analysis-stream";
+import type { SegmentationResult } from "../lib/analysis-package";
 import type { LabelMask } from "../lib/segmentation-mask";
 
 export default function LocalLungmaskPanel({ready, onPrepare, onResult, onBusy}: {
-  ready: boolean; onPrepare: (signal: AbortSignal)=>Promise<AnalysisPackage>;
+  ready: boolean; onPrepare: (signal: AbortSignal)=>Promise<AnalysisStream>;
   onResult: (mask: LabelMask,result: SegmentationResult)=>void; onBusy: (busy: boolean)=>void;
 }) {
   const [endpoint,setEndpoint]=useState("http://127.0.0.1:8765");
@@ -26,7 +27,7 @@ export default function LocalLungmaskPanel({ready, onPrepare, onResult, onBusy}:
     try {
       setStatus("Проверка локальной модели…");
       await checkLocalWorker(session,controller.signal);
-      setStatus("Подготовка выбранной серии…");
+      setStatus("Проверка скалярных данных выбранной серии…");
       const packet=await callbacks.current.onPrepare(controller.signal);
       const output=await runLocalR231(session,packet,controller.signal,setStatus);
       if(controller.signal.aborted)return;
