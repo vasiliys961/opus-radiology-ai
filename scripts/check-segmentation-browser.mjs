@@ -33,6 +33,13 @@ try {
     'http://127.0.0.1:3131/api/ai/provider-readiness?provider=openrouter');
   assert.equal(readinessResponse.status(),404);
   assert.doesNotMatch(await readinessResponse.text(),/OPENROUTER_API_KEY|secret|sk-/);
+  const blockedUpload=await page.request.post('http://127.0.0.1:3131/api/ai',{
+    data:{provider:'openrouter',role:'vision',model:'never-forward',messages:[
+      {role:'user',content:'nonclinical sentinel'}
+    ]},
+  });
+  assert.equal(blockedUpload.status(),410);
+  assert.match(await blockedUpload.text(),/disabled/);
   await page.getByRole('button',{name:'Проверить Polza',exact:true}).click();
   await page.locator('.ora-provider-error').waitFor();
   assert.match(await page.locator('.ora-provider-error').innerText(),/только на localhost/);
