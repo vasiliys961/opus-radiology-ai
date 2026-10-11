@@ -90,6 +90,8 @@ export default function Home() {
   const series = useMemo(() => groupDicomSeries(files.filter((f) => f.kind === "dicom" && f.dicomMeta).map((f) => ({
     id: f.id, name: f.file.name, metadata: f.dicomMeta!,
   }))), [files]);
+  const localDicomById = useMemo(() => new Map(files.filter(item => item.kind === "dicom")
+    .map(item => [item.id, item.file] as const)), [files]);
   const activeSeries = series.find((group) => group.members.some((m) => m.id === activeId)) ?? null;
   // Memoized: switching non-DICOM controls must not restart a DICOM rendering engine.
   const cornerstoneFiles = useMemo(() => {
@@ -329,6 +331,7 @@ export default function Home() {
             <VisionFramePlanningPanel
               series={series}
               activeSeriesKey={activeSeries?.key ?? null}
+              fileById={localDicomById}
               onOpenSlice={(memberId) => {
                 if (series.some(group => group.members.some(m => m.id === memberId))) {
                   setViewMode("2d"); setActiveId(memberId); setZoom(1);
