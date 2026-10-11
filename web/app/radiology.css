@@ -339,3 +339,8 @@ button:disabled { cursor: not-allowed; }
 .ora-synthetic-details p{margin:0;font-size:10px;color:#5e7a86;line-height:1.6;overflow-wrap:anywhere}
 .ora-synthetic-details small{font-size:9px;color:#7c969b;line-height:1.5}
 @media(max-width:640px){.ora-synthetic-controls{grid-template-columns:minmax(0,1fr)}.ora-synthetic-controls label:nth-child(n+3){grid-column:auto}}
+
+.ora-synthetic-preview{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.ora-synthetic-preview figure{margin:0;background:#f0f6f5;border:1px solid #dbeae5;border-radius:9px;display:flex;align-items:center;flex-direction:column;padding:9px;gap:6px;min-width:0}
+.ora-synthetic-preview img{width:min(100%,128px);aspect-ratio:1;image-rendering:pixelated;object-fit:contain;border:1px solid #334852;background:#0c1f29;border-radius:5px}
+.ora-synthetic-preview figcaption{font-size:9px;color:#6b8692;text-align:center;line-height:1.3}
