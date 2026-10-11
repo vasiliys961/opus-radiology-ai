@@ -1,0 +1,5 @@
+# OPTIONAL heavy CT/MR anatomical segmentation. No automatic model licence grant.
+# On Mac check --device mps, --fast, --roi_subset and memory benchmark.
+-r requirements.txt
+torch>=2.5,<3.0
+TotalSegmentator>=2.10,<3.0

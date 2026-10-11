@@ -1,0 +1,7 @@
+# OPTIONAL MONAI task-specific model bundles (installed weights separate).
+# Confirm exact PyTorch/MONAI version compatibility for each checkpoint.
+-r requirements.txt
+torch>=2.5,<3.0
+monai>=1.5,<2.0
+SimpleITK>=2.4,<3.0
+scipy>=1.13,<2.0

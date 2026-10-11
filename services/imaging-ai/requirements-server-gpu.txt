@@ -1,0 +1,9 @@
+# OPTIONAL heavier private GPU server profile; NOT for M1 8GB.
+# PREINSTALL CUDA-enabled PyTorch wheel matching NVIDIA drivers using:
+# https://pytorch.org/get-started/locally/
+# Then install this requirements profile. Verify torch.cuda.is_available().
+# CPU onnxruntime in base != ONNX GPU acceleration. Do not install both
+# onnxruntime and onnxruntime-gpu into one Python environment.
+# Use a separate environment if GPU ONNX runtime is specifically required.
+-r requirements-monai.txt
+-r requirements-totalsegmentator.txt

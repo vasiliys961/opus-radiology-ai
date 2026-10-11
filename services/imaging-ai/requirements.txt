@@ -1,0 +1,14 @@
+# Opus Radiology AI Python worker base (Python 3.11 or 3.12, arm64 Mac or x86_64 Linux).
+# These are candidate constrained ranges, not a platform-resolved audited lockfile.
+# Base installs CPU ONNX, NIfTI/DICOM parsing and a future FastAPI service runtime.
+# Does NOT automatically install model weights, PyTorch, MONAI, TotalSegmentator,
+# subscription-based services, any external API client, or enable real patient egress.
+# Current v1.9 script works; authenticated local HTTP worker is a FUTURE milestone.
+numpy>=1.26.4,<2.0
+onnxruntime>=1.20,<2.0
+nibabel>=5.2,<6.0
+pydicom>=3.0,<4.0
+psutil>=6.0,<8.0
+fastapi>=0.115,<1.0
+uvicorn>=0.30,<1.0
+pydantic>=2.9,<3.0

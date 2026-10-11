@@ -1,0 +1,22 @@
+---
+description: Opus Radiology AI canonical goals, implementation status and safety boundaries
+alwaysApply: true
+---
+
+For any task in this repository, read:
+- @docs/OPUS_RADIOLOGY_MASTER_SPEC.md (end-state and verified/planned boundaries)
+- @REQUIREMENTS.md (acceptance criteria and priorities)
+- @AGENTS.md (workflow and safety)
+- @HANDOFF_NEXT_CHAT.md (context for new chats)
+
+Do not claim that medical weights, universal pathology detection, browser one-click
+local worker or patient-cloud AI are already connected. Main PRs #6-#11 are merged
+as of 2026-10-11; inspect current main before changing anything. Next task R1:
+real licensed Lungmask R231 on legal open chest CT, secure loopback worker,
+mask overlay in MPR, RAM/time benchmark on Mac M1 8GB. Existing export is capped
+at 8,388,608 voxels; streaming must be engineered before scaling up.
+
+No direct main pushes or auto-merges. No editing, printing or committing
+web/.env.local. No real patient cloud upload; leave privacy gate fail-closed.
+Do not silently replace specialist model failures with LLM guesses. Always
+report what actually passed CI and what remains untested on Mac.
