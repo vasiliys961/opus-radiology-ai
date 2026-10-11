@@ -39,6 +39,8 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Synthetic DICOM browser check
         run: npm run test:browser
+      - name: Local provider diagnostics smoke check (synthetic secrets only)
+        run: node ../scripts/check-provider-readiness-dev.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:

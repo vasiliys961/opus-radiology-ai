@@ -27,6 +27,39 @@ try {
   page=await browser.newPage({viewport:{width:1600,height:1000}});
   page.on('pageerror',e=>errors.push(e.message));
   await page.goto('http://127.0.0.1:3131',{waitUntil:'networkidle'});
+  // In production, even a same-origin read-only provider probe remains closed.
+  // API credentials, DICOM and clinical context are never exposed.
+  const readinessResponse=await page.request.get(
+    'http://127.0.0.1:3131/api/ai/provider-readiness?provider=openrouter');
+  assert.equal(readinessResponse.status(),404);
+  assert.doesNotMatch(await readinessResponse.text(),/OPENROUTER_API_KEY|secret|sk-/);
+  const blockedUpload=await page.request.post('http://127.0.0.1:3131/api/ai',{
+    data:{provider:'openrouter',role:'vision',model:'never-forward',messages:[
+      {role:'user',content:'nonclinical sentinel'}
+    ]},
+  });
+  assert.equal(blockedUpload.status(),410);
+  assert.match(await blockedUpload.text(),/disabled/);
+  const deniedSyntheticDemo=await page.request.post(
+    'http://127.0.0.1:3131/api/ai/synthetic-demo',{
+      headers:{origin:'http://127.0.0.1:3131','content-type':'application/json',
+        'sec-fetch-site':'same-origin'},
+      data:{
+        modality:'MR',region:'head',visionModel:'google/fixture',
+        clinicalModel:'openai/fixture',acknowledgePaidSyntheticExperiment:true,
+      },
+    });
+  assert.equal(deniedSyntheticDemo.status(),404);
+  assert.doesNotMatch(await deniedSyntheticDemo.text(),/OPENROUTER_API_KEY|secret|sk-/);
+  const deniedPhantomPreview=await page.request.get(
+    'http://127.0.0.1:3131/api/ai/synthetic-demo/preview?region=head&modality=MR&frame=0');
+  assert.equal(deniedPhantomPreview.status(),404);
+
+
+  await page.getByRole('button',{name:'Проверить Polza',exact:true}).click();
+  await page.locator('.ora-provider-error').waitFor();
+  assert.match(await page.locator('.ora-provider-error').innerText(),/только на localhost/);
+  console.log('Provider readiness remains closed in production and gives a visible safe fallback');
   const files=(await readdir(fixture+'/dicom')).sort().map(n=>fixture+'/dicom/'+n);
   await page.locator('input[accept*=".dcm"]').setInputFiles(files);
   // Study Intelligence verifies ALL indexed synthetic series without calling AI.
@@ -90,6 +123,52 @@ try {
   assert.match(await page.locator('.ora-evidence-error').innerText(),/не связана/);
   assert.match(await page.locator('.ora-evidence-success').innerText(),/synthetic-review\.json/);
   console.log('Local AI evidence review: matched SOP, slice navigation, refused forged source');
+  // v1.8: a user-enabled WebAudio chime sounds after a successful local
+  // Vision-frame manifest. No network images, real AI or patient data involved.
+  await page.waitForFunction(() => {
+    const button=document.querySelector('.ora-vision-plan-controls button');
+    return button && !button.disabled;
+  },undefined,{timeout:30000});
+  await page.evaluate(() => {
+    window.__opusToneStarts=0;
+    class FakeAudioContext {
+      state='running';currentTime=0;destination={};
+      createOscillator(){
+        return {
+          type:'sine',
+          frequency:{setValueAtTime(){}},
+          connect(){},disconnect(){},
+          start(){window.__opusToneStarts+=1;},
+          stop(){},
+          onended:null,
+        };
+      }
+      createGain(){
+        return {gain:{setValueAtTime(){},exponentialRampToValueAtTime(){}},
+          connect(){},disconnect(){}};
+      }
+      resume(){return Promise.resolve();}
+      close(){return Promise.resolve();}
+    }
+    Object.defineProperty(window,'AudioContext',{value:FakeAudioContext,configurable:true});
+  });
+  await page.locator('.ora-completion-toggle input').check();
+  await page.getByRole('button',{name:'Проверить звук · дзинь',exact:true}).click();
+  await page.waitForFunction(()=>window.__opusToneStarts===2);
+  await page.locator('.ora-vision-plan-controls button').click();
+  await page.locator('.ora-vision-plan-result').waitFor();
+  assert.equal(await page.locator('.ora-vision-plan-list>div').count(),4);
+  await page.locator('.ora-vision-plan-thumbnail').first().waitFor({timeout:20000});
+  assert.match(await page.locator('.ora-vision-plan-thumbnail').first().getAttribute('src'),/^data:image\/png;base64,/);
+  assert.match(await page.locator('.ora-vision-plan-result').innerText(),/Загрузка изображений в AI:.*заблокирована/s);
+  await page.waitForFunction(()=>window.__opusToneStarts===4);
+  await page.locator('.ora-vision-plan-list button').nth(1).click();
+  assert.match(await page.locator('.ora-file-row.ora-file-selected .ora-file-name').innerText(),/synthetic-011\.dcm/);
+  const previousCount=await page.evaluate(()=>window.__opusToneStarts);
+  await page.locator('.ora-completion-toggle input').uncheck();
+  await page.locator('.ora-vision-plan-controls button').click();
+  assert.equal(await page.evaluate(()=>window.__opusToneStarts),previousCount);
+  console.log('Vision-frame manifest and WebAudio: SOP navigation, opt-in ding, no sound after opt-out');
   const mpr=page.getByRole('button',{name:'MPR · 3 плоскости',exact:true});
   await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='MPR · 3 плоскости'&&!b.disabled),undefined,{timeout:30000});
   await mpr.click();
