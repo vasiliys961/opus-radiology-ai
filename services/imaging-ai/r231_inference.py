@@ -68,20 +68,36 @@ def load_model(weights):
     return model.eval()
 
 
+def join_skip(up, tensor, bridge):
+    """Pinned non-residual upsampling/join; release temporaries before convolutions."""
+    import torch
+
+    enlarged = up.up(tensor)
+    cropped = up.center_crop(bridge, enlarged.shape[2:])
+    return torch.cat([enlarged, cropped], 1)
+
+
 def forward_logits(model, tensor):
-    """Pinned UNet.forward, freeing each skip connection after its last use."""
+    """Pinned residual=False arithmetic without unused block-local references.
+
+    Upstream block wrappers hold the block input, enlarged image and cropped
+    skip until both convolutions finish. Execute the same Sequential layers
+    here so their old inputs can be released after each layer's last use.
+    The architecture SHA pins this path to R231; no residual branch is used.
+    """
     import torch
 
     blocks = []
     for index, down in enumerate(model.down_path):
-        tensor = down(tensor)
+        for layer in down.block:
+            tensor = layer(tensor)
         if index != len(model.down_path) - 1:
             blocks.append(tensor)
             tensor = torch.nn.functional.avg_pool2d(tensor, 2)
     for up in model.up_path:
-        bridge = blocks.pop()
-        tensor = up(tensor, bridge)
-        del bridge
+        tensor = join_skip(up, tensor, blocks.pop())
+        for layer in up.conv_block.block:
+            tensor = layer(tensor)
     return model.softmax(model.last(tensor))
 
 

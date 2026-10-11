@@ -313,3 +313,33 @@ This is a bounded partial-reference optimization, not optimized Mac/full-chest
 acceptance. Four modes, optional Gemini/Claude through Evidence and closed
 patient/cloud/remote gates remain unchanged. Technical evidence:
 `docs/verification/r231-low-memory-linux.json`, `docs/R231_SAFE_MODE.md`.
+
+
+## Mac resource report and tensor lifetime follow-up — 2026-10-11
+
+PR #17 is merged into main `490fec3`; its Python Actions are green. A new
+user-supplied Mac M1/8GB run of the streamed implementation passes actual R231,
+257 chunks, identical full mask SHA, three MPR overlays and job deletion. Model
+high-water is **752.97 MiB**, not a demonstrated improvement over the earlier
+709.86 MiB Mac run. System minimum available RAM is about 1127.61 MiB; swap peaks
+102.8125 MiB above its starting value and ends 30.8125 MiB higher. All tracked
+process groups are zero during the completed 30-second post-observation. UI
+responsiveness was not assessed. Original reports contain no commit SHA. See
+`docs/verification/r231-low-memory-mac.json`.
+
+The follow-up releases upsampling/cropped-skip/block-input tensors before later
+convolutions, using the same pinned residual=False Sequential operations. Exact
+logits and tensor lifetime tests plus actual public-reference browser verification
+are required. Keep Safe thresholds unchanged: functional Mac PASS does not
+accept memory reduction, repeated-run responsiveness, Safari, full chest or
+clinical accuracy. Four modes/Evidence/optional LLM and patient/cloud OFF remain.
+
+
+Follow-up validation: 49 Python tests pass with the optional stack. Two fresh
+sequential adapter runs on the same Linux host/reference/checkpoint measure
+763.51→596.06 MiB model peak (21.93%). Both include getrusage high-water; the
+baseline uses the PID namespace fallback, while the optimized run also samples
+psutil RSS. The separate actual browser run passes at 636.20 MiB, with identical
+mask SHA, three MPR planes and job deletion. This is a single measured comparison,
+not a Mac reduction claim. Safe admission remains 1219 MiB. See
+`docs/verification/r231-tensor-lifetime-linux.json`.

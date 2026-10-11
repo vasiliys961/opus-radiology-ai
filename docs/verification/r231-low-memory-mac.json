@@ -1,0 +1,150 @@
+{
+  "schema": "opus-r231-mac-resource-verification/v1",
+  "provenance": {
+    "kind": "user-supplied instrumented Mac reports",
+    "gitCommitRecorded": false,
+    "reportsSha256": {
+      "metrics(3).json": "16f8203f35cf44262b097544d2b7c26a66ae8b8589197cdebf4f9a3afddeef98",
+      "resource-report(2).json": "a10d510274277f4c20b8418a437a070f1c2c695f1519b999ecd5725f7e0eb56f"
+    }
+  },
+  "status": "passed",
+  "actualTrainedInference": true,
+  "reference": {
+    "collection": "TCIA LCTSC",
+    "license": "CC BY 3.0",
+    "sourceContentChainSha256": "bb4b90496cf2d83dac83e729ef271091962d532a18db201c6e2d99d42dcb5f61",
+    "originalFrames": 103,
+    "selectedFrames": 32,
+    "selectedIndicesZeroBased": [
+      35,
+      66
+    ],
+    "fullChest": false,
+    "selection": "32 unchanged consecutive central source slices; no resampling, pixel crop or repeated frames"
+  },
+  "dimensions": [
+    512,
+    512,
+    32
+  ],
+  "inputSha256": "23d0065256550d22ccbe62a1ef4029ddf57bb0ef6334874875c244fc791a35d3",
+  "maskSha256": "0ee929a7ba4cbd1e5adc3880a15b6ad0ecbe79f465572d8dc79c39e45aa5795b",
+  "weightsSha256": "d5d2fc3df432115933491f115b283e94d1f5c841c0e82f6e7bd2d65d3ccde69f",
+  "labelVoxels": [
+    7703880,
+    337031,
+    347697
+  ],
+  "inferenceMetrics": {
+    "schema": "opus-worker-metrics/v1",
+    "device": "cpu",
+    "batchSize": 1,
+    "inferenceSeconds": 42.013,
+    "totalSeconds": 45.668,
+    "peakRssMiB": 752.97,
+    "memoryMeasurement": "process RSS sampled every 20 ms plus getrusage high-water where available",
+    "platform": "Darwin",
+    "machine": "arm64",
+    "torchVersion": "2.6.0",
+    "dimensions": [
+      512,
+      512,
+      32
+    ],
+    "resourceProfile": "safe",
+    "threads": 1,
+    "interOpThreads": 1,
+    "inferenceImplementation": "slice-streamed-r231/v1",
+    "weightsLoading": "meta-assign-cpu-float32",
+    "simpleItkImported": false,
+    "clinicalStatus": "unverified_research_draft",
+    "preflight": {
+      "profile": "safe",
+      "estimatedModelRamBytes": 875560960,
+      "requiredRamBytes": 1278214144,
+      "requiredDiskBytes": 142606688,
+      "maxRssBytes": 1009778688,
+      "systemReserveBytes": 268435456,
+      "threads": 1,
+      "interOpThreads": 1,
+      "availableRamBytes": 1374552064,
+      "availableDiskBytes": 31258378240,
+      "guardDecision": "allow"
+    },
+    "guardDecision": "allow"
+  },
+  "preflight": {
+    "profile": "safe",
+    "estimatedModelRamBytes": 875560960,
+    "requiredRamBytes": 1278214144,
+    "requiredDiskBytes": 142606688,
+    "maxRssBytes": 1009778688,
+    "systemReserveBytes": 268435456,
+    "threads": 1,
+    "interOpThreads": 1,
+    "availableRamBytes": 1374552064,
+    "availableDiskBytes": 31258378240,
+    "guardDecision": "allow"
+  },
+  "guardDecision": "allow",
+  "peakRssMiB": 752.97,
+  "controller": {
+    "platform": "darwin",
+    "machine": "arm64",
+    "browser": "134.0.6998.35"
+  },
+  "timings": {
+    "importMprSeconds": 11.869163416,
+    "browserJobSeconds": 55.71264870800001,
+    "totalSeconds": 68.244148833
+  },
+  "chunkCount": 257,
+  "uploadedBytes": 33554784,
+  "overlayPixels": [
+    4122,
+    3658,
+    119
+  ],
+  "jobDeleted": true,
+  "clinicalDice": null,
+  "resources": {
+    "intervalSeconds": 0.5,
+    "postObservationSeconds": 30.0,
+    "runDurationSeconds": 79.075,
+    "resourcesReleasedAfterExitSeconds": 0.502,
+    "system": {
+      "minimumAvailableRamBytes": 1182384128,
+      "maximumSwapUsedBytes": 2776498176,
+      "swapDeltaBytesFromStart": 107806720
+    },
+    "before": {
+      "availableRamBytes": 1592754176,
+      "swapUsedBytes": 2668691456
+    },
+    "after": {
+      "availableRamBytes": 1871822848,
+      "swapUsedBytes": 2701000704
+    },
+    "peakProcessGroupRssBytes": {
+      "worker": 83804160,
+      "model": 760791040,
+      "nextjs": 109953024,
+      "chromium": 691535872
+    },
+    "postRunSampleCount": 60,
+    "lastPostRunSampleSeconds": 29.758,
+    "trackedGroupsZeroThroughoutPostObservation": true,
+    "netSwapChangeBytes": 32309248
+  },
+  "M1Acceptance": "partial-reference-functional-pass; memory-reduction-and-responsiveness-not-accepted",
+  "limitations": [
+    "User-supplied execution evidence; commit SHA absent from the original report.",
+    "32 of 103 native public CT slices; not full chest, Safari or clinical accuracy acceptance.",
+    "Model high-water 752.97 MiB exceeds earlier Mac 709.86 MiB; different runs/load, no controlled Mac memory reduction established.",
+    "Swap is whole-system: peak increase 102.8125 MiB, end increase 30.8125 MiB; cannot attribute all swap to R231.",
+    "Process RSS group peaks are sampled every 0.5 s and may count shared pages; do not add separate peaks as simultaneous unique RAM.",
+    "30-second post-observation completed; tracked processes exit, but UI responsiveness was not assessed.",
+    "Page loopback-only network observation is not an OS sandbox; patient/cloud/remote gates stay closed."
+  ]
+}

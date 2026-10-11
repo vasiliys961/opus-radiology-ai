@@ -176,10 +176,10 @@ a **126.28 MiB / 15.25%** reduction. Both use getrusage process high-water RSS.
   in the base-only environment; trained weights are not included in CI.
 
 The earlier Mac browser PASS used the previous adapter (709.86 MiB model RSS);
-do not compare that number with Linux to claim a Mac reduction. New Mac memory,
-swap and responsiveness measurements are still required. Existing environments
-and official weights need no reinstall or re-download. Stop any old manual worker
-and restart it from this feature branch before testing.
+do not compare that number with Linux to claim a Mac reduction. The subsequent user-supplied Mac memory/swap report is recorded below;
+responsiveness and acceptance of the next allocation change remain pending.
+Existing environments and official weights need no reinstall or re-download.
+Stop any old manual worker and restart it from the tested feature branch.
 
 ## Remaining acceptance
 
@@ -189,3 +189,43 @@ current limits and independent manual-contour/clinical accuracy remain pending.
 Lower CPU priority/thread count can increase elapsed time. Memory pressure from
 other apps can still reject or terminate an otherwise valid job. R1 is PARTIAL;
 patient analysis and remote patient/cloud routes remain blocked.
+
+
+## Instrumented streamed-adapter Mac run and next allocation change
+
+[User-supplied technical report](verification/r231-low-memory-mac.json) records
+an actual trained R231 browser PASS on Mac M1/8GB: 32-of-103 native public slices,
+257 chunks, identical mask SHA, both labels, three MPR overlays and job deletion.
+Inference/postprocessing is 42.013 s; model high-water RSS is **752.97 MiB**.
+Pre-inference available RAM is 1310.875 MiB versus 1219 MiB required.
+
+Minimum whole-system available RAM is 1127.609375 MiB. Whole-system swap rises
+102.8125 MiB at its peak, ending 30.8125 MiB above start. The 30-second
+post-observation has 60 samples; tracked process groups are zero throughout.
+The 0.5 s collector's model peak differs from 20 ms/high-water model metrics;
+process RSS sums can double-count shared pages. Swap belongs to the whole system
+and cannot be exclusively attributed to this job. The reports record no git SHA
+or manual UI responsiveness assessment.
+
+This run establishes functionality at the new admission budget, **not Mac memory
+reduction**: its peak exceeds the earlier 709.86 MiB run, under different system
+conditions. M1 memory/response acceptance is still open.
+
+The next allocation change executes the pinned residual=False block's Sequential
+layers directly. Upsampled and cropped-skip tensors are scoped to concatenation;
+old block inputs are released after the first convolution. The same layer order,
+float32 weights, crop, concatenation and LogSoftmax remain. Weak-reference tests
+verify actual releases, alongside exact-logit and complete reference-mask checks.
+No RAM threshold/reserve is reduced. This change needs its own instrumented Mac
+run using the existing environment/checkpoint/reference; stop any manual worker
+first. Safari and full native chest are separate future checks under existing caps.
+
+
+Follow-up validation: 49 Python tests pass with the optional stack. Two fresh
+sequential adapter runs on the same Linux host/reference/checkpoint measure
+763.51→596.06 MiB model peak (21.93%). Both include getrusage high-water; the
+baseline uses the PID namespace fallback, while the optimized run also samples
+psutil RSS. The separate actual browser run passes at 636.20 MiB, with identical
+mask SHA, three MPR planes and job deletion. This is a single measured comparison,
+not a Mac reduction claim. Safe admission remains 1219 MiB. See
+`docs/verification/r231-tensor-lifetime-linux.json`.

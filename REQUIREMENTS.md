@@ -21,11 +21,11 @@ Canonical vision and implementation truth: **[docs/OPUS_RADIOLOGY_MASTER_SPEC.md
 | DATA-03 | P0 | Result returns with original study/series/frame coords and source identity; reject mismatched or fabricated masks. | IMPLEMENTED for existing NIfTI mask import; richer findings PLANNED |
 | EXEC-01 | P1 | Browser-only lightweight model via WASM without Python; must expose actual runtime compatibility and fail to unsupported. | PLANNED |
 | EXEC-02 | P1 | \`127.0.0.1\` local-worker with versioned job contract, capabilities, model registry, uploads in bounded chunks, cancel/progress, authenticated browser origin and zero external patient egress by default. | PARTIAL — bounded authenticated loopback R231 research worker; patient/remote/large-volume modes blocked |
-| EXEC-03 | P1 | Real model inference on Mac: CPU ONNX now; Torch CPU/MPS, MONAI, Lungmask, TotalSegmentator behind explicitly installed weights/adapters. | PARTIAL — actual R231 partial-reference browser/HTTP regression; previous adapter has user-reported Mac PASS, optimized adapter M1 acceptance pending; generic ONNX remains synthetic |
+| EXEC-03 | P1 | Real model inference on Mac: CPU ONNX now; Torch CPU/MPS, MONAI, Lungmask, TotalSegmentator behind explicitly installed weights/adapters. | PARTIAL — actual R231 partial-reference browser/HTTP regression; streamed adapter has user-supplied instrumented Mac partial-reference PASS; M1 memory/response acceptance pending; generic ONNX remains synthetic |
 | EXEC-04 | P1 | Private CPU server and GPU worker use the same input/output and audit, with queued isolated jobs and measured RAM/VRAM. | PLANNED |
-| EXEC-05 | P0 | Resource preflight (estimated peak memory, space, time) + concurrency cap 1 on 8GB Mac, fallback to smaller ROI/CPU if valid, cancellation without leaking buffers. | PARTIAL — streamed R231 native-plane operations, one weight allocation, bounded compact-volume postprocessing, adaptive volume/frame/plane estimate, one job, RSS/system-pressure/timeout/cancel and UI retry; Linux RSS reduction verified; see docs/R231_SAFE_MODE.md; optimized M1/system acceptance pending |
+| EXEC-05 | P0 | Resource preflight (estimated peak memory, space, time) + concurrency cap 1 on 8GB Mac, fallback to smaller ROI/CPU if valid, cancellation without leaking buffers. | PARTIAL — streamed R231 native-plane operations, one weight allocation, bounded compact-volume postprocessing, adaptive volume/frame/plane estimate, one job, RSS/system-pressure/timeout/cancel and UI retry; Linux RSS reduction verified; instrumented streamed-adapter Mac functional PASS, memory/response acceptance pending; see docs/R231_SAFE_MODE.md |
 | MODEL-01 | P0 | Each model has verified version/sha/license, modalities, sequences, input intensity and geometry transform, preprocessing and test data; unknown => unsupported. | PARTIAL (ONNX profile + pinned R231 adapter; commercial weights/data clearance pending) |
-| MODEL-02 | P1 | First real end-to-end chest CT: Lungmask R231 → actual mask/measurements in MPR on permitted open reference study; memory/time benchmark on M1. | PARTIAL — actual partial LCTSC R231→browser MPR on Linux and previous-adapter Mac report; optimized adapter verified on Linux with identical mask; full chest/Safari/optimized M1 acceptance pending |
+| MODEL-02 | P1 | First real end-to-end chest CT: Lungmask R231 → actual mask/measurements in MPR on permitted open reference study; memory/time benchmark on M1. | PARTIAL — actual partial LCTSC R231→browser MPR on Linux and instrumented streamed-adapter Mac report; identical mask; full chest/Safari/M1 memory/response acceptance pending |
 | MODEL-03 | P1 | TotalSegmentator CT/MR in correctly licensed tasks, CPU/MPS and \`--fast\`/ROI, no universal lesion-detection claims. | PLANNED |
 | MODEL-04 | P1 | Specialty detectors/segmenters for lung nodules, abdominal organs, brain MRI BraTS, other supported localizations, with original task-specific checks. | PLANNED |
 | MODEL-05 | P1 | Reject unrelated study/model combinations; a model that cannot see a structure never outputs 'no pathology'. | PARTIAL; full model routing planned |
@@ -125,3 +125,33 @@ See `docs/R231_BROWSER_REFERENCE.md` and the measured technical report at
 `docs/verification/r231-browser-linux.json`. After the optional environment and
 checkpoint are installed, reproduce with:
 `bash scripts/test-r231-browser.sh --download-public-reference`.
+
+
+## Mac resource report and tensor lifetime follow-up — 2026-10-11
+
+PR #17 is merged into main `490fec3`; its Python Actions are green. A new
+user-supplied Mac M1/8GB run of the streamed implementation passes actual R231,
+257 chunks, identical full mask SHA, three MPR overlays and job deletion. Model
+high-water is **752.97 MiB**, not a demonstrated improvement over the earlier
+709.86 MiB Mac run. System minimum available RAM is about 1127.61 MiB; swap peaks
+102.8125 MiB above its starting value and ends 30.8125 MiB higher. All tracked
+process groups are zero during the completed 30-second post-observation. UI
+responsiveness was not assessed. Original reports contain no commit SHA. See
+`docs/verification/r231-low-memory-mac.json`.
+
+The follow-up releases upsampling/cropped-skip/block-input tensors before later
+convolutions, using the same pinned residual=False Sequential operations. Exact
+logits and tensor lifetime tests plus actual public-reference browser verification
+are required. Keep Safe thresholds unchanged: functional Mac PASS does not
+accept memory reduction, repeated-run responsiveness, Safari, full chest or
+clinical accuracy. Four modes/Evidence/optional LLM and patient/cloud OFF remain.
+
+
+Follow-up validation: 49 Python tests pass with the optional stack. Two fresh
+sequential adapter runs on the same Linux host/reference/checkpoint measure
+763.51→596.06 MiB model peak (21.93%). Both include getrusage high-water; the
+baseline uses the PID namespace fallback, while the optimized run also samples
+psutil RSS. The separate actual browser run passes at 636.20 MiB, with identical
+mask SHA, three MPR planes and job deletion. This is a single measured comparison,
+not a Mac reduction claim. Safe admission remains 1219 MiB. See
+`docs/verification/r231-tensor-lifetime-linux.json`.
