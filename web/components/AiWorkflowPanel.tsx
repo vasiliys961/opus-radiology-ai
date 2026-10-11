@@ -97,7 +97,7 @@ export default function AiWorkflowPanel({ series }: { series: readonly DicomSeri
     </div>
     <div className="ora-v17-models">
       <strong>Дополнительные кандидаты</strong>
-      <div>MedSAM2 — целевая сегментация ROI · MedGemma — независимое исследовательское Vision-сравнение. Не подключены.</div>
+      <div>MedSAM2 / Efficient MedSAM2 — отложенный эксперимент для ROI, без загрузки весов. MedGemma исключена из плана: региональная доступность не гарантирована.</div>
     </div>
     <button className="ora-v17-compare" type="button" aria-expanded={compare} onClick={() => setCompare(v => !v)}>
       {compare ? "Скрыть пилот 6 исследований" : "Показать сравнительный пилот Total / NV"}
