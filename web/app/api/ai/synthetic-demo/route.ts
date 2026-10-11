@@ -105,6 +105,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({error:problems[error.code]},
         {status:error.code === "unsupported-model" ? 422 : 502,headers:HEADERS});
     }
+    // Diagnostic codes are safe; provider response bodies and credentials
+    // are never surfaced to the browser or written into the HTTP error.
+    const providerStatus = error instanceof Error ?
+      /^AI provider returned HTTP ([0-9]{3})$/.exec(error.message)?.[1] : undefined;
+    if (providerStatus) {
+      const hints: Record<string,string> = {
+        "400":"Model request incompatible with this OpenRouter provider",
+        "401":"OpenRouter rejected the server API key",
+        "402":"OpenRouter account lacks available credits",
+        "403":"OpenRouter provider access blocked for this account or region",
+        "404":"Selected model or endpoint not available to this account",
+        "429":"OpenRouter rate limit or quota exceeded",
+        "503":"OpenRouter endpoint temporarily unavailable",
+      };
+      return NextResponse.json({error:hints[providerStatus] ??
+        "OpenRouter returned HTTP "+providerStatus},
+        {status:502,headers:HEADERS});
+    }
     return NextResponse.json({error:"Synthetic AI experiment failed: provider access, model JSON or quota may be incompatible"},
       {status:502,headers:HEADERS});
   } finally {
