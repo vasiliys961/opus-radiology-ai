@@ -77,3 +77,25 @@ Before connecting real CT/MR patient images, implement:
 
 The clinical analysis button in the main app remains disabled until these blockers
 are resolved. Do not expose the developer token or provider keys to the client.
+
+
+## Local doctor-facing evidence viewer (also included in this milestone)
+
+Under the existing Cornerstone 2D/MPR/3D viewer:
+- Import a bounded opus-orchestra/v1 JSON (up to 512 KiB), locally only.
+- Validate schema, provider/model provenance, sampled source-image IDs,
+  expected source SeriesInstanceUID and exact SOPInstanceUID for each finding.
+- Match an individual single-frame DICOM SOP in the currently loaded series
+  and navigate to its source slice. Missing, ambiguous, multi-frame or
+  unrelated evidence is rejected without silent fallback.
+- Mark findings as needing recheck or dismissed in page memory; these notes
+  are NOT signed clinician attestations or stored medical records.
+- Clinical interpretation is tucked behind a disclosure and visibly
+  labelled an unverified research draft.
+
+There is no patient-study import into the cloud model yet. Matching DICOM
+UIDs does not prove identity, image privacy, pixel equality or clinical accuracy.
+The synthetic cloud endpoint produces fake/phantom UIDs, so its JSON cannot be
+applied to unrelated real DICOM files. The browser test generates a consistent
+synthetic DICOM study and an independently constructed research JSON fixture
+to test the UI/series-binding path without diagnoses or patient data.
