@@ -127,6 +127,33 @@ test("Irregular slices and separate StudyUIDs never become evidence of full volu
   assert.ok(report.issues.some(x=>x.code==="GEOMETRY_UNVERIFIED"));
   assert.ok(report.issues.some(x=>x.code==="MULTIPLE_STUDIES"));
 });
+test("Burned-in annotation and recognized biometric flags are warnings, not anonymization grants", () => {
+  const flags=parseDicomSeriesHeader(part10([
+    [0x0008,0x0060,"CS","CT"],
+    [0x0028,0x0301,"CS","YES"],
+    [0x0028,0x0302,"CS","YES"],
+    [0x0012,0x0062,"CS","NO"],
+  ]));
+  assert.equal(flags.burnedInAnnotation,"YES");
+  assert.equal(flags.recognizableVisualFeatures,"YES");
+  assert.equal(flags.patientIdentityRemoved,"NO");
+  const group=seriesWith([{}, {}, {}], {
+    modality:"CT",
+    burnedInAnnotation:"YES",
+    recognizableVisualFeatures:"YES",
+    patientIdentityRemoved:"NO",
+  });
+  const report=analyzeDicomStudy([group]);
+  assert.ok(report.issues.some(i=>i.code==="POSSIBLE_BURNED_IN_TEXT"&&i.level==="warning"));
+  assert.ok(report.issues.some(i=>i.code==="RECOGNIZABLE_VISUAL_FEATURES"));
+  assert.ok(report.issues.some(i=>i.code==="PATIENT_IDENTITY_NOT_REMOVED"));
+  const declaredNo=seriesWith([{}, {}, {}],{
+    burnedInAnnotation:"NO",recognizableVisualFeatures:"NO",patientIdentityRemoved:"YES",
+  });
+  const cleanClaim=analyzeDicomStudy([declaredNo]);
+  assert.equal(cleanClaim.completeness,"not-verifiable");
+  assert.equal(evaluatePatientCloudRelease(null).permitted,false);
+});
 test("Patient cloud release remains blocked even when all caller-defined claims are true", () => {
   const all = {
     physicianAuthentication:true,studyConsent:true,dicomDeidentification:true,
