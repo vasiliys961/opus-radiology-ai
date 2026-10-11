@@ -239,11 +239,11 @@ def test_insufficient_memory(client, monkeypatch):
 def test_adaptive_safe_profile_accepts_native_reference_below_two_gib(client, monkeypatch):
     r, _ = packet()
     r["geometry"]["dimensions"], r["frameCount"] = [512, 512, 32], 32
-    monkeypatch.setattr(worker.psutil, "virtual_memory", lambda: SimpleNamespace(available=1600 * 1024**2))
+    monkeypatch.setattr(worker.psutil, "virtual_memory", lambda: SimpleNamespace(available=1_382_678_528))
     response = client.post("/v1/jobs", headers=HEADERS, json=job(r))
     assert response.status_code == 201
     p = response.json()["preflight"]
-    assert p["requiredRamBytes"] == 1496 * 1024**2
+    assert p["requiredRamBytes"] == 1219 * 1024**2
     assert p["profile"] == "safe" and p["threads"] == 1
 
 
@@ -301,6 +301,7 @@ def test_running_guard_reaps_child_and_preserves_retry(client, monkeypatch, fail
     async def waiting_child(*args, **kwargs):
         assert args[-1] == "safe"
         assert kwargs["env"]["OMP_NUM_THREADS"] == kwargs["env"]["VECLIB_MAXIMUM_THREADS"] == "1"
+        assert kwargs["env"]["LRU_CACHE_CAPACITY"] == kwargs["env"]["ONEDNN_PRIMITIVE_CACHE_CAPACITY"] == "1"
         assert "OPENROUTER_API_KEY" not in kwargs["env"]
         process = await original(args[0], "-c", "import time; time.sleep(30)", **kwargs)
         children.append(process)

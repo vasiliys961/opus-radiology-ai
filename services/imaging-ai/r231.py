@@ -1,5 +1,6 @@
 """Pinned, offline, bounded R231 adapter. Not a pathology detector."""
 import hashlib
+import gc
 import importlib.metadata
 import json
 import os
@@ -132,6 +133,9 @@ def run(directory, weights, profile="safe"):
         raise ValueError("model_memory_budget_exceeded")
     if profile == "safe" and hasattr(os, "nice"):
         os.nice(5)  # lower scheduling priority; never modifies the parent worker
+    if profile == "safe":
+        for name in ("LRU_CACHE_CAPACITY", "ONEDNN_PRIMITIVE_CACHE_CAPACITY", "DNNL_PRIMITIVE_CACHE_CAPACITY"):
+            os.environ[name] = "1"  # also covers direct adapter/CLI execution
     try:
         import resource
         high_water = lambda: resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * (1 if sys.platform == "darwin" else 1024)
@@ -168,18 +172,23 @@ def run(directory, weights, profile="safe"):
     socket.gethostbyname = deny_network
     socket.gethostbyname_ex = deny_network
     import torch
-    from lungmask import LMInferer
+    import r231_lungmask_utils as utils
+    from r231_inference import load_model, predict_slice, predict_slices, restore_slices
     torch.set_num_threads(policy["threads"])
     torch.set_num_interop_threads(policy["interOpThreads"])
-    import SimpleITK as sitk
-    sitk.ProcessObject.SetGlobalDefaultNumberOfThreads(policy["threads"])
     # Force safe state-dict loading even if upstream omits weights_only.
     os.environ["TORCH_FORCE_WEIGHTS_ONLY_LOAD"] = "1"
     canonical, flips = canonical_axes(volume, r["geometry"]["affineLps"])
-    inferer = LMInferer(modelname="R231", modelpath=str(weights), force_cpu=True,
-                       batch_size=1, volume_postprocessing=True, tqdm_disable=True)
+    model = load_model(weights)
     infer_started = time.perf_counter()
-    output = np.flip(inferer.apply(canonical), flips).astype(np.uint8, copy=False)
+    compact_labels, boxes = predict_slices(canonical, lambda plane: predict_slice(model, plane), utils)
+    # No further neural inference is needed. Release weights before connected
+    # components allocate their volume workspaces; the process exits per job.
+    del model
+    gc.collect()
+    compact_labels = utils.postprocessing(compact_labels, disable_tqdm=True)
+    output = np.flip(restore_slices(compact_labels, boxes, canonical.shape, utils), flips)
+    del compact_labels, boxes
     inference_seconds = time.perf_counter() - infer_started
     # Range check avoids np.unique's additional full mask copy/sort.
     if output.shape != volume.shape or output.min() < 0 or output.max() > 2:
@@ -212,6 +221,8 @@ def run(directory, weights, profile="safe"):
                "platform": platform.system(), "machine": platform.machine(),
                "torchVersion": torch.__version__, "dimensions": r["geometry"]["dimensions"],
                "resourceProfile": profile, "threads": policy["threads"], "interOpThreads": policy["interOpThreads"],
+               "inferenceImplementation": "slice-streamed-r231/v1", "weightsLoading": "meta-assign-cpu-float32",
+               "simpleItkImported": "SimpleITK" in sys.modules,
                "clinicalStatus": "unverified_research_draft"}
     (directory / "metrics.json").write_text(json.dumps(metrics))
 
