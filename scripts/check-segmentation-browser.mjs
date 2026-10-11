@@ -203,6 +203,15 @@ try {
   await page.locator('.ora-analysis-package>summary').click();
   await page.getByRole('button',{name:'Подготовить пакет серии',exact:true}).click();
   await page.locator('.ora-package-ready').waitFor();
+  // An explicit offline-ONNX workflow is offered for the selected DICOM series.
+  await page.locator('.ora-offline-model-instructions>summary').click();
+  const offlineInstructions=await page.locator('.ora-offline-model-instructions').innerText();
+  assert.match(offlineInstructions,/ONNX · без облака/);
+  assert.match(offlineInstructions,/scripts\/run-local-onnx\.py/);
+  assert.match(offlineInstructions,/--profile/);
+  assert.match(offlineInstructions,/\.request\.json/);
+  await page.locator('.ora-offline-model-instructions>summary').click();
+
   const download=async(name,path)=>{
     const event=page.waitForEvent('download');
     await page.getByRole('link',{name,exact:true}).click();
