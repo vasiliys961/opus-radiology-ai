@@ -40,6 +40,22 @@ try {
   });
   assert.equal(blockedUpload.status(),410);
   assert.match(await blockedUpload.text(),/disabled/);
+  const deniedSyntheticDemo=await page.request.post(
+    'http://127.0.0.1:3131/api/ai/synthetic-demo',{
+      headers:{origin:'http://127.0.0.1:3131','content-type':'application/json',
+        'sec-fetch-site':'same-origin'},
+      data:{
+        modality:'MR',region:'head',visionModel:'google/fixture',
+        clinicalModel:'openai/fixture',acknowledgePaidSyntheticExperiment:true,
+      },
+    });
+  assert.equal(deniedSyntheticDemo.status(),404);
+  assert.doesNotMatch(await deniedSyntheticDemo.text(),/OPENROUTER_API_KEY|secret|sk-/);
+  const deniedPhantomPreview=await page.request.get(
+    'http://127.0.0.1:3131/api/ai/synthetic-demo/preview?region=head&modality=MR&frame=0');
+  assert.equal(deniedPhantomPreview.status(),404);
+
+
   await page.getByRole('button',{name:'Проверить Polza',exact:true}).click();
   await page.locator('.ora-provider-error').waitFor();
   assert.match(await page.locator('.ora-provider-error').innerText(),/только на localhost/);

@@ -6,6 +6,7 @@ export interface AiGatewayRequest {
   model: string;
   messages: Array<{ role: "system" | "user" | "assistant"; content: string | Array<Record<string, unknown>> }>;
   temperature?: number;
+  maxTokens?: number;
 }
 const PROVIDERS: Record<AiProvider, { url: string; env: string }> = {
   openrouter: { url: "https://openrouter.ai/api/v1/chat/completions", env: "OPENROUTER_API_KEY" },
@@ -31,7 +32,12 @@ export async function callAiGateway(request: AiGatewayRequest, signal?: AbortSig
   const response = await fetch(config.url, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model: request.model, messages: request.messages, temperature: request.temperature ?? 0.1 }),
+    // All research completions have an explicit output token ceiling to avoid
+    // accidental unbounded spending. This is not an account spending limit.
+    body: JSON.stringify({ model: request.model, messages: request.messages,
+      temperature: request.temperature ?? 0.1,
+      max_tokens: Number.isInteger(request.maxTokens) &&
+        request.maxTokens! >= 1 && request.maxTokens! <= 1500 ? request.maxTokens : 1200 }),
     signal,
     cache: "no-store",
   });

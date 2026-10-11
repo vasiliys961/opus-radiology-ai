@@ -12,6 +12,7 @@ type SoundContextState = {
   enabled: boolean;
   setSoundEnabled: (value: boolean) => void;
   previewChime: () => Promise<boolean>;
+  armChime: () => Promise<boolean>;
   completionChime: () => Promise<boolean>;
 };
 const SoundContext = createContext<SoundContextState | null>(null);
@@ -58,25 +59,34 @@ export function AnalysisSoundProvider({ children }: { children: ReactNode }) {
     try { window.localStorage.setItem(SOUND_SETTING_KEY, value ? "enabled" : "disabled"); }
     catch { /* no persistent storage */ }
   }, []);
-  const ring = useCallback(async () => {
+  // Prime playback during a real user click. Safari may block a newly
+  // created AudioContext several minutes later after an asynchronous AI call.
+  const armChime = useCallback(async () => {
     const context = audioRef.current ?? createAudioContext();
     if (!context) return false;
     audioRef.current = context;
     try {
       if (context.state === "suspended") await context.resume();
-      if (context.state !== "running") return false;
+      return context.state === "running";
+    } catch {return false;}
+  }, []);
+  const ring = useCallback(async () => {
+    if (!await armChime()) return false;
+    const context = audioRef.current;
+    if (!context) return false;
+    try {
       const now = context.currentTime + 0.015;
       signalTone(context, 880, now, 0.17);
       signalTone(context, 1318.51, now + 0.12, 0.35);
       return true;
     } catch { return false; }
-  }, []);
+  }, [armChime]);
   const completionChime = useCallback(() => ready && enabled ? ring() : Promise.resolve(false),
     [ready, enabled, ring]);
   const value = useMemo(() => ({
     enabled: ready && enabled, setSoundEnabled,
-    previewChime: ring, completionChime,
-  }), [ready, enabled, setSoundEnabled, ring, completionChime]);
+    previewChime: ring, armChime, completionChime,
+  }), [ready, enabled, setSoundEnabled, ring, armChime, completionChime]);
   return <SoundContext.Provider value={value}>{children}</SoundContext.Provider>;
 }
 export function useAnalysisSound(): SoundContextState {
