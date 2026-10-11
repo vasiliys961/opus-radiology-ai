@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { AiProvider } from "../lib/ai-gateway";
+import SyntheticResearchPanel from "./SyntheticResearchPanel";
 import type {
   CatalogModel, ProviderReadinessReport, RoleCheck,
 } from "../lib/provider-readiness";
@@ -113,6 +114,7 @@ export default function ProviderReadinessPanel({
         Реальный пациентский AI-анализ: заблокирован. Эта диагностика не разрешает
         отправку снимков и не подтверждает клиническую пригодность моделей.
       </p>
+      <SyntheticResearchPanel diagnostic={result}/>
     </div>}
   </section>;
 }
