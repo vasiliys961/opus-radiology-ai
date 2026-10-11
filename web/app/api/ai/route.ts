@@ -1,24 +1,27 @@
-import { NextRequest, NextResponse } from "next/server";
-import { callAiGateway, validateAiGatewayRequest } from "../../../lib/ai-gateway";
+import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
-export async function POST(request: NextRequest) {
-  // Do not allow untrusted public clients to consume provider credits.
-  const configuredToken = process.env.RADIOLOGY_AI_GATEWAY_TOKEN;
-  if (!configuredToken) return NextResponse.json({ error: "AI gateway disabled until authentication is configured" }, { status: 503 });
-  if (request.headers.get("authorization") !== `Bearer ${configuredToken}`) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const length = Number(request.headers.get("content-length") ?? 0);
-  if (length > 8_000_000) return NextResponse.json({ error: "Request too large" }, { status: 413 });
-  let input: unknown;
-  try { input = await request.json(); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
-  if (!validateAiGatewayRequest(input)) return NextResponse.json({ error: "Invalid AI request" }, { status: 400 });
-  try {
-    const result = await callAiGateway(input, AbortSignal.timeout(120_000));
-    return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "AI request failed";
-    return NextResponse.json({ error: message }, { status: 502 });
-  }
+export const dynamic = "force-dynamic";
+
+/**
+ * Retired unsafe generic gateway.
+ *
+ * The previous endpoint accepted arbitrary caller text/image messages whenever
+ * a shared development bearer token was configured. A browser's knowledge of
+ * a token is NOT physician authorization, consent or verified de-identification.
+ *
+ * No arbitrary patient content may reach a provider through this route.
+ * The bounded synthetic-only test lives in /api/ai/orchestrate and creates
+ * its own nonmedical PNGs server-side.
+ */
+export async function POST() {
+  return NextResponse.json({
+    error: "Unrestricted AI upload is disabled. No real patient images or clinical text may be transmitted.",
+    required: [
+      "authenticated clinician session",
+      "per-study consent and data-processing authority",
+      "DICOM tag and image-pixel de-identification verification",
+      "approved provider, jurisdiction and audit trail",
+    ],
+  }, { status: 410, headers: { "Cache-Control": "no-store" } });
 }
