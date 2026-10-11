@@ -6,6 +6,7 @@ import struct
 import uuid
 
 import numpy as np
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -106,6 +107,89 @@ def test_weights_corruption(tmp_path):
     link = tmp_path / "linked.pth"
     link.symlink_to(p)
     with pytest.raises(ValueError, match="weights_unavailable"): check_weights(link)
+
+
+def test_chunk_offsets_limits_and_incomplete_commit(client):
+    r, content = packet()
+    identifier = client.post("/v1/jobs", headers=HEADERS, json=job(r)).json()["jobId"]
+    base = f"/v1/jobs/{identifier}/input"
+    headers = {**HEADERS, "content-type": "application/octet-stream"}
+    assert client.get("/v1/capabilities", headers=HEADERS).json()["chunkUpload"] == {"version": 1, "maxChunkBytes": 262144}
+    assert client.put(base+"/chunks/1", headers=headers, content=content[:352]).status_code == 409
+    assert client.put(base+"/chunks/0", headers=headers, content=b"").status_code == 422
+    assert client.put(base+"/chunks/0", headers=headers, content=b"x"*262145).status_code == 413
+    ack = client.put(base+"/chunks/0", headers=headers, content=content[:352])
+    assert ack.json() == {"state": "receiving_chunks", "uploadedBytes": 352}
+    assert client.put(base+"/chunks/0", headers=headers, content=content[:352]).status_code == 409
+    assert client.put(base+"/chunks/352", headers=headers, content=content).status_code == 413
+    assert client.put(base, headers=headers, content=content).status_code == 409
+    assert client.post(base+"/complete", headers=HEADERS).status_code == 422
+    assert client.get(f"/v1/jobs/{identifier}", headers=HEADERS).json()["state"] == "receiving_chunks"
+    assert client.delete(f"/v1/jobs/{identifier}", headers=HEADERS).status_code == 204
+    assert client.put(base+"/chunks/352", headers=headers, content=content[352:]).status_code == 404
+
+
+def test_chunk_sha_mismatch_never_spawns_model(client, monkeypatch):
+    async def forbidden(*args, **kwargs):
+        raise AssertionError("Corrupt input must never start inference")
+    monkeypatch.setattr(worker.asyncio, "create_subprocess_exec", forbidden)
+    r, content = packet()
+    identifier = client.post("/v1/jobs", headers=HEADERS, json=job(r)).json()["jobId"]
+    base = f"/v1/jobs/{identifier}/input"
+    corrupted = content[:-1] + bytes([content[-1] ^ 1])
+    assert client.put(base+"/chunks/0", headers={**HEADERS, "content-type": "application/octet-stream"}, content=corrupted).status_code == 200
+    assert client.post(base+"/complete", headers=HEADERS).status_code == 422
+    assert client.get(f"/v1/jobs/{identifier}", headers=HEADERS).json()["state"] == "failed"
+    assert client.delete(f"/v1/jobs/{identifier}", headers=HEADERS).status_code == 204
+
+
+def test_complete_chunk_upload_and_cancel_reaps_model(client, monkeypatch):
+    children = []
+    original = asyncio.create_subprocess_exec
+    async def waiting_child(*args, **kwargs):
+        process = await original(args[0], "-c", "import time; time.sleep(30)", **kwargs)
+        children.append(process)
+        return process
+    monkeypatch.setattr(worker.asyncio, "create_subprocess_exec", waiting_child)
+    r, content = packet()
+    identifier = client.post("/v1/jobs", headers=HEADERS, json=job(r)).json()["jobId"]
+    base = f"/v1/jobs/{identifier}/input"
+    for offset in range(0, len(content), 512):
+        ack = client.put(base+f"/chunks/{offset}", headers={**HEADERS, "content-type": "application/octet-stream"}, content=content[offset:offset+512])
+        assert ack.status_code == 200
+        assert ack.json()["uploadedBytes"] == min(offset+512, len(content))
+        assert not children
+    assert client.post(base+"/complete", headers=HEADERS).status_code == 200
+    assert client.post(base+"/complete", headers=HEADERS).status_code == 409
+    assert client.delete(f"/v1/jobs/{identifier}", headers=HEADERS).status_code == 204
+    assert children and children[0].returncode is not None
+
+
+def test_concurrent_upload_and_delete_during_chunk_body(client):
+    async def exercise():
+        r, content = packet()
+        entered, release = asyncio.Event(), asyncio.Event()
+        async def blocked_body():
+            yield content[:100]
+            entered.set()
+            await release.wait()
+            yield content[100:]
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=client.app),
+                                    base_url="http://127.0.0.1:8765", headers=HEADERS) as transport:
+            identifier = (await transport.post("/v1/jobs", json=job(r))).json()["jobId"]
+            base = f"/v1/jobs/{identifier}/input"
+            headers = {"content-type": "application/octet-stream"}
+            uploading = asyncio.create_task(transport.put(base+"/chunks/0", headers=headers, content=blocked_body()))
+            await asyncio.wait_for(entered.wait(), timeout=5)
+            assert (await transport.put(base+"/chunks/0", headers=headers, content=content)).status_code == 409
+            assert (await transport.put(base, headers=headers, content=content)).status_code == 409
+            assert (await transport.post(base+"/complete")).status_code == 409
+            assert (await transport.delete(f"/v1/jobs/{identifier}")).status_code == 204
+            release.set()
+            assert (await asyncio.wait_for(uploading, timeout=5)).status_code == 409
+            assert (await transport.get(f"/v1/jobs/{identifier}")).status_code == 404
+            assert (await transport.post("/v1/jobs", json=job(r))).status_code == 201
+    asyncio.run(exercise())
 
 
 def test_memmap_exact_geometry_and_hash(tmp_path):

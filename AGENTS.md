@@ -15,9 +15,18 @@ Before any implementation: inspect live GitHub \`main\`, its CI status, branch d
 
 ## Current verified boundary (2026-10-11)
 
-PRs #6–#11 already merged into \`main\`. DICOM/Cornerstone/MPR/3D, Study Intelligence, NIfTI package/mask import, experimental ONNX CPU runner **tested with a synthetic identity checkpoint** and OpenRouter calls **on nonpatient generated PNGs** exist. No trained medical checkpoint or one-click local worker is installed by these PRs. No clinically validated universal pathology detector exists.
+PRs #6–#13 are merged into `main`. DICOM/Cornerstone/MPR/3D, Study Intelligence,
+NIfTI package/mask import, experimental ONNX CPU runner **with synthetic Identity
+weights**, OpenRouter **with generated nonpatient PNGs**, and the opt-in real R231
+research-only CPU loopback worker/browser action exist. Checkpoints are installed
+separately; they are not included in the repository. Actual R231 was verified on
+two public CT slices over HTTP on Linux, not complete chest/M1/browser acceptance.
+No clinically validated universal pathology detector exists.
 
-Next **R1**: run **real Lungmask R231** on licensed public CT chest on M1 via isolated \`127.0.0.1\` worker, browser button, display exact MPR mask and benchmark timing/memory; no PHI egress. The current custom ONNX runner cannot simply load pretrained \`.pt\` Lungmask weights—write a proper specialist adapter.
+Next **R1**: legally cleared complete native chest CT, actual R231 mask in MPR,
+bounded viewer/model/mask memory and Mac M1/8GB/Safari benchmark. Keep existing
+limits until whole-pipeline evidence supports larger inputs. Do not claim that
+chunked transport alone completes large-study support or R1.
 
 ## Patient safety, cost, workflow
 
@@ -43,3 +52,24 @@ memory, clinical metrics and commercial model/data licence clearance are pending
 Do not replace these missing checks with resampling, repeated slices or fabricated
 Dice. Local patient mode, remote workers and patient cloud remain blocked. See
 `docs/LOCAL_LUNGMASK_WORKER.md` and `docs/R1_LUNGMASK_VERIFICATION.md`.
+
+
+## Bounded local upload increment — 2026-10-11
+
+On baseline main `6ae278b6cdf678cae9e0b92c0777bd5c3b05043a` (PR #13 merged),
+local R231 browser submission now serializes exact float32 NIfTI in two passes:
+incremental SHA-256 then sequential acknowledged 128 KiB blocks. No whole-volume
+export buffer/Blob is allocated by this local action; manual download still uses
+the existing full buffer. Worker commits only complete, SHA-bound inputs and
+rejects replay/concurrent writes. Cancellation deletes/reaps, including mid-upload.
+Browser mask download enforces declared bytes while reading.
+
+**DATA-02 remains PARTIAL for transport only**, not large-study acceptance:
+8,388,608 voxel and 48 MiB MPR raw-volume guards remain unchanged. Cornerstone
+still holds its decoded volume, returned masks still allocate a complete label
+array, and upstream Lungmask preprocessing/postprocessing can hold full-volume
+copies. Native full chest, bounded whole pipeline, actual R231 browser overlay,
+Safari/M1 8GB system memory and independent clinical metrics remain pending.
+Four modes, optional Gemini/Claude through Evidence and patient/cloud OFF remain
+unchanged. See `docs/R1_LUNGMASK_VERIFICATION.md` for separately labelled actual
+model results and synthetic browser tests. R1 is still PARTIAL.

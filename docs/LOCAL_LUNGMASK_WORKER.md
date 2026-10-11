@@ -10,6 +10,12 @@ pathology detector. No cloud credentials or paid subscription are needed.
 * Official **Lungmask 0.2.20 / R231**, Torch 2.6.0, SimpleITK 2.4.1; CPU only,
   batch 1, two Torch threads, native Lungmask preprocessing and 3D postprocessing.
   Labels: 0 background, 1 right lung, 2 left lung. No diagnostic negative finding.
+* Local browser submission uses a two-pass serializer: first incremental SHA-256,
+  then acknowledged **128 KiB** scalar blocks; no full NIfTI export buffer/Blob.
+  Header, quantitative scalar order and sform are identical to manual export.
+  Serialization yields between blocks and stops on abort; worker rejects replay,
+  missing bytes and digest mismatch before spawning inference. Restart/update
+  both app and worker: browser requires `chunkUpload.version=1` capability.
 * Input is the existing exact, decoded float32 NIfTI with **8,388,608 voxel cap**.
   Export/mask caps have not been raised. Full 512×512×139 Slicer CTChest exceeds
   the cap and is **not supported**. No automatic downsampling, cropping or fake
@@ -114,8 +120,18 @@ we do not bypass that protection. Safari and native Windows are not yet verified
 
 `GET /v1/capabilities` reports actual installed/pinned readiness. `POST /v1/jobs`
 accepts `opus-worker-job/v1` containing an existing `opus-analysis-request/v1`,
-research-only data policy and chest/HU declaration. `PUT /v1/jobs/{id}/input`
-streams `application/octet-stream`. `GET /v1/jobs/{id}` returns real state/elapsed
+research-only data policy and chest/HU declaration. The browser uses sequential
+`PUT /v1/jobs/{id}/input/chunks/{offset}` with octet-stream bodies, at most
+256 KiB accepted by the worker (128 KiB produced by browser). Each response
+acknowledges cumulative `uploadedBytes`; incorrect offsets/concurrent writes are
+409, oversized bodies 413, empty blocks 422. Each block has a 30-second receive
+timeout and is appended only after its complete bounded body is received.
+`POST /v1/jobs/{id}/input/complete` with empty body checks total bytes and SHA
+before starting inference. Incomplete commit is 422 and can be finished; wrong
+SHA marks failed and removes input. Cancel/delete during a chunk cannot recreate
+its directory. No automatic retry/resume: an ambiguous acknowledgement aborts
+and deletes the job. The original streamed `PUT /v1/jobs/{id}/input` remains for
+CLI compatibility. Both transports share the same job/result and geometry contract. `GET /v1/jobs/{id}` returns real state/elapsed
 time plus the existing `opus-segmentation-result/v1` and measured metrics on
 success. `GET /v1/jobs/{id}/mask` returns NIfTI. `DELETE` cancels/reaps/deletes.
 Source salt/request ID binds each result to this series/job; a hash is not a
@@ -134,7 +150,7 @@ Opt-in real model + actual loopback HTTP test on your hardware:
 .venv-lungmask/bin/python -m pip install -r services/imaging-ai/requirements-dev.txt
 .venv-lungmask/bin/python scripts/test-real-r231.py \
   --weights "$HOME/Models/Opus/unet_r231.pth" \
-  --download-public-reference --http-worker \
+  --download-public-reference --http-worker --chunked-upload \
   --report "$HOME/Downloads/opus-r231-hardware-reference.json"
 ```
 
@@ -143,7 +159,7 @@ raw UIDs or patient tags**. It is a two-slice regression, not a complete chest o
 clinical Dice evaluation. Different hardware reports must not be relabelled M1.
 
 **Still required for R1:** legally cleared complete chest reference series,
-native full-resolution streaming beyond the current cap, actual R231→MPR browser
+native full-resolution processing beyond the current cap, actual R231→MPR browser
 end-to-end test, Safari/M1 8GB total system/browser/process memory and cancellation
 measurement, independent ground-truth metrics, documented weight/data licence
 clearance. Until these pass, R1 remains PARTIAL.

@@ -50,15 +50,13 @@ export async function sourceIdentity(series: DicomSeries, requestId: string): Pr
   return sha256(utf8(JSON.stringify({requestId,study:first.studyUid,series:first.seriesUid,frame:first.frameOfReferenceUid,modality:series.modality,sops})));
 }
 
-/** No whole-volume temporary scalar copy; yield and check cancellation between chunks. */
-export async function writeScalarNifti(geometry: MaskGeometry, valueAt: (index: number)=>number,
-  options: { signal?: AbortSignal; yieldControl?: ()=>Promise<void> } = {}): Promise<ArrayBuffer> {
+/** Shared exact NIfTI header; validates the grid before scalar reads. */
+export function scalarNiftiHeader(geometry: MaskGeometry): {header: ArrayBuffer; count: number} {
   const {dimensions,affineLps:a} = geometry;
   invertAffine(a);
   const count = dimensions.reduce((x,y)=>x*y,1);
   if (dimensions.some(n=>!Number.isSafeInteger(n)||n<1||n>32767) || !Number.isSafeInteger(count) || count>MAX_MASK_VOXELS) throw new Error("Экспорт ограничен 8 388 608 вокселями для Mac M1.");
-  aborted(options.signal);
-  const buffer = new ArrayBuffer(352+count*4), view = new DataView(buffer);
+  const header = new ArrayBuffer(352), view = new DataView(header);
   view.setInt32(0,348,true);view.setInt16(40,3,true);
   dimensions.forEach((n,i)=>view.setInt16(42+i*2,n,true));
   view.setInt16(70,16,true);view.setInt16(72,32,true);view.setFloat32(76,1,true);
@@ -69,7 +67,17 @@ export async function writeScalarNifti(geometry: MaskGeometry, valueAt: (index: 
   encoded.forEach((v,i)=>view.setFloat32(280+i*4,v,true));
   // Ensure float32 header precision has not moved the physical grid.
   assertMaskMatchesSource({dimensions,affineLps:encoded.map((v,i)=>i<8?-v:v) as MaskGeometry["affineLps"]},geometry);
-  new Uint8Array(buffer,344,4).set([110,43,49,0]);
+  new Uint8Array(header,344,4).set([110,43,49,0]);
+  return {header,count};
+}
+
+/** Full-buffer download path; local worker uses scalarNiftiChunks instead. */
+export async function writeScalarNifti(geometry: MaskGeometry, valueAt: (index: number)=>number,
+  options: { signal?: AbortSignal; yieldControl?: ()=>Promise<void> } = {}): Promise<ArrayBuffer> {
+  const {header,count}=scalarNiftiHeader(geometry);
+  aborted(options.signal);
+  const buffer=new ArrayBuffer(352+count*4), view=new DataView(buffer);
+  new Uint8Array(buffer).set(new Uint8Array(header));
   const yieldControl = options.yieldControl ?? (()=>new Promise<void>(r=>setTimeout(r,0)));
   for (let start=0;start<count;start+=32768) {
     aborted(options.signal);

@@ -247,3 +247,24 @@ Physician verification, edits, sign-off, export
 - Следующий этап завершён только при открытой законной публичной/обезличенной КТ и видимой на MPR реальной маске, связанной с исходной серией и проверенной геометрией.
 
 **Сопутствующие файлы:** корневой \`requirements.txt\` (минимальные Python зависимости), \`services/imaging-ai/requirements-*.txt\` (опциональные тяжелые пакеты), \`REQUIREMENTS.md\` (приёмочные условия), \`AGENTS.md\` (памятка для следующих AI разработчиков). Next.js зависимости — только \`web/package.json\`.
+
+
+## Bounded local upload increment — 2026-10-11
+
+On baseline main `6ae278b6cdf678cae9e0b92c0777bd5c3b05043a` (PR #13 merged),
+local R231 browser submission now serializes exact float32 NIfTI in two passes:
+incremental SHA-256 then sequential acknowledged 128 KiB blocks. No whole-volume
+export buffer/Blob is allocated by this local action; manual download still uses
+the existing full buffer. Worker commits only complete, SHA-bound inputs and
+rejects replay/concurrent writes. Cancellation deletes/reaps, including mid-upload.
+Browser mask download enforces declared bytes while reading.
+
+**DATA-02 remains PARTIAL for transport only**, not large-study acceptance:
+8,388,608 voxel and 48 MiB MPR raw-volume guards remain unchanged. Cornerstone
+still holds its decoded volume, returned masks still allocate a complete label
+array, and upstream Lungmask preprocessing/postprocessing can hold full-volume
+copies. Native full chest, bounded whole pipeline, actual R231 browser overlay,
+Safari/M1 8GB system memory and independent clinical metrics remain pending.
+Four modes, optional Gemini/Claude through Evidence and patient/cloud OFF remain
+unchanged. See `docs/R1_LUNGMASK_VERIFICATION.md` for separately labelled actual
+model results and synthetic browser tests. R1 is still PARTIAL.

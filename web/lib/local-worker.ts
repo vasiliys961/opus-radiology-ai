@@ -1,5 +1,6 @@
 /** Direct browser -> loopback. No Next.js proxy, provider calls or persisted token. */
 import { assertResultBinding, parseSegmentationResult, sha256, type AnalysisPackage, type SegmentationResult } from "./analysis-package.ts";
+import type { AnalysisStream } from "./analysis-stream.ts";
 import { parseNiftiMask, MAX_MASK_FILE_BYTES, type LabelMask } from "./segmentation-mask.ts";
 
 export const R231_SHA256 = "d5d2fc3df432115933491f115b283e94d1f5c841c0e82f6e7bd2d65d3ccde69f";
@@ -39,10 +40,25 @@ async function smallJson(response: Response) {
   for(const chunk of chunks){result.set(chunk,offset);offset+=chunk.length;}
   return JSON.parse(new TextDecoder().decode(result));
 }
+/** Enforce the advertised size while reading, before allocating the label grid. */
+async function boundedMask(response: Response, length: number): Promise<ArrayBuffer> {
+  const reader=response.body?.getReader();
+  if(!reader) throw new Error("Пустая маска worker.");
+  const buffer=new ArrayBuffer(length), target=new Uint8Array(buffer);let offset=0;
+  try {
+    for(;;) {
+      const next=await reader.read();if(next.done)break;
+      if(offset+next.value.byteLength>length)throw new Error("Размер маски worker превышает заявленный.");
+      target.set(next.value,offset);offset+=next.value.byteLength;
+    }
+    if(offset!==length)throw new Error("Неполная маска worker.");
+    return buffer;
+  } finally {await reader.cancel().catch(()=>{});reader.releaseLock();}
+}
 export async function checkLocalWorker(session: WorkerSession, signal?: AbortSignal): Promise<void> {
   const c=await smallJson(await call(session,"/v1/capabilities",{signal}));
-  if(c.schema!=="opus-worker-capabilities/v1" || c.mode!=="local" || c.device!=="cpu" || c.dataPolicy!=="public-reference-only" || c.patientMode!==false || c.externalEgress!==false || c.concurrency!==1 || c.maxVoxels!==8388608 || c.model?.id!=="lungmask-R231" || c.model?.version!=="0.2.20" || c.model?.weightsSha256!==R231_SHA256 || c.model?.ready!==true) {
-    throw new Error("Совместимая проверенная Lungmask R231 не установлена. Установите зависимости и веса по руководству.");
+  if(c.schema!=="opus-worker-capabilities/v1" || c.mode!=="local" || c.device!=="cpu" || c.dataPolicy!=="public-reference-only" || c.patientMode!==false || c.externalEgress!==false || c.concurrency!==1 || c.maxVoxels!==8388608 || c.chunkUpload?.version!==1 || c.chunkUpload?.maxChunkBytes!==262144 || c.model?.id!=="lungmask-R231" || c.model?.version!=="0.2.20" || c.model?.weightsSha256!==R231_SHA256 || c.model?.ready!==true) {
+    throw new Error("Совместимый worker с проверенной Lungmask R231 недоступен. Обновите приложение и worker, проверьте зависимости и веса по руководству.");
   }
 }
 function pause(signal: AbortSignal): Promise<void> {
@@ -52,7 +68,7 @@ function pause(signal: AbortSignal): Promise<void> {
     signal.addEventListener("abort",abort,{once:true});if(signal.aborted)abort();
   });
 }
-export async function runLocalR231(session: WorkerSession, packet: AnalysisPackage, signal: AbortSignal,
+export async function runLocalR231(session: WorkerSession, packet: AnalysisPackage | AnalysisStream, signal: AbortSignal,
   onStatus: (text: string)=>void): Promise<{mask: LabelMask; result: SegmentationResult; metrics: WorkerMetrics}> {
   if(packet.request.modality!=="CT")throw new Error("R231 поддерживает только КТ грудной клетки в HU.");
   await checkLocalWorker(session,signal);
@@ -65,7 +81,21 @@ export async function runLocalR231(session: WorkerSession, packet: AnalysisPacka
     })}));
     jobId=id(created.jobId);
     onStatus("Передача объёма на этот компьютер…");
-    await call(session,`/v1/jobs/${jobId}/input`,{method:"PUT",signal,headers:{"Content-Type":"application/octet-stream"},body:new Blob([packet.buffer])});
+    if ("chunks" in packet) {
+      let offset=0;
+      for await(const chunk of packet.chunks(signal)) {
+        if(chunk.byteLength<1 || chunk.byteLength>262144 || offset+chunk.byteLength>packet.byteLength) throw new Error("Неверный размер блока объёма.");
+        const ack=await smallJson(await call(session,`/v1/jobs/${jobId}/input/chunks/${offset}`,{
+          method:"PUT",signal,headers:{"Content-Type":"application/octet-stream"},body:chunk}));
+        offset+=chunk.byteLength;
+        if(ack.state!=="receiving_chunks" || ack.uploadedBytes!==offset) throw new Error("Worker не подтвердил блок объёма.");
+        onStatus(`Передача объёма на этот компьютер… ${Math.floor(offset/packet.byteLength*100)}%`);
+      }
+      if(offset!==packet.byteLength) throw new Error("Неполный объём; инференс не запущен.");
+      await call(session,`/v1/jobs/${jobId}/input/complete`,{method:"POST",signal});
+    } else {
+      await call(session,`/v1/jobs/${jobId}/input`,{method:"PUT",signal,headers:{"Content-Type":"application/octet-stream"},body:new Blob([packet.buffer])});
+    }
     for (;;) {
       const status=await smallJson(await call(session,`/v1/jobs/${jobId}`,{signal}));
       if(status.schema!=="opus-worker-job-status/v1"||status.jobId!==jobId)throw new Error("Ответ относится к другому заданию.");
@@ -76,7 +106,7 @@ export async function runLocalR231(session: WorkerSession, packet: AnalysisPacka
         const response=await call(session,`/v1/jobs/${jobId}/mask`,{signal});
         const length=Number(response.headers.get("content-length"));
         if(!Number.isSafeInteger(length)||length<352||length>MAX_MASK_FILE_BYTES)throw new Error("Неверный размер маски worker.");
-        const buffer=await response.arrayBuffer();
+        const buffer=await boundedMask(response,length);
         if(buffer.byteLength!==length)throw new Error("Неполная маска worker.");
         const mask=parseNiftiMask(buffer);
         assertResultBinding(result,packet.request,mask,await sha256(buffer));

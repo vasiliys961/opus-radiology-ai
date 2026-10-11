@@ -28,7 +28,7 @@ FIXTURE = ["bbc8e6ad413d274b299ccaa5e07a40c85d890d51c4dddf62c241a903c34454f9",
            "8fbdd1761ad2b74f408a8cf3a6bab147d4451e139b8a594c772dc043ddeacb76"]
 
 
-def run_http_worker(directory, weights):
+def run_http_worker(directory, weights, chunked=False):
     """Real TCP job/upload/subprocess/result/delete cycle, not an API mock."""
     import httpx
     with socket.socket() as listener:
@@ -62,8 +62,20 @@ def run_http_worker(directory, weights):
             identifier = created.json()["jobId"]
             try:
                 with (directory / "input.nii").open("rb") as stream:
-                    uploaded = client.put(f"/v1/jobs/{identifier}/input", content=stream,headers={"content-type":"application/octet-stream"})
-                    uploaded.raise_for_status()
+                    if chunked:
+                        assert caps.json()["chunkUpload"] == {"version":1,"maxChunkBytes":262144}
+                        offset = 0
+                        while block := stream.read(128 * 1024):
+                            uploaded = client.put(f"/v1/jobs/{identifier}/input/chunks/{offset}",
+                                content=block,headers={"content-type":"application/octet-stream"})
+                            uploaded.raise_for_status()
+                            offset += len(block)
+                            assert uploaded.json()["uploadedBytes"] == offset
+                        completed = client.post(f"/v1/jobs/{identifier}/input/complete")
+                        completed.raise_for_status()
+                    else:
+                        uploaded = client.put(f"/v1/jobs/{identifier}/input", content=stream,headers={"content-type":"application/octet-stream"})
+                        uploaded.raise_for_status()
                 deadline = time.monotonic() + 300
                 while time.monotonic() < deadline:
                     response = client.get(f"/v1/jobs/{identifier}")
@@ -101,7 +113,10 @@ def main():
     parser.add_argument("--download-public-reference", action="store_true", required=True)
     parser.add_argument("--report", type=Path, required=True)
     parser.add_argument("--http-worker", action="store_true", help="Exercise real authenticated loopback HTTP service")
+    parser.add_argument("--chunked-upload", action="store_true", help="Use bounded acknowledged blocks; requires --http-worker")
     args = parser.parse_args()
+    if args.chunked_upload and not args.http_worker:
+        parser.error("--chunked-upload requires --http-worker")
     check_weights(args.weights)
     with tempfile.TemporaryDirectory(prefix="opus-r231-public-regression-") as temporary:
         directory = Path(temporary)
@@ -145,7 +160,7 @@ def main():
              "scope":"selected-series-only","sequence":"not-confirmed","coverage":"not-confirmed"}
         (directory / "request.json").write_text(json.dumps(r))
         if args.http_worker:
-            run_http_worker(directory, args.weights)
+            run_http_worker(directory, args.weights, args.chunked_upload)
         else:
             subprocess.run([sys.executable,str(ROOT / "services/imaging-ai/r231.py"),str(directory),str(args.weights.absolute())],check=True, timeout=300)
         result = json.loads((directory / "result.json").read_text())
@@ -162,7 +177,7 @@ def main():
                   "reference":"JoHof/lungmask v0.2.20 tests/testdata (two CT slices)",
                   "sourceSha256":FIXTURE,"weightsSha256":WEIGHTS_SHA256,
                   "labelVoxels":dict(zip(map(str,values),map(int,counts))),"geometry":"exact original sform preserved",
-                  "metrics":metrics,"transport":"loopback-http" if args.http_worker else "adapter-subprocess", "clinicalDice":None,"M1Acceptance":"not-tested",
+                  "metrics":metrics,"transport":"loopback-http-chunks" if args.chunked_upload else ("loopback-http" if args.http_worker else "adapter-subprocess"), "clinicalDice":None,"M1Acceptance":"not-tested",
                   "limitations":["Only two public reference slices; no full study, browser or clinical validation.",
                                  "Repository Apache-2.0; no separately explicit dataset/weights licence artifact found; no redistribution or commercial clearance implied."]}
         with args.report.open("x") as stream:

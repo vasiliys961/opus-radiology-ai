@@ -17,7 +17,7 @@ Canonical vision and implementation truth: **[docs/OPUS_RADIOLOGY_MASTER_SPEC.md
 | VIEW-03 | P1 | Audit **all** series: technical readiness, sequence uncertainty, coverage limitations, errors; click through series. | IMPLEMENTED (Study Intelligence) |
 | VIEW-04 | P1 | Multi-series task gating: T1/T1c/T2/FLAIR, DWI/ADC and multiphase CT only after evidence from actual tags/pixels. | PARTIAL (simple tag heuristics only) |
 | DATA-01 | P0 | Export exact selected 3D volume, source/series geometry, checksums and model-compatible full-resolution scalars; never use windowed PNG as quantitative source. | IMPLEMENTED to 8,388,608 voxels |
-| DATA-02 | P0 | Stream **large** CT/MRI (e.g., 512×512×300) via chunking/mmap without 8GB OOM; preserve voxel spacing, LPS/RAS, HU, SOP provenance and cancellation. | PLANNED — main bottleneck |
+| DATA-02 | P0 | Stream **large** CT/MRI (e.g., 512×512×300) via chunking/mmap without 8GB OOM; preserve voxel spacing, LPS/RAS, HU, SOP provenance and cancellation. | PARTIAL — bounded local upload; native large-volume viewer/model/mask pipeline pending |
 | DATA-03 | P0 | Result returns with original study/series/frame coords and source identity; reject mismatched or fabricated masks. | IMPLEMENTED for existing NIfTI mask import; richer findings PLANNED |
 | EXEC-01 | P1 | Browser-only lightweight model via WASM without Python; must expose actual runtime compatibility and fail to unsupported. | PLANNED |
 | EXEC-02 | P1 | \`127.0.0.1\` local-worker with versioned job contract, capabilities, model registry, uploads in bounded chunks, cancel/progress, authenticated browser origin and zero external patient egress by default. | PARTIAL — bounded authenticated loopback R231 research worker; patient/remote/large-volume modes blocked |
@@ -80,3 +80,24 @@ See [AGENTS.md](AGENTS.md) and [docs/OPUS_RADIOLOGY_MASTER_SPEC.md](docs/OPUS_RA
 ## R1 engineering increment — 2026-10-11
 
 See [local worker](docs/LOCAL_LUNGMASK_WORKER.md) and [verification record](docs/R1_LUNGMASK_VERIFICATION.md). Real R231 ran on the authors' two public CT slices through authenticated loopback HTTP. Browser contract/MPR regressions remain synthetic; a complete native-resolution chest/R231→MPR/Safari/M1 test has not been performed. Do not mark R1 complete or infer clinical Dice from reproducibility voxel counts. Four modes remain the architecture; remote CPU/GPU and browser WASM are not enabled by this increment.
+
+
+## Bounded local upload increment — 2026-10-11
+
+On baseline main `6ae278b6cdf678cae9e0b92c0777bd5c3b05043a` (PR #13 merged),
+local R231 browser submission now serializes exact float32 NIfTI in two passes:
+incremental SHA-256 then sequential acknowledged 128 KiB blocks. No whole-volume
+export buffer/Blob is allocated by this local action; manual download still uses
+the existing full buffer. Worker commits only complete, SHA-bound inputs and
+rejects replay/concurrent writes. Cancellation deletes/reaps, including mid-upload.
+Browser mask download enforces declared bytes while reading.
+
+**DATA-02 remains PARTIAL for transport only**, not large-study acceptance:
+8,388,608 voxel and 48 MiB MPR raw-volume guards remain unchanged. Cornerstone
+still holds its decoded volume, returned masks still allocate a complete label
+array, and upstream Lungmask preprocessing/postprocessing can hold full-volume
+copies. Native full chest, bounded whole pipeline, actual R231 browser overlay,
+Safari/M1 8GB system memory and independent clinical metrics remain pending.
+Four modes, optional Gemini/Claude through Evidence and patient/cloud OFF remain
+unchanged. See `docs/R1_LUNGMASK_VERIFICATION.md` for separately labelled actual
+model results and synthetic browser tests. R1 is still PARTIAL.

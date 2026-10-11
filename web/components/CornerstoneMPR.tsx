@@ -10,6 +10,7 @@ import { createAsyncViewportToggle } from "../lib/async-viewport";
 import SegmentationControls, { type MaskDisplay } from "./SegmentationControls";
 import { assertMaskMatchesSource, renderMaskPlane, sourceGeometry, type LabelMask, type Point3 } from "../lib/segmentation-mask";
 import { prepareAnalysisPackage, type AnalysisPackage } from "../lib/analysis-package";
+import { prepareAnalysisStream, type AnalysisStream } from "../lib/analysis-stream";
 import type { DicomSeries } from "../lib/dicom-series";
 
 const PLANE_NAMES = ["axial", "coronal", "sagittal"] as const;
@@ -31,6 +32,7 @@ type Runtime = {
   importMask: (mask: LabelMask, display: MaskDisplay) => void;
   setMaskDisplay: (display: MaskDisplay) => void;
   clearMask: () => void;
+  prepareStream: (signal: AbortSignal) => Promise<AnalysisStream>;
   preparePackage: (signal: AbortSignal) => Promise<AnalysisPackage>;
 };
 
@@ -385,6 +387,17 @@ export default function CornerstoneMPR({ files, sourceSeries, quality, show3D, o
               return value;
             },signal);
           },
+          prepareStream: signal => {
+            if (sourceSeries.modality!=="CT") throw new Error("R231 поддерживает только КТ грудной клетки в HU.");
+            const manager=volume.voxelManager;
+            if (cancelled || !manager || manager.numberOfComponents !== 1) throw new Error("Нужен активный скалярный объём.");
+            return prepareAnalysisStream(sourceSeries,getMaskSource(),i=>{
+              if (cancelled) throw new DOMException("Серия закрыта.","AbortError");
+              const value=manager.getAtIndex(i);
+              if (typeof value!=="number") throw new Error("Объём содержит многокомпонентные пиксели.");
+              return value;
+            },signal);
+          },
           importMask: (mask, display) => {
             if (cancelled) throw new Error("Выбранная серия уже закрыта.");
             assertMaskMatchesSource(mask,getMaskSource());
@@ -529,6 +542,10 @@ export default function CornerstoneMPR({ files, sourceSeries, quality, show3D, o
       onPrepare={signal=>{
         if (!runtime.current) throw new Error("Объём ещё не готов.");
         return runtime.current.preparePackage(signal);
+      }}
+      onPrepareStream={signal=>{
+        if (!runtime.current) throw new Error("Объём ещё не готов.");
+        return runtime.current.prepareStream(signal);
       }}
       onImport={(mask,display)=>{
         if (!runtime.current) throw new Error("Сначала дождитесь загрузки MPR.");

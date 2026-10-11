@@ -14,6 +14,7 @@
   "dependencies": {
     "@cornerstonejs/core": "4.18.3",
     "@cornerstonejs/dicom-image-loader": "4.18.3",
+    "@noble/hashes": "2.0.1",
     "dicom-parser": "1.8.21",
     "next": "16.4.0",
     "react": "^19.2.0",
