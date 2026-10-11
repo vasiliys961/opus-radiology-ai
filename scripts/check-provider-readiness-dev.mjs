@@ -74,6 +74,18 @@ try {
   assert.equal((await check("/api/ai/provider-readiness?provider=polza",{
     method:"POST",
   })).status,405);
+  // The exact non-patient PNG frames are served from local deterministic code.
+  const preview=await fetch(host+"/api/ai/synthetic-demo/preview?region=abdomen&modality=CT&frame=0",{
+    signal:AbortSignal.timeout(8000),
+  });
+  assert.equal(preview.status,200);
+  assert.match(preview.headers.get("content-type")??"",/image\/png/);
+  const png=Buffer.from(await preview.arrayBuffer());
+  assert.equal(png.subarray(1,4).toString(),"PNG");
+  assert.equal(png.readUInt32BE(16),96);
+  assert.equal(png.readUInt32BE(20),96);
+  assert.equal((await check("/api/ai/synthetic-demo/preview?region=patient&modality=CT&frame=0")).status,400);
+  assert.equal((await check("/api/ai/synthetic-demo/preview?region=head&modality=CT&frame=0&file=anything")).status,400);
   // The new PAID OpenRouter synthetic research demo requires browser origin,
   // explicit consent and server key. These tests never contact any AI provider.
   const fakeTrial = {
