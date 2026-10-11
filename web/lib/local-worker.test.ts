@@ -97,6 +97,10 @@ test("synthetic contract fixture returns exact bound mask and deletes job; no me
   else {
   const out=await runLocalR231(session,input,new AbortController().signal,()=>{});
   assert.deepEqual([...out.mask.data],Array.from({length:18},(_,i)=>i%3));
+  assert.equal(out.evidence.producer.executionMode,"local");
+  assert.equal(out.evidence.mask.sha256,result.maskSha256);
+  assert.equal(out.evidence.source.inputSha256,p.request.inputSha256);
+  assert.equal(out.evidence.observations.length,2);
   }
   assert.equal(calls.at(-1),`DELETE ${session.endpoint}/v1/jobs/${jobId}`);
   t.mock.restoreAll();

@@ -149,3 +149,19 @@ psutil RSS. The separate actual browser run passes at 636.20 MiB, with identical
 mask SHA, three MPR planes and job deletion. This is a single measured comparison,
 not a Mac reduction claim. Safe admission remains 1219 MiB. See
 `docs/verification/r231-tensor-lifetime-linux.json`.
+
+## Specialist Evidence increment — 2026-10-11
+
+Baseline main `5690b59` includes manually merged PR #18 and green Python CI.
+The user's next Mac report records checked commit `4528b24`, real R231 PASS,
+730.64 MiB peak and no whole-system swap growth; see
+`docs/verification/r231-tensor-lifetime-mac.json`. This is still a partial CT
+reference and not repeated responsiveness/Safari/full-chest/clinical acceptance.
+
+Source-bound specialist Evidence now derives metadata from the existing mask:
+label counts/volumes, mask-grid bounds, an occupied LPS navigation point, model
+and input/mask/weights SHA. R231 produces it automatically; a bound manual
+passport import uses unrecorded execution mode. Local review/export/MPR navigation
+do not sign a result or call LLMs. No volume copy, extra model execution, guard
+change or patient/cloud activation. See `docs/SPECIALIST_EVIDENCE.md` for the
+separate LLM contract and pending reconciliation/audit/sign-off boundaries.

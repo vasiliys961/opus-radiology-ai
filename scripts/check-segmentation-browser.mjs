@@ -249,6 +249,8 @@ try {
   await resultUpload.setInputFiles([join(fixture,'synthetic-mask.nii'),resultPath]);
   await page.locator('.ora-mask-provenance').waitFor();
   assert.match(await page.locator('.ora-mask-provenance').innerText(),/synthetic-fixture-only/);
+  await page.locator('.ora-segmentation-evidence').waitFor();
+  assert.match(await page.locator('.ora-segmentation-evidence').innerText(),/Synthetic sphere/);
   // Local R231 panel: synthetic readiness response only. MR must never create
   // a medical model job, and the previous verified overlay must survive.
   let localJobs=0;
@@ -303,6 +305,7 @@ try {
   assert.equal(await page.locator('.ora-package-ready').count(),0);
   assert.equal(await page.locator('.ora-mask-provenance').count(),0);
   assert.equal(await page.locator('.ora-mask-success').count(),0);
+  assert.equal(await page.locator('.ora-segmentation-evidence').count(),0);
   // Positive local transport/UI test: mathematical CT-tag phantom + mocked
   // prediction. This validates chunk production and MPR, never medical quality.
   const ctFixture=join(fixture,'ct');
@@ -381,6 +384,39 @@ try {
     return pixels.some((v,i)=>i%4===3&&v>0);
   }));
   assert.equal(await page.locator('.ora-mpr-mask-overlay').count(),3);
+  const evidencePanel=page.locator('.ora-segmentation-evidence');
+  await evidencePanel.waitFor();
+  assert.match(await evidencePanel.innerText(),/только в загруженных срезах.*не подтверждена/s);
+  const observation=evidencePanel.locator('.ora-evidence-list>li').first();
+  await observation.getByRole('button',{name:'Перепроверить метку',exact:true}).click();
+  assert.match(await observation.innerText(),/На перепроверку/);
+  const evidenceDownload=page.waitForEvent('download');
+  await evidencePanel.getByRole('button',{name:'Скачать Evidence JSON',exact:true}).click();
+  const exportedFile=await evidenceDownload, exportedPath=join(fixture,'specialist-evidence.json');
+  await exportedFile.saveAs(exportedPath);
+  const evidence=JSON.parse(await readFile(exportedPath,'utf8'));
+  assert.equal(evidence.schema,'opus-specialist-evidence/v1');
+  assert.equal(evidence.clinicalStatus,'unverified_research_draft');
+  assert.equal(evidence.source.inputSha256,localRequest.inputSha256);
+  assert.equal(evidence.mask.sha256,createHash('sha256').update(ctMask).digest('hex'));
+  assert.equal(evidence.observations[0].review,'requires_recheck');
+  assert.equal(evidence.producer.executionMode,'local');
+  assert.doesNotMatch(JSON.stringify(evidence),/synthetic-test-token|sopInstanceUid|patientName/);
+  // Shared LPS focus must synchronise all three plane controls to the exported
+  // occupied voxel, respecting each viewport's camera direction.
+  const beforeEvidenceNavigation=await page.locator('.ora-mpr-controls label').allTextContents();
+  const offCentreObservation=evidencePanel.locator('.ora-evidence-list>li').nth(1);
+  await offCentreObservation.getByRole('button',{name:'Показать метку в MPR',exact:true}).click();
+  assert.equal(await evidencePanel.locator('[role=alert]').count(),0);
+  assert.equal(await page.locator('.ora-mask-settings select').inputValue(),String(evidence.observations[1].labelId));
+  assert.notDeepEqual(await page.locator('.ora-mpr-controls label').allTextContents(),beforeEvidenceNavigation);
+  assert.equal(await page.locator('.ora-mpr-crosshair').count(),3);
+  await observation.getByRole('button',{name:'Отклонить метку',exact:true}).click();
+  assert.match(await observation.innerText(),/Отклонено локально/);
+  assert.equal(await page.locator('.ora-mpr-mask-overlay').count(),3);
+  await page.getByRole('button',{name:'Удалить маску',exact:true}).click();
+  assert.equal(await evidencePanel.count(),0);
+  console.log('Bound specialist Evidence -> local review/export -> occupied-point MPR navigation -> lifecycle clear passed (synthetic only)');
   console.log('Memory/disk/model errors -> retry without reload -> chunk upload -> bound mask -> three MPR planes passed (synthetic CT/prediction only)');
   assert.deepEqual(errors,[]);
   console.log('PASS: overlays, volumes, full scalar NIfTI export (all voxels), checksummed model-result handoff, wrong-package rejection, 3D/MIP controls and resource reset on 2D/MPR. No real model inference performed.');

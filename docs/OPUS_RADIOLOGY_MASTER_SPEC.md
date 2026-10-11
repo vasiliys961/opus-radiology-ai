@@ -343,3 +343,22 @@ psutil RSS. The separate actual browser run passes at 636.20 MiB, with identical
 mask SHA, three MPR planes and job deletion. This is a single measured comparison,
 not a Mac reduction claim. Safe admission remains 1219 MiB. See
 `docs/verification/r231-tensor-lifetime-linux.json`.
+
+## Specialist Evidence increment — 2026-10-11
+
+On main baseline `5690b59`, the user supplies a checked-commit `4528b24` Mac
+partial-reference PASS at 730.64 MiB model peak without whole-system swap growth.
+See `docs/verification/r231-tensor-lifetime-mac.json`; this predates the new UI.
+
+The next increment connects the existing source-bound R231 result to local
+specialist Evidence: mask-derived label counts/volumes, grid bounds and occupied
+LPS points, model/version/weights/input/mask SHA, local review marks, MPR
+navigation and JSON export. It reads the existing mask in bounded yielding blocks
+without another volume allocation or model run. Full organ coverage, diagnoses,
+confidence, clinical accuracy and signed review are not claimed.
+
+Four modes remain the architecture; local specialist execution does not depend
+on Gemini/Claude. The optional LLM research contract stays separate pending a
+comparison/reconciliation adapter. Patient/cloud/remote gates and voxel/RAM/MPR
+caps remain unchanged. See `docs/SPECIALIST_EVIDENCE.md` for implemented behaviour
+and planned conflict checking, persistent physician audit and clinical sign-off.

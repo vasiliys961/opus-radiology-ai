@@ -2,6 +2,7 @@
 import { assertResultBinding, parseSegmentationResult, sha256, type AnalysisPackage, type SegmentationResult } from "./analysis-package.ts";
 import type { AnalysisStream } from "./analysis-stream.ts";
 import { parseNiftiMask, MAX_MASK_FILE_BYTES, type LabelMask } from "./segmentation-mask.ts";
+import { buildSegmentationEvidence, type SegmentationEvidence } from "./segmentation-evidence.ts";
 
 export const R231_SHA256 = "d5d2fc3df432115933491f115b283e94d1f5c841c0e82f6e7bd2d65d3ccde69f";
 export type WorkerSession = { endpoint: string; token: string };
@@ -123,7 +124,7 @@ function pause(signal: AbortSignal): Promise<void> {
   });
 }
 export async function runLocalR231(session: WorkerSession, packet: AnalysisPackage | AnalysisStream, signal: AbortSignal,
-  onStatus: (text: string)=>void): Promise<{mask: LabelMask; result: SegmentationResult; metrics: WorkerMetrics}> {
+  onStatus: (text: string)=>void): Promise<{mask: LabelMask; result: SegmentationResult; metrics: WorkerMetrics; evidence: SegmentationEvidence}> {
   if(packet.request.modality!=="CT")throw new Error("R231 поддерживает только КТ грудной клетки в HU.");
   await checkLocalWorker(session,signal);
   let jobId: string | null=null;
@@ -163,7 +164,8 @@ export async function runLocalR231(session: WorkerSession, packet: AnalysisPacka
         const buffer=await boundedMask(response,length);
         if(buffer.byteLength!==length)throw new Error("Неполная маска worker.");
         const mask=parseNiftiMask(buffer);
-        assertResultBinding(result,packet.request,mask,await sha256(buffer));
+        const maskDigest=await sha256(buffer);
+        assertResultBinding(result,packet.request,mask,maskDigest);
         const m=status.metrics;
         if(m?.device!=="cpu" || ![m.inferenceSeconds,m.totalSeconds,m.peakRssMiB].every(v=>typeof v==="number"&&Number.isFinite(v)&&v>=0) || typeof m.platform!=="string" || typeof m.machine!=="string")throw new Error("Worker не вернул проверяемые метрики.");
         if(m.preflight!==undefined) {
@@ -171,7 +173,9 @@ export async function runLocalR231(session: WorkerSession, packet: AnalysisPacka
           if(!p||p.guardDecision!=="allow"||m.guardDecision!=="allow")throw new Error("Worker не вернул проверяемый preflight.");
           m.preflight=p;
         }
-        return {mask,result,metrics:m};
+        onStatus("Подготовка Evidence по проверенной маске…");
+        const evidence=await buildSegmentationEvidence(packet.request,result,mask,maskDigest,{executionMode:"local",signal});
+        return {mask,result,metrics:m,evidence};
       }
       if(!["queued","running"].includes(status.state))throw new Error("Неизвестное состояние worker.");
       onStatus(`R231 · ${status.state==="running"?"вычисление":"очередь"} · ${Number(status.elapsedSeconds).toFixed(1)} с`);

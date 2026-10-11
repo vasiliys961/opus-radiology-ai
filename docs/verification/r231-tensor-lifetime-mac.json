@@ -1,0 +1,56 @@
+{
+  "schema": "opus-r231-mac-follow-up/v1",
+  "provenance": {
+    "kind": "user-supplied instrumented reports",
+    "reportedCheckedCommitSha": "4528b24",
+    "sourceReportsSha256": {
+      "metrics(4).json": "ae982ac8fab9c11c57516c272f065dcabdeb26460f6693bb47659572c7d67a85",
+      "resource-report(3).json": "07dc0a2018075e62e185d9115b7201b08dddf85db8b5e8c4223fef0136eaec13"
+    }
+  },
+  "status": "passed",
+  "actualTrainedInference": true,
+  "selectedFrames": 32,
+  "originalFrames": 103,
+  "fullChest": false,
+  "inputSha256": "23d0065256550d22ccbe62a1ef4029ddf57bb0ef6334874875c244fc791a35d3",
+  "maskSha256": "0ee929a7ba4cbd1e5adc3880a15b6ad0ecbe79f465572d8dc79c39e45aa5795b",
+  "weightsSha256": "d5d2fc3df432115933491f115b283e94d1f5c841c0e82f6e7bd2d65d3ccde69f",
+  "peakRssMiB": 730.64,
+  "inferenceSeconds": 37.679,
+  "preflight": {
+    "profile": "safe",
+    "estimatedModelRamBytes": 875560960,
+    "requiredRamBytes": 1278214144,
+    "requiredDiskBytes": 142606688,
+    "maxRssBytes": 1009778688,
+    "systemReserveBytes": 268435456,
+    "threads": 1,
+    "interOpThreads": 1,
+    "availableRamBytes": 1676378112,
+    "availableDiskBytes": 31261671424,
+    "guardDecision": "allow"
+  },
+  "overlayPixels": [
+    4122,
+    3658,
+    119
+  ],
+  "jobDeleted": true,
+  "system": {
+    "minimumAvailableRamBytes": 1386233856,
+    "swapPeakDeltaBytes": 0,
+    "swapNetDeltaBytes": -41943040
+  },
+  "postObservation": {
+    "seconds": 30.0,
+    "samples": 60,
+    "trackedGroupsZero": true
+  },
+  "limitations": [
+    "Single Mac M1/8GB partial-reference run, not a controlled repeated memory comparison.",
+    "Whole-system swap did not rise; manual UI responsiveness remains unassessed.",
+    "Safari, full native chest and clinical accuracy remain unaccepted.",
+    "Evidence UI introduced in the next branch was not present in this report."
+  ]
+}

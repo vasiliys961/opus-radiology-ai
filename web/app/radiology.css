@@ -247,6 +247,8 @@ button:disabled { cursor: not-allowed; }
 .ora-evidence-draft{border-top:1px solid #e8edef;padding-top:10px;font-size:11px;color:#647b88}
 .ora-evidence-draft summary{cursor:pointer;font-weight:740;color:#526e79}
 .ora-evidence-draft p{font-size:10px;line-height:1.65}
+.ora-segmentation-evidence{margin-top:12px}
+.ora-segmentation-evidence .ora-evidence-draft p{overflow-wrap:anywhere}
 
 /* v1.8 local Gemini frame manifest and opt-in completion chime */
 .ora-vision-plan{background:#fff;border:1px solid #e2eaeb;border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:11px}
