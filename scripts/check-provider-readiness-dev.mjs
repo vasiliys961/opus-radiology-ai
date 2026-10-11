@@ -74,6 +74,38 @@ try {
   assert.equal((await check("/api/ai/provider-readiness?provider=polza",{
     method:"POST",
   })).status,405);
+  // The new PAID OpenRouter synthetic research demo requires browser origin,
+  // explicit consent and server key. These tests never contact any AI provider.
+  const fakeTrial = {
+    modality:"CT",region:"chest",visionModel:"google/vision-test",
+    clinicalModel:"openai/text-test",acknowledgePaidSyntheticExperiment:true,
+  };
+  const trialHeaders = {
+    "content-type":"application/json","origin":host,"sec-fetch-site":"same-origin",
+  };
+  assert.equal((await check("/api/ai/synthetic-demo",{
+    method:"POST",headers:trialHeaders,body:JSON.stringify(fakeTrial),
+  })).status,503);
+  assert.equal((await check("/api/ai/synthetic-demo",{
+    method:"POST",headers:{...trialHeaders,origin:"https://attacker.invalid"},
+    body:JSON.stringify(fakeTrial),
+  })).status,403);
+  assert.equal((await check("/api/ai/synthetic-demo",{
+    method:"POST",headers:trialHeaders,
+    body:JSON.stringify({...fakeTrial,patientText:"diagnostic medical record"}),
+  })).status,400);
+  assert.equal((await check("/api/ai/synthetic-demo",{
+    method:"POST",headers:trialHeaders,
+    body:JSON.stringify({...fakeTrial,acknowledgePaidSyntheticExperiment:false}),
+  })).status,400);
+  assert.equal((await check("/api/ai/synthetic-demo",{
+    method:"POST",headers:trialHeaders,
+    body:JSON.stringify({...fakeTrial,base64:"x".repeat(3000)}),
+  })).status,413);
+  assert.equal((await check("/api/ai/synthetic-demo",{
+    method:"GET",
+  })).status,405);
+  console.log("Synthetic paid demo: key gate, CSRF, exact schema and request-size limits verified.");
   const legacy = await check("/api/ai",{
     method:"POST", headers:{"content-type":"application/json"},
     body: JSON.stringify({provider:"openrouter",model:"test",messages:[]}),
