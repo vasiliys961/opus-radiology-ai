@@ -30,6 +30,10 @@ export type TechnicalDicomMetadata = {
   sliceThicknessMm?: number | null;
   /** True only if the ContrastBolusAgent tag has a nonempty value; absence means unknown. */
   contrastAgentDeclared?: boolean;
+  /** DICOM privacy hints. NO is a declaration, NOT proof of anonymization. */
+  burnedInAnnotation?: "YES" | "NO" | "UNKNOWN";
+  recognizableVisualFeatures?: "YES" | "NO" | "UNKNOWN";
+  patientIdentityRemoved?: "YES" | "NO" | "UNKNOWN";
 };
 
 export type SeriesMember = {
@@ -78,6 +82,9 @@ function scanCodes(raw: string | null): NonNullable<TechnicalDicomMetadata["mrSe
   return [...new Set(codes.filter((c): c is "SE"|"GR"|"IR"|"EP" =>
     c==="SE" || c==="GR" || c==="IR" || c==="EP"))];
 }
+function privacyFlag(raw: string | null): "YES" | "NO" | "UNKNOWN" {
+  return raw === "YES" || raw === "NO" ? raw : "UNKNOWN";
+}
 function boundedDs(raw: string | null, max = 1_000_000): number | null {
   if (!raw || !/^\d+(?:\.\d+)?$/.test(raw.trim())) return null;
   const value = Number(raw.trim());
@@ -112,6 +119,8 @@ export function parseDicomSeriesHeader(buffer: ArrayBuffer): TechnicalDicomMetad
     bodyRegion: null, imageRole: "UNKNOWN", mrSequenceCodes: [],
     repetitionTimeMs:null, echoTimeMs:null, inversionTimeMs:null, sliceThicknessMm:null,
     contrastAgentDeclared:false,
+    burnedInAnnotation:"UNKNOWN", recognizableVisualFeatures:"UNKNOWN",
+    patientIdentityRemoved:"UNKNOWN",
   };
   let offset = 132;
   let explicit = true;
@@ -165,6 +174,9 @@ export function parseDicomSeriesHeader(buffer: ArrayBuffer): TechnicalDicomMetad
       case 0x00180082: result.inversionTimeMs = boundedDs(getText()); break;
       case 0x00180050: result.sliceThicknessMm = boundedDs(getText()); break;
       case 0x00180010: result.contrastAgentDeclared = length > 0 && getText().length > 0; break;
+      case 0x00280301: result.burnedInAnnotation = privacyFlag(getText()); break;
+      case 0x00280302: result.recognizableVisualFeatures = privacyFlag(getText()); break;
+      case 0x00120062: result.patientIdentityRemoved = privacyFlag(getText()); break;
       case 0x00080018: result.sopInstanceUid = getText() || null; break;
       case 0x00280008: {
         const n = Number.parseInt(getText(), 10);
@@ -262,6 +274,9 @@ async function parseComplexDicomHeader(buffer: ArrayBuffer): Promise<TechnicalDi
     inversionTimeMs: boundedDs(str('x00180082')),
     sliceThicknessMm: boundedDs(str('x00180050')),
     contrastAgentDeclared: Boolean(str('x00180010')),
+    burnedInAnnotation: privacyFlag(str('x00280301')),
+    recognizableVisualFeatures: privacyFlag(str('x00280302')),
+    patientIdentityRemoved: privacyFlag(str('x00120062')),
   };
   if (!result.transferSyntax || !(result.sopInstanceUid || result.studyUid || result.seriesUid || result.modality)) {
     throw new Error('DICOM не содержит достаточных технических метаданных.');
