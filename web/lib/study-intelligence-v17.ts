@@ -4,7 +4,9 @@ export type StudyIssue = {
   code: "NO_STUDY" | "MULTIPLE_STUDIES" | "UNINDEXED_DICOM" | "MIXED_MODALITY" |
         "MIXED_BODY_REGION" | "UNVERIFIED_REGION" | "GEOMETRY_UNVERIFIED" |
         "LOCALIZER" | "INCONSISTENT_TECHNICAL_PROTOCOL" | "MULTIFRAME" |
-        "DUPLICATE_SOP" | "UNKNOWN_COMPLETENESS";
+        "DUPLICATE_SOP" | "UNKNOWN_COMPLETENESS" |
+        "POSSIBLE_BURNED_IN_TEXT" | "RECOGNIZABLE_VISUAL_FEATURES" |
+        "PATIENT_IDENTITY_NOT_REMOVED" | "PRIVACY_NOT_VERIFIED";
   level: "warning" | "info";
   message: string;
   seriesKey: string | null;
@@ -20,6 +22,11 @@ export type SeriesIntelligence = {
   protocolConfidence: "technical-indication" | "unavailable";
   contrast: "declared" | "unknown";
   imageRole: "LOCALIZER" | "DERIVED" | "PRIMARY" | "UNKNOWN";
+  privacyFlags: {
+    burnedInAnnotation: "YES" | "NO" | "UNKNOWN";
+    recognizableVisualFeatures: "YES" | "NO" | "UNKNOWN";
+    patientIdentityRemoved: "YES" | "NO" | "UNKNOWN";
+  };
   spatialExtentMm: number | null;
   volumeReady: boolean;
   issues: StudyIssue[];
@@ -82,6 +89,28 @@ function assessSeries(series: DicomSeries): SeriesIntelligence {
   const roles = normalize(metadata.map(m => m.imageRole && m.imageRole !== "UNKNOWN" ? m.imageRole : null));
   const imageRole = roles.length === 1 ? roles[0] as SeriesIntelligence["imageRole"] : "UNKNOWN";
   const issues: StudyIssue[] = [];
+  const privacyFlags = {
+    burnedInAnnotation: metadata.some(m => m.burnedInAnnotation === "YES") ? "YES" as const :
+      metadata.every(m => m.burnedInAnnotation === "NO") ? "NO" as const : "UNKNOWN" as const,
+    recognizableVisualFeatures: metadata.some(m => m.recognizableVisualFeatures === "YES") ? "YES" as const :
+      metadata.every(m => m.recognizableVisualFeatures === "NO") ? "NO" as const : "UNKNOWN" as const,
+    patientIdentityRemoved: metadata.some(m => m.patientIdentityRemoved === "NO") ? "NO" as const :
+      metadata.every(m => m.patientIdentityRemoved === "YES") ? "YES" as const : "UNKNOWN" as const,
+  };
+  if (privacyFlags.burnedInAnnotation === "YES")
+    issues.push(issue("POSSIBLE_BURNED_IN_TEXT", "warning",
+      "DICOM указывает встроенные надписи на изображении. Передача вовне запрещена.", series.key));
+  if (privacyFlags.recognizableVisualFeatures === "YES")
+    issues.push(issue("RECOGNIZABLE_VISUAL_FEATURES", "warning",
+      "DICOM указывает распознаваемые визуальные признаки. Необходима экспертная оценка.", series.key));
+  if (privacyFlags.patientIdentityRemoved === "NO")
+    issues.push(issue("PATIENT_IDENTITY_NOT_REMOVED", "warning",
+      "DICOM явно не подтверждает удаление идентификаторов пациента.", series.key));
+  if (privacyFlags.burnedInAnnotation === "UNKNOWN" ||
+      privacyFlags.recognizableVisualFeatures === "UNKNOWN" ||
+      privacyFlags.patientIdentityRemoved === "UNKNOWN")
+    issues.push(issue("PRIVACY_NOT_VERIFIED", "info",
+      "DICOM-признаки обезличивания неполны. Даже значение NO/YES в тегах не удостоверяет безопасность снимка.", series.key));
   if (regionEvidence === "unknown")
     issues.push(issue("UNVERIFIED_REGION", "info", "Область исследования не подтверждена техническим DICOM-кодом.", series.key));
   if (regionEvidence === "conflicting")
@@ -106,7 +135,7 @@ function assessSeries(series: DicomSeries): SeriesIntelligence {
     regionEvidence, protocolCandidate: candidate.candidate,
     protocolConfidence: candidate.confidence,
     contrast: metadata.some(m => m.contrastAgentDeclared === true) ? "declared" : "unknown",
-    imageRole,
+    imageRole, privacyFlags,
     spatialExtentMm: series.volumeReady && series.sliceSpacingMm !== null ?
       Number((series.sliceSpacingMm * (series.members.length - 1)).toFixed(2)) : null,
     volumeReady: series.volumeReady, issues,
