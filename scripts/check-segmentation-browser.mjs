@@ -29,6 +29,49 @@ try {
   await page.goto('http://127.0.0.1:3131',{waitUntil:'networkidle'});
   const files=(await readdir(fixture+'/dicom')).sort().map(n=>fixture+'/dicom/'+n);
   await page.locator('input[accept*=".dcm"]').setInputFiles(files);
+  // v1.7: a structured AI research result is local-only and must link to
+  // the exact SOP instance of this synthetic series before it is navigable.
+  await page.waitForFunction(() => {
+    const button=document.querySelector('.ora-evidence-actions button');
+    return button && !button.disabled;
+  },undefined,{timeout:30000});
+  const uid='2.25.1043521000001';
+  const sampleReview={
+    schema:'opus-orchestra/v1',provider:'polza',modality:'MR',
+    visionModel:'gemini-fixture-only',clinicalModel:'claude-fixture-only',
+    clinicalStatus:'unverified_research_draft',
+    sourceImages:[{
+      imageId:'phantom-frame-2',seriesUid:uid+'.2',
+      sopInstanceUid:uid+'.4.2',frameIndex:0,
+      slicePositionMm:-29,mimeType:'image/png',viewLabel:'synthetic phantom 2/32',
+    }],
+    evidence:{
+      schema:'opus-evidence/v1',modality:'MR',coverage:'partially_assessed',
+      seriesReviewed:[uid+'.2'],warnings:['Only one synthetic frame assessed'],
+      findings:[{
+        findingId:'anatomy:synthetic',sign:'Synthetic geometric sphere, not an anatomical finding',
+        anatomy:'synthetic phantom',status:'candidate',
+        source:{seriesUid:uid+'.2',sopInstanceUid:uid+'.4.2',frameIndex:0,slicePositionMm:-29},
+        measurements:{diameterMm:null,volumeMl:null},
+        model:{id:'gemini-fixture-only',provider:'polza',version:null},
+        limitations:['Mathematical test data only'],
+      }],
+    },
+    clinicalDraft:{summary:'Nonmedical phantom. No patient findings.',limitations:['Synthetic only']},
+  };
+  const reviewInput=page.locator('.ora-evidence-panel input[type="file"]');
+  await reviewInput.setInputFiles({name:'synthetic-review.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(sampleReview))});
+  await page.locator('.ora-evidence-success').waitFor();
+  assert.match(await page.locator('.ora-evidence-success').innerText(),/DICOM подтверждены/);
+  await page.getByRole('button',{name:'Открыть исходный срез',exact:true}).click();
+  assert.match(await page.locator('.ora-file-row.ora-file-selected .ora-file-name').innerText(),/synthetic-002\.dcm/);
+  const wrongReview=structuredClone(sampleReview);
+  wrongReview.evidence.findings[0].source.sopInstanceUid=uid+'.4.999';
+  await reviewInput.setInputFiles({name:'wrong-review.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(wrongReview))});
+  await page.locator('.ora-evidence-error').waitFor();
+  assert.match(await page.locator('.ora-evidence-error').innerText(),/не связана/);
+  assert.match(await page.locator('.ora-evidence-success').innerText(),/synthetic-review\.json/);
+  console.log('Local AI evidence review: matched SOP, slice navigation, refused forged source');
   const mpr=page.getByRole('button',{name:'MPR · 3 плоскости',exact:true});
   await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='MPR · 3 плоскости'&&!b.disabled),undefined,{timeout:30000});
   await mpr.click();
