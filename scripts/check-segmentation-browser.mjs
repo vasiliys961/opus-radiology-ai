@@ -30,7 +30,7 @@ try {
   const computeModes=await page.locator('.ora-ai-compute-modes').innerText();
   assert.match(computeModes,/На Mac · ONNX CPU/);
   assert.match(computeModes,/Облако · OpenRouter/);
-  assert.match(computeModes,/реальных пациентских изображений.*заблокирована/s);
+  assert.match(computeModes,/настоящих пациентских изображений.*заблокирована/s);
 
   // In production, even a same-origin read-only provider probe remains closed.
   // API credentials, DICOM and clinical context are never exposed.
