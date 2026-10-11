@@ -70,7 +70,7 @@ test("Untrusted imports reject embedded image payloads, unsupported status, wron
   const x = sample();
   assert.throws(() => parseReviewableOrchestraResult(JSON.stringify({
     ...x, sourceImages: [{ ...x.sourceImages[0], base64: "hidden" }],
-  })), /паспорта/);
+  })), /паспорт/);
   assert.throws(() => parseReviewableOrchestraResult(JSON.stringify({
     ...x, clinicalStatus: "clinically_validated",
   })), /контракт/);
