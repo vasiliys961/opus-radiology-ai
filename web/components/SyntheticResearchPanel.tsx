@@ -16,10 +16,10 @@ const REGIONS: {id:SyntheticRegion; label:string}[] = [
 ];
 function ModelPicker({label,models,value,onChange,id}:{
   label:string;models:readonly CatalogModel[];value:string;
-  onChange:(id:string)=>void;id:string;
+  onChange:(id:string)=>void;id:string;disabled?:boolean;
 }) {
   return <label htmlFor={id}>{label}
-    <select id={id} value={value} onChange={event=>onChange(event.target.value)}>
+    <select id={id} value={value} disabled={disabled} onChange={event=>onChange(event.target.value)}>
       {models.map(model=><option key={model.id} value={model.id}>
         {model.name.length>52 ? model.name.slice(0,49)+"…" : model.name} · {model.id}
       </option>)}
@@ -108,22 +108,22 @@ export default function SyntheticResearchPanel({diagnostic}:Props) {
       созданные на сервере. Загруженные DICOM и клинический контекст не используются.</p>
     <div className="ora-synthetic-controls">
       <label htmlFor="ora-synthetic-region">Область
-        <select id="ora-synthetic-region" value={region}
+        <select id="ora-synthetic-region" value={region} disabled={working}
           onChange={event=>setRegion(event.target.value as SyntheticRegion)}>
           {REGIONS.map(x=><option key={x.id} value={x.id}>{x.label}</option>)}
         </select>
       </label>
       <label htmlFor="ora-synthetic-modality">Условная модальность
-        <select id="ora-synthetic-modality" value={modality}
+        <select id="ora-synthetic-modality" value={modality} disabled={working}
           onChange={event=>setModality(event.target.value as "CT"|"MR")}>
           <option value="CT">КТ — схематическая</option>
           <option value="MR">МРТ — схематическая</option>
         </select>
       </label>
       <ModelPicker id="ora-synthetic-vision-model" label="Vision · анализ кадров"
-        models={visionModels} value={visionModel} onChange={setVisionModel}/>
+        models={visionModels} value={visionModel} onChange={setVisionModel} disabled={working}/>
       <ModelPicker id="ora-synthetic-clinical-model" label="Синтез · текст"
-        models={clinicalModels} value={clinicalModel} onChange={setClinicalModel}/>
+        models={clinicalModels} value={clinicalModel} onChange={setClinicalModel} disabled={working}/>
     </div>
     <p className="ora-synthetic-warning">Это платный эксперимент: OpenRouter может списать средства
       за 5 обращений, включая неудачные. Показанные каталожные модели могут быть
