@@ -5,17 +5,20 @@ import type { DicomSeries } from "../lib/dicom-series";
 import { planVisionFrameSamples, MAX_VISION_SAMPLE_FRAMES,
   type VisionFramePlan } from "../lib/vision-frame-plan";
 import { useAnalysisSound } from "./AnalysisSoundProvider";
+import { decodeDicomPreview } from "../lib/dicom-lite";
 
 export default function VisionFramePlanningPanel({
-  series, activeSeriesKey, onOpenSlice,
+  series, activeSeriesKey, fileById, onOpenSlice,
 }: {
   series: readonly DicomSeries[];
   activeSeriesKey: string | null;
+  fileById: ReadonlyMap<string, File>;
   onOpenSlice: (fileId: string) => void;
 }) {
   const [requested, setRequested] = useState(4);
   const [report, setReport] = useState<VisionFramePlan | null>(null);
   const [notice, setNotice] = useState("");
+  const [thumbnails, setThumbnails] = useState<Record<string, { url?: string; error?: string }>>({});
   const { completionChime } = useAnalysisSound();
   const choice = useMemo(() => {
     // Never silently choose some other series when a specific series is selected.
@@ -24,7 +27,36 @@ export default function VisionFramePlanningPanel({
   useEffect(() => {
     setReport(null);
     setNotice("");
+    setThumbnails({});
   }, [series, activeSeriesKey, requested]);
+  useEffect(() => {
+    if (!report) return;
+    let cancelled = false;
+    setThumbnails({});
+    const render = async () => {
+      // Serial bounded decoding: never hold four full DICOM pixel arrays on M1.
+      for (const frame of report.frames) {
+        if (cancelled) return;
+        const file = fileById.get(frame.fileId);
+        let preview: { url?: string; error?: string };
+        if (!file) preview = { error: "Исходный файл отсутствует." };
+        else if (file.size > 6 * 1024 * 1024)
+          preview = { error: "Локальная миниатюра ограничена размером 6 МиБ; откройте срез в Cornerstone." };
+        else {
+          try {
+            const result = await decodeDicomPreview(file);
+            preview = { url: result.url };
+          } catch {
+            preview = { error: "Локальный декодер не поддерживает этот DICOM. Просмотр возможен в Cornerstone." };
+          }
+        }
+        if (cancelled) return;
+        setThumbnails(previous => ({ ...previous, [frame.fileId]: preview }));
+      }
+    };
+    void render();
+    return () => { cancelled = true; };
+  }, [report, fileById]);
   const prepare = () => {
     if (choice.status === "blocked") {
       setNotice("Локальный план не составлен: " + choice.blockers.join(" "));
@@ -70,6 +102,12 @@ export default function VisionFramePlanningPanel({
             <span>Срез {frame.ordinal} из {frame.totalFrames}</span></div>
           <small>Позиция по нормали: {frame.slicePositionMm === null ? "неизвестна" :
             frame.slicePositionMm.toFixed(2) + " мм"}</small>
+          {thumbnails[frame.fileId]?.url ?
+            <img className="ora-vision-plan-thumbnail" src={thumbnails[frame.fileId].url}
+              alt={"Локальный предпросмотр DICOM, кадр " + (index + 1)} /> :
+            <div className="ora-vision-plan-thumb-placeholder">
+              {thumbnails[frame.fileId]?.error ?? "Готовим миниатюру локально…"}
+            </div>}
           <button type="button" onClick={() => onOpenSlice(frame.fileId)}>Открыть исходный срез</button>
         </div>)}
       </div>
