@@ -19,7 +19,7 @@ function authorized(received: string | null, expected: string): boolean {
   const b = Buffer.from("Bearer " + expected);
   return a.length === b.length && timingSafeEqual(a, b);
 }
-const shortText = (v: string | undefined) => typeof v === "string" && v.length > 0 && v.length < 160;
+const shortText = (v: string | undefined): v is string => typeof v === "string" && v.length > 0 && v.length < 160;
 
 export async function POST(request: NextRequest) {
   const token = process.env.RADIOLOGY_AI_GATEWAY_TOKEN;
