@@ -152,3 +152,15 @@ allocation and upstream R231 full-volume operations remain separate memory
 costs. The **8,388,608 voxel and 48 MiB MPR raw-volume guards are unchanged**.
 This increment completes bounded transport within the existing supported size;
 it does not complete DATA-02 large-study or R1/M1 acceptance.
+
+
+## Actual browser verification on public LCTSC
+
+The newer [reference record](R231_BROWSER_REFERENCE.md) verifies actual R231
+inference and actual mask rendering in three MPR planes on Linux. This supersedes
+the earlier "actual browser not tested" boundary **only for the explicit partial
+32-of-103 native slice selection**. Exact full source scalar SHA, geometry,
+weight/mask binding and deletion were verified. Full chest/M1/Safari/system RAM
+and manual-contour clinical metrics remain pending. R1 is still PARTIAL.
+Current checks: 164 web unit tests, 26 Python worker/reference safety tests,
+typecheck, build, synthetic browser regression and opt-in real browser check.

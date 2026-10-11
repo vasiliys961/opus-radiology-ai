@@ -150,6 +150,7 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
     {summary && <>
       <p className="ora-mask-success" role="status">Сетка совмещена · {summary.name} · меток: {summary.labels.length}</p>
       <small>Совпадение геометрии не подтверждает пациента или правильность сегментации. Проверьте принадлежность файла выбранной серии и границы на всех плоскостях.</small>
+      <p className="ora-mask-coverage" role="note">Полнота анатомического охвата не подтверждена. Объём разметки относится только к загруженным срезам, а не ко всему органу.</p>
       {summary.result ? <details className="ora-mask-provenance">
         <summary>Суммы совпали · {summary.result.model.id} · сведения о модели</summary>
         <p>Заявленная модель: {summary.result.model.id} · {summary.result.model.version}. Задача: {summary.result.model.task}.</p>
