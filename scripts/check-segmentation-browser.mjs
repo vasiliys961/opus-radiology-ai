@@ -27,6 +27,11 @@ try {
   page=await browser.newPage({viewport:{width:1600,height:1000}});
   page.on('pageerror',e=>errors.push(e.message));
   await page.goto('http://127.0.0.1:3131',{waitUntil:'networkidle'});
+  const computeModes=await page.locator('.ora-ai-compute-modes').innerText();
+  assert.match(computeModes,/На Mac · ONNX CPU/);
+  assert.match(computeModes,/Облако · OpenRouter/);
+  assert.match(computeModes,/настоящих пациентских изображений.*заблокирована/s);
+
   // In production, even a same-origin read-only provider probe remains closed.
   // API credentials, DICOM and clinical context are never exposed.
   const readinessResponse=await page.request.get(
@@ -203,6 +208,15 @@ try {
   await page.locator('.ora-analysis-package>summary').click();
   await page.getByRole('button',{name:'Подготовить пакет серии',exact:true}).click();
   await page.locator('.ora-package-ready').waitFor();
+  // An explicit offline-ONNX workflow is offered for the selected DICOM series.
+  await page.locator('.ora-offline-model-instructions>summary').click();
+  const offlineInstructions=await page.locator('.ora-offline-model-instructions').innerText();
+  assert.match(offlineInstructions,/ONNX · без облака/);
+  assert.match(offlineInstructions,/scripts\/run-local-onnx\.py/);
+  assert.match(offlineInstructions,/--profile/);
+  assert.match(offlineInstructions,/\.request\.json/);
+  await page.locator('.ora-offline-model-instructions>summary').click();
+
   const download=async(name,path)=>{
     const event=page.waitForEvent('download');
     await page.getByRole('link',{name,exact:true}).click();

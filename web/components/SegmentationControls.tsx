@@ -29,6 +29,19 @@ export default function SegmentationControls({ ready, onPrepare, onImport, onDis
   const [packet, setPacket] = useState<DownloadPackage | null>(null);
   const [exportBusy, setExportBusy] = useState(false);
   const [exportError, setExportError] = useState("");
+  const [localCommandCopied, setLocalCommandCopied] = useState(false);
+  const localOnnxCommand = packet ? [
+    'cd "$HOME/Desktop/opus-radiology-ai-github"',
+    'source .venv-local-ai/bin/activate',
+    'python3 scripts/run-local-onnx.py ' +
+      '--input "$HOME/Downloads/opus-' + packet.request.requestId + '_0000.nii" ' +
+      '--request "$HOME/Downloads/opus-' + packet.request.requestId + '.request.json" ' +
+      '--model "$HOME/Models/Opus/model.onnx" ' +
+      '--profile "$HOME/Models/Opus/model.profile.json" ' +
+      '--mask "$HOME/Downloads/opus-' + packet.request.requestId + '.mask.nii" ' +
+      '--result "$HOME/Downloads/opus-' + packet.request.requestId + '.result.json"',
+  ].join('\n') : "";
+
 
   const releasePackage = () => {
     const previous = packageRef.current;
@@ -164,6 +177,25 @@ export default function SegmentationControls({ ready, onPrepare, onImport, onDis
           <a href={packet.volumeUrl} download={`opus-${packet.request.requestId}_0000.nii`}>Скачать объём .nii</a>
           <a href={packet.manifestUrl} download={`opus-${packet.request.requestId}.request.json`}>Скачать паспорт .json</a>
         </div>
+        <details className="ora-offline-model-instructions">
+          <summary>Настоящий локальный AI на Mac · ONNX · без облака</summary>
+          <p>Опциональный офлайн-модуль v1.9 запускает установленную на Mac модель
+            на КТ/МРТ-серии, поддерживаемой конкретным ONNX-чекпойнтом.
+            OpenRouter не вызывается. Пока необходимы проверенные веса и профиль модели.</p>
+          <p>Скачайте оба файла выше, установите Python и ONNX Runtime согласно
+            <a href="https://github.com/vasiliys961/opus-radiology-ai/blob/main/docs/LOCAL_ONNX_AI.md"
+              target="_blank" rel="noreferrer"> руководству</a>.
+            Модель и её профиль должны находиться в <code>~/Models/Opus</code>.</p>
+          <pre>{localOnnxCommand}</pre>
+          <button type="button" onClick={()=>{
+            void navigator.clipboard.writeText(localOnnxCommand).then(
+              ()=>setLocalCommandCopied(true),
+              ()=>setLocalCommandCopied(false));
+          }}>{localCommandCopied ? "Команда скопирована" : "Скопировать команду для Cursor"}</button>
+          <p>После выполнения выберите «Импортировать результат модели» и одновременно
+            два новых файла <code>.mask.nii</code> и <code>.result.json</code>.
+            Врач проверяет маску на исходных срезах; отсутствие меток не доказывает отсутствие болезни.</p>
+        </details>
         <small>Запрос: {packet.request.requestId}. Для импорта выберите вместе маску и паспорт результата этого пакета.</small>
         <div className="ora-mask-actions"><button type="button" disabled={busy||exportBusy||!ready} onClick={()=>resultInput.current?.click()}>Импортировать результат модели</button></div>
         <input ref={resultInput} type="file" accept=".json,.nii,.nii.gz" multiple hidden onChange={event=>{

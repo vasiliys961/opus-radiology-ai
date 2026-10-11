@@ -386,3 +386,20 @@ button:disabled { cursor: not-allowed; }
 .ora-cloud-safety p,.ora-cloud-safety li,.ora-cloud-safety small{font-size:10px;line-height:1.55;color:#7e8d95}
 .ora-cloud-safety ul{margin:9px 0;padding-left:17px}
 .ora-cloud-safety li{margin:4px 0}
+
+/* v1.9: Offline medical-model runner instructions, bound to current local study. */
+.ora-offline-model-instructions{margin-top:12px;border:1px solid #c5ddd6;background:#f5fcf9;border-radius:9px;padding:11px;min-width:0}
+.ora-offline-model-instructions>summary{font-size:11px;font-weight:750;color:#237561;cursor:pointer}
+.ora-offline-model-instructions p{font-size:10px;line-height:1.65;color:#587a73;margin:9px 0}
+.ora-offline-model-instructions a{color:#087b74;text-decoration:underline}
+.ora-offline-model-instructions pre{white-space:pre-wrap;overflow-wrap:anywhere;font:10px/1.65 ui-monospace,SFMono-Regular,Menlo,monospace;background:#132b33;color:#b8e6cf;border-radius:7px;padding:11px;overflow:auto;user-select:text}
+.ora-offline-model-instructions code{font:10px ui-monospace,SFMono-Regular,Menlo,monospace}
+.ora-offline-model-instructions button{background:#e3f5ee;color:#137967;border:1px solid #afdac9;border-radius:7px;font-size:10px;font-weight:720;padding:9px 11px}
+
+.ora-ai-compute-modes{border:1px solid #d9e8e4;background:#f8fcfa;border-radius:9px;padding:12px;display:flex;flex-direction:column;gap:9px}
+.ora-ai-compute-modes>strong{font-size:11px;color:#365967}
+.ora-ai-compute-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.ora-ai-compute-options>div{background:white;border:1px solid #e0eae7;border-radius:8px;padding:10px;min-width:0}
+.ora-ai-compute-options b{font-size:10px;color:#197d6e}
+.ora-ai-compute-options p,.ora-ai-compute-options small{font-size:10px;line-height:1.6;color:#69828a;margin:7px 0 0;display:block}
+@media(max-width:750px){.ora-ai-compute-options{grid-template-columns:1fr}}

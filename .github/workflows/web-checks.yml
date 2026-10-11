@@ -31,6 +31,10 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: DICOM module tests
         run: npm test
+      - name: Test real offline ONNX CPU inference (synthetic weights only)
+        run: |
+          python3 -m pip install --disable-pip-version-check numpy onnxruntime onnx
+          python3 ../scripts/test-local-onnx.py
       - name: Typecheck
         run: npm run typecheck
       - name: Production build
