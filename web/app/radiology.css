@@ -282,3 +282,10 @@ button:disabled { cursor: not-allowed; }
 .ora-study-intel-series-item>button{background:#ecf8f5;color:#177e70;border:1px solid #c5e2da;border-radius:7px;padding:8px 10px;font-weight:720;font-size:10px;margin-top:8px}
 .ora-study-intel-footnote{font-size:10px;line-height:1.6;color:#8699a3;margin:12px 0 0}
 @media(max-width:670px){.ora-study-intel{padding:13px}.ora-study-intel-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Privacy features remain locked until server-side authorization and verification. */
+.ora-cloud-safety{border-top:1px solid #e4edef;margin:11px 0 0;padding:12px 0 0}
+.ora-cloud-safety summary{color:#886741;font-size:11px;line-height:1.45;font-weight:760;cursor:pointer}
+.ora-cloud-safety p,.ora-cloud-safety li,.ora-cloud-safety small{font-size:10px;line-height:1.55;color:#7e8d95}
+.ora-cloud-safety ul{margin:9px 0;padding-left:17px}
+.ora-cloud-safety li{margin:4px 0}
