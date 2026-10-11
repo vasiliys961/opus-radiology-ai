@@ -1,0 +1,7 @@
+# OPTIONAL CT lung segmentation model family. Install separately on Mac.
+# No cloud credentials. Model weights/checkpoint licences require review.
+# Batch size 1 and memory benchmarking mandatory on M1 8GB.
+-r requirements.txt
+torch>=2.5,<3.0
+SimpleITK>=2.4,<3.0
+lungmask>=0.2,<0.3
