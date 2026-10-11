@@ -25,3 +25,11 @@ This bearer-token gate is a development integration boundary, **not production p
 5. Independent anatomical segmentation adapter after verification of the pilot artifacts.
 
 No patient images should be sent to external providers before the privacy controls are completed.
+
+## Regional access and resource-constrained model policy
+
+- A physician chooses Polza AI or OpenRouter explicitly. No IP-geolocation routing and no automatic cross-provider failover. Availability and specific model IDs must be checked in the selected provider's catalogue.
+- **MedGemma is excluded from the v1.7 model registry** due to practical access concerns in Crimea. No Google model-weight download or Google-hosted service is required for the MedGemma role.
+- **MedSAM2 / Efficient MedSAM2 is deferred**, not installed and not automatically downloaded. Consider only as an optional separate inference worker after benchmarks on the actual deployment hardware and licensing review. Its use must not block the CT/MR viewing or segmentation workflows.
+- Gemini is retained as the vision model *through the user-selected aggregator*, contingent on confirmed availability there. This is not a direct Google API dependency.
+- The anatomical segmentation pilot does not demonstrate pathology detection. TotalSegmentator remains the primary anatomical candidate; NV-Segment-CTMR remains research-only under its applicable licensing conditions.
