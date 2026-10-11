@@ -24,7 +24,14 @@ validated protocol-detection, anatomy-completeness or de-identification engine.
 4. Spatial source distance between first and last slice is shown ONLY if
    uniform volume geometry was validated, and cannot establish whole-organ
    coverage.
-5. The workstation has a collapsible, filterable study dashboard with
+5. The metadata parser additionally records restricted, exact CS-valued privacy
+   indicators: BurnedInAnnotation (0028,0301), RecognizableVisualFeatures
+   (0028,0302) and PatientIdentityRemoved (0012,0062). YES for the first two
+   or NO for the third causes a visible warning. Missing indicators are
+   explicitly unknown. Even BurnedInAnnotation=NO and PatientIdentityRemoved=YES
+   are NOT independently verified evidence that identifying pixel content,
+   private attributes or recognizable faces are absent.
+6. The workstation has a collapsible, filterable study dashboard with
    click-to-series navigation, even when the scanned study is multi-series.
 6. Full-organ coverage, complete MRI protocols, all CT phases and diagnosis
    cannot be certified from the currently available data. The output always
