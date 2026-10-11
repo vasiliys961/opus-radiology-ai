@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import LocalLungmaskPanel from "./LocalLungmaskPanel";
 import { maskColor, MAX_MASK_FILE_BYTES, readNiftiMaskFile, type LabelMask } from "../lib/segmentation-mask";
 import { assertResultBinding, MAX_RESULT_JSON_BYTES, parseSegmentationResult, sha256, type AnalysisPackage, type AnalysisRequest, type SegmentationResult } from "../lib/analysis-package";
 
@@ -30,6 +31,7 @@ export default function SegmentationControls({ ready, onPrepare, onImport, onDis
   const [exportBusy, setExportBusy] = useState(false);
   const [exportError, setExportError] = useState("");
   const [localCommandCopied, setLocalCommandCopied] = useState(false);
+  const [workerBusy, setWorkerBusy] = useState(false);
   const localOnnxCommand = packet ? [
     'cd "$HOME/Desktop/opus-radiology-ai-github"',
     'source .venv-local-ai/bin/activate',
@@ -125,10 +127,16 @@ export default function SegmentationControls({ ready, onPrepare, onImport, onDis
 
   return <section className="ora-mask-controls" aria-label="Готовая сегментационная маска">
     <div className="ora-mask-heading"><strong>Сегментация · готовая маска</strong><span>Локальный импорт</span></div>
-    <p>Загрузите NIfTI-маску именно выбранной DICOM-серии. Проверяются размеры, положение и ориентация. Автоматическая нейросеть пока не подключена.</p>
+    <p>Загрузите NIfTI-маску именно выбранной DICOM-серии. Проверяются размеры, положение и ориентация. Для открытой исследовательской КТ доступна опциональная локальная Lungmask R231 после отдельной установки.</p>
+    <LocalLungmaskPanel ready={ready&&!busy&&!exportBusy} onBusy={setWorkerBusy}
+      onPrepare={signal=>callbacks.current.onPrepare(signal)} onResult={(mask,result)=>{
+        const next={visible:true,opacity:0.4,label:null};
+        callbacks.current.onImport(mask,next);
+        setSummary({name:"Lungmask R231 · локальный worker",labels:mask.labels,result});setDisplay(next);setError("");
+      }}/>
     <div className="ora-mask-actions">
-      <button type="button" disabled={!ready||busy||exportBusy} onClick={()=>input.current?.click()}>{busy ? "Проверка маски…" : summary ? "Заменить маску .nii / .nii.gz" : "Загрузить маску .nii / .nii.gz"}</button>
-      {summary && <button type="button" disabled={exportBusy} onClick={()=>{
+      <button type="button" disabled={!ready||busy||exportBusy||workerBusy} onClick={()=>input.current?.click()}>{busy ? "Проверка маски…" : summary ? "Заменить маску .nii / .nii.gz" : "Загрузить маску .nii / .nii.gz"}</button>
+      {summary && <button type="button" disabled={exportBusy||workerBusy} onClick={()=>{
         version.current++; callbacks.current.onClear();setSummary(null);setBusy(false);setError("");
       }}>Удалить маску</button>}
       <input ref={input} type="file" accept=".nii,.nii.gz" hidden onChange={event=>{
@@ -165,7 +173,7 @@ export default function SegmentationControls({ ready, onPrepare, onImport, onDis
       <p>Подготовьте выбранную серию как NIfTI и паспорт. Оба файла скачиваются отдельно; приложение не отправляет их на сервер.</p>
       <small>В пакет входит одна серия. Последовательность и полнота анатомического покрытия не подтверждены. Изображение может содержать идентифицирующую информацию; удаление DICOM-тегов не гарантирует обезличивания.</small>
       <div className="ora-mask-actions">
-        <button type="button" disabled={!ready||busy||exportBusy} onClick={()=>void prepare()}>{exportBusy ? "Подготовка объёма…" : packet ? "Подготовить новый пакет" : "Подготовить пакет серии"}</button>
+        <button type="button" disabled={!ready||busy||exportBusy||workerBusy} onClick={()=>void prepare()}>{exportBusy ? "Подготовка объёма…" : packet ? "Подготовить новый пакет" : "Подготовить пакет серии"}</button>
         {exportBusy && <button type="button" onClick={()=>{
           version.current++;preparation.current?.abort();preparation.current=null;setExportBusy(false);
         }}>Отменить подготовку</button>}
@@ -197,7 +205,7 @@ export default function SegmentationControls({ ready, onPrepare, onImport, onDis
             Врач проверяет маску на исходных срезах; отсутствие меток не доказывает отсутствие болезни.</p>
         </details>
         <small>Запрос: {packet.request.requestId}. Для импорта выберите вместе маску и паспорт результата этого пакета.</small>
-        <div className="ora-mask-actions"><button type="button" disabled={busy||exportBusy||!ready} onClick={()=>resultInput.current?.click()}>Импортировать результат модели</button></div>
+        <div className="ora-mask-actions"><button type="button" disabled={busy||exportBusy||workerBusy||!ready} onClick={()=>resultInput.current?.click()}>Импортировать результат модели</button></div>
         <input ref={resultInput} type="file" accept=".json,.nii,.nii.gz" multiple hidden onChange={event=>{
           const files=Array.from(event.target.files??[]);event.target.value="";
           if (files.length && ready) void loadResult(files);

@@ -20,6 +20,8 @@
 
 # Python / model caches
 **/.venv/
+**/.venv-*/
+**/.pytest_cache/
 **/venv/
 **/__pycache__/
 **/.cache/

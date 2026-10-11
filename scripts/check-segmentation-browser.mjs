@@ -249,6 +249,31 @@ try {
   await resultUpload.setInputFiles([join(fixture,'synthetic-mask.nii'),resultPath]);
   await page.locator('.ora-mask-provenance').waitFor();
   assert.match(await page.locator('.ora-mask-provenance').innerText(),/synthetic-fixture-only/);
+  // Local R231 panel: synthetic readiness response only. MR must never create
+  // a medical model job, and the previous verified overlay must survive.
+  let localJobs=0;
+  await page.route('http://127.0.0.1:8765/**',async route=>{
+    const r=route.request();
+    const headers={'access-control-allow-origin':'http://127.0.0.1:3131',
+      'access-control-allow-headers':'authorization,content-type','access-control-allow-methods':'GET,POST,PUT,DELETE'};
+    if(r.method()==='OPTIONS'){await route.fulfill({status:204,headers});return;}
+    if(r.url().endsWith('/v1/capabilities'))await route.fulfill({status:200,headers,contentType:'application/json',body:JSON.stringify({
+      schema:'opus-worker-capabilities/v1',mode:'local',device:'cpu',dataPolicy:'public-reference-only',patientMode:false,externalEgress:false,concurrency:1,maxVoxels:8388608,
+      model:{id:'lungmask-R231',version:'0.2.20',weightsSha256:'d5d2fc3df432115933491f115b283e94d1f5c841c0e82f6e7bd2d65d3ccde69f',ready:true},
+    })});
+    else {localJobs++;await route.fulfill({status:500,headers});}
+  });
+  await page.locator('.ora-local-lungmask>summary').click();
+  const local=page.locator('.ora-local-lungmask');
+  await local.getByLabel('Токен локального worker').fill('synthetic-test-token-for-browser-only-123456789');
+  await local.locator('input[type=checkbox]').check();
+  await local.getByRole('button',{name:'Сегментировать лёгкие локально',exact:true}).click();
+  await local.locator('[role=alert]').waitFor();
+  assert.match(await local.locator('[role=alert]').innerText(),/только КТ/);
+  assert.equal(localJobs,0);
+  assert.match(await page.locator('.ora-mask-provenance').innerText(),/synthetic-fixture-only/);
+  await page.locator('.ora-local-lungmask>summary').click();
+  console.log('R231 panel: unsupported MR stopped before a job; existing MPR mask retained (synthetic readiness fixture)');
   assert.match(await page.locator('.ora-mask-settings select').innerText(),/Synthetic sphere/);
   const invalid=JSON.parse(await readFile(resultPath,'utf8'));invalid.requestId='22222222-2222-4222-8222-222222222222';
   const wrongPath=join(fixture,'wrong-result.json');await writeFile(wrongPath,JSON.stringify(invalid));
