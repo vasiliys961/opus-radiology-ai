@@ -59,7 +59,7 @@ export function syntheticVisionFrames(modality: "CT" | "MR"): VisionFrame[] {
     base64: phantomPng(kind),
     seriesUid: "2.25.20261011001700001",
     sopInstanceUid: "2.25.202610110017000" + (index + 2),
-    frameIndex: index,
+    frameIndex: 0, // one frame per synthetic SOP Instance; index is not a DICOM frame number
     slicePositionMm: index * 3,
     viewLabel: "MATHEMATICAL PHANTOM " + (index + 1) + "/2 - not a clinical CT/MRI scan",
   }));
