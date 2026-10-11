@@ -97,3 +97,25 @@ See `docs/R231_BROWSER_REFERENCE.md` and the measured technical report at
 `docs/verification/r231-browser-linux.json`. After the optional environment and
 checkpoint are installed, reproduce with:
 `bash scripts/test-r231-browser.sh --download-public-reference`.
+
+## Streamed R231 memory increment — 2026-10-11 (feature branch)
+
+Baseline main `ebe7ca2` has PR #16 merged and green Python/Web Actions. The user
+supplied an actual previous-adapter Mac M1/8GB browser PASS on 32-of-103 public
+slices; this does not accept full chest/Safari/system RAM. Later diagnostics
+reported `modelReady=true`, HTTP 507, available 1318.625 MiB vs required 1496 MiB.
+
+This increment removes native-volume float32 copies and float64 restoration
+lists, avoids simultaneous weight copies, releases unused tensors and omits
+eager SimpleITK/DICOM-reader imports. The six Apache-2.0 segmentation utilities
+are retained unchanged; installed UNet source and official weights are SHA-bound.
+Whole compact-volume postprocessing, float32/model resolution, source geometry,
+mask binding and all existing research/privacy/voxel/concurrency boundaries stay.
+
+Actual optimized R231→browser→three MPR planes→DELETE/404 passes on Linux with an
+identical complete mask SHA. Same-host model peak is 828.05→701.77 MiB (15.25%);
+Safe admission for 512×512×32 is 1219 MiB, model RSS ceiling 963 MiB. The 384 MiB
+margin and 256 MiB runtime reserve remain. See `docs/R231_SAFE_MODE.md` and
+`docs/verification/r231-low-memory-linux.json`. **Do not claim a new Mac memory
+reduction** from Linux results: optimized M1/system/swap/Safari acceptance remains
+pending. Do not simply reduce guards again to force a failed Mac to pass.

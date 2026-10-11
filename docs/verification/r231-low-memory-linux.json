@@ -1,0 +1,122 @@
+{
+  "schema": "opus-r231-low-memory-comparison/v1",
+  "status": "passed",
+  "actualTrainedInference": true,
+  "baselineCommit": "ebe7ca2de0084dd589da4ab8989e0cd6c22343b9",
+  "reference": {
+    "collection": "TCIA LCTSC",
+    "license": "CC BY 3.0",
+    "sourceContentChainSha256": "bb4b90496cf2d83dac83e729ef271091962d532a18db201c6e2d99d42dcb5f61",
+    "originalFrames": 103,
+    "selectedFrames": 32,
+    "selectedIndicesZeroBased": [
+      35,
+      66
+    ],
+    "fullChest": false,
+    "selection": "32 unchanged consecutive central source slices; no resampling, pixel crop or repeated frames"
+  },
+  "inputSha256": "23d0065256550d22ccbe62a1ef4029ddf57bb0ef6334874875c244fc791a35d3",
+  "maskSha256": "0ee929a7ba4cbd1e5adc3880a15b6ad0ecbe79f465572d8dc79c39e45aa5795b",
+  "weightsSha256": "d5d2fc3df432115933491f115b283e94d1f5c841c0e82f6e7bd2d65d3ccde69f",
+  "baseline": {
+    "transport": "adapter-subprocess",
+    "metrics": {
+      "schema": "opus-worker-metrics/v1",
+      "device": "cpu",
+      "batchSize": 1,
+      "inferenceSeconds": 37.36,
+      "totalSeconds": 39.005,
+      "peakRssMiB": 828.05,
+      "memoryMeasurement": "getrusage process high-water RSS (PID namespace fallback)",
+      "platform": "Linux",
+      "machine": "x86_64",
+      "torchVersion": "2.6.0+cpu",
+      "dimensions": [
+        512,
+        512,
+        32
+      ],
+      "resourceProfile": "safe",
+      "threads": 1,
+      "interOpThreads": 1,
+      "clinicalStatus": "unverified_research_draft"
+    }
+  },
+  "optimized": {
+    "transport": "real-browser-loopback-chunks",
+    "inferenceMetrics": {
+      "schema": "opus-worker-metrics/v1",
+      "device": "cpu",
+      "batchSize": 1,
+      "inferenceSeconds": 36.131,
+      "totalSeconds": 37.376,
+      "peakRssMiB": 701.77,
+      "memoryMeasurement": "getrusage process high-water RSS (PID namespace fallback)",
+      "platform": "Linux",
+      "machine": "x86_64",
+      "torchVersion": "2.6.0+cpu",
+      "dimensions": [
+        512,
+        512,
+        32
+      ],
+      "resourceProfile": "safe",
+      "threads": 1,
+      "interOpThreads": 1,
+      "inferenceImplementation": "slice-streamed-r231/v1",
+      "weightsLoading": "meta-assign-cpu-float32",
+      "simpleItkImported": false,
+      "clinicalStatus": "unverified_research_draft",
+      "preflight": {
+        "profile": "safe",
+        "estimatedModelRamBytes": 875560960,
+        "requiredRamBytes": 1278214144,
+        "requiredDiskBytes": 142606688,
+        "maxRssBytes": 1009778688,
+        "systemReserveBytes": 268435456,
+        "threads": 1,
+        "interOpThreads": 1,
+        "availableRamBytes": 8810622976,
+        "availableDiskBytes": 27111931904,
+        "guardDecision": "allow"
+      },
+      "guardDecision": "allow"
+    },
+    "labelVoxels": [
+      7703880,
+      337031,
+      347697
+    ],
+    "overlayPixels": [
+      4122,
+      3658,
+      119
+    ],
+    "chunkCount": 257,
+    "uploadedBytes": 33554784,
+    "jobDeleted": true,
+    "timings": {
+      "importMprSeconds": 2.708985594,
+      "browserJobSeconds": 44.6801502,
+      "totalSeconds": 47.672053196
+    }
+  },
+  "comparison": {
+    "maskByteIdentical": true,
+    "peakRssReductionMiB": 126.28,
+    "peakRssReductionPercent": 15.25,
+    "previousRequiredRamMiB": 1496,
+    "requiredRamMiB": 1219,
+    "requiredRamReductionPercent": 18.52
+  },
+  "clinicalDice": null,
+  "M1Acceptance": "optimized-adapter-not-tested-on-M1",
+  "limitations": [
+    "Same Linux host/checkpoint/native partial reference and one CPU thread; baseline direct adapter, optimized real browser.",
+    "Model RSS only; no browser/system-memory, swap or Mac reduction claim.",
+    "32 of 103 native slices, not full chest; no independent clinical accuracy evaluated.",
+    "Admission coefficients provisional; new near-threshold M1/Safari benchmark pending.",
+    "Research-only; patient/cloud/remote gates remain closed."
+  ]
+}

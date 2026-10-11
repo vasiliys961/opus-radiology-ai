@@ -292,3 +292,24 @@ See `docs/R231_BROWSER_REFERENCE.md` and the measured technical report at
 `docs/verification/r231-browser-linux.json`. After the optional environment and
 checkpoint are installed, reproduce with:
 `bash scripts/test-r231-browser.sh --download-public-reference`.
+
+## Streamed R231 memory increment — 2026-10-11 (feature branch)
+
+Baseline main `ebe7ca2` contains the adaptive Safe guard. The previous adapter's
+32-of-103 public native-reference browser run has a user-supplied Mac PASS;
+whole-system memory/Safari/full-chest and clinical accuracy remain unaccepted.
+
+The optimized local CPU adapter processes native slices individually, retains
+whole compact-volume postprocessing, allocates one native uint8 mask and avoids
+simultaneous weight storage. It omits eager image readers and releases unused
+inference tensors. Exact float32 model operations, source geometry and the
+official weights binding are preserved; no smaller replacement study, lower
+precision, disabled postprocessing or LLM fallback is used.
+
+Actual Linux browser R231/MPR/deletion verification passes with the same complete
+mask SHA. Same-session model peak RSS falls 828.05→701.77 MiB (15.25%), and Safe
+admission for 512×512×32 falls 1496→1219 MiB with unchanged margin/runtime reserve.
+This is a bounded partial-reference optimization, not optimized Mac/full-chest
+acceptance. Four modes, optional Gemini/Claude through Evidence and closed
+patient/cloud/remote gates remain unchanged. Technical evidence:
+`docs/verification/r231-low-memory-linux.json`, `docs/R231_SAFE_MODE.md`.

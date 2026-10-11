@@ -6,11 +6,25 @@ from resource_guard import MIB, HARD_RSS_LIMIT, estimate_resources, preflight
 
 def test_native_reference_safe_budget_is_below_old_fixed_gate():
     p = estimate_resources([512, 512, 32], 32)
-    assert p["requiredRamBytes"] == 1496 * MIB
-    assert p["maxRssBytes"] == 1240 * MIB
+    assert p["requiredRamBytes"] == 1219 * MIB
+    assert p["maxRssBytes"] == 963 * MIB
     assert p["requiredRamBytes"] > p["maxRssBytes"] + p["systemReserveBytes"] - 1
     assert p["requiredRamBytes"] < 2 * 1024**3
     assert p["threads"] == p["interOpThreads"] == 1
+
+
+def test_reported_mac_memory_admits_streamed_pipeline_without_lowering_reserve():
+    # Actual failed Mac admission: 1318.625 MiB. This is a calculator/admission
+    # regression, NOT a claim that this Mac has completed the new inference.
+    p = preflight([512, 512, 32], 32, 1_382_678_528, 32_950_009_856)
+    assert p["guardDecision"] == "allow"
+    assert p["requiredRamBytes"] - p["estimatedModelRamBytes"] == 384 * MIB
+    assert p["systemReserveBytes"] == 256 * MIB
+    # Geometry still matters even for equal voxel counts: a larger single
+    # native plane requires a larger temporary workspace.
+    a = estimate_resources([512, 512, 32], 32)
+    b = estimate_resources([1024, 512, 16], 16)
+    assert a["requiredRamBytes"] != b["requiredRamBytes"]
 
 
 def test_volume_and_frame_workspaces_are_counted_separately():

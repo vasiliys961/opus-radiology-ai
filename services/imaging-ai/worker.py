@@ -21,6 +21,7 @@ import psutil
 
 from r231 import MAX_INPUT, MAX_VOXELS, VERSION, WEIGHTS_SHA256, check_weights, validate_request
 from resource_guard import PROFILES, preflight
+from r231_inference import model_source
 
 JOB_TTL_SECONDS = 1800
 MAX_UPLOAD_CHUNK = 256 * 1024
@@ -44,6 +45,7 @@ def validate_origin(origin):
 def model_ready(weights):
     try:
         check_weights(weights)
+        model_source()
         for name, version in (("lungmask", VERSION), ("torch", "2.6.0"), ("SimpleITK", "2.4.1")):
             installed = importlib.metadata.version(name)
             if version and installed.split("+", 1)[0] != version:
@@ -205,6 +207,11 @@ def create_app(weights, token, origin="http://localhost:3000", port=8765, tempor
             environment = {k: v for k, v in os.environ.items() if k in {"PATH", "HOME", "TMPDIR", "SYSTEMROOT", "WINDIR"}}
             for name in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "VECLIB_MAXIMUM_THREADS", "NUMEXPR_NUM_THREADS"):
                 environment[name] = str(diagnostic["threads"])
+            if profile == "safe":
+                # Bound optional CPU backend primitive caches; ignored by
+                # builds without these backends (including some Mac wheels).
+                for name in ("LRU_CACHE_CAPACITY", "ONEDNN_PRIMITIVE_CACHE_CAPACITY", "DNNL_PRIMITIVE_CACHE_CAPACITY"):
+                    environment[name] = "1"
             environment["TORCH_FORCE_WEIGHTS_ONLY_LOAD"] = "1"
             proc = await asyncio.create_subprocess_exec(sys.executable, str(Path(__file__).with_name("r231.py")),
                         str(job["directory"]), str(weights), profile, stdout=asyncio.subprocess.DEVNULL,

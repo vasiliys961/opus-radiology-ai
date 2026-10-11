@@ -5,8 +5,10 @@ MIB = 1024**2
 HARD_RSS_LIMIT = 2 * 1024**3
 SYSTEM_RESERVE = 256 * MIB
 PROFILES = {
-    "safe": {"threads": 1, "interOpThreads": 1, "bytesPerVoxel": 24, "marginBytes": 384 * MIB},
-    "balanced": {"threads": 2, "interOpThreads": 1, "bytesPerVoxel": 32, "marginBytes": 512 * MIB},
+    "safe": {"threads": 1, "interOpThreads": 1, "baseRamBytes": 704 * MIB,
+             "bytesPerVoxel": 8, "marginBytes": 384 * MIB},
+    "balanced": {"threads": 2, "interOpThreads": 1, "baseRamBytes": 896 * MIB,
+                 "bytesPerVoxel": 32, "marginBytes": 512 * MIB},
 }
 
 
@@ -20,10 +22,13 @@ def estimate_resources(dimensions, frame_count, profile="safe"):
     if voxels > 8_388_608:
         raise ValueError("voxel_limit")
     policy = PROFILES[profile]
-    # Fixed Torch/net/workspace allowance, full-volume copies/postprocessing,
-    # and 256x256 per-frame intermediates in pinned Lungmask 0.2.20.
-    # These coefficients are provisional and require native M1 calibration.
-    model_bytes = 896 * MIB + voxels * policy["bytesPerVoxel"] + frame_count * 256 * 256 * 12
+    # One weight allocation, single native-plane preprocessing/restoration,
+    # mapped float32 input + uint8 output, and whole compact-volume connected
+    # components. Native and compact workspaces must be budgeted separately.
+    # Coefficients remain provisional: measured Linux + prior M1 evidence are
+    # not a complete near-threshold M1/system-memory acceptance.
+    model_bytes = (policy["baseRamBytes"] + voxels * policy["bytesPerVoxel"]
+                   + frame_count * 256 * 256 * 32 + dimensions[0] * dimensions[1] * 12)
     return {"profile": profile, "estimatedModelRamBytes": model_bytes,
             "requiredRamBytes": model_bytes + policy["marginBytes"],
             "requiredDiskBytes": 704 + voxels * 5 + 128 * MIB,
