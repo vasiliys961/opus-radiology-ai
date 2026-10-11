@@ -193,13 +193,28 @@ export async function inspectProvider(
     return base;
   }
   const matches = compareConfiguredRoles(visionId, clinicalId, catalogue);
-  const summary = (values: CatalogModel[]) => values
-    .sort((a, b) => {
-      // Make candidate examples familiar but don't claim a model is clinically approved.
-      const priority = (s: string) =>
-        /^(google|openai|anthropic)\//.test(s) ? 0 : 1;
-      return priority(a.id) - priority(b.id) || a.id.localeCompare(b.id);
-    }).slice(0, 14);
+  const summary = (values: CatalogModel[]) => {
+    // Show diverse REAL catalogue choices. Alphabetical-only order can fill
+    // the entire menu with one provider and hide Gemini completely.
+    const sorted = [...values].sort((a,b)=>a.id.localeCompare(b.id));
+    const selected: CatalogModel[] = [];
+    const quotas: Array<[string,number]> = [
+      ["google/",6], ["openai/",4], ["anthropic/",3],
+    ];
+    const used = new Set<string>();
+    for (const [prefix, quota] of quotas) {
+      for (const item of sorted.filter(m=>m.id.startsWith(prefix)).slice(0,quota)) {
+        selected.push(item);
+        used.add(item.id);
+      }
+    }
+    for (const model of sorted)
+      if (!used.has(model.id) && selected.length < 14) {
+        selected.push(model);
+        used.add(model.id);
+      }
+    return selected.slice(0,14);
+  };
   return {
     ...base, catalogStatus: "verified-response",
     vision: matches.vision, clinical: matches.clinical,
