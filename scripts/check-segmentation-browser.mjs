@@ -51,6 +51,10 @@ try {
     });
   assert.equal(deniedSyntheticDemo.status(),404);
   assert.doesNotMatch(await deniedSyntheticDemo.text(),/OPENROUTER_API_KEY|secret|sk-/);
+  const deniedPhantomPreview=await page.request.get(
+    'http://127.0.0.1:3131/api/ai/synthetic-demo/preview?region=head&modality=MR&frame=0');
+  assert.equal(deniedPhantomPreview.status(),404);
+
 
   await page.getByRole('button',{name:'Проверить Polza',exact:true}).click();
   await page.locator('.ora-provider-error').waitFor();
