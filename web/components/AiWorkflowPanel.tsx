@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { AI_CATALOG, modelsForRole, type ProviderId, type SegmentationId } from "../lib/v17-models";
 import { PILOT_CASES, PILOT_NOTES } from "../lib/v17-pilot";
 import { deriveStudyReadiness } from "../lib/study-intelligence";
+import { PATIENT_CLOUD_REQUIREMENTS } from "../lib/patient-cloud-policy";
 import type { DicomSeries } from "../lib/dicom-series";
 
 const PREF_KEY = "opus-radiology-v17-ui-preferences";
@@ -114,6 +115,13 @@ export default function AiWorkflowPanel({ series }: { series: readonly DicomSeri
       <p className="ora-v17-caution">Режимы различались по разрешению (3 мм / 1,5 мм). Слабая сегментация поджелудочной железы на МРТ: Dice {dice(PILOT_NOTES.weakMRPancreasTotalDice)} / {dice(PILOT_NOTES.weakMRPancreasNvDice)}. Нет внешней клинической валидации; Mac M1 не тестировался.</p>
     </div>}
     <p className="ora-v17-muted">Выбор сохраняется только в этом браузере, а не в профиле врача на сервере. Доступность выбранной модели через шлюз пока не проверена.</p>
+    <details className="ora-cloud-safety">
+      <summary>Защита медицинских данных · внешняя отправка заблокирована</summary>
+      <p>Общий API для произвольных изображений отключён. Для будущей работы с пациентами необходимы:</p>
+      <ul>{PATIENT_CLOUD_REQUIREMENTS.map(requirement =>
+        <li key={requirement.id}>{requirement.label} · не подтверждено</li>)}</ul>
+      <small>Переключение Polza / OpenRouter не разрешает отправку данных и не заменяет авторизацию.</small>
+    </details>
     <button className="ora-analyze-button" type="button" disabled aria-label="Гибридный AI-анализ ещё не доступен">Запустить гибридный анализ · скоро</button>
   </div>;
 }
