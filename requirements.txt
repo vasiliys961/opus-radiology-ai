@@ -1,0 +1,4 @@
+# Opus Radiology AI: lightweight Python inference dependencies; see services/imaging-ai/requirements.txt
+# Python 3.11 or 3.12 in a virtual environment. Next.js uses web/package.json.
+# Heavy PyTorch / MONAI / TotalSegmentator are optional, not installed by default.
+-r services/imaging-ai/requirements.txt
