@@ -1,4 +1,3 @@
-import type {AiGatewayRequest} from "./ai-gateway";
 import {loadOpenRouterCatalogue, type CatalogFetcher, type ProviderEnv} from "./provider-readiness";
 import {syntheticVisionFrames, SYNTHETIC_REGIONS, type SyntheticRegion} from "./synthetic-vision-phantom";
 import {runVisionOrchestra, type CompletionCaller, type OrchestraResult} from "./vision-orchestra";
@@ -14,19 +13,19 @@ export type SyntheticTrialRequest = {
   region: SyntheticRegion;
   visionModel: string;
   clinicalModel: string;
+  acknowledgePaidSyntheticExperiment: true;
 };
 export type SyntheticTrialResult = {
   schema: "opus-synthetic-trial/v1";
   sample: "non-patient-mathematical-phantom";
   region: SyntheticRegion;
   patientDataSubmitted: false;
-  accountAccessVerified: false;
   remoteInferencePerformed: true;
   result: OrchestraResult;
 };
 export const SYNTHETIC_TRIAL_MAX_COMPLETIONS = 5;
 const MODEL_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9/:._+-]{0,159}$/;
-const TRIAL_FIELDS = ["modality","region","visionModel","clinicalModel"];
+const TRIAL_FIELDS = ["modality","region","visionModel","clinicalModel","acknowledgePaidSyntheticExperiment"];
 
 export function parseSyntheticTrialInput(value: unknown): SyntheticTrialRequest | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -36,10 +35,12 @@ export function parseSyntheticTrialInput(value: unknown): SyntheticTrialRequest 
       (v.modality !== "CT" && v.modality !== "MR") ||
       !SYNTHETIC_REGIONS.includes(v.region as SyntheticRegion) ||
       typeof v.visionModel !== "string" || !MODEL_PATTERN.test(v.visionModel) ||
-      typeof v.clinicalModel !== "string" || !MODEL_PATTERN.test(v.clinicalModel)) return null;
+      typeof v.clinicalModel !== "string" || !MODEL_PATTERN.test(v.clinicalModel) ||
+      v.acknowledgePaidSyntheticExperiment !== true) return null;
   return {
     modality: v.modality, region: v.region as SyntheticRegion,
     visionModel: v.visionModel, clinicalModel: v.clinicalModel,
+    acknowledgePaidSyntheticExperiment: true,
   };
 }
 export class SyntheticTrialFailure extends Error {
@@ -88,8 +89,7 @@ export async function executeSyntheticTrial(
   return {
     schema:"opus-synthetic-trial/v1",
     sample:"non-patient-mathematical-phantom",
-    region:trusted.region, patientDataSubmitted:false,
-    accountAccessVerified:false, remoteInferencePerformed:true,
+    region:trusted.region, patientDataSubmitted:false, remoteInferencePerformed:true,
     result,
   };
 }
