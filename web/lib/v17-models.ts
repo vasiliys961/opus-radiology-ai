@@ -4,10 +4,10 @@
  */
 export type ProviderId = "openrouter" | "polza";
 export type SegmentationId = "totalsegmentator" | "nv-segment-ctmr";
-export type PipelineRole = "vision" | "clinical" | "segmentation" | "roi-segmentation" | "research-vision";
+export type PipelineRole = "vision" | "clinical" | "segmentation" | "roi-segmentation";
 export type CatalogEntry = {
   id: string; label: string; role: PipelineRole; engine: "api" | "inference-worker";
-  status: "configured-candidate" | "research" | "not-connected";
+  status: "configured-candidate" | "research" | "not-connected" | "deferred";
   modality: readonly ("CT" | "MR")[];
   notes: string;
   weightsLicence?: string;
@@ -19,8 +19,7 @@ export const AI_CATALOG: readonly CatalogEntry[] = [
   { id: "anthropic/claude-opus-5.5", label: "Claude Opus 5.5", role: "clinical", engine: "api", status: "configured-candidate", modality: ["CT", "MR"], notes: "Углублённая проверка сложных случаев" },
   { id: "totalsegmentator", label: "TotalSegmentator", role: "segmentation", engine: "inference-worker", status: "not-connected", modality: ["CT", "MR"], notes: "Основной кандидат для анатомической сегментации; профиль и задача выбираются отдельно для КТ/МРТ", weightsLicence: "Проверять лицензию конкретной задачи и весов; базовые задачи Apache-2.0" },
   { id: "nv-segment-ctmr", label: "NV-Segment-CTMR", role: "segmentation", engine: "inference-worker", status: "research", modality: ["CT", "MR"], notes: "Исследовательский сравнительный кандидат; не подключён", weightsLicence: "Некоммерческое исследование/оценка — требуется проверка условий" },
-  { id: "medsam2", label: "MedSAM2", role: "roi-segmentation", engine: "inference-worker", status: "not-connected", modality: ["CT", "MR"], notes: "Промпт-зависимая сегментация выбранной области; не автономная диагностика" },
-  { id: "medgemma", label: "MedGemma", role: "research-vision", engine: "inference-worker", status: "research", modality: ["CT", "MR"], notes: "Кандидат для сравнительного Vision-тестирования, не заменяет Gemini без валидации" },
+  { id: "medsam2", label: "MedSAM2 / Efficient MedSAM2", role: "roi-segmentation", engine: "inference-worker", status: "deferred", modality: ["CT", "MR"], notes: "Опциональная ROI-сегментация после отдельной проверки памяти, скорости и лицензии. Нет автоматической загрузки весов; не входит в основной конвейер v1.7." },
 ];
 export function defaultModelFor(role: "vision" | "clinical"): string {
   const result = AI_CATALOG.find(m => m.role === role && m.status === "configured-candidate");
