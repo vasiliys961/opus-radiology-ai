@@ -59,7 +59,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({error:"Synthetic trial only available on local Next development server"},
       {status:404, headers:HEADERS});
   }
-  if (origin !== url.origin || (site !== null && site !== "same-origin")) {
+  // Next.js may normalize nextUrl.origin to localhost while the browser uses
+  // 127.0.0.1. Match the Origin to the actually received, allowlisted Host.
+  if (origin !== "http://" + host || (site !== null && site !== "same-origin")) {
     return NextResponse.json({error:"Same-origin browser request required"},
       {status:403, headers:HEADERS});
   }
