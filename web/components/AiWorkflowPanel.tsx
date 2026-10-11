@@ -86,6 +86,24 @@ export default function AiWorkflowPanel({ series }: { series: readonly DicomSeri
         </select>
       </label>
     </div>
+    <section className="ora-ai-compute-modes" aria-label="Локальный и облачный анализ">
+      <strong>Два независимых вычислительных режима</strong>
+      <div className="ora-ai-compute-options">
+        <div>
+          <b>На Mac · ONNX CPU</b>
+          <p>Полная DICOM-серия → локальная 2D-модель → маска в MPR.
+            Ничего не отправляется в интернет. Нужны отдельно установленные,
+            совместимые с конкретной задачей веса.</p>
+          <small>Доступно как офлайн-исполнитель через экспорт из MPR. Нет встроенного медицинского чекпойнта.</small>
+        </div>
+        <div>
+          <b>Облако · OpenRouter</b>
+          <p>Внешние Gemini / GPT / Claude. Пока реальные вызовы работают
+            только с искусственными PNG-фантомами для проверки оркестра.</p>
+          <small>Передача настоящих пациентских изображений в облако заблокирована.</small>
+        </div>
+      </div>
+    </section>
     <ProviderReadinessPanel provider={prefs.provider}
       selectedVision={prefs.vision} selectedClinical={prefs.clinical}/>
     <div className="ora-v17-guidance">
