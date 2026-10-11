@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { checkLocalWorker, runLocalR231, workerEndpoint, R231_SHA256 } from "./local-worker.ts";
+import { checkLocalWorker, runLocalR231, workerEndpoint, workerFailure, LocalWorkerError, R231_SHA256 } from "./local-worker.ts";
 import { scalarNiftiChunks } from "./analysis-stream.ts";
 import { sha256, writeScalarNifti, type AnalysisPackage } from "./analysis-package.ts";
 
@@ -23,9 +23,50 @@ test("worker endpoint rejects outbound hosts, HTTPS proxies, paths and embedded 
 test("readiness requires installed pinned R231 and closed patient/external routes",async t=>{
   for(const change of [{patientMode:true},{externalEgress:true},{mode:"gpu-server"},{model:{...caps.model,ready:false}},{model:{...caps.model,weightsSha256:"c".repeat(64)}}]) {
     t.mock.method(globalThis,"fetch",async()=>Response.json({...caps,...change}));
-    await assert.rejects(checkLocalWorker(session),/недоступен/);
+    await assert.rejects(checkLocalWorker(session),/недоступ/);
     t.mock.restoreAll();
   }
+});
+
+test("resource errors distinguish memory, disk, model, token and origin; no untrusted detail is displayed",()=>{
+  const preflight={availableRamBytes:512*1024**2,requiredRamBytes:1536*1024**2,availableDiskBytes:0,requiredDiskBytes:256*1024**2,guardDecision:"reject-memory"};
+  const ram=workerFailure({code:"insufficient_memory",preflight},507);
+  assert.equal(ram.code,"insufficient_memory");assert.deepEqual(ram.preflight,preflight);
+  assert.match(ram.message,/0\.50 ГиБ.*1\.50 ГиБ/);assert.match(ram.message,/Повторить R231/);
+  assert.match(workerFailure({code:"insufficient_disk",preflight:{...preflight,guardDecision:"reject-disk"}},507).message,/места.*диске/);
+  assert.match(workerFailure({code:"model_not_ready"},503).message,/веса.*перезапустите/);
+  assert.equal(workerFailure("unauthorized",401).code,"unauthorized");
+  assert.equal(workerFailure("origin_or_host_denied",403).code,"origin_or_host_denied");
+  assert.match(workerFailure({code:"memory_pressure",preflight},500).message,/остановлена.*защиты системы/);
+  assert.match(workerFailure({code:"rss_limit"},500).message,/бюджет RAM/);
+  const untrusted=workerFailure({code:"sentinel-private-data",preflight:{...preflight,requiredRamBytes:NaN}},500);
+  assert.equal(untrusted.code,"worker_http_error");assert.equal(untrusted.preflight,undefined);
+  assert.doesNotMatch(untrusted.message,/sentinel-private-data/);
+});
+
+test("HTTP 507 is retryable in the same worker session without reserving/deleting a job",async t=>{
+  const p=await packet();let attempts=0,deleted=false;
+  const preflight={availableRamBytes:512*1024**2,requiredRamBytes:1536*1024**2,availableDiskBytes:1024**3,requiredDiskBytes:256*1024**2,guardDecision:"reject-memory"};
+  t.mock.method(globalThis,"fetch",async(url:string,init:RequestInit)=>{
+    if(url.endsWith("capabilities"))return Response.json({...caps,resourceProfile:{name:"safe",threads:1,interOpThreads:1}});
+    if(init.method==="POST") {
+      attempts++;return Response.json({detail:{code:attempts===1?"insufficient_memory":"insufficient_disk",preflight:{...preflight,guardDecision:attempts===1?"reject-memory":"reject-disk"}}},{status:507});
+    }
+    if(init.method==="DELETE")deleted=true;
+    throw Error("Rejected job must not upload input or hold a slot");
+  });
+  assert.equal(await checkLocalWorker(session),"safe");
+  await assert.rejects(runLocalR231(session,p,new AbortController().signal,()=>{}),e=>e instanceof LocalWorkerError&&e.code==="insufficient_memory");
+  await assert.rejects(runLocalR231(session,p,new AbortController().signal,()=>{}),e=>e instanceof LocalWorkerError&&e.code==="insufficient_disk");
+  assert.equal(attempts,2);assert.equal(deleted,false);
+});
+
+test("transport/CORS failure has actionable text, while cancellation remains AbortError",async t=>{
+  t.mock.method(globalThis,"fetch",async()=>{throw new TypeError("Failed to fetch");});
+  await assert.rejects(checkLocalWorker(session),e=>e instanceof LocalWorkerError&&e.code==="connection_or_cors");
+  const controller=new AbortController();controller.abort();
+  t.mock.method(globalThis,"fetch",async()=>{throw new DOMException("cancel","AbortError");});
+  await assert.rejects(checkLocalWorker(session,controller.signal),{name:"AbortError"});
 });
 
 test("synthetic contract fixture returns exact bound mask and deletes job; no medical inference",async t=>{

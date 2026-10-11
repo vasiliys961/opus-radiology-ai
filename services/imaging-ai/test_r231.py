@@ -4,6 +4,8 @@ import asyncio
 import json
 import struct
 import uuid
+import time
+from types import SimpleNamespace
 
 import numpy as np
 import httpx
@@ -12,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from r231 import canonical_axes, check_weights, load_volume, validate_request
 import worker
+from resource_guard import estimate_resources
 
 TOKEN = "a" * 43
 HEADERS = {"origin": "http://localhost:3000", "authorization": f"Bearer {TOKEN}"}
@@ -50,6 +53,8 @@ def client(tmp_path, monkeypatch):
     # Boundary tests deliberately avoid loading Torch, downloading weights or
     # generating a fake successful medical result.
     monkeypatch.setattr(worker, "model_ready", lambda _: True)
+    monkeypatch.setattr(worker.psutil, "virtual_memory", lambda: SimpleNamespace(available=16 * 1024**3))
+    monkeypatch.setattr(worker.shutil, "disk_usage", lambda _: SimpleNamespace(free=16 * 1024**3))
     with TestClient(worker.create_app(tmp_path / "absent.pth", TOKEN, temporary_root=tmp_path), base_url="http://127.0.0.1:8765") as c:
         yield c
     assert not list(tmp_path.glob("opus-public-worker-*"))
@@ -77,7 +82,7 @@ def test_preflight_and_cancel(client):
     assert client.get(f"/v1/jobs/{identifier}", headers=HEADERS).status_code == 404
 
 
-@pytest.mark.parametrize("change", ["modality", "voxels", "oblique", "text", "patient", "hu"])
+@pytest.mark.parametrize("change", ["modality", "voxels", "oblique", "text", "patient", "hu", "float_frames"])
 def test_unsupported_jobs(client, change):
     r, _ = packet()
     body = job(r)
@@ -87,6 +92,7 @@ def test_unsupported_jobs(client, change):
     if change == "text": r["patientName"] = "sentinel-never-persist"
     if change == "patient": body["dataPolicy"] = "patient"
     if change == "hu": body["acquisition"]["intensity"] = "unknown"
+    if change == "float_frames": r["frameCount"] = float(r["frameCount"])
     assert client.post("/v1/jobs", headers=HEADERS, json=body).status_code == 422
 
 
@@ -219,7 +225,102 @@ def test_reversible_lps_axes(signs):
 def test_insufficient_memory(client, monkeypatch):
     monkeypatch.setattr(worker.psutil, "virtual_memory", lambda: type("Memory", (), {"available": 1})())
     r, _ = packet()
-    assert client.post("/v1/jobs", headers=HEADERS, json=job(r)).status_code == 507
+    response = client.post("/v1/jobs", headers=HEADERS, json=job(r))
+    assert response.status_code == 507
+    detail = response.json()["detail"]
+    assert detail["code"] == "insufficient_memory"
+    assert detail["preflight"]["availableRamBytes"] == 1
+    assert detail["preflight"]["guardDecision"] == "reject-memory"
+    # Failed admission never reserves a slot; retry uses the same session.
+    monkeypatch.setattr(worker.psutil, "virtual_memory", lambda: SimpleNamespace(available=16 * 1024**3))
+    assert client.post("/v1/jobs", headers=HEADERS, json=job(r)).status_code == 201
+
+
+def test_adaptive_safe_profile_accepts_native_reference_below_two_gib(client, monkeypatch):
+    r, _ = packet()
+    r["geometry"]["dimensions"], r["frameCount"] = [512, 512, 32], 32
+    monkeypatch.setattr(worker.psutil, "virtual_memory", lambda: SimpleNamespace(available=1600 * 1024**2))
+    response = client.post("/v1/jobs", headers=HEADERS, json=job(r))
+    assert response.status_code == 201
+    p = response.json()["preflight"]
+    assert p["requiredRamBytes"] == 1496 * 1024**2
+    assert p["profile"] == "safe" and p["threads"] == 1
+
+
+def test_insufficient_disk_is_distinct_and_retryable(client, monkeypatch):
+    r, _ = packet()
+    monkeypatch.setattr(worker.shutil, "disk_usage", lambda _: SimpleNamespace(free=1))
+    response = client.post("/v1/jobs", headers=HEADERS, json=job(r))
+    assert response.status_code == 507
+    assert response.json()["detail"]["code"] == "insufficient_disk"
+    assert response.json()["detail"]["preflight"]["guardDecision"] == "reject-disk"
+    monkeypatch.setattr(worker.shutil, "disk_usage", lambda _: SimpleNamespace(free=16 * 1024**3))
+    assert client.post("/v1/jobs", headers=HEADERS, json=job(r)).status_code == 201
+
+
+def test_model_not_ready_is_not_a_memory_error(tmp_path, monkeypatch):
+    monkeypatch.setattr(worker, "model_ready", lambda _: False)
+    with TestClient(worker.create_app(tmp_path/"absent.pth", TOKEN, temporary_root=tmp_path), base_url="http://127.0.0.1:8765") as c:
+        assert c.get("/v1/capabilities", headers=HEADERS).json()["model"]["ready"] is False
+        response = c.post("/v1/jobs", headers=HEADERS, json=job(packet()[0]))
+        assert response.status_code == 503
+        assert response.json()["detail"] == {"code": "model_not_ready"}
+
+
+def await_failed(client, identifier):
+    for _ in range(100):
+        status = client.get(f"/v1/jobs/{identifier}", headers=HEADERS).json()
+        if status["state"] == "failed":
+            return status
+        time.sleep(0.02)
+    raise AssertionError("Resource guard did not stop the job")
+
+
+def test_memory_rechecked_after_upload_before_inference(client, monkeypatch):
+    async def forbidden(*args, **kwargs):
+        raise AssertionError("Memory rejection must never spawn a model")
+    monkeypatch.setattr(worker.asyncio, "create_subprocess_exec", forbidden)
+    r, content = packet()
+    identifier = client.post("/v1/jobs", headers=HEADERS, json=job(r)).json()["jobId"]
+    base = f"/v1/jobs/{identifier}/input"
+    assert client.put(base+"/chunks/0", headers={**HEADERS,"content-type":"application/octet-stream"}, content=content).status_code == 200
+    monkeypatch.setattr(worker.psutil, "virtual_memory", lambda: SimpleNamespace(available=1))
+    assert client.post(base+"/complete", headers=HEADERS).status_code == 200
+    status = await_failed(client, identifier)
+    assert status["error"] == "insufficient_memory"
+    assert status["guardDecision"] == "reject-memory"
+    assert status["preflight"]["availableRamBytes"] == 1
+    assert status["peakRssMiB"] == 0
+    assert client.delete(f"/v1/jobs/{identifier}", headers=HEADERS).status_code == 204
+
+
+@pytest.mark.parametrize("failure", ["pressure", "rss"])
+def test_running_guard_reaps_child_and_preserves_retry(client, monkeypatch, failure):
+    children = []
+    original = asyncio.create_subprocess_exec
+    async def waiting_child(*args, **kwargs):
+        assert args[-1] == "safe"
+        assert kwargs["env"]["OMP_NUM_THREADS"] == kwargs["env"]["VECLIB_MAXIMUM_THREADS"] == "1"
+        assert "OPENROUTER_API_KEY" not in kwargs["env"]
+        process = await original(args[0], "-c", "import time; time.sleep(30)", **kwargs)
+        children.append(process)
+        if failure == "pressure":
+            monkeypatch.setattr(worker.psutil, "virtual_memory", lambda: SimpleNamespace(available=1))
+        else:
+            measured = SimpleNamespace(memory_info=lambda: SimpleNamespace(rss=3 * 1024**3), children=lambda **_: [])
+            monkeypatch.setattr(worker.psutil, "Process", lambda _: measured)
+        return process
+    monkeypatch.setattr(worker.asyncio, "create_subprocess_exec", waiting_child)
+    r, content = packet()
+    identifier = client.post("/v1/jobs", headers=HEADERS, json=job(r)).json()["jobId"]
+    assert client.put(f"/v1/jobs/{identifier}/input", headers={**HEADERS,"content-type":"application/octet-stream"},content=content).status_code == 200
+    status = await_failed(client, identifier)
+    assert status["error"] == ("memory_pressure" if failure == "pressure" else "rss_limit")
+    assert status["guardDecision"] == ("stop-memory-pressure" if failure == "pressure" else "stop-rss-limit")
+    assert children[0].returncode is not None
+    assert client.delete(f"/v1/jobs/{identifier}", headers=HEADERS).status_code == 204
+    monkeypatch.setattr(worker.psutil, "virtual_memory", lambda: SimpleNamespace(available=16 * 1024**3))
+    assert client.post("/v1/jobs", headers=HEADERS, json=job(r)).status_code == 201
 
 
 def test_invalid_numeric_geometry():

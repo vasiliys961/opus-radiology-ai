@@ -1,0 +1,127 @@
+{
+  "schema": "opus-r231-browser-verification/v1",
+  "status": "passed",
+  "actualTrainedInference": true,
+  "reference": {
+    "collection": "TCIA LCTSC",
+    "license": "CC BY 3.0",
+    "sourceContentChainSha256": "bb4b90496cf2d83dac83e729ef271091962d532a18db201c6e2d99d42dcb5f61",
+    "originalFrames": 103,
+    "selectedFrames": 32,
+    "selectedIndicesZeroBased": [
+      35,
+      66
+    ],
+    "fullChest": false,
+    "selection": "32 unchanged consecutive central source slices; no resampling, pixel crop or repeated frames"
+  },
+  "dimensions": [
+    512,
+    512,
+    32
+  ],
+  "affineLps": [
+    0.9765620000000013,
+    0,
+    0,
+    -250,
+    0,
+    0.9765620000000013,
+    0,
+    -156,
+    0,
+    0,
+    3,
+    145
+  ],
+  "inputSha256": "23d0065256550d22ccbe62a1ef4029ddf57bb0ef6334874875c244fc791a35d3",
+  "maskSha256": "0ee929a7ba4cbd1e5adc3880a15b6ad0ecbe79f465572d8dc79c39e45aa5795b",
+  "weightsSha256": "d5d2fc3df432115933491f115b283e94d1f5c841c0e82f6e7bd2d65d3ccde69f",
+  "labelVoxels": [
+    7703880,
+    337031,
+    347697
+  ],
+  "inferenceMetrics": {
+    "schema": "opus-worker-metrics/v1",
+    "device": "cpu",
+    "batchSize": 1,
+    "inferenceSeconds": 36.995,
+    "totalSeconds": 38.382,
+    "peakRssMiB": 856.11,
+    "memoryMeasurement": "getrusage process high-water RSS (PID namespace fallback)",
+    "platform": "Linux",
+    "machine": "x86_64",
+    "torchVersion": "2.6.0+cpu",
+    "dimensions": [
+      512,
+      512,
+      32
+    ],
+    "resourceProfile": "safe",
+    "threads": 1,
+    "interOpThreads": 1,
+    "clinicalStatus": "unverified_research_draft",
+    "preflight": {
+      "profile": "safe",
+      "estimatedModelRamBytes": 1166016512,
+      "requiredRamBytes": 1568669696,
+      "requiredDiskBytes": 142606688,
+      "maxRssBytes": 1300234240,
+      "systemReserveBytes": 268435456,
+      "threads": 1,
+      "interOpThreads": 1,
+      "availableRamBytes": 8730062848,
+      "availableDiskBytes": 27279261696,
+      "guardDecision": "allow"
+    },
+    "guardDecision": "allow"
+  },
+  "preflight": {
+    "profile": "safe",
+    "estimatedModelRamBytes": 1166016512,
+    "requiredRamBytes": 1568669696,
+    "requiredDiskBytes": 142606688,
+    "maxRssBytes": 1300234240,
+    "systemReserveBytes": 268435456,
+    "threads": 1,
+    "interOpThreads": 1,
+    "availableRamBytes": 8730062848,
+    "availableDiskBytes": 27279261696,
+    "guardDecision": "allow"
+  },
+  "guardDecision": "allow",
+  "peakRssMiB": 856.11,
+  "controller": {
+    "platform": "linux",
+    "machine": "x64",
+    "browser": "134.0.6998.35"
+  },
+  "timings": {
+    "importMprSeconds": 2.5435715930000002,
+    "browserJobSeconds": 46.254633856,
+    "totalSeconds": 49.17166545399999
+  },
+  "chunkCount": 257,
+  "uploadedBytes": 33554784,
+  "overlayPixels": [
+    4122,
+    3658,
+    119
+  ],
+  "jobDeleted": true,
+  "pageNetworkOrigins": [
+    "http://127.0.0.1:41041",
+    "http://127.0.0.1:41953"
+  ],
+  "clinicalDice": null,
+  "M1Acceptance": "not-accepted; requires separate M1/Safari/system-memory verification",
+  "limitations": [
+    "Partial native CT reference only, not complete chest coverage.",
+    "No manual contour Dice or clinical accuracy evaluated.",
+    "Model RSS is separate from browser/system RAM; no 8GB acceptance claim.",
+    "Live worker status/mask responses are relayed unchanged for inspection; timings include this test instrumentation.",
+    "Page egress interception is not an OS network sandbox.",
+    "Model weights commercial clearance remains pending."
+  ]
+}

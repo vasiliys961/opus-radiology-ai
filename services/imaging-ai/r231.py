@@ -14,6 +14,7 @@ import uuid
 
 import numpy as np
 import psutil
+from resource_guard import estimate_resources
 
 MAX_VOXELS = 8_388_608
 MAX_INPUT = 352 + MAX_VOXELS * 4
@@ -63,7 +64,7 @@ def validate_request(r):
     dims, a = g["dimensions"], g["affineLps"]
     if not isinstance(dims, list) or len(dims) != 3 or any(type(n) is not int or not 1 <= n <= 32767 for n in dims):
         raise ValueError("invalid_dimensions")
-    if np.prod(dims, dtype=np.int64) > MAX_VOXELS or r["frameCount"] != dims[2]:
+    if np.prod(dims, dtype=np.int64) > MAX_VOXELS or type(r["frameCount"]) is not int or r["frameCount"] != dims[2]:
         raise ValueError("voxel_limit_or_frame_mismatch")
     if not isinstance(a, list) or len(a) != 12 or any(type(v) not in (int, float) or not np.isfinite(v) for v in a):
         raise ValueError("invalid_affine")
@@ -121,31 +122,41 @@ def deny_network(*args, **kwargs):
     raise RuntimeError("inference_network_disabled")
 
 
-def run(directory, weights):
+def run(directory, weights, profile="safe"):
     started = time.perf_counter()
+    directory = Path(directory)
+    r = json.loads((directory / "request.json").read_text())
+    validate_request(r)
+    policy = estimate_resources(r["geometry"]["dimensions"], r["frameCount"], profile)
+    if policy["estimatedModelRamBytes"] + 128 * 1024**2 > 2 * 1024**3:
+        raise ValueError("model_memory_budget_exceeded")
+    if profile == "safe" and hasattr(os, "nice"):
+        os.nice(5)  # lower scheduling priority; never modifies the parent worker
+    try:
+        import resource
+        high_water = lambda: resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * (1 if sys.platform == "darwin" else 1024)
+    except ImportError:
+        high_water = lambda: 0
     try:
         process = psutil.Process()
-        memory_method = "process RSS sampled every 20 ms; may miss short peaks"
-        rss_bytes = lambda: process.memory_info().rss
+        memory_method = "process RSS sampled every 20 ms plus getrusage high-water where available"
+        rss_bytes = lambda: max(process.memory_info().rss, high_water())
     except psutil.Error:
         # Some isolated Linux runners expose a different /proc PID namespace.
         # getrusage measures this actual process without resolving a PID.
-        import resource
         memory_method = "getrusage process high-water RSS (PID namespace fallback)"
-        rss_bytes = lambda: resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * (1 if sys.platform == "darwin" else 1024)
+        rss_bytes = high_water
     sampled_peak = [rss_bytes()]
     stopped = threading.Event()
     def sample_memory():
         while not stopped.wait(0.02):
             sampled_peak[0] = max(sampled_peak[0], rss_bytes())
-            if sampled_peak[0] > 2 * 1024**3:
+            if sampled_peak[0] > policy["maxRssBytes"]:
                 os._exit(75)  # child-side guard also covers PID namespace isolation
     threading.Thread(target=sample_memory, daemon=True).start()
-    directory = Path(directory)
     check_weights(weights)
     if importlib.metadata.version("lungmask") != VERSION:
         raise ValueError("unsupported_lungmask_version")
-    r = json.loads((directory / "request.json").read_text())
     header, volume = load_volume(directory / "input.nii", r)
     # Defence against accidental upstream downloads. Not an OS network sandbox;
     # this trusted pinned adapter also has no outbound paths or provider clients.
@@ -158,17 +169,20 @@ def run(directory, weights):
     socket.gethostbyname_ex = deny_network
     import torch
     from lungmask import LMInferer
-    torch.set_num_threads(2)
-    torch.set_num_interop_threads(1)
+    torch.set_num_threads(policy["threads"])
+    torch.set_num_interop_threads(policy["interOpThreads"])
+    import SimpleITK as sitk
+    sitk.ProcessObject.SetGlobalDefaultNumberOfThreads(policy["threads"])
     # Force safe state-dict loading even if upstream omits weights_only.
     os.environ["TORCH_FORCE_WEIGHTS_ONLY_LOAD"] = "1"
     canonical, flips = canonical_axes(volume, r["geometry"]["affineLps"])
     inferer = LMInferer(modelname="R231", modelpath=str(weights), force_cpu=True,
                        batch_size=1, volume_postprocessing=True, tqdm_disable=True)
     infer_started = time.perf_counter()
-    output = np.flip(inferer.apply(canonical), flips).astype(np.uint8)
+    output = np.flip(inferer.apply(canonical), flips).astype(np.uint8, copy=False)
     inference_seconds = time.perf_counter() - infer_started
-    if output.shape != volume.shape or not set(np.unique(output)).issubset({0, 1, 2}):
+    # Range check avoids np.unique's additional full mask copy/sort.
+    if output.shape != volume.shape or output.min() < 0 or output.max() > 2:
         raise ValueError("invalid_model_output")
     if not np.any(output):
         raise ValueError("empty_mask_needs_review")
@@ -197,13 +211,14 @@ def run(directory, weights):
                "memoryMeasurement": memory_method,
                "platform": platform.system(), "machine": platform.machine(),
                "torchVersion": torch.__version__, "dimensions": r["geometry"]["dimensions"],
+               "resourceProfile": profile, "threads": policy["threads"], "interOpThreads": policy["interOpThreads"],
                "clinicalStatus": "unverified_research_draft"}
     (directory / "metrics.json").write_text(json.dumps(metrics))
 
 
 if __name__ == "__main__":
     try:
-        run(Path(sys.argv[1]), Path(sys.argv[2]))
+        run(Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3] if len(sys.argv) > 3 else "safe")
     except Exception:
         # No client metadata, filesystem paths, raw library errors or PHI in logs.
         sys.exit(1)

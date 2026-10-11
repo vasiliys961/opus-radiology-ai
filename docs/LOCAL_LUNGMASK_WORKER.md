@@ -52,6 +52,12 @@ deployment and clinical input remain blocked pending documented clearance.
 
 ## Start on Mac M1
 
+The adaptive local guard and default **Safe Mode** are described in
+[R231_SAFE_MODE.md](R231_SAFE_MODE.md). It estimates RAM/disk from the validated
+selected volume, checks again before inference, limits CPU threads and exposes
+separate memory/disk/model/session failures with a retry button. M1/Safari and
+whole-system memory acceptance remain pending; full-chest limits are unchanged.
+
 Prerequisite: native arm64 Python **3.11 or 3.12** and the existing Node viewer.
 This opt-in command installs the optional heavy stack in `.venv-lungmask`, verifies
 the checkpoint, and starts the worker. It never reads/writes `.env.local`.
@@ -60,6 +66,12 @@ the checkpoint, and starts the worker. It never reads/writes `.env.local`.
 cd "$HOME/Desktop/opus-radiology-ai-github"
 bash scripts/start-local-lungmask.sh --install --accept-research-license
 ```
+
+If system `python3` is newer than the pinned optional stack, pass
+`--python python3.11` for first installation. Existing `.venv-lungmask` uses its
+own interpreter. `--profile safe` is the default; `--profile balanced` explicitly
+selects two CPU threads and a larger memory allowance. Do not use a less guarded
+profile as a workaround for insufficient RAM.
 
 Subsequent runs require no dependency or weight download:
 

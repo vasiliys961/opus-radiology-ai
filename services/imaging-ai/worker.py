@@ -20,9 +20,9 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 import psutil
 
 from r231 import MAX_INPUT, MAX_VOXELS, VERSION, WEIGHTS_SHA256, check_weights, validate_request
+from resource_guard import PROFILES, preflight
 
 JOB_TTL_SECONDS = 1800
-MAX_RSS_BYTES = 2 * 1024**3
 MAX_UPLOAD_CHUNK = 256 * 1024
 
 
@@ -53,8 +53,10 @@ def model_ready(weights):
         return False
 
 
-def create_app(weights, token, origin="http://localhost:3000", port=8765, temporary_root=None):
+def create_app(weights, token, origin="http://localhost:3000", port=8765, temporary_root=None, profile="safe"):
     validate_origin(origin)
+    if profile not in PROFILES:
+        raise ValueError("unsupported_resource_profile")
     if not token or len(token) < 32:
         raise ValueError("A random session token is required")
     weights = Path(weights).absolute()
@@ -62,6 +64,14 @@ def create_app(weights, token, origin="http://localhost:3000", port=8765, tempor
     root = Path(tempfile.mkdtemp(prefix="opus-public-worker-", dir=temporary_root))
     root.chmod(0o700)
     ready = model_ready(weights)
+
+    def check_resources(r, stored_input_bytes=0):
+        return preflight(r["geometry"]["dimensions"], r["frameCount"],
+                         psutil.virtual_memory().available, shutil.disk_usage(root).free, profile, stored_input_bytes)
+
+    def resource_error(diagnostic):
+        return {"reject-memory": "insufficient_memory", "reject-disk": "insufficient_disk",
+                "reject-model-budget": "model_memory_budget_exceeded"}[diagnostic["guardDecision"]]
 
     async def discard(job):
         job["cancelRequested"] = True
@@ -133,17 +143,16 @@ def create_app(weights, token, origin="http://localhost:3000", port=8765, tempor
                 "model": {"id": "lungmask-R231", "version": VERSION, "weightsSha256": WEIGHTS_SHA256, "ready": ready},
                 "maxVoxels": MAX_VOXELS, "concurrency": 1,
                 "chunkUpload": {"version": 1, "maxChunkBytes": MAX_UPLOAD_CHUNK},
+                "resourceProfile": {"name": profile, "threads": PROFILES[profile]["threads"], "interOpThreads": 1},
                 "dataPolicy": "public-reference-only", "patientMode": False, "externalEgress": False,
                 "remoteModes": "not-enabled", "status": "experimental"}
 
     @app.post("/v1/jobs", status_code=201)
     async def create_job(request: Request):
         if not ready:
-            raise HTTPException(503, "model_not_installed_or_unverified")
+            raise HTTPException(503, {"code": "model_not_ready"})
         if jobs:
             raise HTTPException(409, "worker_busy_delete_previous_job")
-        if psutil.virtual_memory().available < MAX_RSS_BYTES or shutil.disk_usage(root).free < 256 * 1024**2:
-            raise HTTPException(507, "insufficient_memory_or_disk")
         try:
             body = json.loads(await bounded_body(request, 65536))
             if set(body) != {"schema", "dataPolicy", "acquisition", "request"} or body["schema"] != "opus-worker-job/v1":
@@ -157,14 +166,23 @@ def create_app(weights, token, origin="http://localhost:3000", port=8765, tempor
         # No await between checking the single slot and reserving it.
         if jobs:
             raise HTTPException(409, "worker_busy_delete_previous_job")
+        diagnostic = check_resources(body["request"])
+        if diagnostic["guardDecision"] != "allow":
+            raise HTTPException(507, {"code": resource_error(diagnostic), "preflight": diagnostic})
         identifier = str(uuid.uuid4())
         directory = root / identifier
-        directory.mkdir(mode=0o700)
-        (directory / "request.json").write_text(json.dumps(body["request"]))
+        try:
+            directory.mkdir(mode=0o700)
+            (directory / "request.json").write_text(json.dumps(body["request"]))
+        except OSError:
+            shutil.rmtree(directory, ignore_errors=True)
+            raise HTTPException(507, {"code": "input_write_failed", "preflight": diagnostic}) from None
         jobs[identifier] = {"directory": directory, "created": time.monotonic(),
                             "state": "awaiting_input", "uploadedBytes": 0, "process": None,
+                            "preflight": diagnostic, "guardDecision": "allow", "peakRssMiB": 0,
                             "inputHash": hashlib.sha256(), "uploadLock": asyncio.Lock()}
-        return {"schema": "opus-worker-job-status/v1", "jobId": identifier, "state": "awaiting_input"}
+        return {"schema": "opus-worker-job-status/v1", "jobId": identifier, "state": "awaiting_input",
+                "preflight": diagnostic, "guardDecision": "allow"}
 
     def find(identifier):
         if identifier not in jobs:
@@ -174,11 +192,22 @@ def create_app(weights, token, origin="http://localhost:3000", port=8765, tempor
     async def execute(job):
         proc = None
         try:
+            r = json.loads((job["directory"] / "request.json").read_text())
+            # Available memory can change while the browser hashes/uploads.
+            diagnostic = check_resources(r, job["uploadedBytes"])
+            job["preflight"] = diagnostic
+            job["guardDecision"] = diagnostic["guardDecision"]
+            if diagnostic["guardDecision"] != "allow":
+                job["state"], job["error"] = "failed", resource_error(diagnostic)
+                (job["directory"] / "input.nii").unlink(missing_ok=True)
+                return
             # Provider keys/session bearer are never inherited by inference.
             environment = {k: v for k, v in os.environ.items() if k in {"PATH", "HOME", "TMPDIR", "SYSTEMROOT", "WINDIR"}}
-            environment.update({"OMP_NUM_THREADS": "2", "MKL_NUM_THREADS": "2", "TORCH_FORCE_WEIGHTS_ONLY_LOAD": "1"})
+            for name in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "VECLIB_MAXIMUM_THREADS", "NUMEXPR_NUM_THREADS"):
+                environment[name] = str(diagnostic["threads"])
+            environment["TORCH_FORCE_WEIGHTS_ONLY_LOAD"] = "1"
             proc = await asyncio.create_subprocess_exec(sys.executable, str(Path(__file__).with_name("r231.py")),
-                        str(job["directory"]), str(weights), stdout=asyncio.subprocess.DEVNULL,
+                        str(job["directory"]), str(weights), profile, stdout=asyncio.subprocess.DEVNULL,
                         stderr=asyncio.subprocess.DEVNULL, env=environment)
             job["process"] = proc
             job["started"].set()
@@ -187,12 +216,24 @@ def create_app(weights, token, origin="http://localhost:3000", port=8765, tempor
                 await proc.wait()
                 return
             job["state"] = "running"
+            pressure_samples = 0
             while proc.returncode is None:
+                pressure_samples = pressure_samples + 1 if psutil.virtual_memory().available < diagnostic["systemReserveBytes"] else 0
+                if pressure_samples >= 3:
+                    job["error"], job["guardDecision"] = "memory_pressure", "stop-memory-pressure"
+                    job["preflight"]["runtimeAvailableRamBytes"] = psutil.virtual_memory().available
+                    proc.kill()
+                    break
+                if time.monotonic() - job["created"] > JOB_TTL_SECONDS:
+                    job["error"], job["guardDecision"] = "timeout", "stop-timeout"
+                    proc.kill()
+                    break
                 try:
                     measured = psutil.Process(proc.pid)
                     rss = measured.memory_info().rss + sum(c.memory_info().rss for c in measured.children(recursive=True))
-                    if rss > MAX_RSS_BYTES or time.monotonic() - job["created"] > JOB_TTL_SECONDS:
-                        job["error"] = "resource_limit"
+                    job["peakRssMiB"] = max(job["peakRssMiB"], round(rss / 1024**2, 2))
+                    if rss > diagnostic["maxRssBytes"]:
+                        job["error"], job["guardDecision"] = "rss_limit", "stop-rss-limit"
                         proc.kill()
                         break
                 except psutil.Error:
@@ -204,6 +245,8 @@ def create_app(weights, token, origin="http://localhost:3000", port=8765, tempor
             await proc.wait()
             job["state"] = "succeeded" if proc.returncode == 0 else "failed"
             if proc.returncode != 0:
+                if proc.returncode == 75:
+                    job["error"], job["guardDecision"] = "rss_limit", "stop-rss-limit"
                 job.setdefault("error", "inference_failed_check_input_weights_and_dependencies")
             (job["directory"] / "input.nii").unlink(missing_ok=True)
         except asyncio.CancelledError:
@@ -322,11 +365,14 @@ def create_app(weights, token, origin="http://localhost:3000", port=8765, tempor
         job = find(identifier)
         response = {"schema": "opus-worker-job-status/v1", "jobId": identifier,
                     "state": job["state"], "uploadedBytes": job["uploadedBytes"],
+                    "preflight": job["preflight"], "guardDecision": job["guardDecision"], "peakRssMiB": job["peakRssMiB"],
                     "elapsedSeconds": round(time.monotonic() - job["created"], 1)}
         if "error" in job:
             response["error"] = job["error"]
         if job["state"] == "succeeded":
             response["metrics"] = json.loads((job["directory"] / "metrics.json").read_text())
+            response["metrics"].update(preflight=job["preflight"], guardDecision=job["guardDecision"])
+            response["metrics"]["peakRssMiB"] = max(response["metrics"]["peakRssMiB"], job["peakRssMiB"])
             response["result"] = json.loads((job["directory"] / "result.json").read_text())
         return response
 
@@ -352,12 +398,13 @@ if __name__ == "__main__":
     parser.add_argument("--weights", type=Path, required=True)
     parser.add_argument("--origin", default="http://localhost:3000")
     parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument("--profile", choices=tuple(PROFILES), default="safe")
     args = parser.parse_args()
     if not 1024 <= args.port <= 65535:
         parser.error("Invalid port")
     os.umask(0o077)
     session_token = secrets.token_urlsafe(32)
-    app = create_app(args.weights, session_token, args.origin, args.port)
+    app = create_app(args.weights, session_token, args.origin, args.port, profile=args.profile)
     print(f"Local research worker: http://127.0.0.1:{args.port}; origin: {args.origin}")
     print(f"Paste this ephemeral session token into the local worker panel: {session_token}", flush=True)
     import uvicorn

@@ -57,6 +57,9 @@ const require=createRequire(new URL('../web/package.json',import.meta.url));
 const {chromium}=require('playwright');
 let worker,server,browser,page,token,stage='start',jobId,request,outputStatus,maskPromise;
 let uploaded=0,chunkCount=0,deleted=false,observerError=null;
+const workerHttp={capabilities:null,modelReady:null,createJob:null,firstChunk:null};
+let resourceDiagnostic=null;
+let workerRequestFailed=false;
 const hash=createHash('sha256'), destinations=new Set(), errors=[];
 const started=performance.now(), timings={};
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
@@ -91,6 +94,23 @@ try {
   page=await browser.newPage({viewport:{width:1600,height:1000}});
   page.setDefaultTimeout(120000);
   page.on('pageerror',()=>errors.push('browser-error'));
+  // Only technical flags/codes: never log headers, tokens, bodies or Playwright
+  // error messages (fill() call logs can contain the session token).
+  page.on('requestfailed',r=>{
+    if(new URL(r.url()).origin===workerOrigin)workerRequestFailed=true;
+  });
+  page.on('response',async r=>{
+    const url=new URL(r.url());if(url.origin!==workerOrigin)return;
+    if(url.pathname==='/v1/capabilities') {
+      workerHttp.capabilities=r.status();
+      if(r.ok())try {workerHttp.modelReady=(await r.json()).model?.ready===true;}catch{}
+    }
+    if(url.pathname==='/v1/jobs'&&r.request().method()==='POST') {
+      workerHttp.createJob=r.status();
+      try {const data=await r.json();resourceDiagnostic=data.detail??data;}catch{}
+    }
+    if(url.pathname.endsWith('/input/chunks/0')&&r.request().method()==='PUT')workerHttp.firstChunk=r.status();
+  });
   // Real requests pass through to localhost. Any other page egress is refused.
   await page.route('**/*',async route=>{
     const url=new URL(route.request().url());
@@ -104,7 +124,8 @@ try {
           const body=await response.body();
           if(url.pathname.endsWith('/mask'))maskPromise=Promise.resolve(body);
           else if(response.ok()) {
-            const data=JSON.parse(body.toString());if(data.state==='succeeded'){outputStatus=data;jobId=data.jobId;}
+            const data=JSON.parse(body.toString());resourceDiagnostic=data;
+            if(data.state==='succeeded'){outputStatus=data;jobId=data.jobId;}
           }
           return route.fulfill({response,body});
         } catch(e) {observerError=e;return route.abort();}
@@ -137,14 +158,24 @@ try {
   await page.getByRole('button',{name:'MPR · 3 плоскости',exact:true}).click();
   await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='Подготовить пакет серии'&&!b.disabled));
   timings.importMprSeconds=(performance.now()-started)/1000;
-  stage='real-r231-job';
-  await page.locator('.ora-local-lungmask>summary').click();
+  stage='r231-open-panel';
   const panel=page.locator('.ora-local-lungmask');
+  await panel.waitFor({state:'visible'});
+  if(!await panel.evaluate(node=>node.open))await panel.locator('summary').click();
+  stage='r231-worker-address';
   await panel.getByLabel('Адрес локального worker').fill(workerOrigin);
+  stage='r231-session-token';
   await panel.getByLabel('Токен локального worker').fill(token);
-  await panel.locator('input[type=checkbox]').check();
+  stage='r231-research-confirmation';
+  await panel.getByRole('checkbox').check();
+  stage='r231-button-enabled';
+  const runButton=panel.getByRole('button',{name:'Сегментировать лёгкие локально',exact:true});
+  await runButton.waitFor({state:'visible'});
+  assert.equal(await runButton.isEnabled(),true,'R231 button disabled');
   const jobStarted=performance.now();
-  await panel.getByRole('button',{name:'Сегментировать лёгкие локально',exact:true}).click();
+  stage='r231-click';
+  await runButton.click();
+  stage='r231-await-result';
   await Promise.race([
     panel.locator('.ora-local-worker-metrics').waitFor({timeout:300000}),
     panel.locator('[role=alert]').waitFor({timeout:300000}).then(()=>{throw Error('Worker/UI rejected reference');}),
@@ -189,7 +220,9 @@ try {
       originalFrames:103,selectedFrames:32,selectedIndicesZeroBased:[35,66],fullChest:false,selection:manifest.selection},
     dimensions:request.geometry.dimensions,affineLps:request.geometry.affineLps,inputSha256:request.inputSha256,
     maskSha256:result.maskSha256,weightsSha256:result.model.weightsSha256,labelVoxels:counts,
-    inferenceMetrics:outputStatus.metrics,controller:{platform:os.platform(),machine:os.arch(),browser:await browser.version()},
+    inferenceMetrics:outputStatus.metrics,preflight:outputStatus.metrics.preflight,
+    guardDecision:outputStatus.metrics.guardDecision,peakRssMiB:outputStatus.metrics.peakRssMiB,
+    controller:{platform:os.platform(),machine:os.arch(),browser:await browser.version()},
     timings,chunkCount,uploadedBytes:uploaded,overlayPixels,jobDeleted:true,pageNetworkOrigins:[...destinations],
     clinicalDice:null,M1Acceptance:'not-accepted; requires separate M1/Safari/system-memory verification',
     limitations:['Partial native CT reference only, not complete chest coverage.','No manual contour Dice or clinical accuracy evaluated.',
@@ -197,9 +230,23 @@ try {
   await writeFile(report,JSON.stringify(record,null,2),{flag:'wx',mode:0o600});
   console.log(JSON.stringify({status:'passed',actualTrainedInference:true,selectedFrames:32,fullChest:false,
     labelVoxels:counts,overlayPixels,metrics:outputStatus.metrics,timings}));
-} catch {
-  console.error(JSON.stringify({stage,uploaded,chunkCount,deleted,statusReceived:Boolean(outputStatus),maskReceived:Boolean(maskPromise),
-    inputSha256:request?.inputSha256,geometry:request?.geometry,observerFailed:Boolean(observerError),errorCount:errors.length}));
+} catch(cause) {
+  const uiAlert=page?await page.locator('.ora-local-lungmask [role=alert]').isVisible().catch(()=>false):false;
+  // Project only numeric diagnostics and allowlisted decisions; no raw errors,
+  // token-bearing Playwright call logs or worker response bodies.
+  const preflight={};
+  for(const key of ['availableRamBytes','requiredRamBytes','availableDiskBytes','requiredDiskBytes']) {
+    const n=resourceDiagnostic?.preflight?.[key];if(Number.isSafeInteger(n)&&n>=0)preflight[key]=n;
+  }
+  const guardDecision=resourceDiagnostic?.guardDecision??resourceDiagnostic?.preflight?.guardDecision;
+  const diagnostic={schema:'opus-r231-browser-verification/v1',status:'failed',actualTrainedInference:outputStatus?true:uploaded===0?false:null,
+    stage,uploaded,chunkCount,deleted,statusReceived:Boolean(outputStatus),maskReceived:Boolean(maskPromise),
+    inputSha256:request?.inputSha256,geometry:request?.geometry,observerFailed:Boolean(observerError),errorCount:errors.length,
+    errorType:cause instanceof Error?cause.name:'unknown',uiAlert,workerHttp,workerRequestFailed,preflight,
+    guardDecision:['allow','reject-memory','reject-disk','reject-model-budget','stop-memory-pressure','stop-rss-limit','stop-timeout'].includes(guardDecision)?guardDecision:null,
+    peakRssMiB:Number.isFinite(resourceDiagnostic?.peakRssMiB)?resourceDiagnostic.peakRssMiB:null};
+  await writeFile(report,JSON.stringify(diagnostic,null,2),{flag:'wx',mode:0o600});
+  console.error(JSON.stringify(diagnostic));
   console.error(`FAIL: real R231 browser verification at ${stage}; no screenshots or source pixels saved.`);
   process.exitCode=1;
 } finally {
