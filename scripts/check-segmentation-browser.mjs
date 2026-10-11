@@ -107,6 +107,8 @@ try {
   await page.locator('.ora-vision-plan-controls button').click();
   await page.locator('.ora-vision-plan-result').waitFor();
   assert.equal(await page.locator('.ora-vision-plan-list>div').count(),4);
+  await page.locator('.ora-vision-plan-thumbnail').first().waitFor({timeout:20000});
+  assert.match(await page.locator('.ora-vision-plan-thumbnail').first().getAttribute('src'),/^data:image\/png;base64,/);
   assert.match(await page.locator('.ora-vision-plan-result').innerText(),/Загрузка изображений в AI:.*заблокирована/s);
   await page.waitForFunction(()=>window.__opusToneStarts===4);
   await page.locator('.ora-vision-plan-list button').nth(1).click();
