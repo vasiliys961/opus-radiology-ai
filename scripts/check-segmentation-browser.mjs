@@ -309,7 +309,9 @@ try {
   execFileSync(process.execPath,[join(root,'scripts/generate-segmentation-phantom.mjs'),ctFixture,'CT'],{stdio:'pipe'});
   const ctMask=await readFile(join(ctFixture,'synthetic-mask.nii'));
   const localId='11111111-1111-4111-8111-111111111111';
-  let localRequest,offset=0,chunkCount=0,completed=false,deleted=false;
+  let localRequest,offset=0,chunkCount=0,completed=false,deleted=false,jobAttempts=0;
+  const resourcePreflight={availableRamBytes:512*1024**2,requiredRamBytes:1536*1024**2,
+    availableDiskBytes:4*1024**3,requiredDiskBytes:256*1024**2,guardDecision:'allow'};
   const inputHash=createHash('sha256');
   await page.unroute('http://127.0.0.1:8765/**');
   await page.route('http://127.0.0.1:8765/**',async route=>{
@@ -320,9 +322,13 @@ try {
     if(r.method()==='OPTIONS')return route.fulfill({status:204,headers});
     if(path==='/v1/capabilities')return json({schema:'opus-worker-capabilities/v1',mode:'local',device:'cpu',
       dataPolicy:'public-reference-only',patientMode:false,externalEgress:false,concurrency:1,maxVoxels:8388608,
-      chunkUpload:{version:1,maxChunkBytes:262144},model:{id:'lungmask-R231',version:'0.2.20',
+      resourceProfile:{name:'safe',threads:1,interOpThreads:1},chunkUpload:{version:1,maxChunkBytes:262144},model:{id:'lungmask-R231',version:'0.2.20',
         weightsSha256:'d5d2fc3df432115933491f115b283e94d1f5c841c0e82f6e7bd2d65d3ccde69f',ready:true}});
     if(path==='/v1/jobs'&&r.method()==='POST') {
+      jobAttempts++;
+      const code=['insufficient_memory','insufficient_disk','model_not_ready'][jobAttempts-1];
+      if(code)return route.fulfill({status:code==='model_not_ready'?503:507,headers,contentType:'application/json',
+        body:JSON.stringify({detail:{code,preflight:{...resourcePreflight,guardDecision:code==='insufficient_memory'?'reject-memory':'reject-disk'}}})});
       localRequest=r.postDataJSON().request;assert.equal(localRequest.modality,'CT');return json({jobId:localId});
     }
     if(path.includes('/input/chunks/')) {
@@ -343,7 +349,8 @@ try {
       inputSha256:localRequest.inputSha256,maskSha256:createHash('sha256').update(ctMask).digest('hex'),
       model:{id:'lungmask-R231',version:'0.2.20',weightsSha256:'d5d2fc3df432115933491f115b283e94d1f5c841c0e82f6e7bd2d65d3ccde69f',modality:'CT',task:'synthetic-browser-transport-only'},
       labels:[{id:1,name:'Synthetic sphere'},{id:2,name:'Synthetic insert'}],limitations:['Synthetic prediction; no medical model invoked.']},
-      metrics:{device:'cpu',inferenceSeconds:0,totalSeconds:0,peakRssMiB:0,platform:'synthetic',machine:'fixture'}});
+      metrics:{device:'cpu',inferenceSeconds:0,totalSeconds:0,peakRssMiB:0,platform:'synthetic',machine:'fixture',
+        preflight:{...resourcePreflight,availableRamBytes:4*1024**3},guardDecision:'allow',resourceProfile:'safe',threads:1,interOpThreads:1}});
   });
   await page.reload({waitUntil:'networkidle'});
   await page.locator('input[accept*=".dcm"]').setInputFiles((await readdir(ctFixture+'/dicom')).sort().map(n=>ctFixture+'/dicom/'+n));
@@ -355,7 +362,15 @@ try {
   await positive.getByLabel('Токен локального worker').fill('synthetic-test-token-for-browser-only-123456789');
   await positive.locator('input[type=checkbox]').check();
   await positive.getByRole('button',{name:'Сегментировать лёгкие локально',exact:true}).click();
+  for(const text of [/Недостаточно RAM:.*0\.50 ГиБ.*1\.50 ГиБ/,/Недостаточно места/,/Модель R231 недоступна/]) {
+    await positive.locator('[role=alert]').waitFor();
+    assert.match(await positive.locator('[role=alert]').innerText(),text);
+    assert.equal(offset,0);assert.equal(deleted,false);
+    assert.equal(await positive.locator('input[type=checkbox]').isChecked(),true);
+    await positive.getByRole('button',{name:'Повторить R231',exact:true}).click();
+  }
   await positive.locator('.ora-local-worker-metrics').waitFor();
+  assert.equal(jobAttempts,4);
   assert.match(await positive.innerText(),/Маска возвращена в MPR/);
   assert.equal(chunkCount,5);assert.equal(deleted,true);
   assert.match(await page.locator('.ora-mask-coverage').innerText(),/только к загруженным срезам/);
@@ -366,7 +381,7 @@ try {
     return pixels.some((v,i)=>i%4===3&&v>0);
   }));
   assert.equal(await page.locator('.ora-mpr-mask-overlay').count(),3);
-  console.log('Positive local chunk upload -> bound mask -> three MPR planes passed (synthetic CT/prediction only)');
+  console.log('Memory/disk/model errors -> retry without reload -> chunk upload -> bound mask -> three MPR planes passed (synthetic CT/prediction only)');
   assert.deepEqual(errors,[]);
   console.log('PASS: overlays, volumes, full scalar NIfTI export (all voxels), checksummed model-result handoff, wrong-package rejection, 3D/MIP controls and resource reset on 2D/MPR. No real model inference performed.');
 }catch(e){console.error('FAIL:',e);console.error('PAGE ERRORS:',errors);console.error('SERVER:',logs);if(page){console.error('ALERTS:',await page.locator('[role=alert]').allTextContents());await page.screenshot({path:join(results,'failure.png'),fullPage:true}).catch(()=>{});}process.exitCode=1;}

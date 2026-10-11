@@ -5,7 +5,49 @@ import { parseNiftiMask, MAX_MASK_FILE_BYTES, type LabelMask } from "./segmentat
 
 export const R231_SHA256 = "d5d2fc3df432115933491f115b283e94d1f5c841c0e82f6e7bd2d65d3ccde69f";
 export type WorkerSession = { endpoint: string; token: string };
-export type WorkerMetrics = { device: "cpu"; inferenceSeconds: number; totalSeconds: number; peakRssMiB: number; platform: string; machine: string };
+export type ResourcePreflight = {availableRamBytes: number; requiredRamBytes: number; availableDiskBytes: number; requiredDiskBytes: number; guardDecision: string; runtimeAvailableRamBytes?: number};
+export type WorkerMetrics = { device: "cpu"; inferenceSeconds: number; totalSeconds: number; peakRssMiB: number; platform: string; machine: string;
+  preflight?: ResourcePreflight; guardDecision?: string; resourceProfile?: "safe" | "balanced"; threads?: number; interOpThreads?: number };
+export class LocalWorkerError extends Error {
+  code: string;
+  preflight?: ResourcePreflight;
+  constructor(code: string, message: string, preflight?: ResourcePreflight) {
+    super(message);this.name="LocalWorkerError";this.code=code;this.preflight=preflight;
+  }
+}
+function resourcePreflight(value: unknown): ResourcePreflight | undefined {
+  if (!value || typeof value!=="object")return;
+  const p=value as ResourcePreflight;
+  if (![p.availableRamBytes,p.requiredRamBytes,p.availableDiskBytes,p.requiredDiskBytes].every(n=>Number.isSafeInteger(n)&&n>=0)
+    || !["allow","reject-memory","reject-disk","reject-model-budget"].includes(p.guardDecision))return;
+  return {availableRamBytes:p.availableRamBytes,requiredRamBytes:p.requiredRamBytes,availableDiskBytes:p.availableDiskBytes,
+    requiredDiskBytes:p.requiredDiskBytes,guardDecision:p.guardDecision,
+    ...(typeof p.runtimeAvailableRamBytes==="number"&&Number.isSafeInteger(p.runtimeAvailableRamBytes)&&p.runtimeAvailableRamBytes>=0?{runtimeAvailableRamBytes:p.runtimeAvailableRamBytes}:{})};
+}
+export function workerFailure(detail: unknown, status: number): LocalWorkerError {
+  const d=detail&&typeof detail==="object"?detail as {code?:unknown;preflight?:unknown}:undefined;
+  const code=typeof d?.code==="string"?d.code:typeof detail==="string"?detail:"worker_http_error";
+  const p=resourcePreflight(d?.preflight);
+  const gib=(n:number)=>(n/1024**3).toFixed(2);
+  const messages: Record<string,string>={
+    insufficient_memory:p?`Недостаточно RAM: доступно ${gib(p.availableRamBytes)} ГиБ, требуется ${gib(p.requiredRamBytes)} ГиБ. Закройте лишние вкладки браузера, редакторы и локальные модели, затем нажмите «Повторить R231».`:"Недостаточно RAM. Освободите память и повторите R231.",
+    insufficient_disk:p?`Недостаточно места для временных файлов: доступно ${gib(p.availableDiskBytes)} ГиБ, требуется ${gib(p.requiredDiskBytes)} ГиБ. Освободите место на диске и повторите R231.`:"Недостаточно места на диске. Освободите место и повторите R231.",
+    model_memory_budget_exceeded:"Серия превышает безопасный бюджет процесса R231. Выберите явно ограниченную исследовательскую серию; полная КТ пока не поддерживается. Лимит не повышается автоматически.",
+    model_not_ready:"Модель R231 недоступна: проверьте веса и закреплённые версии зависимостей в .venv-lungmask, затем перезапустите worker.",
+    model_not_installed_or_unverified:"Модель R231 недоступна: проверьте веса и зависимости, затем перезапустите worker.",
+    unauthorized:"Неверный сессионный токен. Введите токен текущего worker и повторите R231.",
+    origin_or_host_denied:"Worker отклонил origin/адрес. Проверьте точный адрес вкладки и параметр --origin, затем перезапустите worker.",
+    worker_busy_delete_previous_job:"Worker занят предыдущим заданием. Отмените его или дождитесь завершения, затем повторите R231.",
+    memory_pressure:`R231 остановлена для защиты системы: доступная RAM упала ниже резерва.${p?` Доступно ${gib(p.runtimeAvailableRamBytes??p.availableRamBytes)} ГиБ; для нового запуска требуется ${gib(p.requiredRamBytes)} ГиБ.`:""} Освободите память и повторите R231. Это не отрицательное медицинское заключение.`,
+    rss_limit:"R231 остановлена: процесс превысил безопасный бюджет RAM. Повторите с меньшей явно выбранной исследовательской серией; увеличение лимита автоматически запрещено.",
+    timeout:"Превышено время локального задания. Проверьте нагрузку компьютера и повторите R231.",
+    input_write_failed:"Не удалось записать временный объём. Проверьте свободное место и права доступа, затем повторите R231.",
+  };
+  const known=Object.hasOwn(messages,code);
+  const message=known?messages[code]:(status===401?messages.unauthorized:status===403?messages.origin_or_host_denied:
+    `Локальный worker: HTTP ${status}. Проверьте совместимость приложения и worker, зависимости и выбранную серию; результат анализа не получен.`);
+  return new LocalWorkerError(known?code:status===401?"unauthorized":status===403?"origin_or_host_denied":"worker_http_error",message,p);
+}
 export function workerEndpoint(value: string): string {
   const url = new URL(value);
   if (url.protocol!=="http:" || url.hostname!=="127.0.0.1" || !url.port || url.username || url.password || url.search || url.hash || url.pathname!=="/") {
@@ -19,9 +61,19 @@ const id = (value: unknown): string => {
 };
 async function call(session: WorkerSession, path: string, init: RequestInit = {}): Promise<Response> {
   if (!/^[A-Za-z0-9_-]{32,128}$/.test(session.token)) throw new Error("Введите сессионный токен из терминала worker.");
-  const response = await fetch(workerEndpoint(session.endpoint)+path, {...init, credentials:"omit", redirect:"error", cache:"no-store",
-    headers:{...init.headers,Authorization:`Bearer ${session.token}`}});
-  if (!response.ok) throw new Error(`Локальный worker: HTTP ${response.status}. Проверьте модель, origin, токен и свободную память.`);
+  const endpoint=workerEndpoint(session.endpoint);
+  let response: Response;
+  try {
+    response = await fetch(endpoint+path, {...init, credentials:"omit", redirect:"error", cache:"no-store",
+      headers:{...init.headers,Authorization:`Bearer ${session.token}`}});
+  } catch(cause) {
+    if(init.signal?.aborted)throw cause;
+    throw new LocalWorkerError("connection_or_cors","Нет связи с локальным worker. Проверьте его запуск и --origin. Браузер может скрыть HTTP-ответ при запрете CORS; повторите после исправления адреса/origin.");
+  }
+  if (!response.ok) {
+    const payload=await smallJson(response).catch(()=>null);
+    throw workerFailure(payload?.detail,response.status);
+  }
   return response;
 }
 async function smallJson(response: Response) {
@@ -55,11 +107,13 @@ async function boundedMask(response: Response, length: number): Promise<ArrayBuf
     return buffer;
   } finally {await reader.cancel().catch(()=>{});reader.releaseLock();}
 }
-export async function checkLocalWorker(session: WorkerSession, signal?: AbortSignal): Promise<void> {
+export async function checkLocalWorker(session: WorkerSession, signal?: AbortSignal): Promise<"safe" | "balanced" | undefined> {
   const c=await smallJson(await call(session,"/v1/capabilities",{signal}));
+  if(c.model?.ready===false)throw workerFailure({code:"model_not_ready"},503);
   if(c.schema!=="opus-worker-capabilities/v1" || c.mode!=="local" || c.device!=="cpu" || c.dataPolicy!=="public-reference-only" || c.patientMode!==false || c.externalEgress!==false || c.concurrency!==1 || c.maxVoxels!==8388608 || c.chunkUpload?.version!==1 || c.chunkUpload?.maxChunkBytes!==262144 || c.model?.id!=="lungmask-R231" || c.model?.version!=="0.2.20" || c.model?.weightsSha256!==R231_SHA256 || c.model?.ready!==true) {
     throw new Error("Совместимый worker с проверенной Lungmask R231 недоступен. Обновите приложение и worker, проверьте зависимости и веса по руководству.");
   }
+  return ["safe","balanced"].includes(c.resourceProfile?.name)?c.resourceProfile.name:undefined;
 }
 function pause(signal: AbortSignal): Promise<void> {
   return new Promise((resolve,reject)=>{
@@ -99,7 +153,7 @@ export async function runLocalR231(session: WorkerSession, packet: AnalysisPacka
     for (;;) {
       const status=await smallJson(await call(session,`/v1/jobs/${jobId}`,{signal}));
       if(status.schema!=="opus-worker-job-status/v1"||status.jobId!==jobId)throw new Error("Ответ относится к другому заданию.");
-      if(status.state==="failed"||status.state==="cancelled")throw new Error("R231 не выполнила анализ. Проверьте HU, осевую геометрию, зависимости и память; это не отрицательное заключение.");
+      if(status.state==="failed"||status.state==="cancelled")throw workerFailure({code:status.error,preflight:status.preflight},500);
       if(status.state==="succeeded") {
         const result=parseSegmentationResult(JSON.stringify(status.result));
         if(result.model.id!=="lungmask-R231"||result.model.version!=="0.2.20"||result.model.weightsSha256!==R231_SHA256)throw new Error("Неожиданная модель результата.");
@@ -112,6 +166,11 @@ export async function runLocalR231(session: WorkerSession, packet: AnalysisPacka
         assertResultBinding(result,packet.request,mask,await sha256(buffer));
         const m=status.metrics;
         if(m?.device!=="cpu" || ![m.inferenceSeconds,m.totalSeconds,m.peakRssMiB].every(v=>typeof v==="number"&&Number.isFinite(v)&&v>=0) || typeof m.platform!=="string" || typeof m.machine!=="string")throw new Error("Worker не вернул проверяемые метрики.");
+        if(m.preflight!==undefined) {
+          const p=resourcePreflight(m.preflight);
+          if(!p||p.guardDecision!=="allow"||m.guardDecision!=="allow")throw new Error("Worker не вернул проверяемый preflight.");
+          m.preflight=p;
+        }
         return {mask,result,metrics:m};
       }
       if(!["queued","running"].includes(status.state))throw new Error("Неизвестное состояние worker.");
