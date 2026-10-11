@@ -1,0 +1,5 @@
+# OPTIONAL engineering/CI tooling, not needed in production inference.
+-r requirements.txt
+pytest>=8,<10
+httpx>=0.27,<1.0
+onnx>=1.17,<2.0
