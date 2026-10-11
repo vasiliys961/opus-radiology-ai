@@ -24,7 +24,7 @@ export type SyntheticTrialResult = {
   result: OrchestraResult;
 };
 export const SYNTHETIC_TRIAL_MAX_COMPLETIONS = 5;
-const MODEL_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9/:._+-]{0,159}$/;
+const MODEL_PATTERN = /^(?!.*:\/\/)[a-zA-Z0-9][a-zA-Z0-9/:._+-]{0,159}$/;
 const TRIAL_FIELDS = ["modality","region","visionModel","clinicalModel","acknowledgePaidSyntheticExperiment"];
 
 export function parseSyntheticTrialInput(value: unknown): SyntheticTrialRequest | null {
