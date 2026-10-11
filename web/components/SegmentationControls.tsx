@@ -2,29 +2,32 @@
 
 import { useEffect, useRef, useState } from "react";
 import LocalLungmaskPanel from "./LocalLungmaskPanel";
+import SegmentationEvidenceReview from "./SegmentationEvidenceReview";
+import { buildSegmentationEvidence, type SegmentationEvidence } from "../lib/segmentation-evidence";
 import type { AnalysisStream } from "../lib/analysis-stream";
-import { maskColor, MAX_MASK_FILE_BYTES, readNiftiMaskFile, type LabelMask } from "../lib/segmentation-mask";
+import { maskColor, MAX_MASK_FILE_BYTES, readNiftiMaskFile, type LabelMask, type Point3 } from "../lib/segmentation-mask";
 import { assertResultBinding, MAX_RESULT_JSON_BYTES, parseSegmentationResult, sha256, type AnalysisPackage, type AnalysisRequest, type SegmentationResult } from "../lib/analysis-package";
 
 export type MaskDisplay = { visible: boolean; opacity: number; label: number | null };
-type Summary = { name: string; labels: LabelMask["labels"]; result?: SegmentationResult };
+type Summary = { name: string; labels: LabelMask["labels"]; result?: SegmentationResult; evidence?: SegmentationEvidence; evidenceRevision?: number };
 type DownloadPackage = { request: AnalysisRequest; volumeUrl: string; manifestUrl: string };
 
-export default function SegmentationControls({ ready, onPrepare, onPrepareStream, onImport, onDisplay, onClear }: {
+export default function SegmentationControls({ ready, onPrepare, onPrepareStream, onImport, onDisplay, onClear, onNavigatePoint }: {
   ready: boolean;
   onPrepare: (signal: AbortSignal) => Promise<AnalysisPackage>;
   onPrepareStream: (signal: AbortSignal) => Promise<AnalysisStream>;
   onImport: (mask: LabelMask, display: MaskDisplay) => void;
   onDisplay: (display: MaskDisplay) => void;
   onClear: () => void;
+  onNavigatePoint: (point: Point3) => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const resultInput = useRef<HTMLInputElement>(null);
   const version = useRef(0);
   const preparation = useRef<AbortController | null>(null);
   const packageRef = useRef<DownloadPackage | null>(null);
-  const callbacks = useRef({ onPrepare, onPrepareStream, onImport, onDisplay, onClear });
-  callbacks.current = { onPrepare, onPrepareStream, onImport, onDisplay, onClear };
+  const callbacks = useRef({ onPrepare, onPrepareStream, onImport, onDisplay, onClear, onNavigatePoint });
+  callbacks.current = { onPrepare, onPrepareStream, onImport, onDisplay, onClear, onNavigatePoint };
   const [summary, setSummary] = useState<Summary | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -112,9 +115,11 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
       const mask=await readNiftiMaskFile(masks[0]);
       if (request!==version.current) return;
       assertResultBinding(result,active.request,mask,maskSha256);
+      const evidence=await buildSegmentationEvidence(active.request,result,mask,maskSha256);
+      if (request!==version.current) return;
       const next={visible:true,opacity:0.4,label:mask.labels[0]?.id??null};
       callbacks.current.onImport(mask,next);
-      setSummary({name:masks[0].name,labels:mask.labels,result});setDisplay(next);
+      setSummary({name:masks[0].name,labels:mask.labels,result,evidence,evidenceRevision:request});setDisplay(next);
     } catch(cause) {
       if (request===version.current) setError(cause instanceof Error?cause.message:String(cause));
     } finally {if (request===version.current) setBusy(false);}
@@ -131,10 +136,10 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
     <div className="ora-mask-heading"><strong>Сегментация · готовая маска</strong><span>Локальный импорт</span></div>
     <p>Загрузите NIfTI-маску именно выбранной DICOM-серии. Проверяются размеры, положение и ориентация. Для открытой исследовательской КТ доступна опциональная локальная Lungmask R231 после отдельной установки.</p>
     <LocalLungmaskPanel ready={ready&&!busy&&!exportBusy} onBusy={setWorkerBusy}
-      onPrepare={signal=>callbacks.current.onPrepareStream(signal)} onResult={(mask,result)=>{
+      onPrepare={signal=>callbacks.current.onPrepareStream(signal)} onResult={(mask,result,evidence)=>{
         const next={visible:true,opacity:0.4,label:null};
         callbacks.current.onImport(mask,next);
-        setSummary({name:"Lungmask R231 · локальный worker",labels:mask.labels,result});setDisplay(next);setError("");
+        setSummary({name:"Lungmask R231 · локальный worker",labels:mask.labels,result,evidence,evidenceRevision:++version.current});setDisplay(next);setError("");
       }}/>
     <div className="ora-mask-actions">
       <button type="button" disabled={!ready||busy||exportBusy||workerBusy} onClick={()=>input.current?.click()}>{busy ? "Проверка маски…" : summary ? "Заменить маску .nii / .nii.gz" : "Загрузить маску .nii / .nii.gz"}</button>
@@ -171,6 +176,11 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
         <small>Объём рассчитан по меткам и геометрии маски; это не оценка точности модели. Названия из паспорта заявлены поставщиком результата. Маска отображается поверх MPR, без 3D-поверхностей.</small>
       </> : <p>Маска не содержит ненулевых меток. Это не подтверждает отсутствие патологических изменений.</p>}
     </>}
+    {summary?.evidence&&<SegmentationEvidenceReview key={summary.evidenceRevision}
+      evidence={summary.evidence} onNavigate={(point,labelId)=>{
+        callbacks.current.onNavigatePoint(point);
+        change({...display,visible:true,label:labelId});
+      }}/>}
     <details className="ora-analysis-package">
       <summary>Пакет полного объёма для AI Engine</summary>
       <p>Подготовьте выбранную серию как NIfTI и паспорт. Оба файла скачиваются отдельно; приложение не отправляет их на сервер.</p>

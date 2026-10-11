@@ -4,10 +4,11 @@ import { checkLocalWorker, runLocalR231, type WorkerMetrics } from "../lib/local
 import type { AnalysisStream } from "../lib/analysis-stream";
 import type { SegmentationResult } from "../lib/analysis-package";
 import type { LabelMask } from "../lib/segmentation-mask";
+import type { SegmentationEvidence } from "../lib/segmentation-evidence";
 
 export default function LocalLungmaskPanel({ready, onPrepare, onResult, onBusy}: {
   ready: boolean; onPrepare: (signal: AbortSignal)=>Promise<AnalysisStream>;
-  onResult: (mask: LabelMask,result: SegmentationResult)=>void; onBusy: (busy: boolean)=>void;
+  onResult: (mask: LabelMask,result: SegmentationResult,evidence: SegmentationEvidence)=>void; onBusy: (busy: boolean)=>void;
 }) {
   const [endpoint,setEndpoint]=useState("http://127.0.0.1:8765");
   const [token,setToken]=useState("");
@@ -32,7 +33,7 @@ export default function LocalLungmaskPanel({ready, onPrepare, onResult, onBusy}:
       const packet=await callbacks.current.onPrepare(controller.signal);
       const output=await runLocalR231(session,packet,controller.signal,setStatus);
       if(controller.signal.aborted)return;
-      callbacks.current.onResult(output.mask,output.result);
+      callbacks.current.onResult(output.mask,output.result,output.evidence);
       setMetrics(output.metrics);setStatus("Маска возвращена в MPR. Проверьте границы на всех плоскостях.");
     } catch(cause) {
       if(controller.signal.aborted)setStatus("Ожидание отменено; запрос удаления отправлен worker. При потере связи файлы удаляются по TTL.");

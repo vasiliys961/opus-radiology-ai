@@ -32,6 +32,7 @@ type Runtime = {
   importMask: (mask: LabelMask, display: MaskDisplay) => void;
   setMaskDisplay: (display: MaskDisplay) => void;
   clearMask: () => void;
+  focusPoint: (point: Point3) => void;
   prepareStream: (signal: AbortSignal) => Promise<AnalysisStream>;
   preparePackage: (signal: AbortSignal) => Promise<AnalysisPackage>;
 };
@@ -405,6 +406,12 @@ export default function CornerstoneMPR({ files, sourceSeries, quality, show3D, o
           },
           setMaskDisplay: display => {if(maskState&&!cancelled){maskState.display=display;scheduleMask();}},
           clearMask: () => {maskState=null;scheduleMask();},
+          focusPoint: world => {
+            if(cancelled || world.length!==3 || !world.every(Number.isFinite))throw new Error("Точка Evidence недоступна.");
+            const index=core.utilities.transformWorldToIndex(volume.imageData,world);
+            if(!insideImageExtent(index,volume.dimensions))throw new Error("Точка Evidence за пределами выбранной серии.");
+            synchronize([...world] as Vec3);
+          },
           setInterpolation: setRenderingInterpolation,
           reset: () => {
             for (const p of PLANE_NAMES) views[p].resetCamera();
@@ -552,7 +559,11 @@ export default function CornerstoneMPR({ files, sourceSeries, quality, show3D, o
         runtime.current.importMask(mask,display);
       }}
       onDisplay={display=>runtime.current?.setMaskDisplay(display)}
-      onClear={()=>runtime.current?.clearMask()}/>
+      onClear={()=>runtime.current?.clearMask()}
+      onNavigatePoint={point=>{
+        if(!runtime.current)throw new Error("Выбранная серия уже закрыта.");
+        runtime.current.focusPoint(point);
+      }}/>
     <div className="ora-mpr-3d-toolbar">
       <button type="button" className={show3D ? "active" : ""} disabled={!ready} aria-pressed={show3D}
         onClick={() => onShow3DChange(!show3D)}>{show3D ? "Скрыть 3D" : "Показать 3D"}</button>
