@@ -1,5 +1,5 @@
 import type { DicomSeries } from "./dicom-series";
-import { validateEvidenceJson, type EvidenceJson } from "./evidence-json";
+import { validateEvidenceJson, type EvidenceJson } from "./evidence-json.ts";
 
 /**
  * Local-only, untrusted research-result viewer.
