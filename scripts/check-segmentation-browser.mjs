@@ -27,6 +27,23 @@ try {
   page=await browser.newPage({viewport:{width:1600,height:1000}});
   page.on('pageerror',e=>errors.push(e.message));
   await page.goto('http://127.0.0.1:3131',{waitUntil:'networkidle'});
+  // In production, even a same-origin read-only provider probe remains closed.
+  // API credentials, DICOM and clinical context are never exposed.
+  const readinessResponse=await page.request.get(
+    'http://127.0.0.1:3131/api/ai/provider-readiness?provider=openrouter');
+  assert.equal(readinessResponse.status(),404);
+  assert.doesNotMatch(await readinessResponse.text(),/OPENROUTER_API_KEY|secret|sk-/);
+  const blockedUpload=await page.request.post('http://127.0.0.1:3131/api/ai',{
+    data:{provider:'openrouter',role:'vision',model:'never-forward',messages:[
+      {role:'user',content:'nonclinical sentinel'}
+    ]},
+  });
+  assert.equal(blockedUpload.status(),410);
+  assert.match(await blockedUpload.text(),/disabled/);
+  await page.getByRole('button',{name:'Проверить Polza',exact:true}).click();
+  await page.locator('.ora-provider-error').waitFor();
+  assert.match(await page.locator('.ora-provider-error').innerText(),/только на localhost/);
+  console.log('Provider readiness remains closed in production and gives a visible safe fallback');
   const files=(await readdir(fixture+'/dicom')).sort().map(n=>fixture+'/dicom/'+n);
   await page.locator('input[accept*=".dcm"]').setInputFiles(files);
   // v1.7: a structured AI research result is local-only and must link to

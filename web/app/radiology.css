@@ -281,3 +281,27 @@ button:disabled { cursor: not-allowed; }
 
 .ora-vision-plan-thumbnail{width:100%;max-height:130px;object-fit:contain;background:#102431;border:1px solid #d8e3e7;border-radius:6px;aspect-ratio:4/3}
 .ora-vision-plan-thumb-placeholder{min-height:76px;display:flex;align-items:center;justify-content:center;text-align:center;padding:10px;border:1px dashed #c7d9dd;border-radius:6px;font-size:9px;color:#8499a4;line-height:1.5;background:#f5f9f9}
+
+/* v1.8: read-only local provider / model-catalogue diagnostic */
+.ora-provider-panel{display:flex;flex-direction:column;gap:10px;padding:13px;border:1px solid #d9e8e8;border-radius:9px;background:#f8fbfc}
+.ora-provider-panel>p{font-size:10px;line-height:1.65;color:#6b8791;margin:0}
+.ora-provider-check{align-self:flex-start;border:1px solid #a6d7ce;background:#e7f5f2;color:#177c69;border-radius:7px;font-size:10px;font-weight:750;padding:9px 12px;cursor:pointer}
+.ora-provider-check:hover:not(:disabled){background:#d3ebe4}
+.ora-provider-check:disabled{opacity:.58;cursor:wait}
+.ora-provider-results{display:flex;flex-direction:column;gap:10px;border-top:1px solid #e0e9eb;padding-top:10px}
+.ora-provider-status-row{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:10px}
+.ora-provider-status-row strong{color:#456472}
+.ora-provider-status-row>span{font-size:10px;font-weight:730}
+.ora-provider-good{color:#19806a}
+.ora-provider-warn{color:#ad793e}
+.ora-provider-role-checks{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px}
+.ora-provider-role-checks li{font-size:10px;line-height:1.45;color:#587380;display:flex;gap:4px;flex-wrap:wrap;flex-direction:column}
+.ora-provider-panel code{display:inline-block;font:10px/1.4 ui-monospace,SFMono-Regular,monospace;background:#eaf2f4;border-radius:4px;padding:3px 5px;color:#365d6a;overflow-wrap:anywhere}
+.ora-provider-config-note,.ora-provider-note{font-size:10px;line-height:1.6;color:#718a95;margin:0}
+.ora-provider-model-list{border:1px solid #e2e9eb;background:#fff;border-radius:7px;padding:9px}
+.ora-provider-model-list>summary{font-size:10px;cursor:pointer;font-weight:730;color:#4b7080}
+.ora-provider-model-list ul{padding:0;margin:9px 0 0;display:flex;flex-direction:column;gap:7px;list-style:none}
+.ora-provider-model-list li{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:4px}
+.ora-provider-model-list strong{font-size:10px;color:#55727c;font-weight:670}
+.ora-provider-safety{border:1px solid #eadbbf;border-radius:7px;background:#fff8eb;padding:9px;font-size:10px;line-height:1.6;color:#956938;margin:0}
+.ora-provider-error{font-size:10px;line-height:1.6;background:#fff0eb;color:#9d583f;padding:10px;border-radius:7px;margin:0}
