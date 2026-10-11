@@ -52,7 +52,7 @@ export function validateEvidenceJson(value: unknown): value is EvidenceJson {
     if (!source || !safeText(source.seriesUid, 180) ||
         !v.seriesReviewed.includes(source.seriesUid) ||
         !(source.sopInstanceUid === null || safeText(source.sopInstanceUid, 180)) ||
-        !(source.frameIndex === null || (Number.isInteger(source.frameIndex) && Number(source.frameIndex) >= 0)) ||
+        !(source.frameIndex === null || (typeof source.frameIndex === "number" && Number.isInteger(source.frameIndex) && source.frameIndex >= 0)) ||
         !(source.slicePositionMm === null || (typeof source.slicePositionMm === "number" && Number.isFinite(source.slicePositionMm)))) return false;
     const m = f.measurements as Record<string, unknown> | null;
     if (!m || !optionalNumber(m.diameterMm) || !optionalNumber(m.volumeMl)) return false;
