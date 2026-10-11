@@ -6,6 +6,7 @@ import { PILOT_CASES, PILOT_NOTES } from "../lib/v17-pilot";
 import { deriveStudyReadiness } from "../lib/study-intelligence";
 import type { DicomSeries } from "../lib/dicom-series";
 import { useAnalysisSound } from "./AnalysisSoundProvider";
+import ProviderReadinessPanel from "./ProviderReadinessPanel";
 
 const PREF_KEY = "opus-radiology-v17-ui-preferences";
 type Preferences = {
@@ -84,6 +85,8 @@ export default function AiWorkflowPanel({ series }: { series: readonly DicomSeri
         </select>
       </label>
     </div>
+    <ProviderReadinessPanel provider={prefs.provider}
+      selectedVision={prefs.vision} selectedClinical={prefs.clinical}/>
     <div className="ora-v17-guidance">
       <strong>{selected?.label} · не подключена</strong>
       <span>{selected?.notes}</span>
@@ -116,7 +119,7 @@ export default function AiWorkflowPanel({ series }: { series: readonly DicomSeri
       </table>
       <p className="ora-v17-caution">Режимы различались по разрешению (3 мм / 1,5 мм). Слабая сегментация поджелудочной железы на МРТ: Dice {dice(PILOT_NOTES.weakMRPancreasTotalDice)} / {dice(PILOT_NOTES.weakMRPancreasNvDice)}. Нет внешней клинической валидации; Mac M1 не тестировался.</p>
     </div>}
-    <p className="ora-v17-muted">Выбор сохраняется только в этом браузере, а не в профиле врача на сервере. Доступность выбранной модели через шлюз пока не проверена.</p>
+    <p className="ora-v17-muted">Выбор сохраняется только в браузере. Нажмите «Проверить» выше для сверки серверной конфигурации с каталогом; наличие модели в каталоге не гарантирует вызов из вашего аккаунта.</p>
     <div className="ora-completion-audio" aria-label="Звук после завершения операций">
       <div className="ora-v17-heading"><strong>Звуковые уведомления</strong><span>Локально · WebAudio</span></div>
       <label className="ora-completion-toggle">
