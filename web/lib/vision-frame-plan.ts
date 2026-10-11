@@ -24,7 +24,7 @@ export type VisionFramePlan = {
 };
 
 export const MAX_VISION_SAMPLE_FRAMES = 4;
-const UID_PATTERN = /^\d{1,18}(?:\.\d{1,18})+$/;
+const validUid = (value: string | null): value is string => !!value && value.length <= 64 && /^\d+(?:\.\d+)+$/.test(value);
 function position(member: SeriesMember): number | null {
   const point = member.metadata.imagePositionPatient;
   const orient = member.metadata.imageOrientationPatient;
@@ -68,13 +68,16 @@ export function planVisionFrameSamples(
     if (!selected.members.length)
       blockers.push("Нет DICOM-кадров.");
     const uid = selected.members[0]?.metadata.seriesUid;
-    if (!uid || !UID_PATTERN.test(uid))
+    if (!validUid(uid))
       blockers.push("Отсутствует корректный SeriesInstanceUID.");
     const sops = new Set<string>();
+    const referenceStudy = selected.members[0]?.metadata.studyUid;
+    const referenceFrame = selected.members[0]?.metadata.frameOfReferenceUid;
     for (const member of selected.members) {
       const m = member.metadata;
-      if (!m.sopInstanceUid || !UID_PATTERN.test(m.sopInstanceUid) ||
-          m.seriesUid !== uid || !m.studyUid || !m.frameOfReferenceUid ||
+      if (!validUid(m.sopInstanceUid) || m.seriesUid !== uid ||
+          !validUid(m.studyUid) || m.studyUid !== referenceStudy ||
+          !validUid(m.frameOfReferenceUid) || m.frameOfReferenceUid !== referenceFrame ||
           m.modality !== selected.modality || (m.numberOfFrames ?? 1) !== 1) {
         blockers.push("Источник содержит неподдерживаемый много-кадровый DICOM или несовпадающие идентификаторы.");
         break;
