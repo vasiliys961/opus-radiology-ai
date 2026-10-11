@@ -278,3 +278,6 @@ button:disabled { cursor: not-allowed; }
 .ora-completion-toggle{display:flex;align-items:flex-start;gap:7px;font-size:10px;font-weight:710;color:#4e6b76;line-height:1.5}
 .ora-completion-toggle input{accent-color:#0e9987;margin-top:2px}
 .ora-vision-plan-audio-test{align-self:flex-start}
+
+.ora-vision-plan-thumbnail{width:100%;max-height:130px;object-fit:contain;background:#102431;border:1px solid #d8e3e7;border-radius:6px;aspect-ratio:4/3}
+.ora-vision-plan-thumb-placeholder{min-height:76px;display:flex;align-items:center;justify-content:center;text-align:center;padding:10px;border:1px dashed #c7d9dd;border-radius:6px;font-size:9px;color:#8499a4;line-height:1.5;background:#f5f9f9}
