@@ -29,6 +29,24 @@ try {
   await page.goto('http://127.0.0.1:3131',{waitUntil:'networkidle'});
   const files=(await readdir(fixture+'/dicom')).sort().map(n=>fixture+'/dicom/'+n);
   await page.locator('input[accept*=".dcm"]').setInputFiles(files);
+  // Study Intelligence verifies ALL indexed synthetic series without calling AI.
+  const intelligence=page.locator('.ora-study-intel');
+  await intelligence.getByText('Проиндексировано', {exact:true}).waitFor();
+  await page.waitForFunction(()=>document.querySelector('.ora-study-intel-stats')
+    ?.textContent?.includes('32'),undefined,{timeout:30000});
+  assert.match(await intelligence.innerText(),/Полнота анатомического охвата.*не подтверждена/s);
+  await intelligence.getByRole('button',{name:'Все серии и протоколы'}).click();
+  await intelligence.getByText('Протокол:',{exact:false}).first().waitFor();
+  assert.equal(await intelligence.getByRole('button',{name:'Открыть эту серию'}).count(),1);
+  await intelligence.getByRole('button',{name:'Открыть эту серию'}).click();
+  await intelligence.getByRole('button',{name:'Свернуть анализ'}).click();
+  // Generic raw AI uploads must fail even if caller tries to send text or pixels.
+  const rawResponseStatus=await page.evaluate(async()=>(await fetch('/api/ai',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({provider:'polza',messages:[{role:'user',content:'patient info'}]}),
+  })).status);
+  assert.equal(rawResponseStatus,410);
+  console.log('Study Intelligence: all series indexed, no completeness claims; raw cloud API disabled');
   // v1.7: a structured AI research result is local-only and must link to
   // the exact SOP instance of this synthetic series before it is navigable.
   await page.waitForFunction(() => {
