@@ -116,6 +116,34 @@ test("Missing provider key is rejected before any external request",async()=>{
     e instanceof SyntheticTrialFailure && e.code==="no-key");
   assert.equal(catalogCount,0);assert.equal(modelCount,0);
 });
+test("Completed trial records usage in launch order despite parallel completion, with no extra network calls",async()=>{
+  let launched=0;const finished:number[]=[];const controller=new AbortController();
+  const trial=await executeSyntheticTrial(input,env,catalogueFetch,async(req,signal)=>{
+    assert.equal(signal,controller.signal);const index=launched++;
+    const reply=await modelCall(req,signal);
+    if(index<3)await new Promise(resolve=>setTimeout(resolve,(2-index)*10));
+    finished.push(index);
+    return {...reply,usage:{prompt_tokens:100+index,completion_tokens:10,total_tokens:110+index,cost:0.01,
+      completion_tokens_details:{reasoning_tokens:5},opaque:"do-not-export",apiKey:"usage-secret"}};
+  },controller.signal);
+  assert.equal(launched,5);assert.deepEqual(finished.slice(0,3),[2,1,0]);
+  assert.deepEqual(trial.usage?.calls.map(c=>c.step),["anatomy","observations","quality","critic","synthesis"]);
+  assert.deepEqual(trial.usage?.calls.map(c=>c.promptTokens),[100,101,102,103,104]);
+  assert.deepEqual(trial.usage?.calls.map(c=>c.requestedModel),[input.visionModel,input.visionModel,input.visionModel,input.clinicalModel,input.clinicalModel]);
+  assert.deepEqual(trial.usage?.totals,{promptTokens:510,completionTokens:50,totalTokens:560,reportedCost:0.05});
+  assert.equal(trial.usage?.currency,"USD");assert.equal(JSON.stringify(trial).includes("usage-secret"),false);
+  assert.equal(JSON.stringify(trial).includes("do-not-export"),false);
+});
+test("Polza reports RUB and missing usage does not imply a free completed trial",async()=>{
+  const polzaFetch:typeof fetch=async()=>new Response(JSON.stringify(catalog));
+  const trial=await executeSyntheticTrial({...input,provider:"polza"},{POLZA_API_KEY:"fixture"},polzaFetch,
+    async(req,signal)=>({...await modelCall(req,signal),usage:{cost_rub:0.2}}));
+  assert.equal(trial.usage?.currency,"RUB");assert.equal(trial.usage?.totals.reportedCost,1);
+  assert.equal(trial.usage?.totals.promptTokens,null);
+  const unknown=await executeSyntheticTrial(input,env,catalogueFetch,modelCall);
+  assert.equal(unknown.usage?.callsWithReportedCost,0);assert.equal(unknown.usage?.totals.reportedCost,null);
+  assert.equal(unknown.usage?.calls.length,5);
+});
 test("Selected text-only Vision ID cannot trigger any paid model calls",async()=>{
   let callCount=0;
   await assert.rejects(executeSyntheticTrial(

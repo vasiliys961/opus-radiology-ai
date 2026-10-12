@@ -4,6 +4,8 @@ import { isAiProvider,type AiProvider } from "./ai-gateway.ts";
 import {syntheticVisionFrames, SYNTHETIC_REGIONS, type SyntheticRegion} from "./synthetic-vision-phantom.ts";
 import {runVisionOrchestra, type CompletionCaller, type OrchestraResult} from "./vision-orchestra.ts";
 import {validateEvidenceJson} from "./evidence-json.ts";
+import {normalizeProviderUsage,summarizeProviderUsage,SYNTHETIC_USAGE_STEPS,
+  type ProviderUsageCall,type ProviderUsageReport} from "./provider-usage.ts";
 
 /**
  * Research sandbox: real provider inference, synthetic geometry ONLY.
@@ -25,6 +27,8 @@ export type SyntheticTrialResult = {
   patientDataSubmitted: false;
   remoteInferencePerformed: true;
   result: OrchestraResult;
+  /** Older downloaded v1 files have no usage; missing means unknown, never free. */
+  usage?: ProviderUsageReport;
 };
 export const SYNTHETIC_TRIAL_MAX_COMPLETIONS = 5;
 const MODEL_PATTERN = /^(?!.*:\/\/)[a-zA-Z0-9][a-zA-Z0-9/:._+-]{0,159}$/;
@@ -81,11 +85,21 @@ export async function executeSyntheticTrial(
   // Frames are ALWAYS generated from server-owned immutable mathematical
   // fixtures. Even a forged client payload cannot send custom image/text.
   const frames = syntheticVisionFrames(trusted.modality, trusted.region);
+  const usageCalls:ProviderUsageCall[]=[];
+  let callIndex=0;
+  const trackedCall:CompletionCaller=async(request,callSignal)=>{
+    const index=callIndex++,step=SYNTHETIC_USAGE_STEPS[index];
+    if(!step)throw new Error("Synthetic completion limit exceeded");
+    const response=await call(request,callSignal);
+    // Assign by launch order, not finish order of the three parallel Vision roles.
+    usageCalls[index]={step,requestedModel:request.model,...normalizeProviderUsage(provider,response.usage)};
+    return response;
+  };
   const result = await runVisionOrchestra({
     provider,
     modality: trusted.modality, visionModel: trusted.visionModel,
     clinicalModel: trusted.clinicalModel, frames,
-  }, call, signal);
+  }, trackedCall, signal);
   if (!validateEvidenceJson(result.evidence) ||
       result.clinicalStatus !== "unverified_research_draft" ||
       result.sourceImages.length !== frames.length ||
@@ -96,7 +110,7 @@ export async function executeSyntheticTrial(
     schema:"opus-synthetic-trial/v1",
     sample:"non-patient-mathematical-phantom",
     region:trusted.region, patientDataSubmitted:false, remoteInferencePerformed:true,
-    result,
+    result,usage:summarizeProviderUsage(provider,usageCalls),
   };
 }
 /**

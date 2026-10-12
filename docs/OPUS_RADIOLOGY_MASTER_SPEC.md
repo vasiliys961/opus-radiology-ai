@@ -587,3 +587,18 @@ unsigned local snapshot, not trusted privacy acceptance or server authorization.
 No new paid call/patient transfer/.env.local change or guard relaxation. Four
 modes, specialist/optional-LLM Evidence separation and R1/Mac/Safari/full CT
 boundaries remain. See `docs/LOCAL_PRIVACY_READINESS.md`.
+
+
+## Synthetic provider usage accounting — 2026-10-12
+
+Baseline main `22dc41b` includes manually merged PR #31 and green Web Actions.
+Successful synthetic trials now retain launch-ordered five-step numeric usage,
+provider-reported RUB/Polza or USD/OpenRouter cost and a metadata-only JSON/UI
+summary. Missing/invalid values and incomplete totals stay unknown, not free;
+cache/reasoning are subcounts. Old exports remain compatible without usage.
+No extra API request or new paid/model run; failed/cancelled spending, production
+preflight/hard budgets and persistent billing remain pending (COST-02 PARTIAL).
+The user's supplied OpenRouter Gemini/Sonnet synthetic completion is documented
+separately from automated mocked verification and clinical acceptance. See
+`docs/SYNTHETIC_PROVIDER_USAGE.md`. Patient Cloud, .env.local, four modes,
+Evidence separation and R231/Safe/MPR/resource boundaries remain unchanged.
