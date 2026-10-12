@@ -321,3 +321,20 @@ or trusted de-ID. No patient cloud release, server upload, model rerun, volume
 allocation, .env.local change or guard relaxation. Four modes, specialist/optional
 LLMs through Evidence and R1/Mac/Safari/full CT/clinical boundaries remain. See
 `docs/PRIVACY_REVIEW_JOURNAL.md` for versioning, limits and verification.
+
+
+## Preferred Vision/evaluator routing — 2026-10-12 (feature branch)
+
+Baseline main `5f65cfe` includes manually merged PR #29 and green main Web Actions.
+The user's exact Gemini 3.8 Flash + chosen Sonnet 5.5/Opus 5.5/GPT-6.1 Sol profile
+now replaces alphabetic catalogue examples in the synthetic browser trial.
+One main selection drives the selected Polza/OpenRouter gateway; missing exact
+models/modalities refuse without downgrading. Polza's documented metadata API is
+connected. The chosen evaluator, rather than Vision itself, runs the image critic
+and text synthesis. Five calls and existing cost guards remain; cancel/selection
+changes abort client/server requests and stale results are discarded.
+
+Public catalogue presence is not account access or radiological accuracy. Paid
+completions are mocked in verification; no patient data/new paid test/medical
+model rerun, .env.local change, cloud release or guard relaxation. Four modes and
+specialist/optional-LLM Evidence separation remain. See `docs/PREFERRED_AI_MODELS.md`.

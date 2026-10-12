@@ -20,7 +20,7 @@ const server = spawn(process.execPath, [
     ...process.env,
     NODE_ENV: "development",
     OPENROUTER_API_KEY: "",
-    POLZA_API_KEY: secret,
+    POLZA_API_KEY: "",
     RADIOLOGY_POLZA_VISION_MODEL: "synthetic/test-vision",
     RADIOLOGY_POLZA_CLINICAL_MODEL: "synthetic/test-reasoning",
     NEXT_TELEMETRY_DISABLED: "1",
@@ -57,8 +57,8 @@ try {
   assert.equal(polza.body.includes(secret),false);
   const data=JSON.parse(polza.body);
   assert.equal(data.schema,"opus-provider-readiness/v1");
-  assert.equal(data.keyConfigured,true);
-  assert.equal(data.catalogStatus,"not-supported");
+  assert.equal(data.keyConfigured,false);
+  assert.equal(data.catalogStatus,"disabled");
   assert.equal(data.inferenceAllowed,false);
   assert.equal(data.patientImagesAllowed,false);
   assert.equal(data.vision.modelId,"synthetic/test-vision");
@@ -89,8 +89,8 @@ try {
   // The new PAID OpenRouter synthetic research demo requires browser origin,
   // explicit consent and server key. These tests never contact any AI provider.
   const fakeTrial = {
-    modality:"CT",region:"chest",visionModel:"google/vision-test",
-    clinicalModel:"openai/text-test",acknowledgePaidSyntheticExperiment:true,
+    modality:"CT",region:"chest",visionModel:"google/gemini-3.8-flash",
+    clinicalModel:"anthropic/claude-sonnet-5.5",acknowledgePaidSyntheticExperiment:true,
   };
   const trialHeaders = {
     "content-type":"application/json","origin":host,"sec-fetch-site":"same-origin",
@@ -124,7 +124,7 @@ try {
   });
   assert.equal(legacy.status,410);
   assert.equal(legacy.body.includes(secret),false);
-  console.log("PASS: localhost provider diagnostic, no key disclosure, Polza catalogue unverified,");
+  console.log("PASS: localhost provider diagnostic, no key disclosure, both providers without keys disabled,");
   console.log("  OpenRouter without key disabled, invalid query/CSRF rejected, arbitrary uploads HTTP 410.");
 } catch(e) {
   console.error("FAIL: provider diagnostic dev smoke check:", e);

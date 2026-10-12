@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   parseOpenRouterModels, compareConfiguredRoles, readBoundedJson, inspectProvider,
+  preferredCatalogueModels,
   type ProviderEnv,
 } from "./provider-readiness.ts";
 
@@ -67,7 +68,7 @@ test("Server uses pinned public catalogue URL and never returns credential", asy
   assert.equal(report.vision.inCatalogue,true);
   assert.equal(report.vision.matchingModality,true);
   assert.equal(report.clinical.matchingModality,true);
-  assert.equal(report.suggestions.vision.length,1);
+  assert.equal(report.suggestions.vision.length,0); // arbitrary catalogue examples are not the chosen profile
   assert.equal(report.patientImagesAllowed,false);
   assert.equal(report.inferenceAllowed,false);
   assert.equal(seen.url,"https://openrouter.ai/api/v1/models");
@@ -88,13 +89,14 @@ test("No key stops external network and never prints untrusted env model ID", as
   assert.equal(output.keyConfigured,false);
   assert.equal(output.vision.modelId,null);
 });
-test("Polza is correctly unknown, not imagined as verified catalogue", async () => {
-  const data=await inspectProvider("polza",env,async()=>{
-    throw new Error("must not call unverified endpoint");
-  });
-  assert.equal(data.catalogStatus,"not-supported");
+test("Polza uses its documented catalogue endpoint and its own key without provider substitution", async () => {
+  const {seen,stub}=mockFetch();const data=await inspectProvider("polza",env,stub);
+  assert.equal(data.catalogStatus,"verified-response");
   assert.equal(data.vision.modelId,"model-a");
-  assert.equal(data.vision.matchingModality,null);
+  assert.equal(data.vision.matchingModality,false);
+  assert.equal(seen.url,"https://polza.ai/api/v1/models");
+  assert.equal((seen.init?.headers as Record<string,string>).Authorization,"Bearer secret-polza-key");
+  assert.equal(seen.init?.redirect,"error");
   assert.equal(data.inferenceAllowed,false);
 });
 test("Network failures have bounded, secret-free, non-fatal report", async () => {
@@ -118,21 +120,30 @@ test("Oversized provider catalogue is refused regardless of declared length", as
   })),/too large/);
 });
 
-test("Model examples include real Gemini candidates even with dozens of alphabetical Anthropic entries",async()=>{
+test("Only the chosen exact profile is shown regardless of alphabetic ordering and legacy variants",async()=>{
   const many = Array.from({length:22},(_,i)=>({
     id:"anthropic/demo-"+String(i).padStart(2,"0"),
     architecture:{input_modalities:["text","image"],output_modalities:["text"]},
   }));
   const synthetic={data:[
     ...many,
-    {id:"google/gemini-valid-test",architecture:{
+    {id:"google/gemini-3.8-flash",architecture:{
       input_modalities:["text","image"],output_modalities:["text"]}},
-    {id:"openai/gpt-valid-test",architecture:{
+    {id:"openai/gpt-6.1-sol",architecture:{
       input_modalities:["text","image"],output_modalities:["text"]}},
   ]};
   const report=await inspectProvider("openrouter",env,mockFetch(synthetic).stub);
   assert.equal(report.catalogStatus,"verified-response");
-  assert.ok(report.suggestions.vision.some(x=>x.id==="google/gemini-valid-test"));
-  assert.ok(report.suggestions.vision.some(x=>x.id==="openai/gpt-valid-test"));
-  assert.ok(report.suggestions.vision.length<=14);
+  assert.deepEqual(report.suggestions.vision.map(m=>m.id),["google/gemini-3.8-flash"]);
+  assert.deepEqual(report.suggestions.clinical.map(m=>m.id),["openai/gpt-6.1-sol"]);
+});
+test("Missing preferred models never fall back to older, batch, image-generator or text-only entries",()=>{
+  const all=parseOpenRouterModels({data:[
+    {id:"google/gemini-2.5-flash",architecture:{input_modalities:["image","text"],output_modalities:["text"]}},
+    {id:"google/gemini-3.8-flash:batch",architecture:{input_modalities:["image","text"],output_modalities:["text"]}},
+    {id:"anthropic/claude-sonnet-5.5",architecture:{input_modalities:["text"],output_modalities:["text"]}},
+    {id:"openai/gpt-6.1-sol",architecture:{input_modalities:["text","image"],output_modalities:["image"]}},
+  ]});
+  assert.deepEqual(preferredCatalogueModels("vision",all),[]);
+  assert.deepEqual(preferredCatalogueModels("clinical",all),[]);
 });

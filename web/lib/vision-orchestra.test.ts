@@ -84,6 +84,7 @@ test("Gemini role calls, critic and GPT/Claude synthesis preserve provenance", a
   assert.equal(seen.filter(r => r.role === "reasoning").length, 1);
   assert.ok(seen.every(r => r.provider === "polza"));
   assert.equal(seen[0].model, "google/gemini-test-id");
+  assert.equal(seen[3].model, "anthropic/claude-test-id"); // evaluator reviews the images independently of Vision
   assert.equal(seen[4].model, "anthropic/claude-test-id");
   assert.equal(result.evidence.coverage, "partially_assessed");
   assert.equal(result.evidence.findings[0].status, "requires_recheck");

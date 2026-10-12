@@ -1,4 +1,6 @@
-import {loadOpenRouterCatalogue, type CatalogFetcher, type ProviderEnv} from "./provider-readiness.ts";
+import {loadProviderCatalogue, type CatalogFetcher, type ProviderEnv} from "./provider-readiness.ts";
+import { isPreferredModel } from "./v17-models.ts";
+import { isAiProvider,type AiProvider } from "./ai-gateway.ts";
 import {syntheticVisionFrames, SYNTHETIC_REGIONS, type SyntheticRegion} from "./synthetic-vision-phantom.ts";
 import {runVisionOrchestra, type CompletionCaller, type OrchestraResult} from "./vision-orchestra.ts";
 import {validateEvidenceJson} from "./evidence-json.ts";
@@ -9,6 +11,7 @@ import {validateEvidenceJson} from "./evidence-json.ts";
  * is accepted from the browser. Strict origin/host checks belong in the route.
  */
 export type SyntheticTrialRequest = {
+  provider?:AiProvider;
   modality: "CT" | "MR";
   region: SyntheticRegion;
   visionModel: string;
@@ -30,17 +33,19 @@ const TRIAL_FIELDS = ["modality","region","visionModel","clinicalModel","acknowl
 export function parseSyntheticTrialInput(value: unknown): SyntheticTrialRequest | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const v = value as Record<string,unknown>;
-  if (Object.keys(v).length !== TRIAL_FIELDS.length ||
-      !Object.keys(v).every(x => TRIAL_FIELDS.includes(x)) ||
+  if (![TRIAL_FIELDS.length,TRIAL_FIELDS.length+1].includes(Object.keys(v).length) ||
+      !Object.keys(v).every(x => TRIAL_FIELDS.includes(x)||x==="provider") ||
+      (Object.hasOwn(v,"provider")&&!isAiProvider(v.provider)) ||
       (v.modality !== "CT" && v.modality !== "MR") ||
       !SYNTHETIC_REGIONS.includes(v.region as SyntheticRegion) ||
-      typeof v.visionModel !== "string" || !MODEL_PATTERN.test(v.visionModel) ||
-      typeof v.clinicalModel !== "string" || !MODEL_PATTERN.test(v.clinicalModel) ||
+      !isPreferredModel("vision",v.visionModel) || !MODEL_PATTERN.test(v.visionModel) ||
+      !isPreferredModel("clinical",v.clinicalModel) || !MODEL_PATTERN.test(v.clinicalModel) ||
       v.acknowledgePaidSyntheticExperiment !== true) return null;
   return {
     modality: v.modality, region: v.region as SyntheticRegion,
     visionModel: v.visionModel, clinicalModel: v.clinicalModel,
     acknowledgePaidSyntheticExperiment: true,
+    ...(Object.hasOwn(v,"provider")?{provider:v.provider as AiProvider}:{}),
   };
 }
 export class SyntheticTrialFailure extends Error {
@@ -59,24 +64,25 @@ export async function executeSyntheticTrial(
 ): Promise<SyntheticTrialResult> {
   const trusted = parseSyntheticTrialInput(input);
   if (!trusted) throw new SyntheticTrialFailure("unsupported-model");
-  const key = env.OPENROUTER_API_KEY?.trim();
+  const provider=trusted.provider??"openrouter";
+  const key = env[provider==="polza"?"POLZA_API_KEY":"OPENROUTER_API_KEY"]?.trim();
   if (!key) throw new SyntheticTrialFailure("no-key");
   let models;
   try {
-    models = await loadOpenRouterCatalogue(key, catalogueFetcher);
+    models = await loadProviderCatalogue(provider,key, catalogueFetcher);
   } catch {
     throw new SyntheticTrialFailure("catalog-unavailable");
   }
   const vision = models.find(x => x.id === trusted.visionModel);
   const clinical = models.find(x => x.id === trusted.clinicalModel);
-  if (!vision?.acceptsImages || !vision.producesText ||
-      !clinical?.acceptsText || !clinical.producesText)
+  if (!vision?.acceptsImages || !vision.acceptsText || !vision.producesText ||
+      !clinical?.acceptsImages || !clinical.acceptsText || !clinical.producesText)
     throw new SyntheticTrialFailure("unsupported-model");
   // Frames are ALWAYS generated from server-owned immutable mathematical
   // fixtures. Even a forged client payload cannot send custom image/text.
   const frames = syntheticVisionFrames(trusted.modality, trusted.region);
   const result = await runVisionOrchestra({
-    provider:"openrouter",
+    provider,
     modality: trusted.modality, visionModel: trusted.visionModel,
     clinicalModel: trusted.clinicalModel, frames,
   }, call, signal);

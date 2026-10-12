@@ -22,7 +22,7 @@ function outcome(label: string, role: RoleCheck) {
 function ModelList({title, models}: {title: string; models: readonly CatalogModel[]}) {
   if (!models.length) return null;
   return <details className="ora-provider-model-list">
-    <summary>{title} ({models.length} примеров)</summary>
+    <summary>{title} ({models.length})</summary>
     <ul>{models.map(model => <li key={model.id}>
       <strong>{model.name}</strong>
       <code>{model.id}</code>
@@ -80,7 +80,7 @@ export default function ProviderReadinessPanel({
       {busy ? "Проверяем…" : "Проверить " + (provider === "openrouter" ? "OpenRouter" : "Polza")}
     </button>
     {error && <p className="ora-provider-error" role="alert">{error}</p>}
-    {result && <div className="ora-provider-results" aria-live="polite">
+    {result && result.provider===provider && <div className="ora-provider-results" aria-live="polite">
       <div className="ora-provider-status-row">
         <strong>Серверный ключ</strong>
         <span className={result.keyConfigured ? "ora-provider-good" : "ora-provider-warn"}>
@@ -96,25 +96,25 @@ export default function ProviderReadinessPanel({
             result.catalogStatus === "unavailable" ? "Недоступен" : "Проверка отключена"}
         </span>
       </div>
-      <ul className="ora-provider-role-checks">
+      <details><summary>Серверные настройки прежнего API</summary><ul className="ora-provider-role-checks">
         <li>{outcome("Vision", result.vision)}
           {result.vision.modelId && <code>{result.vision.modelId}</code>}</li>
         <li>{outcome("Клиническая модель", result.clinical)}
           {result.clinical.modelId && <code>{result.clinical.modelId}</code>}</li>
-      </ul>
+      </ul></details>
       <p className="ora-provider-config-note">
         Выбрано в интерфейсе: Vision <code>{selectedVision}</code>,
-        клинический синтез <code>{selectedClinical}</code>.
-        Это предпочтения браузера, не серверная конфигурация.
+        оценщик и синтез <code>{selectedClinical}</code>.
+        Синтетическая проба использует именно эту связку и выбранный шлюз.
       </p>
-      <ModelList title="Vision: заявлена поддержка изображений" models={result.suggestions.vision}/>
-      <ModelList title="Синтез: заявлена поддержка текста" models={result.suggestions.clinical}/>
+      <ModelList title="Выбранные Vision-модели в каталоге" models={result.suggestions.vision}/>
+      <ModelList title="Выбранные оценщики в каталоге" models={result.suggestions.clinical}/>
       {result.notes.map((note, i) => <p key={i} className="ora-provider-note">{note}</p>)}
       <p className="ora-provider-safety">
         Реальный пациентский AI-анализ: заблокирован. Эта диагностика не разрешает
         отправку снимков и не подтверждает клиническую пригодность моделей.
       </p>
-      <SyntheticResearchPanel diagnostic={result}/>
+      <SyntheticResearchPanel diagnostic={result} selectedVision={selectedVision} selectedClinical={selectedClinical}/>
     </div>}
   </section>;
 }

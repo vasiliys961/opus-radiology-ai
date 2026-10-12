@@ -10,15 +10,15 @@ import type {CompletionCaller} from "./vision-orchestra.ts";
 
 const input = {
   modality:"CT" as const,region:"head" as const,
-  visionModel:"google/vision-test",clinicalModel:"openai/reasoning-test",
+  visionModel:"google/gemini-3.8-flash",clinicalModel:"anthropic/claude-sonnet-5.5",
   acknowledgePaidSyntheticExperiment:true as const,
 };
 const env = {OPENROUTER_API_KEY:"fixture-server-secret"};
 const catalog = {data:[
-  {id:"google/vision-test",name:"Synthetic Vision Provider",
+  {id:"google/gemini-3.8-flash",name:"Synthetic Vision Provider",
     architecture:{input_modalities:["image","text"],output_modalities:["text"]}},
-  {id:"openai/reasoning-test",name:"Synthetic Text Provider",
-    architecture:{input_modalities:["text"],output_modalities:["text"]}},
+  {id:"anthropic/claude-sonnet-5.5",name:"Synthetic Text Provider",
+    architecture:{input_modalities:["text","image"],output_modalities:["text"]}},
   {id:"vendor/no-vision",name:"Text only",
     architecture:{input_modalities:["text"],output_modalities:["text"]}},
 ]};
@@ -98,6 +98,7 @@ test("Server checks models in live catalogue and calls five bounded roles on gen
   assert.equal(catalogCalls,1);
   assert.equal(calls.length,SYNTHETIC_TRIAL_MAX_COMPLETIONS);
   assert.deepEqual(calls.map(c=>c.role),["vision","vision","vision","vision","reasoning"]);
+  assert.deepEqual(calls.map(c=>c.model),[input.visionModel,input.visionModel,input.visionModel,input.clinicalModel,input.clinicalModel]);
   assert.ok(calls.filter(c=>c.role==="vision").every(c=>
     Array.isArray(c.content) && c.content.some((part:{type?:string})=>part.type==="image_url")));
   assert.equal(trial.result.clinicalStatus,"unverified_research_draft");
@@ -143,4 +144,25 @@ test("Per-process rate limiter allows only one running call and four in 10 minut
   assert.equal(limiter.acquire(5),null);
   const release5=limiter.acquire(600_001);assert.equal(typeof release5,"function");
   release5?.();
+});
+test("Polza synthetic execution uses the chosen provider key/catalogue and never switches to OpenRouter",async()=>{
+  const received:string[]=[];calls.length=0;
+  const result=await executeSyntheticTrial({...input,provider:"polza"},{POLZA_API_KEY:"polza-fixture",OPENROUTER_API_KEY:"do-not-use"},
+    async(url,options)=>{received.push(String(url));assert.equal((options?.headers as Record<string,string>).Authorization,"Bearer polza-fixture");
+      return new Response(JSON.stringify(catalog));},async(request,signal)=>{assert.equal(request.provider,"polza");return modelCall(request,signal);});
+  assert.deepEqual(received,["https://polza.ai/api/v1/models"]);assert.equal(result.result.provider,"polza");assert.equal(calls.length,5);
+});
+test("Curated-only parsing refuses legacy/batch/self-critic substitutions and invalid providers",()=>{
+  for(const changed of [{visionModel:"google/gemini-2.5-flash"},{visionModel:input.visionModel+":batch"},
+    {clinicalModel:input.visionModel},{clinicalModel:"openai/gpt-3.5-turbo"},{provider:"unknown"}])
+    assert.equal(parseSyntheticTrialInput({...input,...changed}),null);
+});
+test("Selected evaluator must accept images before any paid calls",async()=>{
+  let paid=0;
+  const textOnly={data:catalog.data.map(m=>m.id===input.clinicalModel?{...m,architecture:{input_modalities:["text"],output_modalities:["text"]}}:m)};
+  await assert.rejects(executeSyntheticTrial(input,env,async()=>new Response(JSON.stringify(textOnly)),async()=>{paid++;throw new Error("must not call");}),
+    (e:unknown)=>e instanceof SyntheticTrialFailure&&e.code==="unsupported-model");assert.equal(paid,0);
+  const imageOnly={data:catalog.data.map(m=>m.id===input.visionModel?{...m,architecture:{input_modalities:["image"],output_modalities:["text"]}}:m)};
+  await assert.rejects(executeSyntheticTrial(input,env,async()=>new Response(JSON.stringify(imageOnly)),async()=>{paid++;throw new Error("must not call");}),
+    (e:unknown)=>e instanceof SyntheticTrialFailure&&e.code==="unsupported-model");assert.equal(paid,0);
 });

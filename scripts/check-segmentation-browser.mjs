@@ -68,6 +68,66 @@ try {
   await page.locator('.ora-provider-error').waitFor();
   assert.match(await page.locator('.ora-provider-error').innerText(),/только на localhost/);
   console.log('Provider readiness remains closed in production and gives a visible safe fallback');
+  // The preferred four-model profile is selected once, reused by both gateway
+  // probes/trials and never replaced by alphabetic catalogue entries. All APIs mocked.
+  const visionChoice=page.locator('#ora-vision-choice'),judgeChoice=page.locator('#ora-clinical-choice');
+  assert.deepEqual(await visionChoice.locator('option').evaluateAll(nodes=>nodes.map(n=>n.value)),['google/gemini-3.8-flash']);
+  const judges=['openai/gpt-6.1-sol','anthropic/claude-sonnet-5.5','anthropic/claude-opus-5.5'];
+  assert.deepEqual(await judgeChoice.locator('option').evaluateAll(nodes=>nodes.map(n=>n.value)),judges);
+  const catalogueModel=id=>({id,name:id,acceptsImages:true,acceptsText:true,producesText:true});
+  let missingPreferred=false;const trialSubmissions=[];
+  await page.route('**/api/ai/provider-readiness?provider=*',route=>{
+    const provider=new URL(route.request().url()).searchParams.get('provider');
+    return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
+      schema:'opus-provider-readiness/v1',provider,keyConfigured:true,catalogStatus:'verified-response',
+      vision:{modelId:null,configured:false,inCatalogue:null,matchingModality:null},
+      clinical:{modelId:null,configured:false,inCatalogue:null,matchingModality:null},
+      suggestions:{vision:missingPreferred?[]:[catalogueModel('google/gemini-3.8-flash')],clinical:judges.map(catalogueModel)},
+      notes:[],patientImagesAllowed:false,inferenceAllowed:false,
+    })});
+  });
+  await page.route('**/api/ai/synthetic-demo/preview?*',route=>route.fulfill({status:200,contentType:'image/png',
+    body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aT1cAAAAASUVORK5CYII=','base64')}));
+  await page.route('**/api/ai/synthetic-demo',route=>{
+    trialSubmissions.push(route.request().postDataJSON());
+    return route.fulfill({status:502,contentType:'application/json',body:JSON.stringify({error:'Synthetic fixture: no paid inference performed'})});
+  });
+  for(const [provider,judge] of [['polza','anthropic/claude-opus-5.5'],['openrouter','openai/gpt-6.1-sol']]){
+    await page.locator('#ora-provider-choice').selectOption(provider);await judgeChoice.selectOption(judge);
+    const gateway=provider==='polza'?'Polza':'OpenRouter';
+    await page.getByRole('button',{name:'Проверить '+gateway,exact:true}).click();
+    const trial=page.getByRole('region',{name:'Эксперимент '+gateway+' с искусственными изображениями',exact:true});
+    await trial.waitFor();assert.equal(await trial.locator('select').count(),2); // region/modality only; no second model picker
+    assert.match(await trial.innerText(),new RegExp(judge.replaceAll('.','\\.')));
+    const cost=trial.locator('#ora-synthetic-cost-ack');await cost.check();
+    await trial.getByRole('button',{name:'Запустить реальный '+gateway+'-тест',exact:true}).click();
+    await trial.getByRole('alert').waitFor();
+    assert.deepEqual(trialSubmissions.at(-1),{provider,modality:'CT',region:'chest',visionModel:'google/gemini-3.8-flash',clinicalModel:judge,acknowledgePaidSyntheticExperiment:true});
+  }
+  // Changing evaluator cancels an outstanding request; a late old response
+  // cannot be shown under the new selection and cost acknowledgement is reset.
+  await page.unroute('**/api/ai/synthetic-demo');let releaseOldResponse;
+  await page.route('**/api/ai/synthetic-demo',async route=>{
+    trialSubmissions.push(route.request().postDataJSON());
+    await new Promise(resolve=>{releaseOldResponse=resolve;});
+    await route.fulfill({status:502,contentType:'application/json',body:JSON.stringify({error:'STALE-EVALUATOR-RESPONSE'})}).catch(()=>{});
+  });
+  const pendingTrial=page.getByRole('region',{name:'Эксперимент OpenRouter с искусственными изображениями',exact:true});
+  await pendingTrial.getByRole('button',{name:'Запустить реальный OpenRouter-тест',exact:true}).click();
+  await pendingTrial.getByRole('button',{name:'Отменить тест',exact:true}).waitFor();
+  await judgeChoice.selectOption('anthropic/claude-sonnet-5.5');
+  await pendingTrial.getByRole('button',{name:'Отменить тест',exact:true}).waitFor({state:'detached'});
+  assert.equal(await pendingTrial.locator('#ora-synthetic-cost-ack').isChecked(),false);
+  releaseOldResponse?.();assert.doesNotMatch(await pendingTrial.innerText(),/STALE-EVALUATOR-RESPONSE/);
+  missingPreferred=true;await page.getByRole('button',{name:'Проверить OpenRouter',exact:true}).click();
+  const absentTrial=page.getByRole('region',{name:'Эксперимент OpenRouter с искусственными изображениями',exact:true});
+  await absentTrial.getByText(/Другая модель автоматически не выбирается/).waitFor();
+  await absentTrial.locator('#ora-synthetic-cost-ack').check();
+  assert.equal(await absentTrial.getByRole('button',{name:'Запустить реальный OpenRouter-тест',exact:true}).isDisabled(),true);
+  assert.equal(await visionChoice.inputValue(),'google/gemini-3.8-flash');assert.equal(trialSubmissions.length,3);
+  await page.unroute('**/api/ai/provider-readiness?provider=*');await page.unroute('**/api/ai/synthetic-demo/preview?*');await page.unroute('**/api/ai/synthetic-demo');
+  await page.locator('#ora-provider-choice').selectOption('polza');await judgeChoice.selectOption('anthropic/claude-sonnet-5.5');
+  console.log('Preferred model profile: exact Gemini + chosen evaluator, both gateways, no duplicate picker, missing-model refusal without downgrade and paid HTTP requests mocked');
   const files=(await readdir(fixture+'/dicom')).sort().map(n=>fixture+'/dicom/'+n);
   // Deliberately fake identifiers in a preamble/private tag. No real PHI.
   const phiSentinel='SYNTHETIC-PHI-REMOVE-ME',dirtyDicom=await readFile(files[0]);

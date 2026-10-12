@@ -1,5 +1,9 @@
 # v1.8 — Проверка шлюзов OpenRouter / Polza без данных пациентов
 
+> Исторический этап. Текущий выбор Gemini 3.8/оценщиков, Polza/OpenRouter и ограничения запуска:
+> [PREFERRED_AI_MODELS.md](PREFERRED_AI_MODELS.md). Ниже описано прежнее поведение.
+
+
 **Ветка:** feature/v1.8-provider-readiness.
 
 ## Что работает
