@@ -518,3 +518,21 @@ or an M1/Safari benchmark. All existing worker/resource/MPR/SHA guards remain.
 See `docs/LOCAL_PRIVACY_OCR.md` for pins, licensing, tests and pending independent
 privacy/server release. Four modes, optional LLMs through Evidence, .env.local,
 patient/cloud/remote OFF and R1 boundaries remain unchanged.
+
+
+## Local privacy review journal — 2026-10-12 (feature branch)
+
+Baseline main `28be9d8` includes manually merged PR #27 and green Web Actions.
+Bounded local history now records copy SHA changes/rectangles, OCR start/result/
+cancel/failure and explicit human decisions. Replay checks current exact PNGs,
+redactions and review state before exports. Separate metadata-only journal and
+reviewed copy+journal bundle downloads complement the unchanged candidate format.
+No recognized text, original UIDs, patient/context text, token or error text is
+recorded. Capacity is 128 events; OCR reserves a terminal slot. Restart creates a
+new session; no silent truncation, automatic persistence or import is added.
+
+This is unsigned sampled-copy history with an unverified clock/actor, not clinical
+source verification, protected audit or a trusted de-ID release. Server/privacy/
+provider acceptance remains pending; patient cloud remains OFF and `/api/ai` 410.
+See `docs/PRIVACY_REVIEW_JOURNAL.md`. Four modes, optional-LLM Evidence separation,
+.env.local, R231/Safe/MPR guards and R1/Mac/Safari/full CT boundaries remain.

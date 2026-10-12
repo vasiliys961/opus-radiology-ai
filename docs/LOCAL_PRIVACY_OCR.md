@@ -95,3 +95,7 @@ regions and retained human acknowledgement, actual black raster redaction,
 unchanged original and zero rescan still requiring human checks. It verifies
 fixed local GET assets and no pixel/text upload. DICOM/SHA/mask/MPR/privacy
 regressions remain; no medical checkpoint or paid provider is rerun.
+
+The local OCR lifecycle and manual decisions now have a bounded, unsigned
+copy-bound journal with explicit downloads; see [PRIVACY_REVIEW_JOURNAL.md](PRIVACY_REVIEW_JOURNAL.md).
+It is separate from the still-missing protected server audit.
