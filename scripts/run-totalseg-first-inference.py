@@ -54,6 +54,22 @@ def prepare(input_file, model_dir, output_dir):
         raise ValueError("host_has_less_than_12_gib_available_ram")
     return source,models,output,sha256(source)
 
+def reported_stage(process):
+    """Only trust fixed diagnostic stage tokens, never echo exception strings."""
+    allowed={"arguments","input_preflight","input_nifti_load","runtime_cache",
+             "model_import","model_inference","mask_validation"}
+    for line in reversed(process.stderr.splitlines()):
+        try:
+            data=json.loads(line)
+        except (ValueError,TypeError):
+            continue
+        if isinstance(data,dict) and data.get("status")=="failed" and data.get("stage") in allowed:
+            return {"stage":data["stage"],"errorType":data.get("error") if data.get("error") in
+                    {"ValueError","OSError","PermissionError","FileNotFoundError",
+                     "RuntimeError","ImportError","ModuleNotFoundError","AssertionError",
+                     "TypeError","KeyError","IndexError"} else "other"}
+    return {"stage":"unknown","errorType":"unknown"}
+
 def failure_category(process):
     """Never publish raw Docker logs or host paths in CI artifacts."""
     log=(process.stderr+"\n"+process.stdout).lower()
@@ -107,6 +123,7 @@ def run(input_file,model_dir,output_dir,*,confirmed=False,repo_root=None):
     else:
         report["status"]="failed"
         report["failureCategory"]=failure_category(process)
+        report.update(reported_stage(process))
     # Never echo the Docker logs (potentially contain private local paths).
     return report
 

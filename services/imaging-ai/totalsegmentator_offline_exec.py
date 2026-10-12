@@ -6,7 +6,10 @@ from pathlib import Path
 import sys
 from totalsegmentator_input import inspect_input
 
-def run(input_path, output_path, *, confirmed=False, expected_source_sha=None):
+def run(input_path, output_path, *, confirmed=False, expected_source_sha=None, stage=None):
+    def reached(name):
+        if stage is not None:
+            stage[0] = name
     if not confirmed:
         raise ValueError("explicit_research_confirmation_required")
     source, output = Path(input_path), Path(output_path)
@@ -15,7 +18,9 @@ def run(input_path, output_path, *, confirmed=False, expected_source_sha=None):
             source.suffix != ".nii" or output.suffix != ".nii"):
         raise ValueError("invalid_paths")
     # Reject malformed or oversized CT before importing heavy medical dependencies.
+    reached("input_preflight")
     inspected = inspect_input(source)
+    reached("input_nifti_load")
     import nibabel as nib
     img = nib.load(str(source), mmap=True)
     dims = tuple(int(n) for n in img.shape)
@@ -31,6 +36,7 @@ def run(input_path, output_path, *, confirmed=False, expected_source_sha=None):
     affine=img.affine.copy()
     affine[:2,:]*=-1
     lps=[float(affine[row,col]) for row in range(3) for col in range(4)]
+    reached("runtime_cache")
     # Third-party libraries require writable cache locations under tmpfs.
     import os
     for key in ("HOME", "XDG_CACHE_HOME", "MPLCONFIGDIR", "TORCH_HOME", "TOTALSEG_HOME_DIR"):
@@ -44,11 +50,14 @@ def run(input_path, output_path, *, confirmed=False, expected_source_sha=None):
         probe.unlink()
     from totalsegmentator_audit import LUNG_LOBES
     from totalsegmentator_result import validate_native_mask
+    reached("model_import")
     from totalsegmentator.python_api import totalsegmentator
     try:
+        reached("model_inference")
         totalsegmentator(input=source,output=output,task="total",fast=True,
                          roi_subset=list(LUNG_LOBES.values()),ml=True,device="cpu",
                          quiet=True)
+        reached("mask_validation")
         report=validate_native_mask(output,dims,lps,source_sha,list(LUNG_LOBES))
         return {"schema":"opus-totalseg-offline-research-execution/v1",
                 "execution":"real-model-call","networkIsolation":"must-be-enforced-by-host",
@@ -67,11 +76,12 @@ def main(argv=None):
     p.add_argument("--research-confirmed",action="store_true")
     p.add_argument("--source-sha256")
     args=p.parse_args(argv)
+    stage=["arguments"]
     try:
-        report=run(args.input,args.output,confirmed=args.research_confirmed,
+        report=run(args.input,args.output,confirmed=args.research_confirmed,stage=stage,
                    expected_source_sha=args.source_sha256)
     except Exception as exc:
-        print(json.dumps({"status":"failed","error":type(exc).__name__}),file=sys.stderr)
+        print(json.dumps({"status":"failed","error":type(exc).__name__,"stage":stage[0]}),file=sys.stderr)
         return 2
     print(json.dumps(report,sort_keys=True))
     return 0
