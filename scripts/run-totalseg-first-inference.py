@@ -20,13 +20,18 @@ def sha256(path):
             h.update(data)
     return h.hexdigest()
 
-def host_memory_bytes(meminfo=Path("/proc/meminfo")):
+def host_memory_bytes(meminfo=Path("/proc/meminfo"), field="MemTotal"):
     for line in meminfo.read_text().splitlines():
-        if line.startswith("MemTotal:"):
+        if line.startswith(field + ":"):
             return int(line.split()[1])*1024
     raise ValueError("unknown_host_memory")
 
+def available_memory_bytes():
+    return host_memory_bytes(field="MemAvailable")
+
 def prepare(input_file, model_dir, output_dir):
+    if Path(input_file).is_symlink() or Path(model_dir).is_symlink() or Path(output_dir).is_symlink():
+        raise ValueError("unsafe_symlink")
     source=Path(input_file).resolve(strict=True)
     models=Path(model_dir).resolve(strict=True)
     output=Path(output_dir).resolve(strict=True)
@@ -42,10 +47,10 @@ def prepare(input_file, model_dir, output_dir):
             p=models/folder/TRAINER/name
             if not p.is_file() or p.is_symlink() or p.stat().st_size==0:
                 raise ValueError("model_cache_incomplete")
-    if host_memory_bytes()<12*1024**3:
-        raise ValueError("host_requires_at_least_12_gib_ram")
-    if source.is_symlink():
-        raise ValueError("unsafe_input")
+    if host_memory_bytes()<14*1024**3:
+        raise ValueError("host_requires_at_least_14_gib_ram")
+    if available_memory_bytes()<12*1024**3:
+        raise ValueError("host_has_less_than_12_gib_available_ram")
     return source,models,output,sha256(source)
 
 def run(input_file,model_dir,output_dir,*,confirmed=False,repo_root=None):

@@ -3,12 +3,12 @@
 The provisioning workflow from PR #54 succeeded; it did not run the model.
 The real-inference entry point is now `scripts/run-totalseg-first-inference.py`.
 
-Prerequisites: separate Linux Docker host with **at least 12 GiB total RAM**,
+Prerequisites: separate Linux Docker host with **at least 14 GiB total RAM and 12 GiB currently available**,
 Docker Compose, both fully extracted Dataset297/298 model folders from the
 offline provisioner, and a **PUBLIC** uncompressed NIfTI CT (`.nii`).
 Do not use clinical/patient data for this unvalidated research step. The
 container runs with networking disabled, a 12 GiB cap, read-only weights and
-bounded execution time. Host may need more than 12 GiB to avoid pressure.
+bounded execution time. The preflight rejects hosts below 14 GiB installed or 12 GiB currently available (MemAvailable).
 Use a disposable dedicated CPU server, not the Mac.
 
 ```bash
