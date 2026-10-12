@@ -20,8 +20,9 @@ signed report. A doctor must still inspect the source and decide independently.
 - Spatial QC: supplied LPS point/mask SHA, continuous source index, actual discrete
   mask label, target/different/background/unavailable state and binding failures.
 - Local history: revision, observation, previous/new status and declared UTC time.
-- Coverage/provenance/privacy limitations and an explicit absence of clinical
-  opinion, clinician authentication and signature.
+- A separate saved reviewer draft with stale/cleared/missing state; clinician
+  authentication, clinical approval and signature remain absent.
+- Coverage/provenance/privacy limitations.
 
 No LLM import is stated as no imported evidence, not a negative finding. An empty
 mask is not a normal scan. Missing values remain missing; zero remains zero.
@@ -36,8 +37,9 @@ Volumes never imply complete organ coverage.
 History is replay-validated and must agree with the current review states before
 report creation. Invalid binding, continuity, promoted status or inconsistent
 history refuses export with a visible error. Measurements are not reimported from
-reports. General report import, editable diagnostic text and clinical sign-off
-remain planned. The JSON Evidence, comparison and standalone journal exports
+reports. General report import and clinical sign-off remain planned. Separate
+reviewer draft editing/versioned restore is now available; see `REVIEWER_NOTE.md`.
+The JSON Evidence, comparison and standalone journal exports
 remain available for structured local workflows.
 
 ## Local execution, safety and resources

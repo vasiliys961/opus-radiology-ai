@@ -32,6 +32,9 @@ downloads, with a standalone source-bound journal export/restore. See
 `EVIDENCE_REVIEW_HISTORY.md`. Marks otherwise live in page memory.
 The card also downloads a self-contained printable HTML research report; the
 comparison card adds imported hypotheses/QC. See `EVIDENCE_REPORT.md`.
+An explicit local reviewer note is versioned separately and included in JSON/HTML;
+unsaved edits block full export and changed review marks require note recheck.
+See `REVIEWER_NOTE.md`; author/clock/signature are not authenticated.
 Successful replacement, mask deletion and series/MPR teardown discard the prior
 review. A failed replacement retains the previously bound mask and Evidence.
 

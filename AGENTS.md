@@ -215,3 +215,15 @@ Local browser printing/PDF is optional; authenticated clinical reports, Safari
 print acceptance and R1 acceptance remain pending. See `docs/EVIDENCE_REPORT.md`.
 No model rerun, volume copy, resource guard change, .env.local change or
 patient/cloud/remote activation. Four modes and optional-LLM separation remain.
+
+## Separate reviewer draft — 2026-10-12
+
+Baseline main `0c84fab` has PR #23 manually merged and green Web Actions.
+A local plain-text reviewer note now saves bounded versions separately from
+model output. It binds to the verified source/mask/model and exact status-review
+prefix SHA; changed marks require recheck. Unsaved edits block full JSON/HTML
+export. Local note restore cannot erase/fork existing versions or replace model
+measurements. Text is sensitive/unverified, escaped in reports, with no signed
+identity or protected storage. See `docs/REVIEWER_NOTE.md`.
+No model rerun, volume copy, resource guard change, .env.local change or
+patient/cloud/remote activation. Four modes and R1 boundaries remain unchanged.

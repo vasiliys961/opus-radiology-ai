@@ -4,6 +4,7 @@ import type { EvidenceDecision, SegmentationEvidence } from "./segmentation-evid
 import { COMPARISON_REASONS, normalizeLlmMeasurements, reconcileEvidence, type LlmMeasurements } from "./evidence-reconciliation.ts";
 import { normalizeEvidenceReviewHistory, type EvidenceReviewHistory } from "./evidence-review-history.ts";
 import type { Point3 } from "./segmentation-mask.ts";
+import { normalizeReviewerNote,reviewerNoteNeedsRecheck,type ReviewerNote,type EvidenceWithNote } from "./evidence-reviewer-note.ts";
 
 export const MAX_EVIDENCE_REPORT_BYTES = 2 * 1024 * 1024;
 const decisions: Record<EvidenceDecision,string> = {unreviewed:"Не проверено врачом",requires_recheck:"На перепроверку",rejected:"Отклонено локально"};
@@ -33,6 +34,14 @@ export function buildEvidenceReport(evidence: SegmentationEvidence, options: {
     if (evidence.observations.some(o=>o.review !== (states.get(o.observationId) ?? "unreviewed")))
       throw new Error("Текущие отметки не соответствуют истории проверки; отчёт не создан.");
   }
+  const rawNote=(evidence as SegmentationEvidence & {reviewerNote?:ReviewerNote}).reviewerNote;
+  if(rawNote&&!history)throw new Error("Для заметки требуется связанная история проверки.");
+  const note=rawNote?normalizeReviewerNote(rawNote,evidence as EvidenceWithNote):null;
+  const latestNote=note?.versions[note.versions.length-1];
+  const reviewerText=!latestNote?"<p>Заметка проверяющего не предоставлена. Клиническое мнение врача не удостоверено.</p>":
+    `<p><strong>Неподписанный черновик; автор не удостоверен.</strong> Версия заметки ${latestNote.revision}, история проверки ${latestNote.reviewRevision}.</p>
+    ${reviewerNoteNeedsRecheck({...evidence,reviewerNote:note} as EvidenceWithNote)?"<p><strong>Заметку нужно перепроверить: после её сохранения изменились отметки.</strong></p>":"<p>Текст связан с текущей историей проверки; это не клиническое утверждение.</p>"}
+    <p>${latestNote.text?escape(latestNote.text):"Текущая заметка очищена; прошлые версии сохранены в JSON."}</p><p>Заявленное время: ${escape(latestNote.at)} · UTC.</p>`;
   const llm = options.llm ? normalizeLlmMeasurements(options.llm) : null;
   const comparison = llm ? reconcileEvidence(evidence,llm,options.sampleMask) : null;
   const s = evidence.source, m = evidence.producer.model;
@@ -86,8 +95,9 @@ export function buildEvidenceReport(evidence: SegmentationEvidence, options: {
     <h2>Гипотезы LLM и сопоставление</h2>${hypotheses}
     <p>Совпадение чисел или метки в точке не доказывает клинического согласия. Фон маски не исключает патологию. Порог клинической значимости не задан.</p>
     <h2>Локальная история проверки</h2>${journal}
+    <h2>Заметка проверяющего · черновик</h2>${reviewerText}
     <h2>Ограничения результата</h2>${list(evidence.limitations)}
-    <p>Контрольные суммы связывают данные, но не удостоверяют пациента, автора или клиническую точность. Клиническое мнение и подпись врача в этом отчёте не предоставлены.</p>
+    <p>Контрольные суммы связывают данные, но не удостоверяют пациента, автора или клиническую точность. Клиническое мнение врача не удостоверено; подпись и клиническое утверждение не предоставлены.</p>
     <small>Отчёт храните локально. Текст, хеши и координаты не гарантируют обезличивание; разрешение на внешнюю отправку пациентов не предоставлено. Для печати или сохранения PDF используйте меню браузера «Печать».</small>
     </body></html>`;
   if (new TextEncoder().encode(html).byteLength > MAX_EVIDENCE_REPORT_BYTES) throw new Error("Отчёт превышает лимит 2 МиБ.");

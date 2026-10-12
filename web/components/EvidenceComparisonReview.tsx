@@ -5,10 +5,11 @@ import type { SegmentationEvidence } from "../lib/segmentation-evidence";
 import type { Point3 } from "../lib/segmentation-mask";
 import EvidenceReportDownload from "./EvidenceReportDownload";
 
-export default function EvidenceComparisonReview({evidence,onNavigate,onSampleMask}: {
+export default function EvidenceComparisonReview({evidence,onNavigate,onSampleMask,hasUnsavedReviewerNote=false}: {
   evidence: SegmentationEvidence;
   onNavigate: (point: Point3,labelId: number | null)=>void;
   onSampleMask: (point: Point3)=>number | null;
+  hasUnsavedReviewerNote?: boolean;
 }) {
   const [llm, setLlm] = useState<LlmMeasurements | null>(null);
   const [error, setError] = useState("");
@@ -64,8 +65,8 @@ export default function EvidenceComparisonReview({evidence,onNavigate,onSampleMa
         </div> : <p>Пространственная точка LLM не предоставлена.</p>}
       </li>)}</ul>
       <div className="ora-evidence-actions">
-        <button type="button" onClick={() => download(comparison, "comparison")}>Скачать сопоставление JSON</button>
-        <EvidenceReportDownload evidence={evidence} llm={llm} onSampleMask={onSampleMask}/>
+        <button type="button" disabled={hasUnsavedReviewerNote} onClick={() => download(comparison, "comparison")}>Скачать сопоставление JSON</button>
+        <EvidenceReportDownload evidence={evidence} llm={llm} onSampleMask={onSampleMask} hasUnsavedReviewerNote={hasUnsavedReviewerNote}/>
         <button type="button" onClick={() => {++importVersion.current; setLlm(null); setError("");setNavigationError("");}}>Удалить гипотезы LLM</button>
       </div>
       <small>Совпадение чисел не доказывает клиническое согласие. Порог клинической значимости не задан. Оба результата остаются видны; сравнение не подписывает заключение.</small>
