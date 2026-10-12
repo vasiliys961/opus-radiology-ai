@@ -19,7 +19,7 @@ def inspect_input(path):
             raise ValueError("invalid_nifti_file")
         header = os.read(fd, 352)
         if (len(header) != 352 or struct.unpack_from("<i", header)[0] != 348
-                or header[344:348] != b"n+1\\x00"
+                or header[344:348] != b"n+1\x00"
                 or struct.unpack_from("<h", header, 40)[0] != 3):
             raise ValueError("invalid_nifti_header")
         dimensions = tuple(struct.unpack_from("<3h", header, 42))

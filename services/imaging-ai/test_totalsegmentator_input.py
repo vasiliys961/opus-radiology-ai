@@ -8,7 +8,7 @@ def create(tmp_path, dims=(4,3,3), datatype=16, bitpix=32):
     struct.pack_into("<4h", header, 40, 3, *dims)
     struct.pack_into("<hh", header, 70, datatype, bitpix)
     struct.pack_into("<f", header, 108, 352.)
-    header[344:348] = b"n+1\\x00"
+    header[344:348] = b"n+1\x00"
     path=tmp_path/"ct.nii"
     path.write_bytes(header+bytes(dims[0]*dims[1]*dims[2]*(bitpix//8)))
     return path
