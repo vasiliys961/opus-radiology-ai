@@ -39,7 +39,7 @@ def test_link_and_empty_file_rejected(tmp_path):
     target=tmp_path/'empty';target.touch()
     assert file_record(tmp_path,'empty')['status']=='rejected-size'
     (tmp_path/'link').symlink_to(target)
-    assert file_record(tmp_path,'link')['status']=='rejected-symlink'
+    assert file_record(tmp_path,'link')['status']=='rejected-symlink-or-unsafe-file'
 
 
 def test_oversized_file_is_refused_before_hashing(tmp_path,monkeypatch):
@@ -47,3 +47,34 @@ def test_oversized_file_is_refused_before_hashing(tmp_path,monkeypatch):
     monkeypatch.setattr(module,'MAX_FILE_BYTES',2)
     (tmp_path/'large').write_bytes(b'123')
     assert file_record(tmp_path,'large')['status']=='rejected-size'
+
+
+def test_directory_symlink_and_path_escape_are_rejected(tmp_path):
+    source=tmp_path/'trusted';source.mkdir()
+    (source/'data').write_bytes(b'known')
+    (tmp_path/'linked').symlink_to(source, target_is_directory=True)
+    assert file_record(tmp_path,'linked/data')['status']=='rejected-symlink-or-unsafe-file'
+    assert file_record(tmp_path,'../elsewhere')['status']=='rejected-path'
+    assert file_record(tmp_path,'/etc/passwd')['status']=='rejected-path'
+
+
+def test_fifo_never_blocks_audit(tmp_path):
+    import os
+    os.mkfifo(tmp_path/'stream')
+    assert file_record(tmp_path,'stream')['status']=='rejected-type'
+
+
+def test_changed_file_is_not_accepted(tmp_path,monkeypatch):
+    import totalsegmentator_audit as module
+    original_read=module.os.read
+    target=tmp_path/'weights'
+    target.write_bytes(b'first')
+    first=[True]
+    def changed_read(fd,n):
+        data=original_read(fd,n)
+        if first[0]:
+            first[0]=False
+            target.write_bytes(b'other')
+        return data
+    monkeypatch.setattr(module.os,'read',changed_read)
+    assert file_record(tmp_path,'weights')['status']=='changed-during-audit'

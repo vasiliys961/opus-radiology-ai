@@ -2,6 +2,8 @@
 import hashlib
 import importlib.metadata
 import json
+import os
+import stat
 from pathlib import Path
 
 VERSION = '2.18.0'
@@ -33,25 +35,53 @@ def plan(modality, task='total', roi=None):
 
 
 def file_record(root, relative):
-    path = root / relative
-    if any(p.is_symlink() for p in [path,*path.parents]):
-        return {'file':relative,'status':'rejected-symlink'}
-    if not path.is_file():
-        return {'file':relative,'status':'missing'}
-    size = path.stat().st_size
-    if size <= 0 or size > MAX_FILE_BYTES:
-        return {'file':relative,'status':'rejected-size'}
-    digest = hashlib.sha256()
-    read_bytes = 0
-    with path.open('rb') as stream:
-        while block := stream.read(128*1024):
+    """Hash one untrusted local file without following symlinks.
+
+    This is a filesystem integrity check, not proof of official model provenance.
+    Each directory is opened relative to its already-open parent to prevent
+    symlink replacement between validation and reading.
+    """
+    parts = Path(relative).parts
+    if (not parts or Path(relative).is_absolute()
+            or any(p in ('', '.', '..') for p in parts)):
+        return {'file': relative, 'status': 'rejected-path'}
+    fds = []
+    try:
+        directory = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        fds.append(directory)
+        for name in parts[:-1]:
+            directory = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=directory)
+            fds.append(directory)
+        fd = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
+        fds.append(fd)
+        before = os.fstat(fd)
+        if not stat.S_ISREG(before.st_mode):
+            return {'file': relative, 'status': 'rejected-type'}
+        size = before.st_size
+        if size <= 0 or size > MAX_FILE_BYTES:
+            return {'file': relative, 'status': 'rejected-size'}
+        digest = hashlib.sha256()
+        read_bytes = 0
+        while block := os.read(fd, 128 * 1024):
             read_bytes += len(block)
             if read_bytes > size or read_bytes > MAX_FILE_BYTES:
-                return {'file':relative,'status':'changed-during-audit'}
+                return {'file': relative, 'status': 'changed-during-audit'}
             digest.update(block)
-    if read_bytes != size:
-        return {'file':relative,'status':'changed-during-audit'}
-    return {'file':relative,'status':'present-unverified','bytes':size,'sha256':digest.hexdigest()}
+        after = os.fstat(fd)
+        if (read_bytes != size or before.st_size != after.st_size
+                or before.st_mtime_ns != after.st_mtime_ns
+                or before.st_ctime_ns != after.st_ctime_ns
+                or before.st_ino != after.st_ino):
+            return {'file': relative, 'status': 'changed-during-audit'}
+        return {'file': relative, 'status': 'present-unverified',
+                'bytes': size, 'sha256': digest.hexdigest()}
+    except FileNotFoundError:
+        return {'file': relative, 'status': 'missing'}
+    except OSError:
+        return {'file': relative, 'status': 'rejected-symlink-or-unsafe-file'}
+    finally:
+        for fd in reversed(fds):
+            os.close(fd)
 
 
 def audit(weights_root, config_path, installed_version=None):
