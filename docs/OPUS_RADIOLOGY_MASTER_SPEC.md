@@ -383,3 +383,22 @@ patient/cloud activation is added; all four modes and resource caps remain.
 See `docs/EVIDENCE_RECONCILIATION.md`. Spatial ROI reconciliation, authenticated
 independent inference, clinical thresholds, versioned physician audit/sign-off,
 Safari and full-chest R1 acceptance remain planned or PARTIAL.
+
+## Bound LLM spatial point increment — 2026-10-12
+
+On baseline main `9c96502` (PR #20 manually merged; green Web Actions), local
+measurement claims can additionally provide an explicit LPS-mm point and current
+mask SHA. Source/input/request/target binding, geometry extent and review are
+checked before MPR navigation. The active mask supplies a single nearest-neighbour
+label lookup, including permuted/flipped grids; no additional volume or inference.
+
+The UI shows target label, different label, background or unavailable sampling,
+and opens the point in all three MPR planes. Wrong binding/mask, outside-volume
+points and rejected/missing targets disable navigation. Templates leave points
+null. A label hit is not validation of pathology and background is not a negative
+diagnosis. Numeric comparability and point QC remain separate; all output is an
+unverified research draft requiring review. See `docs/EVIDENCE_RECONCILIATION.md`.
+
+Full spatial lesion/ROI reconciliation, authenticated independent model evidence,
+durable physician audit and clinical sign-off remain planned. Four modes, optional
+LLMs, privacy gates and memory/voxel/MPR limits are unchanged; R1 is still PARTIAL.

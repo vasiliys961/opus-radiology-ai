@@ -8,7 +8,7 @@ import { orbitCamera } from "../lib/mpr-orbit";
 import { applyVolumeDisplay, buildVolumeTransfer, getVolumeSampling, getVolumeScalarRange, type VolumeDisplayActor, type VolumePalette, type VolumeRenderMode, type VolumeRenderQuality } from "../lib/volume-rendering";
 import { createAsyncViewportToggle } from "../lib/async-viewport";
 import SegmentationControls, { type MaskDisplay } from "./SegmentationControls";
-import { assertMaskMatchesSource, renderMaskPlane, sourceGeometry, type LabelMask, type Point3 } from "../lib/segmentation-mask";
+import { assertMaskMatchesSource, renderMaskPlane, sampleMaskLabel, sourceGeometry, type LabelMask, type Point3 } from "../lib/segmentation-mask";
 import { prepareAnalysisPackage, type AnalysisPackage } from "../lib/analysis-package";
 import { prepareAnalysisStream, type AnalysisStream } from "../lib/analysis-stream";
 import type { DicomSeries } from "../lib/dicom-series";
@@ -33,6 +33,7 @@ type Runtime = {
   setMaskDisplay: (display: MaskDisplay) => void;
   clearMask: () => void;
   focusPoint: (point: Point3) => void;
+  sampleMaskPoint: (point: Point3) => number | null;
   prepareStream: (signal: AbortSignal) => Promise<AnalysisStream>;
   preparePackage: (signal: AbortSignal) => Promise<AnalysisPackage>;
 };
@@ -406,6 +407,7 @@ export default function CornerstoneMPR({ files, sourceSeries, quality, show3D, o
           },
           setMaskDisplay: display => {if(maskState&&!cancelled){maskState.display=display;scheduleMask();}},
           clearMask: () => {maskState=null;scheduleMask();},
+          sampleMaskPoint: point => !cancelled && maskState ? sampleMaskLabel(maskState.mask, point) : null,
           focusPoint: world => {
             if(cancelled || world.length!==3 || !world.every(Number.isFinite))throw new Error("Точка Evidence недоступна.");
             const index=core.utilities.transformWorldToIndex(volume.imageData,world);
@@ -560,6 +562,7 @@ export default function CornerstoneMPR({ files, sourceSeries, quality, show3D, o
       }}
       onDisplay={display=>runtime.current?.setMaskDisplay(display)}
       onClear={()=>runtime.current?.clearMask()}
+      onSampleMask={point=>runtime.current?.sampleMaskPoint(point)??null}
       onNavigatePoint={point=>{
         if(!runtime.current)throw new Error("Выбранная серия уже закрыта.");
         runtime.current.focusPoint(point);
