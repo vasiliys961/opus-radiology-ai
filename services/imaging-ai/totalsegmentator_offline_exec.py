@@ -69,6 +69,19 @@ def run(input_path, output_path, *, confirmed=False, expected_source_sha=None, s
             output.unlink()
         raise
 
+MASK_REJECTION_CODES = frozenset({
+    "invalid_dimensions", "invalid_affine", "invalid_source_identity",
+    "invalid_label_set", "invalid_mask_file", "invalid_mask_header",
+    "mask_geometry_mismatch", "truncated_mask", "unexpected_mask_label",
+    "oversized_mask", "empty_mask_needs_review",
+})
+
+def safe_mask_rejection(exc, stage):
+    if stage != "mask_validation" or not isinstance(exc, ValueError):
+        return None
+    message = str(exc)
+    return message if message in MASK_REJECTION_CODES else "unrecognized_validation_error"
+
 def main(argv=None):
     p=argparse.ArgumentParser()
     p.add_argument("--input",required=True,type=Path)
@@ -81,7 +94,11 @@ def main(argv=None):
         report=run(args.input,args.output,confirmed=args.research_confirmed,stage=stage,
                    expected_source_sha=args.source_sha256)
     except Exception as exc:
-        print(json.dumps({"status":"failed","error":type(exc).__name__,"stage":stage[0]}),file=sys.stderr)
+        payload={"status":"failed","error":type(exc).__name__,"stage":stage[0]}
+        mask_code=safe_mask_rejection(exc,stage[0])
+        if mask_code is not None:
+            payload["maskRejection"]=mask_code
+        print(json.dumps(payload),file=sys.stderr)
         return 2
     print(json.dumps(report,sort_keys=True))
     return 0

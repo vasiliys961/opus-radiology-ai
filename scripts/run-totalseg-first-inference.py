@@ -56,6 +56,10 @@ def prepare(input_file, model_dir, output_dir):
 
 def reported_stage(process):
     """Only trust fixed diagnostic stage tokens, never echo exception strings."""
+    allowed_mask={"invalid_dimensions","invalid_affine","invalid_source_identity",
+                  "invalid_label_set","invalid_mask_file","invalid_mask_header",
+                  "mask_geometry_mismatch","truncated_mask","unexpected_mask_label",
+                  "oversized_mask","empty_mask_needs_review","unrecognized_validation_error"}
     allowed={"arguments","input_preflight","input_nifti_load","runtime_cache",
              "model_import","model_inference","mask_validation"}
     for line in reversed(process.stderr.splitlines()):
@@ -64,10 +68,13 @@ def reported_stage(process):
         except (ValueError,TypeError):
             continue
         if isinstance(data,dict) and data.get("status")=="failed" and data.get("stage") in allowed:
-            return {"stage":data["stage"],"errorType":data.get("error") if data.get("error") in
+            result={"stage":data["stage"],"errorType":data.get("error") if data.get("error") in
                     {"ValueError","OSError","PermissionError","FileNotFoundError",
                      "RuntimeError","ImportError","ModuleNotFoundError","AssertionError",
                      "TypeError","KeyError","IndexError"} else "other"}
+            if data["stage"]=="mask_validation" and data.get("maskRejection") in allowed_mask:
+                result["maskRejection"]=data["maskRejection"]
+            return result
     return {"stage":"unknown","errorType":"unknown"}
 
 def failure_category(process):
