@@ -190,3 +190,15 @@ Spatial exports retain needs_review/imported-unverified. No model rerun, volume
 copy, guard change or patient/cloud activation. Full ROI/pathology reconciliation,
 independent inference, persistent audit and R1 acceptance remain pending. See
 `docs/EVIDENCE_RECONCILIATION.md`.
+
+## Local review journal — 2026-10-12
+
+Baseline main `601d78d` has PR #21 manually merged and green Web Actions.
+Specialist changes/resets now append a bounded `opus-evidence-review/v1` journal
+with source/input/mask/model binding, revision, previous/new status and declared
+time/unverified actor. Explicit local export/restore only; old/forked/foreign
+imports cannot erase current history or replace measurements. No authenticated
+identity, clinical verification, signature, protected database or automatic
+browser persistence is implied. See `docs/EVIDENCE_REVIEW_HISTORY.md`.
+No model rerun, volume allocation, guard relaxation, .env.local change or
+patient/cloud/remote activation. Four modes and R1 boundaries remain unchanged.

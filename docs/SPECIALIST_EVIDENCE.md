@@ -26,8 +26,10 @@ or authentic model author; their mode is `not-recorded`.
 The Evidence card can select a label and synchronise all three MPR planes to its
 occupied point. Coordinates are checked against the active volume. Local marks
 are `unreviewed`, `requires_recheck` and `rejected`; no control signs or clinically
-verifies a result. Rejection keeps the mask visible for comparison. Marks are
-included in an explicit local JSON download and otherwise live in page memory.
+verifies a result. Rejection keeps the mask visible for comparison. Changes and
+resets now append a bounded local revision history included in Evidence/comparison
+downloads, with a standalone source-bound journal export/restore. See
+`EVIDENCE_REVIEW_HISTORY.md`. Marks otherwise live in page memory.
 Successful replacement, mask deletion and series/MPR teardown discard the prior
 review. A failed replacement retains the previously bound mask and Evidence.
 
@@ -58,5 +60,5 @@ contract. A local metadata comparison increment now imports explicit same-input
 label-volume claims beside this specialist card and displays numeric differences
 or reasons to abstain; see `EVIDENCE_RECONCILIATION.md`. It does not infer spatial
 pathology agreement from anatomy names. Spatial LLM ROI reconciliation, verified
-independent inference, persistent versioned physician audit and clinical sign-off
+independent inference, authenticated persistent physician audit and clinical sign-off
 remain planned. R1, full native chest and Safari remain PARTIAL.

@@ -119,7 +119,10 @@ Latest-started imports win; malformed replacement retains the previous import
 with an explicit error. Local specialist review immediately recomputes comparison.
 Clearing hypotheses, mask deletion, successful mask replacement and MPR teardown
 discard comparison state. State lives in page memory until explicit local JSON
-download. There is no persistent physician audit, signature or clinical approval.
+download. Specialist changes/resets now append a local review journal included
+in the comparison snapshot, with source-bound standalone export/restore; see
+`EVIDENCE_REVIEW_HISTORY.md`. Authenticated persistent physician audit, signature
+and clinical approval remain planned.
 
 ## Validation and remaining work
 
@@ -135,6 +138,6 @@ Synthetic claims are not actual LLM
 inference or real-model/clinical evidence; no medical model was rerun.
 
 Authenticated provider output, independent measurements, spatial LLM ROI pairing,
-clinical significance rules, longitudinal comparison, versioned physician audit
+clinical significance rules, longitudinal comparison, authenticated physician audit
 and sign-off remain planned. Mac/Safari/full-native-chest/clinical accuracy
 acceptance is unchanged from the separately recorded R231 reports.

@@ -400,6 +400,10 @@ try {
   assert.equal(evidence.source.inputSha256,localRequest.inputSha256);
   assert.equal(evidence.mask.sha256,createHash('sha256').update(ctMask).digest('hex'));
   assert.equal(evidence.observations[0].review,'requires_recheck');
+  assert.equal(evidence.reviewHistory.schema,'opus-evidence-review/v1');
+  assert.equal(evidence.reviewHistory.events.length,1);
+  assert.equal(evidence.reviewHistory.events[0].from,'unreviewed');
+  assert.equal(evidence.reviewHistory.events[0].to,'requires_recheck');
   assert.equal(evidence.producer.executionMode,'local');
   assert.doesNotMatch(JSON.stringify(evidence),/synthetic-test-token|sopInstanceUid|patientName/);
   // Shared LPS focus must synchronise all three plane controls to the exported
@@ -479,6 +483,7 @@ try {
   assert.equal(compared.comparisons[0].spatial.sampledLabelId,evidence.observations[1].labelId);
   assert.deepEqual(compared.comparisons[0].spatial.pointLpsMm,evidence.observations[1].anchorLpsMm);
   assert.equal(compared.specialist.observations[0].review,'requires_recheck');
+  assert.equal(compared.specialist.reviewHistory.events.length,1);
   assert.equal(compared.llm.claims[0].valueMl,evidence.observations[0].volumeMl+1);
   assert.doesNotMatch(JSON.stringify(compared),/synthetic-test-token|sopInstanceUid|patientName/);
   await comparisonPanel.getByRole('button',{name:'Удалить гипотезы LLM',exact:true}).click();
@@ -490,9 +495,51 @@ try {
   assert.match(await comparedClaim.innerText(),/Нельзя сопоставить.*Целевая метка отклонена/s);
   assert.equal(await anchorButton.isDisabled(),true);
   assert.equal(await page.locator('.ora-mpr-mask-overlay').count(),3);
+  // Reset is a new review event; exported journals can extend but cannot erase
+  // or fork the active history. Restoring never replaces any measurements.
+  const historyPanel=evidencePanel.locator('.ora-review-history');
+  await observation.getByRole('button',{name:'Сбросить отметку',exact:true}).click();
+  assert.match(await observation.innerText(),/Не проверено врачом/);
+  assert.match(await historyPanel.innerText(),/версия 3/);
+  await historyPanel.locator('details>summary').click();
+  assert.equal(await historyPanel.locator('ol>li').count(),3);
+  const historyDownload=page.waitForEvent('download');
+  await historyPanel.getByRole('button',{name:'Скачать историю JSON',exact:true}).click();
+  const historyFile=await historyDownload,historyPath=join(fixture,'review-history.json');
+  await historyFile.saveAs(historyPath);
+  const journal=JSON.parse(await readFile(historyPath,'utf8'));
+  assert.deepEqual(journal.events.map(e=>[e.revision,e.from,e.to]),[[1,'unreviewed','requires_recheck'],[2,'requires_recheck','rejected'],[3,'rejected','unreviewed']]);
+  assert.equal(journal.binding.maskSha256,evidence.mask.sha256);
+  const historyInput=historyPanel.locator('input[type=file]');
+  const importHistory=async value=>historyInput.setInputFiles({name:'synthetic-history.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(value))});
+  const continued=structuredClone(journal);
+  continued.events.push({revision:4,observationId:evidence.observations[0].observationId,from:'unreviewed',to:'rejected',at:'2026-10-12T00:00:00.000Z',actor:'local-unverified-reviewer'});
+  await importHistory(continued);
+  await historyPanel.getByRole('status').waitFor();
+  assert.match(await observation.innerText(),/Отклонено локально/);
+  assert.match(await historyPanel.innerText(),/версия 4/);
+  assert.equal(await anchorButton.isDisabled(),true); // comparison follows restored review
+  const foreign=structuredClone(continued);foreign.binding.maskSha256='f'.repeat(64);
+  await importHistory(foreign);
+  await historyPanel.locator('[role=alert]').waitFor();
+  assert.match(await historyPanel.locator('[role=alert]').innerText(),/другому пакету/);
+  assert.match(await observation.innerText(),/Отклонено локально/);
+  await importHistory(journal);
+  await historyPanel.getByText(/Более старая версия/).waitFor();
+  assert.match(await historyPanel.innerText(),/версия 4/);
+  const forked=structuredClone(continued);forked.events[0].at='2026-10-12T01:00:00.000Z';
+  await importHistory(forked);
+  await historyPanel.getByText(/Расходящаяся версия/).waitFor();
+  assert.equal(await historyPanel.locator('ol>li').count(),4);
+  await importHistory(continued);
+  await historyPanel.locator('[role=alert]').waitFor({state:'detached'});
+  assert.equal(await historyPanel.locator('[role=alert]').count(),0);
+  assert.equal(await page.locator('.ora-mpr-mask-overlay').count(),3);
   await page.getByRole('button',{name:'Удалить маску',exact:true}).click();
   assert.equal(await evidencePanel.count(),0);
   assert.equal(await comparisonPanel.count(),0);
+  assert.equal(await historyPanel.count(),0);
+  console.log('Local review history: immutable reset, journal/export, source-bound extension restore, older/forked/foreign refusal, comparison refresh and lifecycle clear (synthetic only)');
   console.log('Local metadata reconciliation: blank template, numeric discrepancy, source/scope abstention, failed-import retention, review-aware export and lifecycle clear (synthetic only)');
   console.log('LLM LPS anchors: active mask target/different label, three-plane navigation, wrong mask/source/outside/rejected abstention and export (synthetic only)');
   console.log('Bound specialist Evidence -> local review/export -> occupied-point MPR navigation -> lifecycle clear passed (synthetic only)');
