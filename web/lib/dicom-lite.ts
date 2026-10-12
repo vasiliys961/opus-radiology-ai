@@ -217,11 +217,13 @@ export function renderDicomPixels(frame: DicomFrame): Uint8ClampedArray {
   return output;
 }
 
-export async function decodeDicomPreview(file: File): Promise<{url: string; metadata: DicomPreviewMetadata}> {
+export async function decodeDicomPreview(file: File,options:{maxPixels?:number}={}): Promise<{url: string; metadata: DicomPreviewMetadata}> {
   if (file.size > MAX_PREVIEW_FILE_BYTES) {
     throw new DicomPreviewError("Файл больше 64 МБ. Не загружаем его целиком в память; нужен потоковый DICOM-декодер.");
   }
   const frame = parseDicomFrame(await file.arrayBuffer());
+  if(options.maxPixels!==undefined&&(!Number.isSafeInteger(options.maxPixels)||options.maxPixels<1||frame.metadata.width*frame.metadata.height>options.maxPixels))
+    throw new DicomPreviewError("Кадр превышает лимит локальной копии. Откройте исходный срез в Cornerstone.");
   const pixels = renderDicomPixels(frame);
   const canvas = document.createElement("canvas");
   canvas.width = frame.metadata.width;

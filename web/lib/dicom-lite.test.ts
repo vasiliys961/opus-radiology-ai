@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseDicomFrame, renderDicomPixels, DicomPreviewError } from "./dicom-lite.ts";
+import { decodeDicomPreview,parseDicomFrame, renderDicomPixels, DicomPreviewError } from "./dicom-lite.ts";
 
 function syntheticDicom({syntax = "1.2.840.10008.1.2.1", signed = false, inverted = false,
   photometric, highBit, windowCenter, windowWidth}: {
@@ -78,4 +78,10 @@ test("DICOM window width one becomes threshold rather than all black", () => {
 
 test("rejects high bit outside pixel allocation", () => {
   assert.throws(() => parseDicomFrame(syntheticDicom({highBit:16})), /High Bit/);
+});
+
+test("bounded privacy preview refuses excess pixels before allocating a canvas or RGBA",async()=>{
+  const file=new File([syntheticDicom()],"synthetic-only.dcm");
+  await assert.rejects(decodeDicomPreview(file,{maxPixels:3}),/лимит локальной копии/);
+  await assert.rejects(decodeDicomPreview(file,{maxPixels:NaN}),/лимит локальной копии/);
 });

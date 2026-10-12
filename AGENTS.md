@@ -245,3 +245,23 @@ See `docs/REVIEWER_NOTE.md`. This is metadata-only unsigned research text, not
 clinical approval, protected storage or an authenticated audit. No model rerun,
 volume copy, resource-guard change, .env.local change or patient/cloud/remote
 activation. Four modes and R1/Mac/Safari/full-chest/clinical boundaries remain.
+
+
+## Local cloud privacy preparation — 2026-10-12 (feature branch)
+
+Baseline main `335d6d3` includes manually merged PR #25 and green Web Actions.
+The user's next goal is cloud analysis only after de-identification. The local
+Vision plan now prepares bounded windowed PNG copies without DICOM/private
+metadata, original UIDs/filenames or clinical/reviewer text. PNG ancillary blocks
+are stripped with CRC/size/encoding checks; actual opaque-black raster redaction
+leaves source/MPR/Evidence untouched. Each exact copy needs separate local text/
+visual checks bound to its SHA; redaction/restart resets review. Explicit local
+candidate export only, no network or provider/model run.
+
+This is PARTIAL privacy preparation, not a trusted de-ID release or DICOM file
+conformance claim. The candidate retains unverified/sampled-only and transmission
+false. OCR/defacing, independent privacy acceptance, server clinician/study
+controls, provider context and audit/retention remain pending; arbitrary `/api/ai`
+stays HTTP 410 and forged client flags cannot enable it. See
+`docs/CLOUD_DEIDENTIFICATION.md`. Four modes, optional-LLM Evidence separation,
+.env.local, all R231/MPR/resource guards and R1 acceptance stay unchanged.
