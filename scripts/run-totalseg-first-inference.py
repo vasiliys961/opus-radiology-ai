@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -53,6 +54,24 @@ def prepare(input_file, model_dir, output_dir):
         raise ValueError("host_has_less_than_12_gib_available_ram")
     return source,models,output,sha256(source)
 
+def failure_category(process):
+    """Never publish raw Docker logs or host paths in CI artifacts."""
+    log=(process.stderr+"\n"+process.stdout).lower()
+    checks=(
+        ("docker_runtime", ("cannot connect to the docker daemon", "error response from daemon",
+                            "permission denied while trying to connect to the docker daemon")),
+        ("model_missing", ("no such file or directory: '/models", "dataset297_", "dataset298_")),
+        ("read_only_filesystem", ("read-only file system", "permissionerror")),
+        ("memory", ("out of memory", "cannot allocate memory", "killed")),
+        ("python_import", ("modulenotfounderror", "importerror")),
+        ("nifti_invalid", ("invalid_nifti", "invalid_input", "invalid_mask")),
+        ("weight_download_attempt", ("connectionerror", "network is unreachable", "name or service not known")),
+    )
+    for category,terms in checks:
+        if any(term in log for term in terms):
+            return category
+    return "unclassified"
+
 def run(input_file,model_dir,output_dir,*,confirmed=False,repo_root=None):
     if not confirmed:
         raise ValueError("explicit_research_confirmation_required")
@@ -87,6 +106,7 @@ def run(input_file,model_dir,output_dir,*,confirmed=False,repo_root=None):
             report["status"]="invalid_output"
     else:
         report["status"]="failed"
+        report["failureCategory"]=failure_category(process)
     # Never echo the Docker logs (potentially contain private local paths).
     return report
 
