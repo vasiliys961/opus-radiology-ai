@@ -4,7 +4,7 @@ import type { EvidenceDecision, SegmentationEvidence } from "./segmentation-evid
 import { COMPARISON_REASONS, normalizeLlmMeasurements, reconcileEvidence, type LlmMeasurements } from "./evidence-reconciliation.ts";
 import { normalizeEvidenceReviewHistory, type EvidenceReviewHistory } from "./evidence-review-history.ts";
 import type { Point3 } from "./segmentation-mask.ts";
-import { normalizeReviewerNote,reviewerNoteNeedsRecheck,type ReviewerNote,type EvidenceWithNote } from "./evidence-reviewer-note.ts";
+import { latestReviewerNotes,normalizeReviewerNote,reviewerNoteNeedsRecheck,type ReviewerNote,type EvidenceWithNote } from "./evidence-reviewer-note.ts";
 
 export const MAX_EVIDENCE_REPORT_BYTES = 2 * 1024 * 1024;
 const decisions: Record<EvidenceDecision,string> = {unreviewed:"Не проверено врачом",requires_recheck:"На перепроверку",rejected:"Отклонено локально"};
@@ -37,11 +37,16 @@ export function buildEvidenceReport(evidence: SegmentationEvidence, options: {
   const rawNote=(evidence as SegmentationEvidence & {reviewerNote?:ReviewerNote}).reviewerNote;
   if(rawNote&&!history)throw new Error("Для заметки требуется связанная история проверки.");
   const note=rawNote?normalizeReviewerNote(rawNote,evidence as EvidenceWithNote):null;
-  const latestNote=note?.versions[note.versions.length-1];
-  const reviewerText=!latestNote?"<p>Заметка проверяющего не предоставлена. Клиническое мнение врача не удостоверено.</p>":
-    `<p><strong>Неподписанный черновик; автор не удостоверен.</strong> Версия заметки ${latestNote.revision}, история проверки ${latestNote.reviewRevision}.</p>
-    ${reviewerNoteNeedsRecheck({...evidence,reviewerNote:note} as EvidenceWithNote)?"<p><strong>Заметку нужно перепроверить: после её сохранения изменились отметки.</strong></p>":"<p>Текст связан с текущей историей проверки; это не клиническое утверждение.</p>"}
-    <p>${latestNote.text?escape(latestNote.text):"Текущая заметка очищена; прошлые версии сохранены в JSON."}</p><p>Заявленное время: ${escape(latestNote.at)} · UTC.</p>`;
+  const latestNotes=latestReviewerNotes(note??undefined);
+  const reviewerText=!latestNotes.length?"<p>Заметка проверяющего не предоставлена. Клиническое мнение врача не удостоверено.</p>":
+    latestNotes.map(latestNote=>{
+      const target=evidence.observations.find(o=>o.observationId===latestNote.observationId);
+      return `<article><h3>${target?`Метка ${escape(target.labelId)} · ${escape(target.labelName)}`:"Общая заметка к результату"}</h3>
+      ${target?`<p>Наблюдение: ${escape(target.observationId)}. Точка метки · LPS, мм: ${point(target.anchorLpsMm)}. Привязка к метке маски, не к очагу патологии.</p>`:""}
+      <p><strong>Неподписанный черновик; автор не удостоверен.</strong> Версия заметки ${latestNote.revision}, история проверки ${latestNote.reviewRevision}.</p>
+      ${reviewerNoteNeedsRecheck({...evidence,reviewerNote:note} as EvidenceWithNote,latestNote.observationId??null)?"<p><strong>Заметку нужно перепроверить: после её сохранения изменились отметки.</strong></p>":"<p>Текст связан с текущей историей проверки; это не клиническое утверждение.</p>"}
+      <p>${latestNote.text?escape(latestNote.text):"Текущая заметка очищена; прошлые версии сохранены в JSON."}</p><p>Заявленное время: ${escape(latestNote.at)} · UTC.</p></article>`;
+    }).join("");
   const llm = options.llm ? normalizeLlmMeasurements(options.llm) : null;
   const comparison = llm ? reconcileEvidence(evidence,llm,options.sampleMask) : null;
   const s = evidence.source, m = evidence.producer.model;

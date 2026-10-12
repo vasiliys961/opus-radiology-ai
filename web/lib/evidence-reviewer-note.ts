@@ -3,8 +3,8 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { normalizeEvidenceReviewHistory, type EvidenceReviewHistory, type ReviewedEvidence } from "./evidence-review-history.ts";
 
 export const MAX_NOTE_CHARS=4_000, MAX_NOTE_VERSIONS=32, MAX_NOTE_JSON_BYTES=512_000;
-export type ReviewerNoteVersion={revision:number;reviewRevision:number;reviewSha256:string;text:string;at:string;actor:"local-unverified-reviewer"};
-export type ReviewerNote={schema:"opus-reviewer-note/v1";clinicalStatus:"unverified_research_draft";provenance:"local-unverified";
+export type ReviewerNoteVersion={revision:number;reviewRevision:number;reviewSha256:string;text:string;at:string;actor:"local-unverified-reviewer";observationId?:string};
+export type ReviewerNote={schema:"opus-reviewer-note/v1"|"opus-reviewer-note/v2";clinicalStatus:"unverified_research_draft";provenance:"local-unverified";
   binding:EvidenceReviewHistory["binding"];versions:ReviewerNoteVersion[]};
 export type EvidenceWithNote=ReviewedEvidence & {reviewerNote?:ReviewerNote};
 const object=(v:unknown):Record<string,unknown>=>{
@@ -17,9 +17,23 @@ function digest(history:EvidenceReviewHistory,revision:number):string {
 }
 const time=(v:unknown):v is string=>typeof v==="string"&&/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(v)&&Number.isFinite(Date.parse(v))&&new Date(v).toISOString()===v;
 
+/** Missing target retains the original general-note contract. No anatomy guessing. */
+function validateTarget(value:unknown,evidence:ReviewedEvidence):asserts value is string {
+  if(typeof value!=="string"||!evidence.observations.some(o=>o.observationId===value))
+    throw new Error("Цель заметки не соответствует существующей метке Evidence.");
+}
+export function latestReviewerNotes(note?:ReviewerNote):ReviewerNoteVersion[] {
+  const latest=new Map<string|null,ReviewerNoteVersion>();
+  for(const version of note?.versions??[])latest.set(version.observationId??null,version);
+  return [...latest.values()];
+}
+export function latestReviewerNote(note?:ReviewerNote,observationId:string|null=null):ReviewerNoteVersion|undefined {
+  return latestReviewerNotes(note).find(v=>(v.observationId??null)===observationId);
+}
+
 export function normalizeReviewerNote(value:unknown,evidence:ReviewedEvidence):ReviewerNote {
   const r=object(value),b=object(r.binding),history=normalizeEvidenceReviewHistory(evidence.reviewHistory,evidence);
-  if(r.schema!=="opus-reviewer-note/v1"||r.clinicalStatus!=="unverified_research_draft"||r.provenance!=="local-unverified"||
+  if((r.schema!=="opus-reviewer-note/v1"&&r.schema!=="opus-reviewer-note/v2")||r.clinicalStatus!=="unverified_research_draft"||r.provenance!=="local-unverified"||
     !Array.isArray(r.versions)||r.versions.length>MAX_NOTE_VERSIONS)throw new Error("Неподдерживаемый черновик заметки.");
   if(Object.entries(history.binding).some(([key,v])=>b[key]!==v))throw new Error("Заметка относится к другому источнику, маске или модели.");
   const hashes=new Map<number,string>();
@@ -32,25 +46,34 @@ export function normalizeReviewerNote(value:unknown,evidence:ReviewedEvidence):R
     previousReviewRevision=v.reviewRevision;
     if(!hashes.has(v.reviewRevision))hashes.set(v.reviewRevision,digest(history,v.reviewRevision));
     if(v.reviewSha256!==hashes.get(v.reviewRevision))throw new Error("Заметка привязана к другой последовательности проверки.");
-    return {revision:i+1,reviewRevision:v.reviewRevision,reviewSha256:v.reviewSha256 as string,text:v.text,at:v.at,actor:"local-unverified-reviewer"};
+    if(v.observationId!==undefined){
+      if(r.schema!=="opus-reviewer-note/v2")throw new Error("Для заметок к меткам требуется формат opus-reviewer-note/v2.");
+      validateTarget(v.observationId,evidence);
+    }
+    return {revision:i+1,reviewRevision:v.reviewRevision,reviewSha256:v.reviewSha256 as string,text:v.text,at:v.at,actor:"local-unverified-reviewer",
+      ...(v.observationId===undefined?{}:{observationId:v.observationId})};
   });
-  return {schema:"opus-reviewer-note/v1",clinicalStatus:"unverified_research_draft",provenance:"local-unverified",binding:history.binding,versions};
+  return {schema:r.schema,clinicalStatus:"unverified_research_draft",provenance:"local-unverified",binding:history.binding,versions};
 }
 
-export function saveReviewerNote(evidence:EvidenceWithNote,text:string,at:string):EvidenceWithNote {
+export function saveReviewerNote(evidence:EvidenceWithNote,text:string,at:string,observationId:string|null=null):EvidenceWithNote {
   if(typeof text!=="string"||text.length>MAX_NOTE_CHARS||!time(at))throw new Error("Заметка ограничена 4000 символами; проверьте время устройства.");
+  if(observationId!==null)validateTarget(observationId,evidence);
   const history=normalizeEvidenceReviewHistory(evidence.reviewHistory,evidence);
   const note=evidence.reviewerNote?normalizeReviewerNote(evidence.reviewerNote,evidence):
     {schema:"opus-reviewer-note/v1" as const,clinicalStatus:"unverified_research_draft" as const,provenance:"local-unverified" as const,binding:history.binding,versions:[]};
-  const last=note.versions[note.versions.length-1],reviewSha256=digest(history,history.events.length);
+  const last=latestReviewerNote(note,observationId),reviewSha256=digest(history,history.events.length);
   if((!last&&text==="")||(last?.text===text&&last.reviewSha256===reviewSha256))return evidence;
   if(note.versions.length>=MAX_NOTE_VERSIONS)throw new Error("Достигнут лимит 32 версий заметки. Сохраните историю; текущая заметка сохранена.");
-  const version:ReviewerNoteVersion={revision:note.versions.length+1,reviewRevision:history.events.length,reviewSha256,text,at,actor:"local-unverified-reviewer"};
-  return {...evidence,reviewerNote:{...note,versions:[...note.versions,version]}};
+  const version:ReviewerNoteVersion={revision:note.versions.length+1,reviewRevision:history.events.length,reviewSha256,text,at,actor:"local-unverified-reviewer",
+    ...(observationId===null?{}:{observationId})};
+  // Old clients must refuse targeted journals instead of flattening label text
+  // into their single general note. Legacy general-only files keep v1.
+  return {...evidence,reviewerNote:{...note,schema:observationId===null?note.schema:"opus-reviewer-note/v2",versions:[...note.versions,version]}};
 }
 
-export function reviewerNoteNeedsRecheck(evidence:EvidenceWithNote):boolean {
-  const last=evidence.reviewerNote?.versions[evidence.reviewerNote.versions.length-1];
+export function reviewerNoteNeedsRecheck(evidence:EvidenceWithNote,observationId:string|null=null):boolean {
+  const last=latestReviewerNote(evidence.reviewerNote,observationId);
   if(!last)return false;
   const history=normalizeEvidenceReviewHistory(evidence.reviewHistory,evidence);
   return last.reviewRevision!==history.events.length||last.reviewSha256!==digest(history,history.events.length);

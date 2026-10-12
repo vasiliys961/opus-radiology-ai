@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeReviewerNote,restoreReviewerNote,reviewerNoteNeedsRecheck,saveReviewerNote,MAX_NOTE_VERSIONS } from "./evidence-reviewer-note.ts";
+import { latestReviewerNote,latestReviewerNotes,normalizeReviewerNote,restoreReviewerNote,reviewerNoteNeedsRecheck,saveReviewerNote,MAX_NOTE_VERSIONS,type EvidenceWithNote } from "./evidence-reviewer-note.ts";
 import { changeEvidenceReview,startEvidenceReview } from "./evidence-review-history.ts";
 import { buildEvidenceReport } from "./evidence-report.ts";
 import type { SegmentationEvidence } from "./segmentation-evidence.ts";
@@ -95,4 +95,89 @@ test("allowlisting ignores unknown opaque buffers/secrets without reading getter
   const restored=restoreReviewerNote(startEvidenceReview(base),raw);
   assert.doesNotMatch(JSON.stringify(restored),/secret-sentinel|PHI-sentinel/);
   assert.equal(restored.observations[0].volumeMl,0.004);assert.equal(restored.source,base.source);
+});
+
+const secondId="note-fixture:label:2";
+function twoLabels(){return startEvidenceReview({...base,observations:[...base.observations,
+  {...base.observations[0],observationId:secondId,labelId:2,labelName:"Other synthetic label",anchorLpsMm:[1,1,1]}]});}
+
+test("general and existing-label notes stay independent; clearing affects only its target",()=>{
+  let r=saveReviewerNote(twoLabels(),"General synthetic comment",at);
+  r=saveReviewerNote(r,"First label comment",at,id);
+  r=saveReviewerNote(r,"Second label comment",at,secondId);
+  assert.equal(latestReviewerNotes(r.reviewerNote).length,3);
+  assert.equal(latestReviewerNote(r.reviewerNote)?.text,"General synthetic comment");
+  assert.equal(latestReviewerNote(r.reviewerNote,id)?.text,"First label comment");
+  assert.equal(saveReviewerNote(r,"First label comment",at,id),r); // latest overall belongs to label 2
+  assert.equal(saveReviewerNote(r,"General synthetic comment",at),r);
+  const cleared=saveReviewerNote(r,"",at,id);
+  assert.equal(latestReviewerNote(cleared.reviewerNote,id)?.text,"");
+  assert.equal(latestReviewerNote(cleared.reviewerNote,secondId)?.text,"Second label comment");
+  assert.equal(latestReviewerNote(cleared.reviewerNote)?.text,"General synthetic comment");
+  assert.equal(r.reviewerNote?.versions.length,3);
+  assert.equal(cleared.reviewerNote?.versions.length,4);
+  assert.deepEqual(cleared.observations,twoLabels().observations);
+});
+
+test("legacy general note restores unchanged; append requires exact known targets and preserves target prefix",()=>{
+  const initial=twoLabels(),general=saveReviewerNote(initial,"Legacy general note",at);
+  assert.equal("observationId" in general.reviewerNote!.versions[0],false);
+  const restored=restoreReviewerNote(initial,JSON.stringify(general.reviewerNote));
+  assert.deepEqual(restored.reviewerNote,general.reviewerNote);
+  const extended=saveReviewerNote(restored,"Targeted synthetic note",at,id);
+  assert.equal(general.reviewerNote?.schema,"opus-reviewer-note/v1");
+  assert.equal(extended.reviewerNote?.schema,"opus-reviewer-note/v2");
+  assert.deepEqual(restoreReviewerNote(general,JSON.stringify(extended.reviewerNote)).reviewerNote,extended.reviewerNote);
+  assert.equal(extended.reviewerNote?.versions[1].observationId,id);
+  for(const target of ["foreign:label:1","",1,null,{}]){
+    const invalid=structuredClone(extended.reviewerNote!);
+    Object.assign(invalid.versions[1],{observationId:target});
+    assert.throws(()=>restoreReviewerNote(general,JSON.stringify(invalid)),/Цель заметки/);
+  }
+  assert.throws(()=>saveReviewerNote(initial,"",at,"absent"),/Цель заметки/);
+  const retargeted=structuredClone(extended.reviewerNote!);retargeted.versions[1].observationId=secondId;
+  assert.throws(()=>restoreReviewerNote(extended,JSON.stringify(retargeted)),/не продолжает/);
+});
+
+test("targeted files cannot masquerade as legacy general notes",()=>{
+  const targeted=saveReviewerNote(twoLabels(),"Targeted synthetic",at,id);
+  assert.throws(()=>normalizeReviewerNote({...targeted.reviewerNote,schema:"opus-reviewer-note/v1"},twoLabels()),/требуется формат/);
+  const generalAfter=saveReviewerNote(targeted,"General synthetic",at);
+  assert.equal(generalAfter.reviewerNote?.schema,"opus-reviewer-note/v2");
+  assert.deepEqual(restoreReviewerNote(twoLabels(),JSON.stringify(generalAfter.reviewerNote)).reviewerNote,generalAfter.reviewerNote);
+});
+
+test("changed review stales every saved target; reconfirming one leaves the others stale",()=>{
+  let r=saveReviewerNote(twoLabels(),"General",at);
+  r=saveReviewerNote(r,"First",at,id);r=saveReviewerNote(r,"Second",at,secondId);
+  const changed=changeEvidenceReview(r,id,"rejected",at) as typeof r;
+  for(const target of [null,id,secondId])assert.equal(reviewerNoteNeedsRecheck(changed,target),true);
+  const reconfirmed=saveReviewerNote(changed,"First",at,id);
+  assert.equal(reviewerNoteNeedsRecheck(reconfirmed,id),false);
+  assert.equal(reviewerNoteNeedsRecheck(reconfirmed,secondId),true);
+  assert.equal(reviewerNoteNeedsRecheck(reconfirmed),true);
+  assert.equal(reconfirmed.reviewerNote?.versions.length,4);
+});
+
+test("HTML includes latest general and each target text, known anchors and independent cleared/stale state",()=>{
+  const initial=twoLabels();initial.observations[1].labelName='<img src="https://example.invalid/"> Synthetic label';
+  let r=saveReviewerNote(initial,"General synthetic sentinel",at);
+  r=saveReviewerNote(r,"Old first sentinel",at,id);r=saveReviewerNote(r,"Second synthetic sentinel",at,secondId);
+  r=saveReviewerNote(r,"Current first <script>sentinel</script>",at,id);
+  const html=buildEvidenceReport(r,{generatedAt:at});
+  assert.match(html,/General synthetic sentinel/);assert.match(html,/Second synthetic sentinel/);
+  assert.match(html,/Current first &lt;script&gt;/);assert.doesNotMatch(html,/Old first sentinel|<script|<img/);
+  assert.match(html,/&lt;img src=/);assert.match(html,/Наблюдение: note-fixture:label:2/);
+  assert.match(html,/Точка метки · LPS, мм: 1; 1; 1/);assert.match(html,/не к очагу патологии/);
+  const changed=changeEvidenceReview(r,id,"requires_recheck",at) as typeof r;
+  const cleared=saveReviewerNote(changed,"",at,id),report=buildEvidenceReport(cleared,{generatedAt:at});
+  assert.equal(report.match(/Заметку нужно перепроверить/g)?.length,2);
+  assert.match(report,/Текущая заметка очищена/);assert.match(report,/Second synthetic sentinel/);
+  assert.doesNotMatch(report,/Current first/);
+});
+
+test("shared version limit cannot be bypassed by switching labels",()=>{
+  let r:EvidenceWithNote=twoLabels();for(let i=0;i<MAX_NOTE_VERSIONS;i++)r=saveReviewerNote(r,`Synthetic ${i}`,at,i%2?id:secondId);
+  assert.throws(()=>saveReviewerNote(r,"General",at),/лимит 32/);
+  assert.equal(r.reviewerNote?.versions.length,32);assert.equal(latestReviewerNotes(r.reviewerNote).length,2);
 });

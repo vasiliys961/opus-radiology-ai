@@ -460,3 +460,21 @@ does not change measurements, provider output or comparison decisions.
 This is not authenticated clinical opinion, signature, de-ID or protected
 persistence. See `docs/REVIEWER_NOTE.md`. Patient/cloud/remote OFF, four modes,
 resource limits and R1/Mac/Safari/full-chest/clinical acceptance stay unchanged.
+
+
+## Label-linked reviewer drafts — 2026-10-12 (feature branch)
+
+Baseline main `dcaf69b` has PR #24 manually merged and green Web Actions.
+The existing local note journal now keeps independent latest general/label text.
+Optional observation IDs must match current specialist Evidence exactly. Targeted
+journals use v2 so older clients refuse instead of misattributing label comments;
+older v1 general files keep their shape and prefix. MPR navigation reuses the existing
+occupied-label point, not an invented lesion/ROI. Unsaved edits block target
+switching and full exports. HTML retains latest text and stale/cleared state per
+target. Review changes conservatively stale all targets; reconfirmation is per
+target. The shared cap remains 32 versions total, not 32 per label.
+
+See `docs/REVIEWER_NOTE.md`. This is metadata-only unsigned research text, not
+clinical approval, protected storage or an authenticated audit. No model rerun,
+volume copy, resource-guard change, .env.local change or patient/cloud/remote
+activation. Four modes and R1/Mac/Safari/full-chest/clinical boundaries remain.
