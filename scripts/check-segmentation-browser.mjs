@@ -599,13 +599,51 @@ try {
   assert.equal(await noteEditor.inputValue(),reviewerText);
   const confirmedHtml=await downloadReport(comparisonPanel.getByRole('button',{name:'Скачать отчёт с сопоставлением HTML',exact:true}),join(fixture,'reviewer-confirmed-report.html'));
   assert.match(confirmedHtml,/Версия заметки 2, история проверки 4/);assert.doesNotMatch(confirmedHtml,/Заметку нужно перепроверить/);
+  // Optional exact observation targets retain the legacy general note and use
+  // existing occupied-label anchors, never invent a lesion/ROI coordinate.
+  const noteTarget=notePanel.getByRole('combobox',{name:'К чему относится заметка',exact:true});
+  const labelComments=['Synthetic first label comment <script>sentinel</script>.','Synthetic second label comment.'];
+  for(let i=0;i<2;i++){
+    await noteTarget.selectOption(evidence.observations[i].observationId);
+    assert.equal(await noteEditor.inputValue(),'');
+    await noteEditor.fill(labelComments[i]);
+    assert.equal(await noteTarget.isDisabled(),true);
+    assert.equal(await evidencePanel.getByRole('button',{name:'Скачать Evidence JSON',exact:true}).isDisabled(),true);
+    await notePanel.getByRole('button',{name:'Сохранить заметку',exact:true}).click();
+    await notePanel.getByText(new RegExp(`сохранённых версий: ${i+3}`)).waitFor();
+    assert.equal(await noteTarget.isDisabled(),false);
+    await notePanel.getByRole('button',{name:'Показать метку заметки в MPR',exact:true}).click();
+    assert.equal(await page.locator('.ora-mask-settings select').inputValue(),String(evidence.observations[i].labelId));
+    assert.equal(await page.locator('.ora-mpr-crosshair').count(),3);
+  }
+  const targetedDownload=page.waitForEvent('download');
+  await notePanel.getByRole('button',{name:'Скачать заметку JSON',exact:true}).click();
+  const targetedFile=await targetedDownload,targetedPath=join(fixture,'targeted-notes.json');await targetedFile.saveAs(targetedPath);
+  const targetedNote=JSON.parse(await readFile(targetedPath,'utf8'));
+  assert.equal(targetedNote.schema,'opus-reviewer-note/v2');
+  assert.equal(targetedNote.versions.length,4);
+  assert.equal('observationId' in targetedNote.versions[0],false); // old general shape preserved
+  assert.deepEqual(targetedNote.versions.slice(2).map(v=>v.observationId),evidence.observations.slice(0,2).map(o=>o.observationId));
+  await noteTarget.selectOption(evidence.observations[0].observationId);
+  const wrongTarget=structuredClone(targetedNote);wrongTarget.versions[3].observationId='foreign-label';
+  await importNote(wrongTarget);await notePanel.getByText(/Цель заметки/).waitFor();
+  assert.equal(await noteEditor.inputValue(),labelComments[0]);
+  await importNote(targetedNote);await notePanel.locator('[role=alert]').waitFor({state:'detached'});
+  assert.equal(await noteEditor.inputValue(),labelComments[0]); // selected target, not last overall version
+  await noteTarget.selectOption('');assert.equal(await noteEditor.inputValue(),reviewerText);
+  assert.equal(await notePanel.getByRole('button',{name:'Показать метку заметки в MPR',exact:true}).count(),0);
+  const targetedHtml=await downloadReport(comparisonPanel.getByRole('button',{name:'Скачать отчёт с сопоставлением HTML',exact:true}),join(fixture,'targeted-report.html'));
+  assert.match(targetedHtml,/Synthetic reviewer comment &lt;script&gt;/);
+  assert.match(targetedHtml,/Synthetic first label comment &lt;script&gt;/);assert.match(targetedHtml,/Synthetic second label comment/);
+  for(const o of evidence.observations.slice(0,2))assert.ok(targetedHtml.includes(`Наблюдение: ${o.observationId}`));
+  assert.doesNotMatch(targetedHtml,/<script|<img|Заметку нужно перепроверить/);
   assert.equal(await page.locator('.ora-mpr-mask-overlay').count(),3);
   await page.getByRole('button',{name:'Удалить маску',exact:true}).click();
   assert.equal(await evidencePanel.count(),0);
   assert.equal(await comparisonPanel.count(),0);
   assert.equal(await historyPanel.count(),0);
   assert.equal(await notePanel.count(),0);
-  console.log('Reviewer note: unsaved export block, immutable bound versions, stale/recheck/confirmation, local restore/refusal, escaped report text and teardown (synthetic only)');
+  console.log('Reviewer note: unsaved export/target-switch block, general + exact label versions, occupied-point MPR navigation, stale/recheck, target-aware restore/refusal, escaped multi-target report and teardown (synthetic only)');
   console.log('Local review history: immutable reset, journal/export, source-bound extension restore, older/forked/foreign refusal, comparison refresh and lifecycle clear (synthetic only)');
   console.log('Local printable report: specialist/LLM separation, escaped markup, no requests, print-to-PDF and current rejected history (synthetic only)');
   console.log('Local metadata reconciliation: blank template, numeric discrepancy, source/scope abstention, failed-import retention, review-aware export and lifecycle clear (synthetic only)');

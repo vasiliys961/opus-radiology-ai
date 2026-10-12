@@ -20,7 +20,8 @@ signed report. A doctor must still inspect the source and decide independently.
 - Spatial QC: supplied LPS point/mask SHA, continuous source index, actual discrete
   mask label, target/different/background/unavailable state and binding failures.
 - Local history: revision, observation, previous/new status and declared UTC time.
-- A separate saved reviewer draft with stale/cleared/missing state; clinician
+- Separate saved general/label reviewer drafts with each target's latest text,
+  exact observation and occupied-label LPS anchor, stale/cleared/missing state; clinician
   authentication, clinical approval and signature remain absent.
 - Coverage/provenance/privacy limitations.
 
@@ -77,10 +78,11 @@ npm run build
 npm run test:browser
 ```
 
-200 Web unit/contract tests cover source/review/claim separation, empty/missing/
+213 Web unit/contract tests cover source/review/claim separation, empty/missing/
 zero values, numeric/spatial abstention, rejection, history consistency, time/status
 validation, HTML escaping/CSP, output limits and never reading unknown opaque
-payloads. The synthetic browser regression downloads both variants, checks current
+payloads, backward-compatible general notes and independent exact label targets.
+The synthetic browser regression downloads both variants, checks current
 rejected history, opens the combined report as inert text with no requests and
 prints it to PDF using Chromium. Synthetic PNG/PDF previews may be CI artifacts;
 patient/reference pixels and real clinical reports are never CI inputs/artifacts.

@@ -5,7 +5,7 @@ import { changeEvidenceReview, MAX_REVIEW_JSON_BYTES, restoreEvidenceReview, sta
 import type { Point3 } from "../lib/segmentation-mask";
 import EvidenceComparisonReview from "./EvidenceComparisonReview";
 import EvidenceReportDownload from "./EvidenceReportDownload";
-import { MAX_NOTE_CHARS,MAX_NOTE_JSON_BYTES,restoreReviewerNote,reviewerNoteNeedsRecheck,saveReviewerNote,type EvidenceWithNote } from "../lib/evidence-reviewer-note";
+import { latestReviewerNote,MAX_NOTE_CHARS,MAX_NOTE_JSON_BYTES,restoreReviewerNote,reviewerNoteNeedsRecheck,saveReviewerNote,type EvidenceWithNote } from "../lib/evidence-reviewer-note";
 const decisionLabel: Record<EvidenceDecision,string>={unreviewed:"Не проверено врачом",requires_recheck:"На перепроверку",rejected:"Отклонено локально"};
 
 /** Mount with a binding key so replacement/series changes discard old reviews. */
@@ -14,11 +14,13 @@ export default function SegmentationEvidenceReview({evidence,onNavigate,onSample
   onSampleMask: (point: Point3)=>number | null;
 }) {
   const [review,setReview]=useState<EvidenceWithNote>(()=>startEvidenceReview(evidence));
+  const [noteTarget,setNoteTarget]=useState<string|null>(null);
   const [noteDraft,setNoteDraft]=useState("");
   const [noteError,setNoteError]=useState("");
-  const latestNote=review.reviewerNote?.versions[review.reviewerNote.versions.length-1];
+  const latestNote=latestReviewerNote(review.reviewerNote,noteTarget);
+  const targetObservation=review.observations.find(o=>o.observationId===noteTarget);
   const noteDirty=noteDraft!==(latestNote?.text??"");
-  const noteStale=useMemo(()=>reviewerNoteNeedsRecheck(review),[review]);
+  const noteStale=useMemo(()=>reviewerNoteNeedsRecheck(review,noteTarget),[review,noteTarget]);
   const [error,setError]=useState("");
   const [historyError,setHistoryError]=useState("");
   const [imported,setImported]=useState(false);
@@ -44,7 +46,7 @@ export default function SegmentationEvidenceReview({evidence,onNavigate,onSample
   };
   const saveNote=()=>{
     ++importVersion.current;
-    try{setReview(saveReviewerNote(review,noteDraft,new Date().toISOString()));setNoteError("");}
+    try{setReview(saveReviewerNote(review,noteDraft,new Date().toISOString(),noteTarget));setNoteError("");}
     catch(e){setNoteError(e instanceof Error?e.message:"Не удалось сохранить заметку.");}
   };
   const restoreNote=async(file?:File)=>{
@@ -54,7 +56,7 @@ export default function SegmentationEvidenceReview({evidence,onNavigate,onSample
       if(file.size>MAX_NOTE_JSON_BYTES)throw new Error("Файл заметки превышает 512 КБ.");
       const raw=await file.text();if(version!==importVersion.current)return;
       const next=restoreReviewerNote(review,raw);setReview(next);
-      setNoteDraft(next.reviewerNote?.versions[next.reviewerNote.versions.length-1]?.text??"");setNoteError("");
+      setNoteDraft(latestReviewerNote(next.reviewerNote,noteTarget)?.text??"");setNoteError("");
     }catch(e){if(version===importVersion.current)setNoteError(e instanceof Error?e.message:"Не удалось восстановить заметку.");}
   };
   return <section className="ora-evidence-panel ora-segmentation-evidence" aria-label="Evidence сегментации">
@@ -77,6 +79,11 @@ export default function SegmentationEvidenceReview({evidence,onNavigate,onSample
     <section className="ora-reviewer-note" aria-label="Заметка проверяющего">
       <h3>Заметка проверяющего · неподписанный черновик</h3>
       <p>Ваш текст отделён от моделей и включается в отчёт после сохранения. Автор не удостоверен. Текст может содержать чувствительные данные: храните его локально.</p>
+      <label>К чему относится заметка <select value={noteTarget??""} disabled={noteDirty} onChange={e=>{
+        const target=e.target.value||null;++importVersion.current;setNoteTarget(target);
+        setNoteDraft(latestReviewerNote(review.reviewerNote,target)?.text??"");setNoteError("");
+      }}><option value="">Общая заметка к результату</option>{review.observations.map(o=><option key={o.observationId} value={o.observationId}>{o.labelId} · {o.labelName}</option>)}</select></label>
+      {targetObservation&&<p>Заметка относится к метке маски в загруженных срезах, а не к отдельному очагу патологии.</p>}
       <label>Текст заметки<textarea maxLength={MAX_NOTE_CHARS} autoComplete="off" value={noteDraft} onChange={e=>{++importVersion.current;setNoteDraft(e.target.value);setNoteError("");}} rows={5}/></label>
       <p>{noteDraft.length} / {MAX_NOTE_CHARS} символов · сохранённых версий: {review.reviewerNote?.versions.length??0}</p>
       {noteDirty&&<p role="status">Есть несохранённые правки. Сохраните или сбросьте их перед экспортом отчёта/Evidence.</p>}
@@ -86,8 +93,9 @@ export default function SegmentationEvidenceReview({evidence,onNavigate,onSample
         <button type="button" disabled={!noteDirty&&!noteStale} onClick={saveNote}>Сохранить заметку</button>
         <button type="button" disabled={!noteDirty} onClick={()=>{++importVersion.current;setNoteDraft(latestNote?.text??"");setNoteError("");}}>Сбросить правки заметки</button>
         <button type="button" disabled={!review.reviewerNote||noteDirty} onClick={()=>download(review.reviewerNote,"reviewer-note")}>Скачать заметку JSON</button>
+        {targetObservation&&<button type="button" onClick={()=>{try{onNavigate(targetObservation.anchorLpsMm,targetObservation.labelId);setNoteError("");}catch{setNoteError("Не удалось перейти к метке: проверьте активную серию MPR.");}}}>Показать метку заметки в MPR</button>}
       </div>
-      <details><summary>Версии заметки</summary><ol>{review.reviewerNote?.versions.map(v=><li key={v.revision}>Версия {v.revision} · история проверки {v.reviewRevision} · <time dateTime={v.at}>{new Date(v.at).toLocaleString("ru-RU")}</time><p>{v.text||"Пустая заметка (текст очищен)."}</p></li>)}</ol></details>
+      <details><summary>Версии заметки</summary><ol>{review.reviewerNote?.versions.map(v=><li key={v.revision}>Версия {v.revision} · {v.observationId?review.observations.find(o=>o.observationId===v.observationId)?.labelName:"Общая заметка"} · история проверки {v.reviewRevision} · <time dateTime={v.at}>{new Date(v.at).toLocaleString("ru-RU")}</time><p>{v.text||"Пустая заметка (текст очищен)."}</p></li>)}</ol></details>
       <label>Восстановить заметку JSON <input type="file" accept=".json,application/json" onChange={e=>{void restoreNote(e.target.files?.[0]);e.target.value="";}}/></label>
     </section>
     <div className="ora-evidence-actions"><button type="button" disabled={noteDirty} onClick={()=>download(review,"evidence")}>Скачать Evidence JSON</button></div>

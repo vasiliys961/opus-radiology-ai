@@ -40,7 +40,7 @@ Canonical vision and implementation truth: **[docs/OPUS_RADIOLOGY_MASTER_SPEC.md
 | COST-01 | P1 | **No mandatory subscriptions** or paid APIs to operate browser, offline AI and local evidence; code/weights licenses independently verified. | PARTIAL (core OSS components) |
 | COST-02 | P0 | For optional paid models: preflight costs and frame/token limits, explicit approval, daily/monthly hard cap, idempotent billing, retry controls and kill switch. | PARTIAL (synthetic throttles; production budget PLANNED) |
 | COST-03 | P1 | Per-model/licensed-weights record of access restrictions, countries, commercial status and software versions; MedGemma excluded per project constraint. | PLANNED |
-| REVIEW-01 | P0 | Every generated clinical text is an **unverified draft** until signed by authorized clinician; one-click study-linked evidence review. | PARTIAL — bound local journal/restore, printable report and separate versioned reviewer text with stale-review warning; authenticated clinician identity, protected persistence and signature PLANNED |
+| REVIEW-01 | P0 | Every generated clinical text is an **unverified draft** until signed by authorized clinician; one-click study-linked evidence review. | PARTIAL — bound local journal/restore, printable report and separate versioned general/label reviewer text with stale-review warning and existing-label MPR navigation; authenticated clinician identity, protected persistence and signature PLANNED |
 | REVIEW-02 | P0 | No marketing claim of sensitivity/specificity/clinical validity without independent held-out evaluation on each anatomical task. | Policy implemented; clinical validation PLANNED |
 | OPS-01 | P1 | Next.js UI deploys independently of Python; same interface can be used browser-only / local Mac / remote CPU / remote GPU. | PARTIAL |
 | OPS-02 | P1 | Reproducible Docker/venv/container images and task-specific minimal dependency sets; no automatic 15 GB medical model download on M1. | PARTIAL (base requirements provided by this PR) |
@@ -155,3 +155,21 @@ psutil RSS. The separate actual browser run passes at 636.20 MiB, with identical
 mask SHA, three MPR planes and job deletion. This is a single measured comparison,
 not a Mac reduction claim. Safe admission remains 1219 MiB. See
 `docs/verification/r231-tensor-lifetime-linux.json`.
+
+
+## Label-linked reviewer drafts — 2026-10-12 (feature branch)
+
+Baseline main `dcaf69b` has PR #24 manually merged and green Web Actions.
+The existing local note journal now keeps independent latest general/label text.
+Optional observation IDs must match current specialist Evidence exactly. Targeted
+journals use v2 so older clients refuse instead of misattributing label comments;
+older v1 general files keep their shape and prefix. MPR navigation reuses the existing
+occupied-label point, not an invented lesion/ROI. Unsaved edits block target
+switching and full exports. HTML retains latest text and stale/cleared state per
+target. Review changes conservatively stale all targets; reconfirmation is per
+target. The shared cap remains 32 versions total, not 32 per label.
+
+See `docs/REVIEWER_NOTE.md`. This is metadata-only unsigned research text, not
+clinical approval, protected storage or an authenticated audit. No model rerun,
+volume copy, resource-guard change, .env.local change or patient/cloud/remote
+activation. Four modes and R1/Mac/Safari/full-chest/clinical boundaries remain.
