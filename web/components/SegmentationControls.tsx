@@ -12,7 +12,7 @@ export type MaskDisplay = { visible: boolean; opacity: number; label: number | n
 type Summary = { name: string; labels: LabelMask["labels"]; result?: SegmentationResult; evidence?: SegmentationEvidence; evidenceRevision?: number };
 type DownloadPackage = { request: AnalysisRequest; volumeUrl: string; manifestUrl: string };
 
-export default function SegmentationControls({ ready, onPrepare, onPrepareStream, onImport, onDisplay, onClear, onNavigatePoint }: {
+export default function SegmentationControls({ ready, onPrepare, onPrepareStream, onImport, onDisplay, onClear, onNavigatePoint, onSampleMask }: {
   ready: boolean;
   onPrepare: (signal: AbortSignal) => Promise<AnalysisPackage>;
   onPrepareStream: (signal: AbortSignal) => Promise<AnalysisStream>;
@@ -20,6 +20,7 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
   onDisplay: (display: MaskDisplay) => void;
   onClear: () => void;
   onNavigatePoint: (point: Point3) => void;
+  onSampleMask: (point: Point3) => number | null;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const resultInput = useRef<HTMLInputElement>(null);
@@ -177,7 +178,7 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
       </> : <p>Маска не содержит ненулевых меток. Это не подтверждает отсутствие патологических изменений.</p>}
     </>}
     {summary?.evidence&&<SegmentationEvidenceReview key={summary.evidenceRevision}
-      evidence={summary.evidence} onNavigate={(point,labelId)=>{
+      evidence={summary.evidence} onSampleMask={onSampleMask} onNavigate={(point,labelId)=>{
         callbacks.current.onNavigatePoint(point);
         change({...display,visible:true,label:labelId});
       }}/>}

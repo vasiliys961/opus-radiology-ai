@@ -177,3 +177,16 @@ Legacy orchestra findings cannot be converted by guessing anatomy or coverage.
 No model rerun, extra volume copy, guard change, paid call or patient/cloud route.
 See `docs/EVIDENCE_RECONCILIATION.md`. Spatial ROI reconciliation, independent
 inference, durable physician audit/sign-off and R1 acceptance remain pending.
+
+## Bound LLM spatial points — 2026-10-12
+
+Baseline main `9c96502` has PR #20 manually merged and green Web Actions.
+Optional LPS-mm points in the local LLM measurement contract now bind to the
+input/target/current-mask SHA, map through source geometry, sample the existing
+active mask and navigate all three MPR planes. Wrong source/mask, outside-volume
+points and rejected/missing labels cannot navigate. No point is invented in the
+template; label hit/background is not clinical agreement or absence of disease.
+Spatial exports retain needs_review/imported-unverified. No model rerun, volume
+copy, guard change or patient/cloud activation. Full ROI/pathology reconciliation,
+independent inference, persistent audit and R1 acceptance remain pending. See
+`docs/EVIDENCE_RECONCILIATION.md`.

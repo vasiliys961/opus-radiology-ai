@@ -172,6 +172,17 @@ export function assertMaskMatchesSource(mask: MaskGeometry, source: MaskGeometry
 }
 
 const COLORS: readonly Point3[] = [[52,211,153],[251,146,60],[96,165,250],[232,121,249],[250,204,21],[45,212,191],[251,113,133],[167,139,250]];
+
+/** Single discrete sample of the existing mask. Out of bounds is not background.
+ * Clamp only at the inclusive physical half-voxel boundary used by MPR. */
+export function sampleMaskLabel(mask: LabelMask, point: Point3): number | null {
+  if (point.length !== 3 || !point.every(Number.isFinite)) return null;
+  const index = transformPoint(mask.inverseLps, point), [nx,ny,nz] = mask.dimensions;
+  if (index.some((v,i) => !Number.isFinite(v) || v < -0.5 || v > mask.dimensions[i] - 0.5)) return null;
+  const [x,y,z] = index.map((v,i) => Math.min(mask.dimensions[i]-1, Math.max(0, Math.round(v))));
+  if (mask.data.length !== nx*ny*nz) return null;
+  return mask.data[x+nx*(y+ny*z)];
+}
 export function maskColor(label: number): Point3 { return COLORS[(label-1)%COLORS.length] ?? COLORS[0]; }
 
 /** Orthographic display raster. Sample discrete labels by nearest neighbour, never interpolate IDs. */

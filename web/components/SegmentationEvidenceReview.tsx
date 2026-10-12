@@ -5,8 +5,9 @@ import type { Point3 } from "../lib/segmentation-mask";
 import EvidenceComparisonReview from "./EvidenceComparisonReview";
 
 /** Mount with a binding key so replacement/series changes discard old reviews. */
-export default function SegmentationEvidenceReview({evidence,onNavigate}: {
-  evidence: SegmentationEvidence; onNavigate: (point: Point3,labelId: number)=>void;
+export default function SegmentationEvidenceReview({evidence,onNavigate,onSampleMask}: {
+  evidence: SegmentationEvidence; onNavigate: (point: Point3,labelId: number | null)=>void;
+  onSampleMask: (point: Point3)=>number | null;
 }) {
   const [review,setReview]=useState(evidence);
   const [error,setError]=useState("");
@@ -38,6 +39,6 @@ export default function SegmentationEvidenceReview({evidence,onNavigate}: {
       <p>SHA-256 исходного объёма: {review.source.inputSha256}<br/>SHA-256 маски: {review.mask.sha256}<br/>SHA-256 весов: {review.producer.model.weightsSha256}</p>
       <ul>{review.limitations.map((s,i)=><li key={i}>{s}</li>)}</ul></details>
     <small>Отметки существуют в памяти страницы и включаются в локальный JSON. Маска сохраняется для сравнения даже при отклонении. Электронной подписи и утверждённого заключения нет. Провайдеры Gemini/Claude не вызываются.</small>
-    <EvidenceComparisonReview evidence={review}/>
+    <EvidenceComparisonReview evidence={review} onNavigate={onNavigate} onSampleMask={onSampleMask}/>
   </section>;
 }

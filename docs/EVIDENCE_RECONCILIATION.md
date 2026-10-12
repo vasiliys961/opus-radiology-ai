@@ -29,7 +29,8 @@ model execution or image/mask copy is added. Labels refer only to loaded slices.
     "metric": "label-volume-ml",
     "scope": "unknown",
     "valueMl": null,
-    "statement": "Measurement not provided."
+    "statement": "Measurement not provided.",
+    "anchor": null
   }]
 }
 ```
@@ -64,6 +65,42 @@ lack exact input hashes, explicit label targets and comparable loaded-volume
 scope. Their separate local source-slice viewer continues to work. The comparison
 import explains the missing fields instead of guessing or claiming agreement.
 
+## Optional spatial point
+
+The same claim can include an optional anchor; older imports with no anchor
+continue to work. The template leaves it null and never copies a specialist
+point into an alleged LLM observation. A provided anchor has this structure:
+
+```json
+{
+  "coordinateSystem": "LPS-mm",
+  "pointLpsMm": [10, 21, 27],
+  "maskSha256": "64-lowercase-hex-characters-from-current-mask"
+}
+```
+
+These example coordinates are arbitrary, not a real finding. RAS, pixels,
+nonfinite values and malformed coordinates are rejected; no silent conversion.
+Point QC matches the input/source binding, observation/weights, current mask SHA
+and local review, then maps LPS through the inverse source affine and checks
+the physical image extent (inclusive half-voxel boundary used by MPR). A wrong
+binding, missing/rejected target or outside point disables navigation.
+
+The active MPR runtime samples exactly one nearest-neighbour voxel from its
+already bound mask. Exported spatial state records continuous source indices,
+sampled label ID and `target_label`, `different_label`, `background` or
+`not_checked`. An unavailable/closed sampler never becomes a background label.
+Axis permutations/reversals use the mask's own inverse affine; no resampling or
+volume scan/copy is added. Spatial QC is independent of quantitative coverage:
+a point may be inspectable while a whole-organ volume/pathology claim remains
+not comparable. Every spatial result still requires review.
+
+The point button synchronises all three MPR planes and selects the sampled label;
+background shows all labels. Both the supplied point and the specialist anchor
+remain separately available. A label hit proves only a discrete mask lookup,
+not a correct lesion, organ attribution, LLM observation or diagnosis. Background
+does not exclude pathology. This is point QC, not full lesion/ROI registration.
+
 ## Lifecycle, resource and privacy boundary
 
 Import is capped at 512,000 UTF-8 bytes and 100 unique claims. Types, finite values,
@@ -86,12 +123,15 @@ download. There is no persistent physician audit, signature or clinical approval
 
 ## Validation and remaining work
 
-179 Web unit/contract tests cover independent binding-field failures, scope/task/
+185 Web unit/contract tests cover independent binding-field failures, scope/task/
 target abstention, absent/zero/missing volumes, local rejection, exact numeric
-comparison, templates, strict bounded parsing and metadata allowlisting.
+comparison, templates, strict bounded parsing and metadata allowlisting, optional
+LPS anchors, flipped/permuted grids, half-voxel boundaries and unavailable masks.
 TypeScript/production build and the synthetic browser regression cover import,
 numeric discrepancy, wrong-input abstention, legacy rejection with prior-state
-retention, review-aware export and deletion. Synthetic claims are not actual LLM
+retention, review-aware export/deletion, actual point-to-three-plane navigation,
+different/target label lookup and wrong-source/mask/outside/rejected blocking.
+Synthetic claims are not actual LLM
 inference or real-model/clinical evidence; no medical model was rerun.
 
 Authenticated provider output, independent measurements, spatial LLM ROI pairing,

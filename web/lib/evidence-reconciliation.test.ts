@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createLlmMeasurementTemplate, parseLlmMeasurements, reconcileEvidence, type LlmMeasurements } from "./evidence-reconciliation.ts";
+import { checkLlmAnchor, createLlmMeasurementTemplate, parseLlmMeasurements, reconcileEvidence, type LlmMeasurements } from "./evidence-reconciliation.ts";
 import type { SegmentationEvidence } from "./segmentation-evidence.ts";
+import { invertAffine, sampleMaskLabel, transformPoint, type LabelMask } from "./segmentation-mask.ts";
 
 // Metadata fixture only: no image volume, model or provider execution.
 const geometry = {dimensions: [2, 2, 2] as [number, number, number], affineLps: [1,0,0,0,0,1,0,0,0,0,1,0] as SegmentationEvidence["mask"]["geometry"]["affineLps"]};
@@ -34,6 +35,105 @@ test("bound numeric differences preserve both values and always require review",
   assert.equal(reconcileEvidence(evidence, claims(0.004)).comparisons[0].review, "needs_review");
   assert.equal(reconcileEvidence(evidence, claims(0)).comparisons[0].deltaMl, -0.004);
   assert.equal(reconcileEvidence(evidence, claims(0.004 + 1e-10)).comparisons[0].status, "numeric_difference");
+});
+
+function anchored(point: [number,number,number] = [0,0,0]) {
+  const l = claims();
+  l.claims[0].anchor = {coordinateSystem: "LPS-mm", pointLpsMm: point, maskSha256: evidence.mask.sha256};
+  return l;
+}
+function maskFixture(): LabelMask {
+  return {...geometry, inverseLps: invertAffine(geometry.affineLps), data: new Uint16Array([1,0,2,1,1,0,2,1]),
+    labels: [], voxelVolumeMm3: 1};
+}
+
+test("optional LPS anchors parse strictly, preserve old imports and exclude unknown properties", () => {
+  const legacy = claims(); delete legacy.claims[0].anchor;
+  assert.equal(parseLlmMeasurements(JSON.stringify(legacy)).claims[0].anchor, undefined);
+  assert.equal(parseLlmMeasurements(JSON.stringify(createLlmMeasurementTemplate(evidence))).claims[0].anchor, null);
+  const l = anchored();
+  const parsed = parseLlmMeasurements(JSON.stringify({...l, claims: [{...l.claims[0], anchor: {...l.claims[0].anchor, token: "secret-sentinel"}}]}));
+  assert.deepEqual(parsed.claims[0].anchor, l.claims[0].anchor);
+  assert.doesNotMatch(JSON.stringify(parsed), /secret-sentinel/);
+  for (const mutation of [{coordinateSystem: "RAS-mm"}, {pointLpsMm: [0,0]}, {pointLpsMm: [0,"0",0]},
+    {pointLpsMm: [0,0,null]}, {maskSha256: "invalid"}]) {
+    const bad = anchored(); Object.assign(bad.claims[0].anchor!, mutation);
+    assert.throws(() => parseLlmMeasurements(JSON.stringify(bad)));
+  }
+  assert.throws(() => parseLlmMeasurements(JSON.stringify(l).replace('"pointLpsMm":[0,0,0]', '"pointLpsMm":[0,1e999,0]')));
+});
+
+test("spatial point QC reports target/background/different labels without clinical agreement", () => {
+  const mask = maskFixture(), sampler = (p: [number,number,number]) => sampleMaskLabel(mask, p);
+  for (const [point, relation, label] of [ [[0,0,0],"target_label",1], [[1,0,0],"background",0], [[0,1,0],"different_label",2] ] as const) {
+    const l = anchored([...point]); const c = reconcileEvidence(evidence, l, sampler).comparisons[0];
+    assert.equal(c.spatial?.status, "in_volume"); assert.equal(c.spatial?.relation, relation);
+    assert.equal(c.spatial?.sampledLabelId, label); assert.equal(c.spatial?.review, "needs_review");
+    assert.deepEqual(c.spatial?.sourceIndex, point);
+  }
+  const l = anchored(); l.claims[0].metric = "other"; l.claims[0].scope = "unknown"; l.claims[0].valueMl = null;
+  const c = reconcileEvidence(evidence, l, sampler).comparisons[0];
+  assert.equal(c.status, "not_comparable"); assert.equal(c.spatial?.relation, "target_label");
+  assert.equal(c.deltaMl, null); // point membership never converts unsupported pathology into agreement
+});
+
+test("wrong source/weights/mask/target or rejected label blocks point navigation before sampling", () => {
+  const mutations = [
+    (l: LlmMeasurements) => {l.source.inputSha256 = "e".repeat(64);},
+    (l: LlmMeasurements) => {l.source.requestId = "other";},
+    (l: LlmMeasurements) => {l.source.modality = "MR";},
+    (l: LlmMeasurements) => {l.source.frameCount++;},
+    (l: LlmMeasurements) => {l.source.sourceIdentitySha256 = "e".repeat(64);},
+    (l: LlmMeasurements) => {l.claims[0].anchor!.maskSha256 = "e".repeat(64);},
+    (l: LlmMeasurements) => {l.claims[0].modelWeightsSha256 = "e".repeat(64);},
+    (l: LlmMeasurements) => {l.claims[0].observationId = "missing";},
+  ];
+  const sampler = () => {throw Error("Must not sample unbound claims");};
+  for (const mutate of mutations) {
+    const l = anchored(); mutate(l);
+    const c = checkLlmAnchor(evidence, l, l.claims[0], sampler);
+    assert.equal(c?.status, "not_bound"); assert.equal(c?.pointLpsMm, null); assert.ok(c!.reasons.length > 0);
+  }
+  const l = anchored(), rejected = {...evidence, observations: evidence.observations.map(o => ({...o, review: "rejected" as const}))};
+  assert.equal(checkLlmAnchor(rejected, l, l.claims[0], sampler)?.status, "not_bound");
+});
+
+test("out-of-volume and unavailable active mask never become background or navigable coordinates", () => {
+  const l = anchored([1.5001,0,0]), sampler = () => {throw Error("Outside point must not be sampled");};
+  const outside = checkLlmAnchor(evidence, l, l.claims[0], sampler);
+  assert.equal(outside?.status, "outside_volume"); assert.equal(outside?.pointLpsMm, null);
+  const inside = anchored();
+  for (const read of [undefined, () => null, () => {throw Error("closed");}, () => NaN, () => -1]) {
+    const c = checkLlmAnchor(evidence, inside, inside.claims[0], read);
+    assert.equal(c?.sampledLabelId, null); assert.equal(c?.relation, "not_checked");
+    assert.ok(c!.reasons.length > 0);
+  }
+  assert.equal(checkLlmAnchor(evidence, claims(), claims().claims[0]), null);
+});
+
+test("LPS affine and a permuted mask grid map the same physical point without resampling", () => {
+  const affine = [0,-2,0,10,1,0,0,20,0,0,-3,30] as typeof geometry.affineLps;
+  const maskAffine = [0,0,-2,10,1,0,0,20,0,-3,0,30] as typeof geometry.affineLps;
+  const e = {...evidence, source: {...evidence.source, geometry: {...geometry, affineLps: affine}},
+    mask: {...evidence.mask, geometry: {...geometry, affineLps: maskAffine}}};
+  const mask = {...maskFixture(), affineLps: maskAffine, inverseLps: invertAffine(maskAffine)};
+  mask.data[3] = 2;
+  const point = transformPoint(affine, [1,0,1]), l = anchored(point);
+  assert.deepEqual(point, [10,21,27]);
+  const c = checkLlmAnchor(e, l, l.claims[0], p => sampleMaskLabel(mask, p));
+  assert.deepEqual(c?.sourceIndex, [1,0,1]); assert.equal(c?.sampledLabelId, 2);
+  assert.equal(c?.relation, "different_label");
+});
+
+test("discrete mask sampling uses nearest neighbour and inclusive half-voxel boundaries", () => {
+  const mask = maskFixture();
+  assert.equal(sampleMaskLabel(mask, [-0.5,0,0]), 1);
+  assert.equal(sampleMaskLabel(mask, [1.5,0,0]), 0);
+  assert.equal(sampleMaskLabel(mask, [0.49,0,0]), 1);
+  assert.equal(sampleMaskLabel(mask, [0.51,0,0]), 0);
+  for (const p of [[-0.5001,0,0], [1.5001,0,0], [NaN,0,0]] as [number,number,number][])
+    assert.equal(sampleMaskLabel(mask, p), null);
+  assert.equal(sampleMaskLabel({...mask, data: new Uint16Array(1)}, [0,0,0]), null);
 });
 
 test("each source binding field independently prevents numeric comparison", () => {
