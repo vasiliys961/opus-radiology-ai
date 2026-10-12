@@ -12,14 +12,16 @@ PROFILES = {
 }
 
 
-def estimate_resources(dimensions, frame_count, profile="safe"):
+def estimate_resources(dimensions, frame_count, profile="safe", full_stream=False):
     if profile not in PROFILES:
         raise ValueError("unsupported_resource_profile")
     if (len(dimensions) != 3 or any(type(n) is not int or n < 1 for n in dimensions)
             or type(frame_count) is not int or frame_count != dimensions[2]):
         raise ValueError("invalid_resource_geometry")
     voxels = prod(dimensions)
-    if voxels > 8_388_608:
+    if full_stream and (dimensions[0] > 512 or dimensions[1] > 512 or not 3 <= frame_count <= 300):
+        raise ValueError("full_stream_geometry_limit")
+    if not full_stream and voxels > 8_388_608:
         raise ValueError("voxel_limit")
     policy = PROFILES[profile]
     # One weight allocation, single native-plane preprocessing/restoration,
@@ -27,7 +29,7 @@ def estimate_resources(dimensions, frame_count, profile="safe"):
     # components. Native and compact workspaces must be budgeted separately.
     # Coefficients remain provisional: measured Linux + prior M1 evidence are
     # not a complete near-threshold M1/system-memory acceptance.
-    model_bytes = (policy["baseRamBytes"] + voxels * policy["bytesPerVoxel"]
+    model_bytes = (policy["baseRamBytes"] + (16 * MIB if full_stream else voxels * policy["bytesPerVoxel"])
                    + frame_count * 256 * 256 * 32 + dimensions[0] * dimensions[1] * 12)
     return {"profile": profile, "estimatedModelRamBytes": model_bytes,
             "requiredRamBytes": model_bytes + policy["marginBytes"],
@@ -37,8 +39,8 @@ def estimate_resources(dimensions, frame_count, profile="safe"):
             "threads": policy["threads"], "interOpThreads": policy["interOpThreads"]}
 
 
-def preflight(dimensions, frame_count, available_ram, free_disk, profile="safe", stored_input_bytes=0):
-    result = estimate_resources(dimensions, frame_count, profile)
+def preflight(dimensions, frame_count, available_ram, free_disk, profile="safe", stored_input_bytes=0, full_stream=False):
+    result = estimate_resources(dimensions, frame_count, profile, full_stream)
     if type(stored_input_bytes) is not int or not 0 <= stored_input_bytes <= 352 + prod(dimensions) * 4:
         raise ValueError("invalid_stored_input_size")
     # A second check must not reserve disk for the already stored upload twice.

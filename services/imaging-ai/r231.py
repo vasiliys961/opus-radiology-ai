@@ -16,6 +16,7 @@ import uuid
 import numpy as np
 import psutil
 from resource_guard import estimate_resources
+from full_ct import FULL_MAX_VOXELS, is_full_request, release_mapping, progress, write_restored_mask
 
 MAX_VOXELS = 8_388_608
 MAX_INPUT = 352 + MAX_VOXELS * 4
@@ -44,7 +45,7 @@ def validate_request(r):
     """Only technical, allowlisted metadata; do not persist arbitrary client text."""
     keys = {"schema", "requestId", "sourceIdentitySha256", "inputSha256", "geometry",
             "modality", "frameCount", "input", "scope", "sequence", "coverage"}
-    if not isinstance(r, dict) or set(r) != keys or r["schema"] != "opus-analysis-request/v1":
+    if not isinstance(r, dict) or set(r) != keys or r["schema"] not in {"opus-analysis-request/v1", "opus-analysis-request/v2"}:
         raise ValueError("invalid_request")
     identifier = uuid.UUID(r["requestId"])
     if identifier.version != 4 or str(identifier) != r["requestId"]:
@@ -65,7 +66,9 @@ def validate_request(r):
     dims, a = g["dimensions"], g["affineLps"]
     if not isinstance(dims, list) or len(dims) != 3 or any(type(n) is not int or not 1 <= n <= 32767 for n in dims):
         raise ValueError("invalid_dimensions")
-    if np.prod(dims, dtype=np.int64) > MAX_VOXELS or type(r["frameCount"]) is not int or r["frameCount"] != dims[2]:
+    if is_full_request(r) and (dims[0] > 512 or dims[1] > 512 or not 3 <= dims[2] <= 300):
+        raise ValueError("full_stream_geometry_limit")
+    if np.prod(dims, dtype=np.int64) > (FULL_MAX_VOXELS if is_full_request(r) else MAX_VOXELS) or type(r["frameCount"]) is not int or r["frameCount"] != dims[2]:
         raise ValueError("voxel_limit_or_frame_mismatch")
     if not isinstance(a, list) or len(a) != 12 or any(type(v) not in (int, float) or not np.isfinite(v) for v in a):
         raise ValueError("invalid_affine")
@@ -104,10 +107,14 @@ def load_volume(path, r):
                 if np.linalg.norm((actual-expected) @ [x, y, z, 1]) > 0.05:
                     raise ValueError("geometry_mismatch")
     volume = np.memmap(path, dtype="<f4", mode="r", offset=352, shape=tuple(dims[::-1]))
+    minimum, maximum = float("inf"), -float("inf")
     for plane in volume:
         if not np.isfinite(plane).all():
             raise ValueError("nonfinite_intensity")
-    if volume.min() < -2048 or volume.min() > -700 or volume.max() < 0 or volume.max() > 65535:
+        minimum, maximum = min(minimum, float(plane.min())), max(maximum, float(plane.max()))
+        if is_full_request(r):
+            release_mapping(volume)
+    if minimum < -2048 or minimum > -700 or maximum < 0 or maximum > 65535:
         raise ValueError("unsupported_hu_range")
     return header, volume
 
@@ -128,7 +135,8 @@ def run(directory, weights, profile="safe"):
     directory = Path(directory)
     r = json.loads((directory / "request.json").read_text())
     validate_request(r)
-    policy = estimate_resources(r["geometry"]["dimensions"], r["frameCount"], profile)
+    full = is_full_request(r)
+    policy = estimate_resources(r["geometry"]["dimensions"], r["frameCount"], profile, full)
     if policy["estimatedModelRamBytes"] + 128 * 1024**2 > 2 * 1024**3:
         raise ValueError("model_memory_budget_exceeded")
     if profile == "safe" and hasattr(os, "nice"):
@@ -181,26 +189,35 @@ def run(directory, weights, profile="safe"):
     canonical, flips = canonical_axes(volume, r["geometry"]["affineLps"])
     model = load_model(weights)
     infer_started = time.perf_counter()
-    compact_labels, boxes = predict_slices(canonical, lambda plane: predict_slice(model, plane), utils)
+    compact_labels, boxes = predict_slices(canonical, lambda plane: predict_slice(model, plane), utils,
+        (lambda: release_mapping(volume)) if full else (lambda: None),
+        (lambda n: progress(directory, "inference", n, r["frameCount"])) if full else (lambda n: None))
     # No further neural inference is needed. Release weights before connected
     # components allocate their volume workspaces; the process exits per job.
     del model
     gc.collect()
+    if full:
+        progress(directory, "postprocessing", 0, r["frameCount"])
     compact_labels = utils.postprocessing(compact_labels, disable_tqdm=True)
-    output = np.flip(restore_slices(compact_labels, boxes, canonical.shape, utils), flips)
+    if full:
+        counts = write_restored_mask(directory / "mask.nii", header, compact_labels, boxes, canonical.shape, utils, flips,
+            lambda n: progress(directory, "restoration", n, r["frameCount"]))
+    else:
+        output = np.flip(restore_slices(compact_labels, boxes, canonical.shape, utils), flips)
     del compact_labels, boxes
     inference_seconds = time.perf_counter() - infer_started
     # Range check avoids np.unique's additional full mask copy/sort.
-    if output.shape != volume.shape or output.min() < 0 or output.max() > 2:
+    if not full and (output.shape != volume.shape or output.min() < 0 or output.max() > 2):
         raise ValueError("invalid_model_output")
-    if not np.any(output):
+    if not full and not np.any(output):
         raise ValueError("empty_mask_needs_review")
     mask_header = bytearray(header)
     struct.pack_into("<hh", mask_header, 70, 2, 8)
-    with (directory / "mask.nii").open("xb") as stream:
-        stream.write(mask_header)
-        for plane in output:
-            stream.write(plane.tobytes())
+    if not full:
+        with (directory / "mask.nii").open("xb") as stream:
+            stream.write(mask_header)
+            for plane in output:
+                stream.write(plane.tobytes())
     result = {"schema": "opus-segmentation-result/v1",
               **{k: r[k] for k in ("requestId", "sourceIdentitySha256", "inputSha256")},
               "maskSha256": digest(directory / "mask.nii"),
@@ -209,7 +226,11 @@ def run(directory, weights, profile="safe"):
               "labels": [{"id": 1, "name": "Right lung"}, {"id": 2, "name": "Left lung"}],
               "limitations": ["Experimental; clinician review required. Not a pathology detector.",
                               "Axial CT in HU only; anatomy and full coverage are not automatically verified.",
+                              "Whole supplied series processed; anatomy/full acquisition coverage unconfirmed. Native mask streamed to disk." if full else
                               "Bounded to 8,388,608 voxels; no hidden downsampling or cropped-volume substitution."]}
+    if full:
+        result["fullVolume"] = {"dimensions": r["geometry"]["dimensions"], "labelVoxels": counts[1:],
+                                "coverage": "all-supplied-frames", "clinicalStatus": "unverified_research_draft"}
     (directory / "result.json").write_text(json.dumps(result))
     sampled_peak[0] = max(sampled_peak[0], rss_bytes())
     stopped.set()
@@ -221,7 +242,7 @@ def run(directory, weights, profile="safe"):
                "platform": platform.system(), "machine": platform.machine(),
                "torchVersion": torch.__version__, "dimensions": r["geometry"]["dimensions"],
                "resourceProfile": profile, "threads": policy["threads"], "interOpThreads": policy["interOpThreads"],
-               "inferenceImplementation": "slice-streamed-r231/v1", "weightsLoading": "meta-assign-cpu-float32",
+               "inferenceImplementation": "full-ct-streamed-r231/v2" if full else "slice-streamed-r231/v1", "weightsLoading": "meta-assign-cpu-float32",
                "simpleItkImported": "SimpleITK" in sys.modules,
                "clinicalStatus": "unverified_research_draft"}
     (directory / "metrics.json").write_text(json.dumps(metrics))

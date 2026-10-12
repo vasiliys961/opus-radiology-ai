@@ -51,11 +51,11 @@ export async function sourceIdentity(series: DicomSeries, requestId: string): Pr
 }
 
 /** Shared exact NIfTI header; validates the grid before scalar reads. */
-export function scalarNiftiHeader(geometry: MaskGeometry): {header: ArrayBuffer; count: number} {
+function niftiHeader(geometry: MaskGeometry, maximum:number): {header: ArrayBuffer; count: number} {
   const {dimensions,affineLps:a} = geometry;
   invertAffine(a);
   const count = dimensions.reduce((x,y)=>x*y,1);
-  if (dimensions.some(n=>!Number.isSafeInteger(n)||n<1||n>32767) || !Number.isSafeInteger(count) || count>MAX_MASK_VOXELS) throw new Error("Экспорт ограничен 8 388 608 вокселями для Mac M1.");
+  if (dimensions.some(n=>!Number.isSafeInteger(n)||n<1||n>32767) || !Number.isSafeInteger(count) || count>maximum) throw new Error("Экспорт ограничен 8 388 608 вокселями для Mac M1.");
   const header = new ArrayBuffer(352), view = new DataView(header);
   view.setInt32(0,348,true);view.setInt16(40,3,true);
   dimensions.forEach((n,i)=>view.setInt16(42+i*2,n,true));
@@ -69,6 +69,15 @@ export function scalarNiftiHeader(geometry: MaskGeometry): {header: ArrayBuffer;
   assertMaskMatchesSource({dimensions,affineLps:encoded.map((v,i)=>i<8?-v:v) as MaskGeometry["affineLps"]},geometry);
   new Uint8Array(header,344,4).set([110,43,49,0]);
   return {header,count};
+}
+export const scalarNiftiHeader=(geometry:MaskGeometry)=>niftiHeader(geometry,MAX_MASK_VOXELS);
+/** Separate disk-streamed contract. Never used by full-buffer export/MPR. */
+export function fullCtNiftiHeader(geometry:MaskGeometry) {
+  const d=geometry.dimensions,a=geometry.affineLps;
+  if(d[0]>512||d[1]>512||d[2]<3||d[2]>300||[1,2,4,6,8,9].some(i=>Math.abs(a[i])>1e-5)||
+    [a[0],a[5],a[10]].some(v=>!Number.isFinite(v)||Math.abs(v)<0.1||Math.abs(v)>20))
+    throw new Error("Полный поток поддерживает только осевую КТ до 512×512×300.");
+  return niftiHeader(geometry,512*512*300);
 }
 
 /** Full-buffer download path; local worker uses scalarNiftiChunks instead. */

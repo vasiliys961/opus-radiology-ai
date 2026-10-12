@@ -110,7 +110,7 @@ def predict_slice(model, normalized):
         return torch.max(forward_logits(model, tensor), 1)[1][0].cpu().numpy().astype(np.uint8)
 
 
-def predict_slices(volume, predict, utils):
+def predict_slices(volume, predict, utils, release_input=lambda: None, on_progress=lambda n: None):
     """Pinned clipping/cropping/normalization, one native plane at a time.
 
     A read-only/negative-stride memmap is accepted without a native-volume copy.
@@ -127,6 +127,8 @@ def predict_slices(volume, predict, utils):
         normalized = np.divide((resized + 1024), 1624)
         labels[index] = predict(normalized)
         boxes.append(box)
+        release_input()
+        on_progress(index + 1)
     return labels, boxes
 
 

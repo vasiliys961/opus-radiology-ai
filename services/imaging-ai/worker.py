@@ -1,5 +1,6 @@
 """Research-only loopback worker. Shared v1 job contract; remote modes closed."""
 import argparse
+import base64
 import asyncio
 from contextlib import asynccontextmanager
 import importlib.metadata
@@ -22,6 +23,7 @@ import psutil
 from r231 import MAX_INPUT, MAX_VOXELS, VERSION, WEIGHTS_SHA256, check_weights, validate_request
 from resource_guard import PROFILES, preflight
 from r231_inference import model_source
+from full_ct import FULL_MAX_INPUT, FULL_MAX_FRAMES, is_full_request, crop_mask
 
 JOB_TTL_SECONDS = 1800
 MAX_UPLOAD_CHUNK = 256 * 1024
@@ -69,7 +71,8 @@ def create_app(weights, token, origin="http://localhost:3000", port=8765, tempor
 
     def check_resources(r, stored_input_bytes=0):
         return preflight(r["geometry"]["dimensions"], r["frameCount"],
-                         psutil.virtual_memory().available, shutil.disk_usage(root).free, profile, stored_input_bytes)
+                         psutil.virtual_memory().available, shutil.disk_usage(root).free, profile, stored_input_bytes,
+                         is_full_request(r))
 
     def resource_error(diagnostic):
         return {"reject-memory": "insufficient_memory", "reject-disk": "insufficient_disk",
@@ -125,6 +128,7 @@ def create_app(weights, token, origin="http://localhost:3000", port=8765, tempor
         if request.headers.get("host") != f"127.0.0.1:{port}" or request.headers.get("origin") != origin:
             return JSONResponse({"detail": "origin_or_host_denied"}, status_code=403, headers=headers)
         headers.update({"Access-Control-Allow-Origin": origin, "Vary": "Origin"})
+        headers["Access-Control-Expose-Headers"] = "X-Opus-Mask-Proof, Content-Length"
         if request.method == "OPTIONS":
             requested = {v.strip().lower() for v in request.headers.get("access-control-request-headers", "").split(",") if v.strip()}
             if request.headers.get("access-control-request-method") not in {"GET", "POST", "PUT", "DELETE"} or not requested.issubset({"authorization", "content-type"}):
@@ -144,6 +148,8 @@ def create_app(weights, token, origin="http://localhost:3000", port=8765, tempor
         return {"schema": "opus-worker-capabilities/v1", "mode": "local", "device": "cpu",
                 "model": {"id": "lungmask-R231", "version": VERSION, "weightsSha256": WEIGHTS_SHA256, "ready": ready},
                 "maxVoxels": MAX_VOXELS, "concurrency": 1,
+                "fullCt": {"requestSchema": "opus-analysis-request/v2", "maxPlane": 512, "maxFrames": FULL_MAX_FRAMES,
+                           "maskAccess": "bounded-slabs-only"},
                 "chunkUpload": {"version": 1, "maxChunkBytes": MAX_UPLOAD_CHUNK},
                 "resourceProfile": {"name": profile, "threads": PROFILES[profile]["threads"], "interOpThreads": 1},
                 "dataPolicy": "public-reference-only", "patientMode": False, "externalEgress": False,
@@ -182,7 +188,8 @@ def create_app(weights, token, origin="http://localhost:3000", port=8765, tempor
         jobs[identifier] = {"directory": directory, "created": time.monotonic(),
                             "state": "awaiting_input", "uploadedBytes": 0, "process": None,
                             "preflight": diagnostic, "guardDecision": "allow", "peakRssMiB": 0,
-                            "inputHash": hashlib.sha256(), "uploadLock": asyncio.Lock()}
+                            "inputHash": hashlib.sha256(), "uploadLock": asyncio.Lock(),
+                            "inputLimit": FULL_MAX_INPUT if is_full_request(body["request"]) else MAX_INPUT}
         return {"schema": "opus-worker-job-status/v1", "jobId": identifier, "state": "awaiting_input",
                 "preflight": diagnostic, "guardDecision": "allow"}
 
@@ -301,7 +308,7 @@ def create_app(weights, token, origin="http://localhost:3000", port=8765, tempor
             directory = job["directory"]
             r = json.loads((directory / "request.json").read_text())
             expected = 352 + 4 * int(__import__("math").prod(r["geometry"]["dimensions"]))
-            if offset + len(data) > min(expected, MAX_INPUT):
+            if offset + len(data) > min(expected, job["inputLimit"]):
                 raise HTTPException(413, "input_limit")
             # No await between cancellation check, disk append and acknowledgement.
             try:
@@ -353,7 +360,7 @@ def create_app(weights, token, origin="http://localhost:3000", port=8765, tempor
             with (directory / "input.nii").open("xb") as stream:
                 async for chunk in request.stream():
                     job["uploadedBytes"] += len(chunk)
-                    if job["uploadedBytes"] > min(MAX_INPUT, expected):
+                    if job["uploadedBytes"] > min(job["inputLimit"], expected):
                         raise HTTPException(413, "input_limit")
                     if job["state"] == "cancelled":
                         raise HTTPException(409, "job_cancelled")
@@ -381,6 +388,17 @@ def create_app(weights, token, origin="http://localhost:3000", port=8765, tempor
             response["metrics"].update(preflight=job["preflight"], guardDecision=job["guardDecision"])
             response["metrics"]["peakRssMiB"] = max(response["metrics"]["peakRssMiB"], job["peakRssMiB"])
             response["result"] = json.loads((job["directory"] / "result.json").read_text())
+        progress_path = job["directory"] / "progress.json"
+        if progress_path.exists() and progress_path.stat().st_size <= 4096:
+            try:
+                p = json.loads(progress_path.read_text())
+                if (set(p) == {"stage", "completedFrames", "totalFrames"}
+                        and p["stage"] in {"inference", "postprocessing", "restoration"}
+                        and type(p["completedFrames"]) is int and type(p["totalFrames"]) is int
+                        and 0 <= p["completedFrames"] <= p["totalFrames"] <= FULL_MAX_FRAMES):
+                    response["progress"] = p
+            except (ValueError, OSError, TypeError):
+                pass
         return response
 
     @app.get("/v1/jobs/{identifier}/mask")
@@ -388,7 +406,38 @@ def create_app(weights, token, origin="http://localhost:3000", port=8765, tempor
         job = find(identifier)
         if job["state"] != "succeeded":
             raise HTTPException(409, "result_not_ready")
+        r = json.loads((job["directory"] / "request.json").read_text())
+        if is_full_request(r):
+            raise HTTPException(409, "full_mask_requires_bounded_slab")
         return FileResponse(job["directory"] / "mask.nii", media_type="application/octet-stream")
+
+    @app.post("/v1/jobs/{identifier}/mask-slab")
+    async def mask_slab(identifier: str, request: Request):
+        job = find(identifier)
+        if job["state"] != "succeeded":
+            raise HTTPException(409, "result_not_ready")
+        if job["uploadLock"].locked():
+            raise HTTPException(409, "slab_busy")
+        async with job["uploadLock"]:
+            try:
+                body = json.loads(await bounded_body(request, 512))
+                if not isinstance(body, dict) or set(body) != {"start", "count"}:
+                    raise ValueError()
+                r = json.loads((job["directory"] / "request.json").read_text())
+                if not is_full_request(r):
+                    raise ValueError()
+                path, geometry = crop_mask(job["directory"], r, body["start"], body["count"])
+                result = json.loads((job["directory"] / "result.json").read_text())
+                proof = {"schema": "opus-full-ct-slab/v1", "jobId": identifier,
+                         "requestId": r["requestId"], "sourceIdentitySha256": r["sourceIdentitySha256"],
+                         "inputSha256": r["inputSha256"], "fullMaskSha256": result["maskSha256"],
+                         "slabMaskSha256": __import__("r231").digest(path), "geometry": geometry,
+                         "start": body["start"], "count": body["count"], "sourceFrameCount": r["frameCount"]}
+                encoded = base64.b64encode(json.dumps(proof).encode()).decode("ascii")
+                return Response(path.read_bytes(), media_type="application/octet-stream",
+                                headers={"X-Opus-Mask-Proof": encoded})
+            except (ValueError, TypeError, KeyError, OSError):
+                raise HTTPException(422, "invalid_mask_range_or_result") from None
 
     @app.delete("/v1/jobs/{identifier}", status_code=204)
     async def cancel(identifier: str):
