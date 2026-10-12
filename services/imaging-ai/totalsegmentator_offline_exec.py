@@ -4,6 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 import sys
+from totalsegmentator_input import inspect_input
 
 def run(input_path, output_path, *, confirmed=False, expected_source_sha=None):
     if not confirmed:
@@ -13,11 +14,13 @@ def run(input_path, output_path, *, confirmed=False, expected_source_sha=None):
             output.is_symlink() or source.resolve() == output.resolve() or
             source.suffix != ".nii" or output.suffix != ".nii"):
         raise ValueError("invalid_paths")
+    # Reject malformed or oversized CT before importing heavy medical dependencies.
+    inspected = inspect_input(source)
     import nibabel as nib
     img = nib.load(str(source), mmap=True)
     dims = tuple(int(n) for n in img.shape)
-    if len(dims)!=3 or any(n<1 or n>cap for n,cap in zip(dims,(512,512,300))):
-        raise ValueError("unsupported_input_shape")
+    if dims != inspected["dimensions"]:
+        raise ValueError("input_geometry_mismatch")
     sha=hashlib.sha256()
     with source.open("rb") as f:
         while part:=f.read(131072):
