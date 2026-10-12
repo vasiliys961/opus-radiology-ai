@@ -19,6 +19,10 @@ services:
     environment:
       TOTALSEG_HOME_DIR: /tmp/opus-totalseg-config
       TOTALSEG_WEIGHTS_PATH: /models
+      HOME: /tmp/opus-home
+      XDG_CACHE_HOME: /tmp/opus-home/.cache
+      MPLCONFIGDIR: /tmp/opus-home/.config/matplotlib
+      TORCH_HOME: /tmp/opus-home/.cache/torch
     volumes:
       - type: bind
         source: ${OPUS_TOTALSEG_MODEL_HOME:?Provide an existing official TotalSegmentator model cache}
