@@ -104,9 +104,15 @@ export default function CornerstoneStack({ files, selectedIndex, onSliceChange, 
       if (cancelled) return;
       const imageIds = files.map((file) => loader.wadouri.fileManager.add(file));
       const registered = imageIds.map((imageId) => Number(imageId.split(":").pop()));
-      release = () => registered.forEach((index) => {
-        if (Number.isInteger(index)) loader.wadouri.fileManager.remove(index);
-      });
+      release = () => {
+        // Evict only this stack's decoded images; decache also releases datasets.
+        for(const imageId of imageIds) {
+          try {core.cache.removeImageLoadObject(imageId);} catch { /* already evicted */ }
+        }
+        registered.forEach(index=>{
+          if(Number.isInteger(index))loader.wadouri.fileManager.remove(index);
+        });
+      };
       if (cancelled) return;
       engine = new core.RenderingEngine(`ora-engine-${crypto.randomUUID()}`);
       engineRef.current = engine;
@@ -141,7 +147,10 @@ export default function CornerstoneStack({ files, selectedIndex, onSliceChange, 
         setError(`Не удалось декодировать серию: ${errorText(err)}`);
         setStatus("Декодирование не завершено");
       }
-    }).finally(() => { if (!cancelled) setBusy(false); });
+    }).finally(() => {
+      if (!cancelled) setBusy(false);
+      else {try {release?.();} catch { /* late decode after unmount */ }}
+    });
 
     return () => {
       cancelled = true;

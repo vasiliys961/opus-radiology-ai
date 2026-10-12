@@ -427,3 +427,8 @@ button:disabled { cursor: not-allowed; }
 .ora-local-lungmask > label { display: block; margin: 10px 0; font-size: 13px; }
 .ora-local-lungmask input:not([type=checkbox]) { display: block; width: min(100%, 420px); box-sizing: border-box; padding: 8px; border: 1px solid #9fb8ae; border-radius: 6px; background: transparent; color: inherit; }
 .ora-local-worker-metrics { font-variant-numeric: tabular-nums; }
+.ora-ct-slab{margin-top:12px;padding:12px;border:1px solid #b8cdc6;border-radius:9px;background:#f8fcfa}
+.ora-ct-slab>label{display:block;margin:8px 0;font-size:11px;color:#365967}
+.ora-ct-slab input{display:block;width:100%;box-sizing:border-box;padding:7px;border:1px solid #b8cdc6;border-radius:6px;background:white}
+.ora-ct-slab button{margin:6px 0;padding:9px;border:1px solid #afdac9;border-radius:7px;background:#e3f5ee;color:#137967;font-size:11px}
+.ora-ct-slab button:disabled{opacity:.55;cursor:not-allowed}

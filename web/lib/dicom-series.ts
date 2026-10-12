@@ -51,6 +51,8 @@ export type DicomSeries = {
   volumeReady: boolean;
   sliceSpacingMm: number | null;
   warning: string | null;
+  /** Explicit local subvolume; original identities/coordinates stay unchanged. */
+  selection?: {startIndex:number;endIndex:number;sourceFrameCount:number};
 };
 
 const LONG_VRS = new Set(['OB', 'OD', 'OF', 'OL', 'OV', 'OW', 'SQ', 'UC', 'UR', 'UT', 'UN']);

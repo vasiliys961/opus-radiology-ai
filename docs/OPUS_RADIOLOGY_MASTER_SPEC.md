@@ -587,3 +587,17 @@ unsigned local snapshot, not trusted privacy acceptance or server authorization.
 No new paid call/patient transfer/.env.local change or guard relaxation. Four
 modes, specialist/optional-LLM Evidence separation and R1/Mac/Safari/full CT
 boundaries remain. See `docs/LOCAL_PRIVACY_READINESS.md`.
+
+
+## Bounded native CT slab — 2026-10-12
+
+Baseline main `22dc41b` has PR #31 merged and green Web Actions. An explicit
+consecutive native CT range now feeds MPR and the existing local R231 action,
+while full 2D remains available. The entire source geometry is rechecked; bounds
+are min(32 frames, existing voxel/raw/file limits). No resampling or pixel copy.
+Selected SOP identity, shifted LPS/scalars/SHA and strict worker contract remain
+bound. Selection/source changes tear down masks/packages/jobs; owned 2D decoded
+cache is released. See `docs/BOUNDED_CT_SLAB.md`.
+This is partial slab support, not full-CT stitching, a trained-model rerun or a
+Mac/Safari benchmark. Four modes/Evidence/optional LLMs, .env.local, patient/cloud
+OFF and R231/Safe/resource limits stay unchanged; R1 remains PARTIAL.
