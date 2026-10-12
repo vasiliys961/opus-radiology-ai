@@ -1,0 +1,26 @@
+# Opt-in, offline audit only: docker compose -f deploy/compose.yaml run --rm weights-audit
+services:
+  weights-audit:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.weights-audit
+    network_mode: none
+    read_only: true
+    user: "10001:10001"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 64
+    mem_limit: 256m
+    volumes:
+      - type: bind
+        source: ${OPUS_TOTALSEG_WEIGHTS_PATH:?Set OPUS_TOTALSEG_WEIGHTS_PATH to an existing local model directory}
+        target: /weights
+        read_only: true
+      - type: bind
+        source: ${OPUS_TOTALSEG_CONFIG_PATH:?Set OPUS_TOTALSEG_CONFIG_PATH to an existing local config.json}
+        target: /config.json
+        read_only: true
+    command: ["--weights-root", "/weights", "--config", "/config.json"]
+    restart: "no"
