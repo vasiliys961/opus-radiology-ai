@@ -5,6 +5,7 @@ import { deflateSync } from "node:zlib";
 import { appendPrivacyEvent,buildPrivacyReviewBundle,createPrivacyJournal,exportPrivacyJournal,MAX_PRIVACY_EVENTS,
   MAX_PRIVACY_BUNDLE_BYTES,restorePrivacyReviewBundle,type PrivacyAction,type PrivacyJournal } from "./privacy-review-journal.ts";
 import { validatePrivacyRaster } from "./vision-privacy-browser.ts";
+import { assessPrivacyReadiness,buildPrivacyReadinessReport } from "./privacy-readiness.ts";
 import { createPrivacyFrame,markPrivacyReview,type PrivacyFrame } from "./vision-privacy.ts";
 
 const id="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",at="2026-10-12T14:00:00.000Z",rect={x:0,y:0,width:1,height:1};
@@ -225,4 +226,56 @@ test("cancelling a pending imported decoder cleans it without waiting for its de
   try{const controller=new AbortController(),pending=validatePrivacyRaster(frame(),controller.signal);controller.abort();
     await assert.rejects(pending,/отменено/);assert.equal(lastSrc,"");
   }finally{globalThis.Image=previous;}
+});
+
+test("local readiness counts exact per-frame human marks but never releases Cloud",()=>{
+  const first=review(start(),frame()),other=frame("frame-2");
+  const assessment=assessPrivacyReadiness({frames:[first.f,other],ocr:{},keptText:{},busy:false});
+  assert.equal(assessment.status,"needs-local-review");assert.deepEqual(assessment.frames.map(f=>f.localReviewDone),[true,false]);
+  const ready=assessPrivacyReadiness({frames:[first.f],ocr:{},keptText:{},busy:false});
+  assert.equal(ready.localReviewDone,true);assert.equal(ready.transmissionPermitted,false);assert.equal(ready.deidentificationVerified,false);
+  assert.equal(ready.serverChecks.length,7);assert.ok(ready.serverChecks.every(c=>c.status==="not-connected"));
+  assert.equal(ready.productionRelease,"not-implemented");
+  assert.equal(assessPrivacyReadiness({frames:[],ocr:{},keptText:{},busy:false}).status,"not-prepared");
+  assert.equal(assessPrivacyReadiness({frames:[first.f],ocr:{},keptText:{},busy:true}).localReviewDone,false);
+});
+test("OCR absence/zero/stale are distinct, never auto-mark reviews; positive detections need exact-copy acknowledgement",()=>{
+  const f=frame(),input={frames:[f],keptText:{},busy:false};
+  const positive={sha256:f.sha256,regions:[{rectangle:rect,confidence:99}]};
+  assert.equal(assessPrivacyReadiness({...input,ocr:{}}).frames[0].ocrState,"not-run");
+  const zero=assessPrivacyReadiness({...input,ocr:{[f.frameId]:{sha256:f.sha256,regions:[]}}});
+  assert.equal(zero.frames[0].ocrState,"no-text-found");assert.equal(zero.localReviewDone,false);
+  const stale=assessPrivacyReadiness({...input,ocr:{[f.frameId]:{...positive,sha256:"f".repeat(64)}}});
+  assert.equal(stale.frames[0].ocrState,"stale");assert.equal(stale.frames[0].regionCount,null);
+  const both=review(start(),f).f;
+  const unresolved=assessPrivacyReadiness({...input,frames:[both],ocr:{[f.frameId]:positive},keptText:{[f.frameId]:"f".repeat(64)}});
+  assert.equal(unresolved.localReviewDone,false);
+  assert.equal(assessPrivacyReadiness({...input,frames:[both],ocr:{[f.frameId]:positive},keptText:{[f.frameId]:f.sha256}}).localReviewDone,true);
+});
+test("rendering local readiness never reads PNG or opaque PHI/word/secret fields",()=>{
+  const f=frame(),ocr={sha256:f.sha256,regions:[{rectangle:rect,confidence:99}]};
+  Object.defineProperty(f,"pngBase64",{get(){throw new Error("Rendering must not decode pixels");}});
+  for(const object of [f,ocr])for(const key of ["text","token","patientName","opaqueDicom"])
+    Object.defineProperty(object,key,{enumerable:true,get(){throw new Error("Must not read opaque field");}});
+  const raw=JSON.stringify(assessPrivacyReadiness({frames:[f],ocr:{[f.frameId]:ocr},keptText:{},busy:false}));
+  assert.doesNotMatch(raw,/pngBase64|text"|token|patientName|opaqueDicom|confidence/);
+});
+test("readiness export checks actual raster/current journal while allowing incomplete local drafts",()=>{
+  const f=frame(),j=start(),input={frames:[f],ocr:{},keptText:{},busy:false};
+  const report=buildPrivacyReadinessReport(input,j);
+  assert.equal(report.validation,"local-copy-sha-and-journal-checked");assert.equal(report.journalRevision,0);
+  assert.equal(report.localReviewDone,false);assert.doesNotMatch(JSON.stringify(report),/pngBase64|initialFrames|events"/);
+  assert.throws(()=>buildPrivacyReadinessReport({...input,busy:true},j),/завершите/);
+  assert.throws(()=>buildPrivacyReadinessReport({...input,frames:[{...f,pngBase64:Buffer.from(png(0)).toString("base64")}]},j),/не совпадают/);
+  assert.throws(()=>buildPrivacyReadinessReport({...input,frames:[markPrivacyReview(f,"pixel",true)]},j),/не совпадают/);
+  const checked=review(j,f);assert.equal(buildPrivacyReadinessReport({...input,frames:[checked.f]},checked.j).localReviewDone,true);
+});
+test("changed or restored copies revoke readiness and invalid metadata cannot be rendered as checked",()=>{
+  const checked=review(start(),frame()),newFrame=createPrivacyFrame(png(0),"frame-1","CT",[rect]);
+  const input={frames:[newFrame],ocr:{},keptText:{},busy:false};
+  assert.equal(assessPrivacyReadiness(input).localReviewDone,false);
+  const restored=restorePrivacyReviewBundle(JSON.stringify(buildPrivacyReviewBundle([checked.f],checked.j,id)),[frame()],null,at);
+  assert.equal(buildPrivacyReadinessReport({...input,frames:restored.frames},restored.journal).localReviewDone,false);
+  for(const frames of [[frame(),frame()],Array(5).fill(frame()),[{...frame(),width:Infinity}],[{...frame(),frameId:"patient-filename"}]])
+    assert.throws(()=>assessPrivacyReadiness({...input,frames}));
 });

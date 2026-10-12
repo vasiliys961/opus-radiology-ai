@@ -7,6 +7,8 @@ import { scanPrivacyText,type PrivacyOcrResult } from "../lib/privacy-ocr";
 import { appendPrivacyEvent,buildPrivacyReviewBundle,createPrivacyJournal,exportPrivacyJournal,MAX_PRIVACY_EVENTS,
   MAX_PRIVACY_BUNDLE_BYTES,restorePrivacyReviewBundle,type PrivacyAction,type PrivacyJournal } from "../lib/privacy-review-journal";
 import { acquireBrowserCompute } from "../lib/browser-compute-slot";
+import VisionPrivacyReadiness from "./VisionPrivacyReadiness";
+import { buildPrivacyReadinessReport } from "../lib/privacy-readiness";
 
 const actionLabels:Record<PrivacyAction["kind"],string>={redacted:"Скрытие областей", "ocr-started":"OCR начат",
   "ocr-completed":"OCR завершён","ocr-cancelled":"OCR отменён","ocr-failed":"OCR не завершён",
@@ -108,13 +110,18 @@ export default function VisionPrivacyPreparation({previews,modality}:{previews:r
     try{record(frame,{kind:"text-retained"});setKeptText(previous=>({...previous,[frame.frameId]:frame.sha256}));setError("");setOcrNotice("");}
     catch(e){setError(e instanceof Error?e.message:"Не удалось записать отметку.");}
   };
-  const download=(kind:"candidate"|"journal"|"bundle"="candidate")=>{
+  const download=(kind:"candidate"|"journal"|"bundle"|"readiness"="candidate")=>{
     try{
       if(!journalRef.current)throw new Error("Сначала создайте копии.");
-      // Even the legacy candidate export must match the recorded actions.
-      const review=exportPrivacyJournal(journalRef.current,frames);
-      const packet=kind==="journal"?review:kind==="bundle"?buildPrivacyReviewBundle(frames,journalRef.current,crypto.randomUUID()):
-        buildVisionPrivacyPacket(frames,crypto.randomUUID());
+      let packet:unknown;
+      if(kind==="readiness")packet=buildPrivacyReadinessReport({frames,ocr,keptText,busy},journalRef.current);
+      else if(kind==="journal")packet=exportPrivacyJournal(journalRef.current,frames);
+      else if(kind==="bundle")packet=buildPrivacyReviewBundle(frames,journalRef.current,crypto.randomUUID());
+      else{
+        const candidate=buildVisionPrivacyPacket(frames,crypto.randomUUID());
+        // Even the legacy candidate export must match the recorded actions.
+        exportPrivacyJournal(journalRef.current,candidate.frames);packet=candidate;
+      }
       const url=URL.createObjectURL(new Blob([JSON.stringify(packet)],{type:"application/json"}));
       const a=document.createElement("a");a.href=url;a.download=`opus-local-privacy-${kind}.json`;
       a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);setError("");
@@ -164,6 +171,8 @@ export default function VisionPrivacyPreparation({previews,modality}:{previews:r
       <p role="status">Скрытых областей: {frame.redactions.length}. Изменение копии сбрасывает её проверку.</p>
       <label><input type="checkbox" disabled={busy} checked={frame.pixelReviewSha256===frame.sha256} onChange={e=>review("pixel",e.target.checked)}/> Проверил копию: идентифицирующих надписей нет</label>
       <label><input type="checkbox" disabled={busy} checked={frame.visualReviewSha256===frame.sha256} onChange={e=>review("visual",e.target.checked)}/> Проверил копию: лица и узнаваемых признаков нет</label>
+      <VisionPrivacyReadiness frames={frames} ocr={ocr} keptText={keptText} busy={busy}/>
+      <button type="button" disabled={busy} onClick={()=>download("readiness")}>Скачать локальный статус без пикселей JSON</button>
       <button type="button" disabled={busy||!reviewed} onClick={()=>download()}>Скачать локальный пакет копий JSON</button>
       {journal&&<section aria-label="Локальный журнал приватности">
         <p role="status">Действий в журнале: {journal.events.length} из {MAX_PRIVACY_EVENTS}. Время и проверяющий не подтверждены.</p>
