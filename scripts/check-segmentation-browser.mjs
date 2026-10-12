@@ -263,6 +263,41 @@ try {
   assert.equal(await bundleButton.isDisabled(),true);assert.equal(await journalButton.isDisabled(),false);
   const resetJournal=await savePrivacyJson(privacy,'Скачать журнал без пикселей JSON','privacy-reset-journal.json');
   assert.equal(resetJournal.journal.events.length,0);assert.notEqual(resetJournal.journal.sessionId,journalOnly.journal.sessionId);
+  const restoreInput=privacy.getByLabel('Восстановить копии с журналом JSON',{exact:true});
+  await restoreInput.setInputFiles({name:'broken.json',mimeType:'application/json',buffer:Buffer.from('{"SYNTHETIC-SECRET":oops}')});
+  await privacy.getByRole('alert').filter({hasText:/Пакет повреждён/}).waitFor();
+  assert.doesNotMatch(await privacy.getByRole('alert').innerText(),/SYNTHETIC-SECRET/);
+  const afterBad=await savePrivacyJson(privacy,'Скачать журнал без пикселей JSON','privacy-after-bad.json');
+  assert.deepEqual(afterBad,resetJournal);
+  await restoreInput.setInputFiles({name:'too-big.json',mimeType:'application/json',buffer:Buffer.alloc(12*1024*1024+1)});
+  await privacy.getByRole('alert').filter({hasText:/не более 12 МиБ/}).waitFor();
+  await restoreInput.setInputFiles(join(fixture,'privacy-journal-only.json'));
+  await privacy.getByRole('alert').filter({hasText:/Нужен пакет копий с журналом/}).waitFor();
+  await restoreInput.setInputFiles(join(fixture,'privacy-review-bundle.json'));
+  await privacy.getByText(/Копии и история восстановлены/).waitFor();
+  assert.equal(await privacyDownloadButton.isDisabled(),true);assert.equal(await bundleButton.isDisabled(),true);
+  assert.equal(await reviewText.isChecked(),false);assert.equal(await reviewFace.isChecked(),false);
+  await privacySelect.selectOption('1');assert.deepEqual(await outgoingPixel(),[0,0,0,255]);
+  assert.equal(await page.locator('.ora-vision-plan-thumbnail').nth(1).getAttribute('src'),originalThumbnail);
+  const restoredJournal=await savePrivacyJson(privacy,'Скачать журнал без пикселей JSON','privacy-restored-journal.json');
+  assert.equal(restoredJournal.schema,'opus-privacy-journal-export/v2');
+  assert.deepEqual(restoredJournal.journal.events.slice(0,11),history);
+  assert.deepEqual(restoredJournal.journal.events.slice(11).map(e=>e.action.kind),Array(4).fill('copy-restored'));
+  // Re-importing the old file cannot drop the newly appended restore entries.
+  await restoreInput.setInputFiles(join(fixture,'privacy-review-bundle.json'));
+  await privacy.getByRole('alert').filter({hasText:/Пакет старее/}).waitFor();
+  const afterOld=await savePrivacyJson(privacy,'Скачать журнал без пикселей JSON','privacy-after-old.json');
+  assert.deepEqual(afterOld,restoredJournal);assert.deepEqual(await outgoingPixel(),[0,0,0,255]);
+  for(let i=0;i<4;i++){await privacySelect.selectOption(String(i));await reviewText.check();await reviewFace.check();}
+  const restoredBundle=await savePrivacyJson(privacy,'Скачать копии с журналом JSON','privacy-restored-bundle.json');
+  assert.equal(restoredBundle.schema,'opus-vision-privacy-review/v2');assert.equal(restoredBundle.candidate.transmissionPermitted,false);
+  assert.equal(restoredBundle.review.journal.events.length,23);
+  // A fresh preparation may restore the saved v2 session, still requiring all checks again.
+  await privacy.getByRole('button',{name:'Создать копии заново',exact:true}).click();
+  await restoreInput.setInputFiles(join(fixture,'privacy-restored-bundle.json'));
+  await privacy.getByText(/Копии и история восстановлены/).waitFor();
+  assert.equal(await reviewText.isChecked(),false);assert.equal(await reviewFace.isChecked(),false);
+  assert.equal(await bundleButton.isDisabled(),true);
   page.off('request',observePrivacyRequest);assert.deepEqual(privacyRequests,[]);
   const forgedPrivacyStatus=await page.request.post(baseUrl+'/api/ai',{
     data:{...privacyPacket,transmissionPermitted:true,deidentificationVerified:true,physicianAuthentication:true,studyConsent:true},

@@ -94,7 +94,7 @@ Primary references:
 From `web/`: `npm test`, `npm run typecheck`, `npm run build`,
 `npm run test:browser`.
 
-239 Web unit/contract tests cover metadata stripping with unchanged raster bytes,
+247 Web unit/contract tests cover metadata stripping with unchanged raster bytes,
 CRC/shape/critical-chunk/byte/pixel guards, strict base64 at the maximum size,
 rectangle bounds, exact-copy review hashes, field allowlisting, source-free IDs
 and refusal to promote local checks to cloud authorization. Synthetic browser

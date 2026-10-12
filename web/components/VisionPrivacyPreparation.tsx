@@ -2,14 +2,15 @@
 import { useEffect,useRef,useState } from "react";
 import { buildVisionPrivacyPacket,createPrivacyFrame,markPrivacyReview,pngFromBase64,validatePrivacyRectangle,
   type PrivacyFrame,type PrivacyRectangle } from "../lib/vision-privacy";
-import { redactPrivacyRegions } from "../lib/vision-privacy-browser";
+import { redactPrivacyRegions,validatePrivacyRaster } from "../lib/vision-privacy-browser";
 import { scanPrivacyText,type PrivacyOcrResult } from "../lib/privacy-ocr";
 import { appendPrivacyEvent,buildPrivacyReviewBundle,createPrivacyJournal,exportPrivacyJournal,MAX_PRIVACY_EVENTS,
-  type PrivacyAction,type PrivacyJournal } from "../lib/privacy-review-journal";
+  MAX_PRIVACY_BUNDLE_BYTES,restorePrivacyReviewBundle,type PrivacyAction,type PrivacyJournal } from "../lib/privacy-review-journal";
+import { acquireBrowserCompute } from "../lib/browser-compute-slot";
 
 const actionLabels:Record<PrivacyAction["kind"],string>={redacted:"Скрытие областей", "ocr-started":"OCR начат",
   "ocr-completed":"OCR завершён","ocr-cancelled":"OCR отменён","ocr-failed":"OCR не завершён",
-  "text-retained":"Надписи оставлены по ручной отметке","review-set":"Ручная проверка"};
+  "text-retained":"Надписи оставлены по ручной отметке","review-set":"Ручная проверка","copy-restored":"Копия восстановлена · проверки сняты"};
 
 /** OCR reads same-origin fixed assets only. No image upload or recognized-text export. */
 export default function VisionPrivacyPreparation({previews,modality}:{previews:readonly (string|undefined)[];modality:string}) {
@@ -19,6 +20,7 @@ export default function VisionPrivacyPreparation({previews,modality}:{previews:r
   const [ocr,setOcr]=useState<Record<string,PrivacyOcrResult>>({}),[ocrBusy,setOcrBusy]=useState(false),[ocrNotice,setOcrNotice]=useState("");
   const [keptText,setKeptText]=useState<Record<string,string>>({});
   const [journal,setJournal]=useState<PrivacyJournal|null>(null);
+  const [importBusy,setImportBusy]=useState(false),[importNotice,setImportNotice]=useState("");
   const journalRef=useRef<PrivacyJournal|null>(null);
   const scan=useRef<AbortController|null>(null);
   const generation=useRef(0);
@@ -33,16 +35,36 @@ export default function VisionPrivacyPreparation({previews,modality}:{previews:r
     const next=appendPrivacyEvent(journalRef.current,target.frameId,target.sha256,action,new Date().toISOString());
     journalRef.current=next;setJournal(next);
   };
+  const initialCopies=()=>{
+    if(!["CT","MR"].includes(modality)||!previews.length||previews.length>4||previews.some(p=>!p?.startsWith("data:image/png;base64,")))
+      throw new Error("Сначала дождитесь локальных PNG-миниатюр всех выбранных срезов.");
+    return previews.map((url,i)=>createPrivacyFrame(pngFromBase64(url!.split(",")[1]),`frame-${i+1}`,modality as "CT"|"MR"));
+  };
   const prepare=()=>{
-    ++generation.current;setError("");
+    ++generation.current;setError("");setImportNotice("");
     try{
-      if(!["CT","MR"].includes(modality)||!previews.length||previews.length>4||previews.some(p=>!p?.startsWith("data:image/png;base64,")))
-        throw new Error("Сначала дождитесь локальных PNG-миниатюр всех выбранных срезов.");
-      const next=previews.map((url,i)=>createPrivacyFrame(pngFromBase64(url!.split(",")[1]),`frame-${i+1}`,modality as "CT"|"MR"));
+      const next=initialCopies();
       const nextJournal=createPrivacyJournal(next,crypto.randomUUID(),new Date().toISOString());
       journalRef.current=nextJournal;setJournal(nextJournal);
       setFrames(next);setSelected(0);setRectangle({x:0,y:0,width:1,height:1});setOcr({});setKeptText({});setOcrNotice("");
     }catch(e){setError(e instanceof Error?e.message:"Не удалось подготовить копии.");}
+  };
+  const restore=async(file:File)=>{
+    const controller=new AbortController(),version=++generation.current;scan.current=controller;
+    setBusy(true);setImportBusy(true);setError("");setImportNotice("");let release:(()=>void)|undefined;
+    try{
+      if(!file.size||file.size>MAX_PRIVACY_BUNDLE_BYTES)throw new Error("Выберите пакет копий с журналом не более 12 МиБ.");
+      release=acquireBrowserCompute("privacy-restore");
+      const text=await file.text();if(controller.signal.aborted)throw new DOMException("Восстановление отменено.","AbortError");
+      const next=restorePrivacyReviewBundle(text,initialCopies(),journalRef.current?{journal:journalRef.current,frames}:null,new Date().toISOString());
+      for(const f of next.frames)await validatePrivacyRaster(f,controller.signal);
+      if(version!==generation.current||controller.signal.aborted)return;
+      journalRef.current=next.journal;setJournal(next.journal);setFrames(next.frames);setSelected(0);
+      setOcr({});setKeptText({});setOcrNotice("");setRectangle({x:0,y:0,width:1,height:1});
+      setImportNotice("Копии и история восстановлены. Осмотрите каждый кадр заново: ручные проверки и результат OCR не перенесены.");
+    }catch(e){if(version===generation.current)setError(controller.signal.aborted?"Восстановление отменено. Текущая работа сохранена.":
+      e instanceof Error?e.message:"Не удалось восстановить пакет. Текущая работа сохранена.");}
+    finally{release?.();if(version===generation.current){scan.current=null;setBusy(false);setImportBusy(false);}}
   };
   const redact=async(regions:PrivacyRectangle[]=[rectangle])=>{
     if(!frame)return;const version=++generation.current;setBusy(true);setError("");
@@ -102,6 +124,10 @@ export default function VisionPrivacyPreparation({previews,modality}:{previews:r
     <h3>Подготовка к облаку · локальные копии</h3>
     <p>В копии остаются только PNG-пиксели выбранных срезов: без DICOM-тегов, исходных UID, имён файлов и клинического текста. Надписи внутри изображения нужно удалить отдельно.</p>
     <button type="button" disabled={busy||previews.some(p=>!p)} onClick={prepare}>{frames.length?"Создать копии заново":"Подготовить копии без метаданных"}</button>
+    <label>Восстановить копии с журналом JSON <input type="file" accept=".json,application/json" disabled={busy||previews.some(p=>!p)}
+      onChange={e=>{const file=e.target.files?.[0];e.target.value="";if(file)void restore(file);}}/></label>
+    {importBusy&&<button type="button" onClick={()=>scan.current?.abort()}>Отменить восстановление</button>}
+    {importNotice&&<p role="status">{importNotice}</p>}
     {error&&<p role="alert">{error}</p>}
     {frame&&<>
       <label>Копия кадра <select value={selected} disabled={busy} onChange={e=>{setSelected(Number(e.target.value));setError("");setOcrNotice("");}}>

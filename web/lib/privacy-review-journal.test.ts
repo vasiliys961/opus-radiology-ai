@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { deflateSync } from "node:zlib";
 import { appendPrivacyEvent,buildPrivacyReviewBundle,createPrivacyJournal,exportPrivacyJournal,MAX_PRIVACY_EVENTS,
-  type PrivacyAction,type PrivacyJournal } from "./privacy-review-journal.ts";
+  MAX_PRIVACY_BUNDLE_BYTES,restorePrivacyReviewBundle,type PrivacyAction,type PrivacyJournal } from "./privacy-review-journal.ts";
+import { validatePrivacyRaster } from "./vision-privacy-browser.ts";
 import { createPrivacyFrame,markPrivacyReview,type PrivacyFrame } from "./vision-privacy.ts";
 
 const id="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",at="2026-10-12T14:00:00.000Z",rect={x:0,y:0,width:1,height:1};
@@ -123,4 +124,105 @@ test("invalid redactions and fabricated terminal/review actions cannot enter the
     {kind:"ocr-completed",regionCount:0},{kind:"ocr-cancelled"},{kind:"unknown"}] as unknown as PrivacyAction[])
     assert.throws(()=>add(j,f,action));
   assert.throws(()=>appendPrivacyEvent(j,f.frameId,f.sha256,{kind:"ocr-started"},"not-a-date"));
+});
+
+test("restore retains exact redacted pixels/history but revokes imported human checks and OCR",()=>{
+  const original=frame(),changed=createPrivacyFrame(png(0),"frame-1","CT",[rect]);
+  let j=add(start(),original,{kind:"redacted",nextSha256:changed.sha256,rectangles:[rect]});
+  j=add(j,changed,{kind:"ocr-started"});j=add(j,changed,{kind:"ocr-completed",regionCount:2});
+  j=add(j,changed,{kind:"text-retained"});const reviewed=review(j,changed),bundle=buildPrivacyReviewBundle([reviewed.f],reviewed.j,id);
+  const restored=restorePrivacyReviewBundle(JSON.stringify(bundle),[original],null,at);
+  assert.equal(restored.frames[0].pngBase64,changed.pngBase64);assert.deepEqual(restored.frames[0].redactions,[rect]);
+  assert.equal(restored.frames[0].pixelReviewSha256,null);assert.equal(restored.frames[0].visualReviewSha256,null);
+  assert.deepEqual(restored.journal.events.slice(0,-1),reviewed.j.events);
+  assert.equal(restored.journal.events.at(-1)?.action.kind,"copy-restored");assert.equal(restored.journal.schema,"opus-privacy-journal/v2");
+  assert.throws(()=>buildPrivacyReviewBundle(restored.frames,restored.journal,id),/Проверьте/);
+  assert.throws(()=>add(restored.journal,restored.frames[0],{kind:"text-retained"}),/Нет найденных/);
+  const rechecked=review(restored.journal,restored.frames[0]),v2=buildPrivacyReviewBundle([rechecked.f],rechecked.j,id);
+  assert.equal(v2.schema,"opus-vision-privacy-review/v2");assert.equal(v2.review.schema,"opus-privacy-journal-export/v2");
+  assert.equal(restorePrivacyReviewBundle(JSON.stringify(v2),[original],null,at).frames[0].pixelReviewSha256,null);
+});
+
+test("restore only extends a nonempty current prefix; older, forked and other-session files cannot erase it",()=>{
+  const base=review(start(),frame()),saved=buildPrivacyReviewBundle([base.f],base.j,id);
+  let extension=add(base.j,base.f,{kind:"review-set",review:"pixel",checked:false});
+  extension=add(extension,base.f,{kind:"review-set",review:"pixel",checked:true});
+  const extended=buildPrivacyReviewBundle([base.f],extension,id);
+  const current={journal:base.j,frames:[base.f]};
+  const restored=restorePrivacyReviewBundle(JSON.stringify(extended),[frame()],current,at);
+  assert.deepEqual(restored.journal.events.slice(0,base.j.events.length),base.j.events);
+  assert.throws(()=>restorePrivacyReviewBundle(JSON.stringify(saved),[frame()],{journal:extension,frames:[base.f]},at),/старее/);
+  const fork={...base.j,events:base.j.events.map(e=>({...e,declaredAt:"2026-10-12T14:01:00.000Z"}))};
+  const foreign={...base.j,sessionId:"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"};
+  for(const j of [fork,foreign])assert.throws(()=>restorePrivacyReviewBundle(JSON.stringify(buildPrivacyReviewBundle([base.f],j,id)),[frame()],current,at),/другую ветку/);
+  assert.equal(current.journal.events.length,2);assert.equal(current.frames[0].pixelReviewSha256,base.f.sha256);
+});
+
+test("restore checks initial raster, modality, frame order and actual current state before replacement",()=>{
+  const a=frame(),b=frame("frame-2");let j=start([a,b]);const first=review(j,a);j=first.j;
+  const second=review(j,b);j=second.j;const bundle=JSON.stringify(buildPrivacyReviewBundle([first.f,second.f],j,id));
+  for(const originals of [[createPrivacyFrame(png(0),"frame-1","CT"),b],[{...a,modality:"MR" as const},b],[b,a],[a]])
+    assert.throws(()=>restorePrivacyReviewBundle(bundle,originals,null,at),/другим выбранным/);
+  assert.throws(()=>restorePrivacyReviewBundle(bundle,[a,b],{journal:j,frames:[{...first.f,visualReviewSha256:null},second.f]},at),/повреждён/);
+});
+
+test("restore refuses forged flags, digest/pixel/history changes and incompatible wrappers",()=>{
+  const {j,f}=review(start(),frame()),bundle=buildPrivacyReviewBundle([f],j,id);
+  const mutations=[(b:typeof bundle)=>{b.review.journalSha256="f".repeat(64);},
+    (b:typeof bundle)=>{b.candidate.frames[0].pngBase64=Buffer.from(png(0)).toString("base64");},
+    (b:typeof bundle)=>{b.review.journal.events[0].revision=4;},
+    (b:typeof bundle)=>{b.candidate.transmissionPermitted=true as false;},
+    (b:typeof bundle)=>{b.candidate.deidentificationVerified=true as false;},
+    (b:typeof bundle)=>{b.schema="opus-vision-privacy-review/v2";},
+    (b:typeof bundle)=>{b.review.journal.actor="verified" as "local-unverified";}];
+  for(const mutate of mutations){const copy=structuredClone(bundle);mutate(copy);assert.throws(()=>restorePrivacyReviewBundle(JSON.stringify(copy),[frame()],null,at));}
+  for(const input of [bundle.candidate,bundle.review,null,[]])assert.throws(()=>restorePrivacyReviewBundle(JSON.stringify(input),[frame()],null,at));
+});
+
+test("restore bounds parse/history, reserves all frame reset entries and never exposes parse fragments",()=>{
+  assert.throws(()=>restorePrivacyReviewBundle(" ".repeat(MAX_PRIVACY_BUNDLE_BYTES+1),[frame()],null,at),/12 МиБ/);
+  assert.throws(()=>restorePrivacyReviewBundle('{"SYNTHETIC-SECRET":oops}',[frame()],null,at),e=>e instanceof Error&&!e.message.includes("SYNTHETIC-SECRET"));
+  let {j,f}=review(start(),frame());
+  while(j.events.length<MAX_PRIVACY_EVENTS)j=add(j,f,{kind:"review-set",review:"pixel",checked:true});
+  for(const count of [126,127,128]){
+    const bundle=buildPrivacyReviewBundle([f],{...j,events:j.events.slice(0,count)},id);
+    assert.throws(()=>restorePrivacyReviewBundle(JSON.stringify(bundle),[frame()],null,at),/нет места/);
+  }
+  const accepted=restorePrivacyReviewBundle(JSON.stringify(buildPrivacyReviewBundle([f],{...j,events:j.events.slice(0,125)},id)),[frame()],null,at);
+  const rechecked=review(accepted.journal,accepted.frames[0]);
+  assert.equal(buildPrivacyReviewBundle([rechecked.f],rechecked.j,id).review.journal.events.length,128);
+  assert.equal(j.events.length,128);assert.equal(f.pixelReviewSha256,f.sha256);
+});
+
+test("unknown file fields are discarded; old v1 clients cannot replay restored v2 events as v1",()=>{
+  const {j,f}=review(start(),frame()),bundle=buildPrivacyReviewBundle([f],j,id);
+  const raw=JSON.parse(JSON.stringify(bundle));raw.patientName="SYNTHETIC-SECRET";raw.candidate.frames[0].token="SYNTHETIC-SECRET";
+  raw.review.journal.events[0].action.text="SYNTHETIC-SECRET";
+  const restored=restorePrivacyReviewBundle(JSON.stringify(raw),[frame()],null,at);
+  assert.doesNotMatch(JSON.stringify(restored),/SYNTHETIC-SECRET|patientName|token|text"/);
+  assert.throws(()=>exportPrivacyJournal({...restored.journal,schema:"opus-privacy-journal/v1"},restored.frames),/версии v2/);
+});
+
+test("imported raster verification checks bounds/hash before decoder allocation and clears decoder on all exits",async()=>{
+  const previous=globalThis.Image;let allocated=0,lastSrc="",fail=false;
+  class Decoder {naturalWidth=1;naturalHeight=1;constructor(){allocated++;}set src(v:string){lastSrc=v;}
+    decode(){return fail?Promise.reject(new Error("SYNTHETIC-SECRET")):Promise.resolve();}}
+  globalThis.Image=Decoder as unknown as typeof Image;
+  try{
+    const signal=new AbortController().signal,f=frame();
+    await assert.rejects(validatePrivacyRaster({...f,sha256:"f".repeat(64)},signal),/SHA/);assert.equal(allocated,0);
+    await validatePrivacyRaster(f,signal);assert.equal(lastSrc,"");
+    fail=true;await assert.rejects(validatePrivacyRaster(f,signal),/Пиксели копии не читаются/);assert.equal(lastSrc,"");
+    const cancelled=new AbortController();cancelled.abort();await assert.rejects(validatePrivacyRaster(f,cancelled.signal),/отменено/);
+    assert.equal(allocated,2);
+  }finally{globalThis.Image=previous;}
+});
+
+test("cancelling a pending imported decoder cleans it without waiting for its decode promise",async()=>{
+  const previous=globalThis.Image;let lastSrc="";
+  class Decoder {set src(v:string){lastSrc=v;}decode(){return new Promise<void>(()=>{});}}
+  globalThis.Image=Decoder as unknown as typeof Image;
+  try{const controller=new AbortController(),pending=validatePrivacyRaster(frame(),controller.signal);controller.abort();
+    await assert.rejects(pending,/отменено/);assert.equal(lastSrc,"");
+  }finally{globalThis.Image=previous;}
 });
