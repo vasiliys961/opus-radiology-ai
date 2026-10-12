@@ -65,3 +65,13 @@ serialization. All model files in those tests are synthetic, never trusted.
 No actual TotalSegmentator checkpoint, output, MPS/GPU or medical accuracy was
 verified. Existing R231/API/MPR components are unchanged. All four execution modes
 and specialist/optional-LLM separation remain; patient/cloud gates stay closed.
+
+## Asset file integrity hardening
+
+The read-only audit now opens every directory through an already-open parent
+with no-follow flags and opens the checkpoint as a nonblocking regular file.
+This prevents symlink swaps and FIFO blocking in a local model directory; it
+also rejects traversal and detects metadata changes during hashing. A returned
+SHA still means **present-unverified**, never trusted or clinically ready.
+These POSIX file-descriptor guards require a supported local OS; unsupported
+platforms fail closed instead of silently weakening the audit.
