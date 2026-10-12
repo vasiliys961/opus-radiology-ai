@@ -5,8 +5,9 @@ import type { SegmentationEvidence } from "../lib/segmentation-evidence";
 import type { LlmMeasurements } from "../lib/evidence-reconciliation";
 import type { Point3 } from "../lib/segmentation-mask";
 
-export default function EvidenceReportDownload({evidence,llm,onSampleMask}: {
+export default function EvidenceReportDownload({evidence,llm,onSampleMask,hasUnsavedReviewerNote=false}: {
   evidence: SegmentationEvidence; llm?: LlmMeasurements | null; onSampleMask?: (point: Point3)=>number | null;
+  hasUnsavedReviewerNote?: boolean;
 }) {
   const [error,setError]=useState("");
   const download=()=>{
@@ -18,7 +19,7 @@ export default function EvidenceReportDownload({evidence,llm,onSampleMask}: {
     }catch(e){setError(e instanceof Error?e.message:"Не удалось создать отчёт Evidence.");}
   };
   return <div className="ora-report-export">
-    <button type="button" onClick={download}>{llm?"Скачать отчёт с сопоставлением HTML":"Скачать отчёт Evidence HTML"}</button>
+    <button type="button" disabled={hasUnsavedReviewerNote} onClick={download}>{llm?"Скачать отчёт с сопоставлением HTML":"Скачать отчёт Evidence HTML"}</button>
     <small>Откройте файл локально; печать или сохранение PDF доступны через меню браузера. Отчёт — неподписанный черновик.</small>
     {error&&<p role="alert" className="ora-evidence-error">{error}</p>}
   </div>;

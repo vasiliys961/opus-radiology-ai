@@ -442,3 +442,21 @@ clinical report or de-ID guarantee. See `docs/EVIDENCE_REPORT.md`.
 Clinical text editing/sign-off, protected report storage/audit and Safari print
 acceptance remain planned. Four modes, optional LLMs, all resource limits and
 patient/cloud/remote OFF remain unchanged; R1 is still PARTIAL.
+
+## Separate reviewer draft increment — 2026-10-12
+
+On baseline main `0c84fab` (PR #23 manually merged; green Web Actions), a plain
+reviewer text draft is now distinct from mask measurements and imported LLM
+claims. Explicit saving appends a bounded version, linked to source/mask/model
+and an exact canonical review-prefix SHA. Changed review marks make the prior
+text require recheck; saving after inspection records a new association.
+
+Unsaved edits block full Evidence/comparison/report export. Saved versions export
+and restore locally, refusing foreign/older/forked or incompatible review files.
+HTML shows the latest text in a separate unsigned reviewer section, with stale/
+cleared/missing state. Clearing latest text retains prior saved versions. It
+does not change measurements, provider output or comparison decisions.
+
+This is not authenticated clinical opinion, signature, de-ID or protected
+persistence. See `docs/REVIEWER_NOTE.md`. Patient/cloud/remote OFF, four modes,
+resource limits and R1/Mac/Safari/full-chest/clinical acceptance stay unchanged.
