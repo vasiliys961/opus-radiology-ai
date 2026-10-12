@@ -6,6 +6,8 @@ import { planVisionFrameSamples, MAX_VISION_SAMPLE_FRAMES,
   type VisionFramePlan } from "../lib/vision-frame-plan";
 import { useAnalysisSound } from "./AnalysisSoundProvider";
 import { decodeDicomPreview } from "../lib/dicom-lite";
+import { MAX_PRIVACY_PIXELS } from "../lib/vision-privacy";
+import VisionPrivacyPreparation from "./VisionPrivacyPreparation";
 
 export default function VisionFramePlanningPanel({
   series, activeSeriesKey, fileById, onOpenSlice,
@@ -44,7 +46,7 @@ export default function VisionFramePlanningPanel({
           preview = { error: "Локальная миниатюра ограничена размером 6 МиБ; откройте срез в Cornerstone." };
         else {
           try {
-            const result = await decodeDicomPreview(file);
+            const result = await decodeDicomPreview(file,{maxPixels:MAX_PRIVACY_PIXELS});
             preview = { url: result.url };
           } catch {
             preview = { error: "Локальный декодер не поддерживает этот DICOM. Просмотр возможен в Cornerstone." };
@@ -114,6 +116,9 @@ export default function VisionFramePlanningPanel({
       <p>Охват: только отдельные кадры. Количественные измерения, диагнозы и
         отсутствие патологий этим планом не устанавливаются.</p>
       <p>Загрузка изображений в AI: <strong>заблокирована</strong>. Обезличивание: не подтверждено.</p>
+      <VisionPrivacyPreparation key={JSON.stringify(report.frames.map(f=>f.fileId))+requested}
+        previews={report.frames.map(f=>thumbnails[f.fileId]?.url)}
+        modality={series.find(s=>s.key===report.seriesKey)?.modality??""}/>
     </div>}
     <p className="ora-vision-plan-footnote">Отбираем по равномерным индексам геометрически проверенной серии,
       сохраняя исходные SOPInstanceUID локально. Выборка не гарантирует обнаружения очагов между срезами.</p>

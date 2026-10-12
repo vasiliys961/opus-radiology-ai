@@ -66,6 +66,14 @@ try {
   assert.match(await page.locator('.ora-provider-error').innerText(),/только на localhost/);
   console.log('Provider readiness remains closed in production and gives a visible safe fallback');
   const files=(await readdir(fixture+'/dicom')).sort().map(n=>fixture+'/dicom/'+n);
+  // Deliberately fake identifiers in a preamble/private tag. No real PHI.
+  const phiSentinel='SYNTHETIC-PHI-REMOVE-ME',dirtyDicom=await readFile(files[0]);
+  dirtyDicom.write(phiSentinel,0,'ascii');
+  const privateValue=Buffer.from(phiSentinel+' '),privateHeader=Buffer.alloc(8);
+  privateHeader.writeUInt16LE(0x0029);privateHeader.writeUInt16LE(0x1001,2);privateHeader.write('LO',4,'ascii');
+  privateHeader.writeUInt16LE(privateValue.length,6);
+  const pixelTagAt=dirtyDicom.length-64*64*2-12;
+  await writeFile(files[0],Buffer.concat([dirtyDicom.subarray(0,pixelTagAt),privateHeader,privateValue,dirtyDicom.subarray(pixelTagAt)]));
   await page.locator('input[accept*=".dcm"]').setInputFiles(files);
   // Study Intelligence verifies ALL indexed synthetic series without calling AI.
   const intelligence=page.locator('.ora-study-intel');
@@ -174,6 +182,69 @@ try {
   await page.locator('.ora-vision-plan-controls button').click();
   assert.equal(await page.evaluate(()=>window.__opusToneStarts),previousCount);
   console.log('Vision-frame manifest and WebAudio: SOP navigation, opt-in ding, no sound after opt-out');
+  // Local privacy workbench: metadata-free copies, actual black raster pixels,
+  // exact-image review, no network, no promotion to patient-cloud authorization.
+  await page.locator('.ora-vision-plan-thumbnail').nth(3).waitFor();
+  const privacy=page.getByRole('region',{name:'Подготовка обезличенных кадров',exact:true});
+  const privacyRequests=[],observePrivacyRequest=request=>privacyRequests.push(request.url());
+  page.on('request',observePrivacyRequest);
+  await page.getByLabel('Жалобы, анамнез, лабораторные данные',{exact:true}).fill(phiSentinel);
+  await privacy.getByRole('button',{name:'Подготовить копии без метаданных',exact:true}).click();
+  const privacyImage=privacy.getByAltText('Точная подготовленная копия кадра',{exact:true});
+  const privacySelect=privacy.getByRole('combobox',{name:'Копия кадра',exact:true});
+  const reviewText=privacy.getByRole('checkbox',{name:'Проверил копию: идентифицирующих надписей нет',exact:true});
+  const reviewFace=privacy.getByRole('checkbox',{name:'Проверил копию: лица и узнаваемых признаков нет',exact:true});
+  const privacyDownloadButton=privacy.getByRole('button',{name:'Скачать локальный пакет копий JSON',exact:true});
+  assert.equal(await privacyDownloadButton.isDisabled(),true);
+  await privacySelect.selectOption('1');await reviewText.check();await reviewFace.check();
+  const originalThumbnail=await page.locator('.ora-vision-plan-thumbnail').nth(1).getAttribute('src');
+  const outgoingPixel=async()=>page.evaluate(async()=>{
+    const image=document.querySelector('.ora-privacy-preview');await image.decode();
+    const canvas=document.createElement('canvas');canvas.width=image.naturalWidth;canvas.height=image.naturalHeight;
+    const ctx=canvas.getContext('2d');ctx.drawImage(image,0,0);return [...ctx.getImageData(32,32,1,1).data];
+  });
+  assert.ok((await outgoingPixel())[0]>0);
+  for(const [field,value] of [['X','28'],['Y','28'],['Ширина','8'],['Высота','8']])await privacy.getByRole('spinbutton',{name:field,exact:true}).fill(value);
+  await privacy.getByRole('button',{name:'Скрыть область в копии',exact:true}).click();
+  await privacy.getByText(/Скрытых областей: 1/).waitFor();
+  assert.equal(await reviewText.isChecked(),false);assert.equal(await reviewFace.isChecked(),false);
+  assert.deepEqual(await outgoingPixel(),[0,0,0,255]);
+  assert.equal(await page.locator('.ora-vision-plan-thumbnail').nth(1).getAttribute('src'),originalThumbnail);
+  for(let i=0;i<4;i++){
+    await privacySelect.selectOption(String(i));await reviewText.check();await reviewFace.check();
+    assert.equal(await privacyDownloadButton.isDisabled(),i!==3);
+  }
+  const privacyDownload=page.waitForEvent('download');await privacyDownloadButton.click();
+  const privacyFile=await privacyDownload,privacyPath=join(fixture,'privacy-candidate.json');await privacyFile.saveAs(privacyPath);
+  const privacyPacket=JSON.parse(await readFile(privacyPath,'utf8'));
+  assert.equal(privacyPacket.frames.length,4);assert.equal(privacyPacket.transmissionPermitted,false);
+  assert.equal(privacyPacket.deidentificationVerified,false);assert.equal(privacyPacket.metadataPolicy,'pixel-only-no-DICOM');
+  assert.equal(privacyPacket.coverage,'sampled-frames-only');
+  assert.deepEqual(privacyPacket.frames[1].redactions,[{x:28,y:28,width:8,height:8}]);
+  assert.doesNotMatch(JSON.stringify(privacyPacket),new RegExp(phiSentinel+'|sopInstanceUid|seriesUid|filename|clinicalContext'));
+  for(const f of privacyPacket.frames){
+    const png=Buffer.from(f.pngBase64,'base64'),types=[];let at=8;
+    assert.equal(createHash('sha256').update(png).digest('hex'),f.sha256);
+    assert.equal(f.pixelReviewSha256,f.sha256);assert.equal(f.visualReviewSha256,f.sha256);
+    assert.equal(png.includes(Buffer.from(phiSentinel)),false);assert.equal(png.includes(Buffer.from(uid)),false);
+    while(at<png.length){types.push(png.subarray(at+4,at+8).toString('ascii'));at+=12+png.readUInt32BE(at);}
+    assert.ok(types.every(t=>['IHDR','IDAT','IEND'].includes(t)));
+  }
+  await privacySelect.selectOption('1');
+  assert.equal(await privacyImage.evaluate(img=>img.getBoundingClientRect().width===img.naturalWidth),true);
+  await privacy.screenshot({path:join(results,'synthetic-privacy-preparation.png')});
+  await privacy.getByRole('button',{name:'Создать копии заново',exact:true}).click();
+  assert.equal(await reviewText.isChecked(),false);assert.equal(await reviewFace.isChecked(),false);
+  assert.equal(await privacyDownloadButton.isDisabled(),true);
+  page.off('request',observePrivacyRequest);assert.deepEqual(privacyRequests,[]);
+  const forgedPrivacyStatus=await page.request.post('http://127.0.0.1:3131/api/ai',{
+    data:{...privacyPacket,transmissionPermitted:true,deidentificationVerified:true,physicianAuthentication:true,studyConsent:true},
+  });
+  assert.equal(forgedPrivacyStatus.status(),410);
+  await page.locator('#ora-frame-count').selectOption('2');
+  await privacy.waitFor({state:'detached'});await page.locator('#ora-frame-count').selectOption('4');
+  await page.getByLabel('Жалобы, анамнез, лабораторные данные',{exact:true}).fill('');
+  console.log('Local privacy preparation: preamble/private metadata and context excluded, exact black pixels, unchanged source, SHA-bound reviews, bounded no-network candidate, forged cloud flags refused and lifecycle reset (synthetic only)');
   const mpr=page.getByRole('button',{name:'MPR · 3 плоскости',exact:true});
   await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='MPR · 3 плоскости'&&!b.disabled),undefined,{timeout:30000});
   await mpr.click();

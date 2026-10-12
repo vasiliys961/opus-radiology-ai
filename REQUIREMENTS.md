@@ -34,7 +34,7 @@ Canonical vision and implementation truth: **[docs/OPUS_RADIOLOGY_MASTER_SPEC.md
 | LLM-01 | P1 | Optional LLM adapters: Gemini, Claude Opus, GPT and permitted open-compatible models; API keys server side; real credentials tested only in user environment. | PARTIAL (OpenRouter synthetic only, Polza diagnostic) |
 | LLM-02 | P0 | LLM is **not necessary** for full offline viewer/AI tasks and may never silently substitute for missing specialist model. | PARTIAL architectural constraint |
 | LLM-03 | P1 | Parallel Vision/model calls under budget, transparent 'what was actually seen' ledger, structured comparison, independent critique and evidence review. | PARTIAL (synthetic pipeline only) |
-| PRIV-01 | P0 | Real patient cloud egress remains hard OFF until server-verified auth, lawful purpose, de-ID tags + pixel checks, retention, processor contract/jurisdiction and audit; no client checkboxes overriding. | IMPLEMENTED OFF gate / production policy PLANNED |
+| PRIV-01 | P0 | Real patient cloud egress remains hard OFF until server-verified auth, lawful purpose, de-ID tags + pixel checks, retention, processor contract/jurisdiction and audit; no client checkboxes overriding. | IMPLEMENTED OFF gate; bounded local pixel-only copies, PNG metadata stripping, actual raster redaction and SHA-bound manual review PARTIAL; independent de-ID/server authorization/production policy PLANNED |
 | PRIV-02 | P0 | Local patient analysis isolated: loopback-only worker, access control, no analytics/PHI logs/CI, local encrypted patient storage if persisted, audit and lifecycle deletion. | PARTIAL — research-only loopback boundary; clinical patient storage/access/audit not released |
 | PRIV-03 | P0 | Server patient mode: TLS, role-based access, tenant isolation, encryption, authenticated jobs, limited retention, documented applicable jurisdiction, private provider agreements. | PLANNED |
 | COST-01 | P1 | **No mandatory subscriptions** or paid APIs to operate browser, offline AI and local evidence; code/weights licenses independently verified. | PARTIAL (core OSS components) |
@@ -173,3 +173,23 @@ See `docs/REVIEWER_NOTE.md`. This is metadata-only unsigned research text, not
 clinical approval, protected storage or an authenticated audit. No model rerun,
 volume copy, resource-guard change, .env.local change or patient/cloud/remote
 activation. Four modes and R1/Mac/Safari/full-chest/clinical boundaries remain.
+
+
+## Local cloud privacy preparation — 2026-10-12 (feature branch)
+
+Baseline main `335d6d3` includes manually merged PR #25 and green Web Actions.
+The user's next goal is cloud analysis only after de-identification. The local
+Vision plan now prepares bounded windowed PNG copies without DICOM/private
+metadata, original UIDs/filenames or clinical/reviewer text. PNG ancillary blocks
+are stripped with CRC/size/encoding checks; actual opaque-black raster redaction
+leaves source/MPR/Evidence untouched. Each exact copy needs separate local text/
+visual checks bound to its SHA; redaction/restart resets review. Explicit local
+candidate export only, no network or provider/model run.
+
+This is PARTIAL privacy preparation, not a trusted de-ID release or DICOM file
+conformance claim. The candidate retains unverified/sampled-only and transmission
+false. OCR/defacing, independent privacy acceptance, server clinician/study
+controls, provider context and audit/retention remain pending; arbitrary `/api/ai`
+stays HTTP 410 and forged client flags cannot enable it. See
+`docs/CLOUD_DEIDENTIFICATION.md`. Four modes, optional-LLM Evidence separation,
+.env.local, all R231/MPR/resource guards and R1 acceptance stay unchanged.

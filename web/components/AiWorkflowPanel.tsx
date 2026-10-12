@@ -61,7 +61,7 @@ export default function AiWorkflowPanel({ series }: { series: readonly DicomSeri
       <strong>AI-оркестр · v1.7</strong>
       <span>Этап подключения</span>
     </div>
-    <p className="ora-v17-muted">Выбор моделей работает. Передача снимков в облако и автоматический инференс пока выключены — реальные пациенты не отправляются.</p>
+    <p className="ora-v17-muted">Выбор моделей работает. Lungmask R231 запускается локально из MPR при установленном worker. Для будущего облачного анализа доступна подготовка копий без метаданных и скрытие надписей ниже; реальные пациенты пока не отправляются.</p>
     <div className="ora-v17-grid">
       <label htmlFor="ora-provider-choice">AI-шлюз
         <select id="ora-provider-choice" value={prefs.provider} onChange={e => set("provider", e.target.value as ProviderId)}>

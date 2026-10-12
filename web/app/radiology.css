@@ -283,6 +283,17 @@ button:disabled { cursor: not-allowed; }
 
 .ora-vision-plan-thumbnail{width:100%;max-height:130px;object-fit:contain;background:#102431;border:1px solid #d8e3e7;border-radius:6px;aspect-ratio:4/3}
 .ora-vision-plan-thumb-placeholder{min-height:76px;display:flex;align-items:center;justify-content:center;text-align:center;padding:10px;border:1px dashed #c7d9dd;border-radius:6px;font-size:9px;color:#8499a4;line-height:1.5;background:#f5f9f9}
+.ora-privacy-preparation{border:1px solid #c9dfd5;border-radius:9px;padding:14px;display:flex;flex-direction:column;gap:10px;background:#f6faf7}
+.ora-privacy-preparation h3{font-size:13px;color:#265947;margin:0}
+.ora-privacy-preparation p,.ora-privacy-preparation label{font-size:11px;line-height:1.6;margin:0;color:#48665a}
+.ora-privacy-preparation button,.ora-privacy-preparation select{align-self:flex-start;padding:8px;border:1px solid #b7d4c8;border-radius:6px;background:#fff;color:#1f6a50}
+.ora-privacy-preparation button:disabled{opacity:.45;cursor:not-allowed}
+.ora-privacy-preview-scroll{max-height:512px;overflow:auto;background:#000}
+.ora-privacy-preview{display:block;max-width:none;background:#000}
+.ora-privacy-rectangle{display:flex;gap:8px;flex-wrap:wrap}
+.ora-privacy-rectangle label{display:flex;flex-direction:column;gap:4px}
+.ora-privacy-rectangle input{width:80px;padding:6px;border:1px solid #c9dfd5;border-radius:5px;background:#fff;color:#264d3d}
+.ora-privacy-preparation [role=alert]{color:#9c3333}
 
 /* v1.8: read-only local provider / model-catalogue diagnostic */
 .ora-provider-panel{display:flex;flex-direction:column;gap:10px;padding:13px;border:1px solid #d9e8e8;border-radius:9px;background:#f8fbfc}
