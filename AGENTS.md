@@ -165,3 +165,15 @@ passport import uses unrecorded execution mode. Local review/export/MPR navigati
 do not sign a result or call LLMs. No volume copy, extra model execution, guard
 change or patient/cloud activation. See `docs/SPECIALIST_EVIDENCE.md` for the
 separate LLM contract and pending reconciliation/audit/sign-off boundaries.
+
+## Local measurement reconciliation increment — 2026-10-12
+
+Baseline main `0b84bc4` has PR #19 manually merged and green Web Actions.
+Specialist Evidence now accepts explicit bound `opus-llm-measurements/v1` claims
+and exports numeric differences/abstention as `opus-evidence-comparison/v1`.
+Templates contain no prediction and unknown coverage. Imported source/provider/
+coverage claims are unverified; equal numbers never imply clinical agreement.
+Legacy orchestra findings cannot be converted by guessing anatomy or coverage.
+No model rerun, extra volume copy, guard change, paid call or patient/cloud route.
+See `docs/EVIDENCE_RECONCILIATION.md`. Spatial ROI reconciliation, independent
+inference, durable physician audit/sign-off and R1 acceptance remain pending.

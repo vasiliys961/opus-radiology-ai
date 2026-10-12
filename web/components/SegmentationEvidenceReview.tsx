@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { reviewSegmentationEvidence, type EvidenceDecision, type SegmentationEvidence } from "../lib/segmentation-evidence";
 import type { Point3 } from "../lib/segmentation-mask";
+import EvidenceComparisonReview from "./EvidenceComparisonReview";
 
 /** Mount with a binding key so replacement/series changes discard old reviews. */
 export default function SegmentationEvidenceReview({evidence,onNavigate}: {
@@ -37,5 +38,6 @@ export default function SegmentationEvidenceReview({evidence,onNavigate}: {
       <p>SHA-256 исходного объёма: {review.source.inputSha256}<br/>SHA-256 маски: {review.mask.sha256}<br/>SHA-256 весов: {review.producer.model.weightsSha256}</p>
       <ul>{review.limitations.map((s,i)=><li key={i}>{s}</li>)}</ul></details>
     <small>Отметки существуют в памяти страницы и включаются в локальный JSON. Маска сохраняется для сравнения даже при отклонении. Электронной подписи и утверждённого заключения нет. Провайдеры Gemini/Claude не вызываются.</small>
+    <EvidenceComparisonReview evidence={review}/>
   </section>;
 }
