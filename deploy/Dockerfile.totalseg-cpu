@@ -1,0 +1,13 @@
+# Optional, heavy, CPU-only runtime image. Never built on user's Mac as part of CI.
+FROM python:3.11-slim
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
+WORKDIR /opt/opus
+# Supply a dedicated CPU torch wheel source; do not pull GPU CUDA dependencies.
+COPY services/imaging-ai/requirements.txt /opt/opus/requirements-base.txt
+RUN python -m pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.6.0
+RUN python -m pip install --no-cache-dir "TotalSegmentator==2.18.0" \
+    "numpy>=1.26.4,<2.0" "nibabel>=5.2,<6.0" "psutil>=6.0,<8.0"
+COPY services/imaging-ai/totalsegmentator_runtime_probe.py /opt/opus/runtime_probe.py
+RUN useradd --system --uid 10001 --home-dir /nonexistent --shell /usr/sbin/nologin opus
+USER 10001:10001
+ENTRYPOINT ["python", "/opt/opus/runtime_probe.py"]
