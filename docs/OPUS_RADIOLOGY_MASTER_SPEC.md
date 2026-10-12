@@ -402,3 +402,23 @@ unverified research draft requiring review. See `docs/EVIDENCE_RECONCILIATION.md
 Full spatial lesion/ROI reconciliation, authenticated independent model evidence,
 durable physician audit and clinical sign-off remain planned. Four modes, optional
 LLMs, privacy gates and memory/voxel/MPR limits are unchanged; R1 is still PARTIAL.
+
+## Local review journal increment — 2026-10-12
+
+Baseline main `601d78d` includes manually merged PR #21 and green Web Actions.
+The specialist Evidence card now records every status change/reset as a bounded
+local journal: revision, observation, previous/new status, declared timestamp
+and unverified reviewer role. Evidence/comparison export preserves that history;
+the standalone journal can restore decisions only onto the same verified
+source/input/request/mask/model. Current history must remain an identical prefix:
+older, forked, foreign or malformed imports cannot erase local decisions.
+
+No measured data/geometry/mask is replaced, and rejection still disables
+comparison/navigation for that target. Page-memory state and explicitly downloaded
+JSON are implemented; authenticated clinician access, tamper-proof persistent
+audit, trusted timestamps and signature remain planned. This is research review,
+not clinical sign-off. See `docs/EVIDENCE_REVIEW_HISTORY.md`.
+
+The 512-event/256-KB journal bound adds metadata only. No model rerun, volume copy,
+guard change, paid provider or patient/cloud/remote activation. Four modes and
+Mac/Safari/full-chest/clinical R1 acceptance remain unchanged.
