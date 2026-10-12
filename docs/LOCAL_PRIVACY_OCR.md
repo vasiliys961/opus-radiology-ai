@@ -99,3 +99,7 @@ regressions remain; no medical checkpoint or paid provider is rerun.
 The local OCR lifecycle and manual decisions now have a bounded, unsigned
 copy-bound journal with explicit downloads; see [PRIVACY_REVIEW_JOURNAL.md](PRIVACY_REVIEW_JOURNAL.md).
 It is separate from the still-missing protected server audit.
+
+Local bundle restoration shares the same-tab compute slot with OCR/R231,
+resets OCR/acknowledgement and manual checks, and preserves the prior journal.
+Restoring a saved decision does not replace current review.

@@ -34,7 +34,7 @@ Canonical vision and implementation truth: **[docs/OPUS_RADIOLOGY_MASTER_SPEC.md
 | LLM-01 | P1 | Optional LLM adapters: Gemini, Claude Opus, GPT and permitted open-compatible models; API keys server side; real credentials tested only in user environment. | PARTIAL (OpenRouter synthetic only, Polza diagnostic) |
 | LLM-02 | P0 | LLM is **not necessary** for full offline viewer/AI tasks and may never silently substitute for missing specialist model. | PARTIAL architectural constraint |
 | LLM-03 | P1 | Parallel Vision/model calls under budget, transparent 'what was actually seen' ledger, structured comparison, independent critique and evidence review. | PARTIAL (synthetic pipeline only) |
-| PRIV-01 | P0 | Real patient cloud egress remains hard OFF until server-verified auth, lawful purpose, de-ID tags + pixel checks, retention, processor contract/jurisdiction and audit; no client checkboxes overriding. | IMPLEMENTED OFF gate; bounded local pixel-only copies, PNG metadata stripping, RU/EN OCR text localization, actual raster redaction and SHA-bound manual review with bounded local journal/export PARTIAL; independent de-ID/server authorization/production policy PLANNED |
+| PRIV-01 | P0 | Real patient cloud egress remains hard OFF until server-verified auth, lawful purpose, de-ID tags + pixel checks, retention, processor contract/jurisdiction and audit; no client checkboxes overriding. | IMPLEMENTED OFF gate; bounded local pixel-only copies, PNG metadata stripping, RU/EN OCR text localization, actual raster redaction and SHA-bound manual review with bounded local journal/export/restore PARTIAL; independent de-ID/server authorization/production policy PLANNED |
 | PRIV-02 | P0 | Local patient analysis isolated: loopback-only worker, access control, no analytics/PHI logs/CI, local encrypted patient storage if persisted, audit and lifecycle deletion. | PARTIAL — research-only loopback boundary; clinical patient storage/access/audit not released |
 | PRIV-03 | P0 | Server patient mode: TLS, role-based access, tenant isolation, encryption, authenticated jobs, limited retention, documented applicable jurisdiction, private provider agreements. | PLANNED |
 | COST-01 | P1 | **No mandatory subscriptions** or paid APIs to operate browser, offline AI and local evidence; code/weights licenses independently verified. | PARTIAL (core OSS components) |
@@ -231,3 +231,21 @@ source verification, protected audit or a trusted de-ID release. Server/privacy/
 provider acceptance remains pending; patient cloud remains OFF and `/api/ai` 410.
 See `docs/PRIVACY_REVIEW_JOURNAL.md`. Four modes, optional-LLM Evidence separation,
 .env.local, R231/Safe/MPR guards and R1/Mac/Safari/full CT boundaries remain.
+
+
+## Local privacy bundle restoration — 2026-10-12 (feature branch)
+
+Baseline main `42ea468` includes manually merged PR #28 and green Web Actions.
+Local reviewed copy+journal files now restore onto matching current initial
+previews after bounded PNG/SHA/replay/digest checks and sequential cancellable
+decoding. Nonempty current history requires an exact same-session prefix;
+older/forked/foreign files and failures leave current work intact. Restore
+preserves raster redactions/history and appends v2 reset events, clearing both
+human checks and transient OCR/acknowledgement. Re-review is required for export.
+Native v1 files remain unchanged; new clients accept full v1/v2 bundles.
+
+This is explicit local restoration, not protected storage/authenticated provenance
+or trusted de-ID. No patient cloud release, server upload, model rerun, volume
+allocation, .env.local change or guard relaxation. Four modes, specialist/optional
+LLMs through Evidence and R1/Mac/Safari/full CT/clinical boundaries remain. See
+`docs/PRIVACY_REVIEW_JOURNAL.md` for versioning, limits and verification.

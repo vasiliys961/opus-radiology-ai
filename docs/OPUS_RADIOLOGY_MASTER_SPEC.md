@@ -536,3 +536,21 @@ source verification, protected audit or a trusted de-ID release. Server/privacy/
 provider acceptance remains pending; patient cloud remains OFF and `/api/ai` 410.
 See `docs/PRIVACY_REVIEW_JOURNAL.md`. Four modes, optional-LLM Evidence separation,
 .env.local, R231/Safe/MPR guards and R1/Mac/Safari/full CT boundaries remain.
+
+
+## Local privacy bundle restoration — 2026-10-12 (feature branch)
+
+Baseline main `42ea468` includes manually merged PR #28 and green Web Actions.
+Local reviewed copy+journal files now restore onto matching current initial
+previews after bounded PNG/SHA/replay/digest checks and sequential cancellable
+decoding. Nonempty current history requires an exact same-session prefix;
+older/forked/foreign files and failures leave current work intact. Restore
+preserves raster redactions/history and appends v2 reset events, clearing both
+human checks and transient OCR/acknowledgement. Re-review is required for export.
+Native v1 files remain unchanged; new clients accept full v1/v2 bundles.
+
+This is explicit local restoration, not protected storage/authenticated provenance
+or trusted de-ID. No patient cloud release, server upload, model rerun, volume
+allocation, .env.local change or guard relaxation. Four modes, specialist/optional
+LLMs through Evidence and R1/Mac/Safari/full CT/clinical boundaries remain. See
+`docs/PRIVACY_REVIEW_JOURNAL.md` for versioning, limits and verification.

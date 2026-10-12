@@ -40,7 +40,8 @@ reserved for the terminal event before OCR starts. At capacity, further actions
 refuse with save/restart guidance; entries are never silently truncated. Starting
 copies again creates a separate journal and clears checks; save the current file
 first. Source/plan replacement or unmount clears the local session. There is no
-import/restore endpoint, history merge, protected storage or authenticated audit.
+server import/restore endpoint, protected storage or authenticated audit. Explicit
+local bundle restoration is described below.
 
 Binding is to the initial sampled windowed copies, not an authenticated original
 study identity. Equal pixels can share hashes; a hash is not de-identification or
@@ -68,3 +69,53 @@ reserved capacity and fresh sessions. Synthetic browser tests exercise candidate
 bundle/journal downloads, unchanged source, review reset, history revisions/SHA,
 restart and actual local OCR on synthetic English/Russian text. Existing mask SHA,
 binding, MPR and resource regressions remain; no trained medical model rerun.
+
+
+## Explicit local restoration — 2026-10-12
+
+Baseline main `42ea468` includes manually merged PR #28 and green Web Actions.
+After loading the same selected CT/MR previews, choose **Восстановить копии с
+журналом JSON**. Only full reviewed copy+journal bundles v1/v2 are accepted;
+a candidate or metadata-only journal does not contain enough bound information.
+There is no server upload or automatic local storage. The file selector is
+cleared immediately and errors never include imported JSON fragments.
+
+The browser checks a 12 MiB file limit before reading. The pure parser also bounds
+its input to 12 MiB characters; direct callers must provide bounded text. Existing
+four-frame/2 MiB PNG/1,048,576 pixel/32 rectangle/128 event limits still apply.
+Candidate privacy flags, wrapper/journal versions, exact PNG bytes/CRC/SHA/grid,
+canonical journal SHA, replayed states and initial cleaned-copy bindings must
+match. Initial source matching uses current preview PNG hashes/modality/dimensions/
+order, not an imported UID or filename. Wrong selected frames or window refuse.
+
+An empty current journal may adopt a saved matching session. A nonempty journal
+accepts only the same session/creation time with its entire current prefix intact;
+older, forked or different-session files cannot overwrite it. No history merge or
+truncation is attempted. Validation/decoder failure or cancellation leaves current
+copies, history and checks intact. The original DICOM/MPR/mask/Evidence never change.
+
+After structural checks, imported PNGs decode sequentially, each with a 5-second
+limit and cancellation/unmount cleanup before committing the entire result.
+A same-tab compute slot serializes restoration with OCR/R231 until cleanup;
+this is not a cross-tab or OS RAM guarantee. Import parses bounded JSON/copy
+strings, not a study volume; this is not a measured Mac memory improvement.
+
+Successful restore preserves hidden raster pixels and prior history, then appends
+one `copy-restored` event per frame. Both human checks and transient OCR results/
+text acknowledgement are cleared: inspect the displayed copies again, optionally
+repeat OCR, then make fresh manual checks before candidate/bundle export.
+The parser requires room for restore entries and both new checks per frame.
+No imported mark is current acceptance or a cloud release.
+
+Restored histories and their journal/bundle export wrappers use **v2** so old
+clients refuse unknown reset semantics. Native v1 sessions and candidates retain
+their format. Both full bundle versions can be restored by the new client.
+SHA/digest checks detect accidental mismatch; an attacker can rewrite the whole
+unsigned bundle and recalculate them. Matching sampled pixels is not authenticated
+study provenance or independent de-identification. Patient cloud remains OFF.
+
+247 Web tests plus synthetic Chromium verify v1/v2 save/restore, actual black
+pixels and unchanged source, required re-review, exact history preservation,
+older/forked/wrong-source/corrupt/oversized refusal, version/flag/digest checks,
+error sanitization and decoder cancellation/cleanup. No real patient or trained
+medical model rerun, provider request, M1/Safari/full CT or clinical acceptance.
