@@ -40,6 +40,11 @@ jobs:
             --archives "${RUNNER_TEMP}/archives" \
             --destination "${RUNNER_TEMP}/models" --research-provision
           python scripts/verify-totalsegmentator-provision.py --weights-root "${RUNNER_TEMP}/models"
+          # Provisioner creates models/ as 0700; container runs as UID 10001.
+          # These are PUBLIC checkpoints on an ephemeral runner. Read-only Docker bind stays enforced.
+          find "${RUNNER_TEMP}/models" -type d -exec chmod 755 {} +
+          find "${RUNNER_TEMP}/models" -type f -exec chmod 644 {} +
+          test -r "${RUNNER_TEMP}/models/Dataset297_TotalSegmentator_total_3mm_1559subj/nnUNetTrainer_4000epochs_NoMirroring__nnUNetPlans__3d_fullres/fold_0/checkpoint_final.pth"
           rm -rf "${RUNNER_TEMP}/archives"
       - name: Build actual CPU model container
         run: docker build -f deploy/Dockerfile.totalseg-research -t opus-totalseg-experiment .
