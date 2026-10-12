@@ -1,7 +1,9 @@
 # Optional Linux CPU inference image: deliberately not built automatically in CI.
 FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 \
-    TOTALSEG_HOME_DIR=/tmp/opus-totalseg-config TOTALSEG_WEIGHTS_PATH=/models
+    TOTALSEG_HOME_DIR=/tmp/opus-totalseg-config TOTALSEG_WEIGHTS_PATH=/models \
+    HOME=/tmp/opus-home XDG_CACHE_HOME=/tmp/opus-home/.cache \
+    MPLCONFIGDIR=/tmp/opus-home/.config/matplotlib TORCH_HOME=/tmp/opus-home/.cache/torch
 WORKDIR /opt/opus
 COPY deploy/totalseg-cpu-constraints.txt /opt/opus/constraints.txt
 RUN python -m pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu \
