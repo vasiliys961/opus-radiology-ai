@@ -202,3 +202,16 @@ identity, clinical verification, signature, protected database or automatic
 browser persistence is implied. See `docs/EVIDENCE_REVIEW_HISTORY.md`.
 No model rerun, volume allocation, guard relaxation, .env.local change or
 patient/cloud/remote activation. Four modes and R1 boundaries remain unchanged.
+
+## Local printable Evidence report — 2026-10-12
+
+Baseline main `2c5d090` has PR #22 manually merged and green Web Actions.
+Source/model-bound specialist metadata, optional imported LLM claims/QC and local
+review history now export to self-contained HTML with print CSS. It remains an
+unsigned research draft; empty mask/missing claims/zero values/rejections and
+abstention are kept distinct. Known metadata is allowlisted/escaped, with no
+images, scripts, links, external resources or unknown-buffer serialization.
+Local browser printing/PDF is optional; authenticated clinical reports, Safari
+print acceptance and R1 acceptance remain pending. See `docs/EVIDENCE_REPORT.md`.
+No model rerun, volume copy, resource guard change, .env.local change or
+patient/cloud/remote activation. Four modes and optional-LLM separation remain.

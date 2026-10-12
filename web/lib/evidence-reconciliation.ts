@@ -73,6 +73,11 @@ export function parseLlmMeasurements(raw: string): LlmMeasurements {
   if (new TextEncoder().encode(raw).byteLength > MAX_LLM_MEASUREMENTS_BYTES) throw new Error("JSON гипотез слишком большой (максимум 512 КБ).");
   let value: unknown;
   try { value = JSON.parse(raw); } catch { throw new Error("Файл не содержит корректный JSON."); }
+  return normalizeLlmMeasurements(value);
+}
+
+/** Validate/allowlist metadata without serializing unknown image/secret fields. */
+export function normalizeLlmMeasurements(value: unknown): LlmMeasurements {
   const r = object(value);
   if (r.schema === "opus-orchestra/v1" || r.schema === "opus-evidence/v1")
     throw new Error("Этот LLM-паспорт не содержит SHA входа, целевой метки и сопоставимого охвата. Используйте просмотр AI-находок; для сравнения нужен opus-llm-measurements/v1.");

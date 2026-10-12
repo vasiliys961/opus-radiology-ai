@@ -30,6 +30,8 @@ verifies a result. Rejection keeps the mask visible for comparison. Changes and
 resets now append a bounded local revision history included in Evidence/comparison
 downloads, with a standalone source-bound journal export/restore. See
 `EVIDENCE_REVIEW_HISTORY.md`. Marks otherwise live in page memory.
+The card also downloads a self-contained printable HTML research report; the
+comparison card adds imported hypotheses/QC. See `EVIDENCE_REPORT.md`.
 Successful replacement, mask deletion and series/MPR teardown discard the prior
 review. A failed replacement retains the previously bound mask and Evidence.
 

@@ -406,6 +406,15 @@ try {
   assert.equal(evidence.reviewHistory.events[0].to,'requires_recheck');
   assert.equal(evidence.producer.executionMode,'local');
   assert.doesNotMatch(JSON.stringify(evidence),/synthetic-test-token|sopInstanceUid|patientName/);
+  const downloadReport=async(button,path)=>{
+    const event=page.waitForEvent('download');await button.click();const file=await event;
+    await file.saveAs(path);return readFile(path,'utf8');
+  };
+  const specialistHtml=await downloadReport(evidencePanel.getByRole('button',{name:'Скачать отчёт Evidence HTML',exact:true}),join(fixture,'evidence-report.html'));
+  assert.match(specialistHtml,/НЕУТВЕРЖДЁННЫЙ ИССЛЕДОВАТЕЛЬСКИЙ ЧЕРНОВИК/);
+  assert.match(specialistHtml,/Гипотезы LLM не импортированы/);
+  assert.match(specialistHtml,/На перепроверку/);
+  assert.ok(specialistHtml.includes(evidence.mask.sha256));
   // Shared LPS focus must synchronise all three plane controls to the exported
   // occupied voxel, respecting each viewport's camera direction.
   const beforeEvidenceNavigation=await page.locator('.ora-mpr-controls label').allTextContents();
@@ -427,7 +436,7 @@ try {
   assert.ok(hypotheses.claims.every(c=>c.valueMl===null&&c.scope==='unknown'));
   hypotheses.producer={kind:'llm',provider:'synthetic-fixture',model:'no-real-LLM'};
   hypotheses.claims[0]={...hypotheses.claims[0],scope:'loaded-slices',
-    valueMl:evidence.observations[0].volumeMl+1,statement:'Synthetic volume discrepancy; no LLM invoked.'};
+    valueMl:evidence.observations[0].volumeMl+1,statement:'Synthetic volume discrepancy; <img src="https://example.invalid/x" onerror="alert(1)"> no LLM invoked.'};
   const hypothesisInput=comparisonPanel.locator('input[type=file]');
   const importHypotheses=async value=>hypothesisInput.setInputFiles({name:'synthetic-hypotheses.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(value))});
   await importHypotheses(hypotheses);
@@ -486,6 +495,19 @@ try {
   assert.equal(compared.specialist.reviewHistory.events.length,1);
   assert.equal(compared.llm.claims[0].valueMl,evidence.observations[0].volumeMl+1);
   assert.doesNotMatch(JSON.stringify(compared),/synthetic-test-token|sopInstanceUid|patientName/);
+  const combinedHtml=await downloadReport(comparisonPanel.getByRole('button',{name:'Скачать отчёт с сопоставлением HTML',exact:true}),join(fixture,'comparison-report.html'));
+  assert.match(combinedHtml,/Числовое расхождение/);assert.match(combinedHtml,/В точке другая метка/);
+  assert.match(combinedHtml,/Происхождение, независимость и охват не удостоверены/);
+  assert.doesNotMatch(combinedHtml,/<img|<script|<iframe|<a\s/i);
+  const reportPage=await browser.newPage({viewport:{width:1200,height:1000}}),reportRequests=[];
+  reportPage.on('request',request=>reportRequests.push(request.url()));
+  await reportPage.setContent(combinedHtml,{waitUntil:'load'});
+  assert.equal(await reportPage.locator('img,script,iframe,a,form').count(),0);
+  assert.match(await reportPage.locator('body').innerText(),/<img src=/); // text only, never parsed as markup
+  await reportPage.emulateMedia({media:'print'});
+  await reportPage.pdf({path:join(results,'synthetic-evidence-report.pdf'),preferCSSPageSize:true,printBackground:true});
+  await reportPage.screenshot({path:join(results,'synthetic-evidence-report.png'),fullPage:true});
+  assert.deepEqual(reportRequests,[]);await reportPage.close();
   await comparisonPanel.getByRole('button',{name:'Удалить гипотезы LLM',exact:true}).click();
   assert.equal(await comparisonPanel.locator('.ora-comparison-list').count(),0);
   await importHypotheses(hypotheses);
@@ -534,12 +556,16 @@ try {
   await importHistory(continued);
   await historyPanel.locator('[role=alert]').waitFor({state:'detached'});
   assert.equal(await historyPanel.locator('[role=alert]').count(),0);
+  const rejectedHtml=await downloadReport(comparisonPanel.getByRole('button',{name:'Скачать отчёт с сопоставлением HTML',exact:true}),join(fixture,'rejected-report.html'));
+  assert.match(rejectedHtml,/Версия 4/);assert.match(rejectedHtml,/Отклонено локально/);
+  assert.match(rejectedHtml,/Нельзя сопоставить/);assert.match(rejectedHtml,/Целевая метка отклонена/);
   assert.equal(await page.locator('.ora-mpr-mask-overlay').count(),3);
   await page.getByRole('button',{name:'Удалить маску',exact:true}).click();
   assert.equal(await evidencePanel.count(),0);
   assert.equal(await comparisonPanel.count(),0);
   assert.equal(await historyPanel.count(),0);
   console.log('Local review history: immutable reset, journal/export, source-bound extension restore, older/forked/foreign refusal, comparison refresh and lifecycle clear (synthetic only)');
+  console.log('Local printable report: specialist/LLM separation, escaped markup, no requests, print-to-PDF and current rejected history (synthetic only)');
   console.log('Local metadata reconciliation: blank template, numeric discrepancy, source/scope abstention, failed-import retention, review-aware export and lifecycle clear (synthetic only)');
   console.log('LLM LPS anchors: active mask target/different label, three-plane navigation, wrong mask/source/outside/rejected abstention and export (synthetic only)');
   console.log('Bound specialist Evidence -> local review/export -> occupied-point MPR navigation -> lifecycle clear passed (synthetic only)');
