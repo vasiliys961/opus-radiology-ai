@@ -16,6 +16,9 @@ services:
     cpus: "4.0"
     tmpfs:
       - /tmp:size=2g,mode=1777
+    environment:
+      TOTALSEG_HOME_DIR: /tmp/opus-totalseg-config
+      TOTALSEG_WEIGHTS_PATH: /models
     volumes:
       - type: bind
         source: ${OPUS_TOTALSEG_MODEL_HOME:?Provide an existing official TotalSegmentator model cache}
