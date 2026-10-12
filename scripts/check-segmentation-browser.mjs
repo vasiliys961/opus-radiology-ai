@@ -198,6 +198,13 @@ try {
   const reviewText=privacy.getByRole('checkbox',{name:'Проверил копию: идентифицирующих надписей нет',exact:true});
   const reviewFace=privacy.getByRole('checkbox',{name:'Проверил копию: лица и узнаваемых признаков нет',exact:true});
   const privacyDownloadButton=privacy.getByRole('button',{name:'Скачать локальный пакет копий JSON',exact:true});
+  const savePrivacyJson=async(region,buttonName,filename)=>{
+    const downloaded=page.waitForEvent('download');await region.getByRole('button',{name:buttonName,exact:true}).click();
+    const path=join(fixture,filename);await (await downloaded).saveAs(path);return JSON.parse(await readFile(path,'utf8'));
+  };
+  const journalButton=privacy.getByRole('button',{name:'Скачать журнал без пикселей JSON',exact:true});
+  const bundleButton=privacy.getByRole('button',{name:'Скачать копии с журналом JSON',exact:true});
+  assert.equal(await bundleButton.isDisabled(),true);
   assert.equal(await privacyDownloadButton.isDisabled(),true);
   await privacySelect.selectOption('1');await reviewText.check();await reviewFace.check();
   const originalThumbnail=await page.locator('.ora-vision-plan-thumbnail').nth(1).getAttribute('src');
@@ -233,12 +240,29 @@ try {
     while(at<png.length){types.push(png.subarray(at+4,at+8).toString('ascii'));at+=12+png.readUInt32BE(at);}
     assert.ok(types.every(t=>['IHDR','IDAT','IEND'].includes(t)));
   }
+  const bundle=await savePrivacyJson(privacy,'Скачать копии с журналом JSON','privacy-review-bundle.json');
+  assert.equal(bundle.schema,'opus-vision-privacy-review/v1');
+  assert.deepEqual(bundle.candidate.frames,privacyPacket.frames);
+  assert.equal(bundle.review.journal.actor,'local-unverified');assert.equal(bundle.review.transmissionPermitted,false);
+  const history=bundle.review.journal.events;assert.equal(history.length,11);
+  assert.deepEqual(history.map(e=>e.revision),Array.from({length:11},(_,i)=>i+1));
+  assert.equal(history[2].action.kind,'redacted');assert.equal(history[2].frameId,'frame-2');
+  assert.equal(history[2].sha256,bundle.review.journal.initialFrames[1].sha256);
+  assert.equal(history[2].action.nextSha256,privacyPacket.frames[1].sha256);
+  assert.notEqual(history[2].sha256,history[2].action.nextSha256);
+  assert.equal(bundle.review.journalSha256,createHash('sha256').update(JSON.stringify(bundle.review.journal)).digest('hex'));
+  const journalOnly=await savePrivacyJson(privacy,'Скачать журнал без пикселей JSON','privacy-journal-only.json');
+  assert.deepEqual(journalOnly,bundle.review);
+  assert.doesNotMatch(JSON.stringify(journalOnly),new RegExp(phiSentinel+'|pngBase64|sopInstanceUid|seriesUid|filename|clinicalContext'));
   await privacySelect.selectOption('1');
   assert.equal(await privacyImage.evaluate(img=>img.getBoundingClientRect().width===img.naturalWidth),true);
   await privacy.screenshot({path:join(results,'synthetic-privacy-preparation.png')});
   await privacy.getByRole('button',{name:'Создать копии заново',exact:true}).click();
   assert.equal(await reviewText.isChecked(),false);assert.equal(await reviewFace.isChecked(),false);
   assert.equal(await privacyDownloadButton.isDisabled(),true);
+  assert.equal(await bundleButton.isDisabled(),true);assert.equal(await journalButton.isDisabled(),false);
+  const resetJournal=await savePrivacyJson(privacy,'Скачать журнал без пикселей JSON','privacy-reset-journal.json');
+  assert.equal(resetJournal.journal.events.length,0);assert.notEqual(resetJournal.journal.sessionId,journalOnly.journal.sessionId);
   page.off('request',observePrivacyRequest);assert.deepEqual(privacyRequests,[]);
   const forgedPrivacyStatus=await page.request.post(baseUrl+'/api/ai',{
     data:{...privacyPacket,transmissionPermitted:true,deidentificationVerified:true,physicianAuthentication:true,studyConsent:true},
@@ -745,6 +769,7 @@ try {
   const ocrRequests=[],watchOcr=request=>ocrRequests.push({url:request.url(),method:request.method(),body:request.postData()});
   page.on('request',watchOcr);
   await ocrPanel.getByRole('button',{name:'Найти надписи локально',exact:true}).click();
+  assert.equal(await ocrPrivacy.getByRole('button',{name:'Скачать журнал без пикселей JSON',exact:true}).isDisabled(),true);
   await ocrPanel.getByRole('button',{name:'Отменить OCR',exact:true}).click();
   await ocrPanel.getByText(/OCR отменён/).waitFor();
   assert.equal(await ocrPrivacy.getByRole('button',{name:'Скачать локальный пакет копий JSON',exact:true}).isDisabled(),true);
@@ -779,6 +804,12 @@ try {
   assert.equal(await ocrPrivacy.getByRole('checkbox',{name:'Проверил копию: идентифицирующих надписей нет',exact:true}).isChecked(),false);
   assert.equal(await ocrPrivacy.getByRole('button',{name:'Скачать локальный пакет копий JSON',exact:true}).isDisabled(),true);
   page.off('request',watchOcr);
+  const ocrJournal=await savePrivacyJson(ocrPrivacy,'Скачать журнал без пикселей JSON','privacy-ocr-journal.json');
+  assert.deepEqual(ocrJournal.journal.events.map(e=>e.action.kind),['ocr-started','ocr-cancelled','ocr-started','ocr-completed',
+    'text-retained','review-set','ocr-started','ocr-completed','redacted','ocr-started','ocr-completed']);
+  assert.equal(ocrJournal.journal.events.at(-1).action.regionCount,0);
+  assert.equal(ocrJournal.journal.events[3].action.regionCount,detected);
+  assert.doesNotMatch(JSON.stringify(ocrJournal),/TEST|ТЕСТ|pngBase64|sopInstanceUid|clinicalContext|errorMessage/);
   assert.ok(ocrRequests.some(r=>r.url.endsWith('/eng.traineddata.gz')));
   assert.ok(ocrRequests.some(r=>r.url.endsWith('/rus.traineddata.gz')));
   const unexpectedOcrRequests=ocrRequests.filter(r=>!(r.method==='GET'&&!r.body&&(r.url.startsWith(baseUrl+'/api/privacy-ocr/assets/v1/')||

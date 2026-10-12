@@ -4,6 +4,12 @@ import { buildVisionPrivacyPacket,createPrivacyFrame,markPrivacyReview,pngFromBa
   type PrivacyFrame,type PrivacyRectangle } from "../lib/vision-privacy";
 import { redactPrivacyRegions } from "../lib/vision-privacy-browser";
 import { scanPrivacyText,type PrivacyOcrResult } from "../lib/privacy-ocr";
+import { appendPrivacyEvent,buildPrivacyReviewBundle,createPrivacyJournal,exportPrivacyJournal,MAX_PRIVACY_EVENTS,
+  type PrivacyAction,type PrivacyJournal } from "../lib/privacy-review-journal";
+
+const actionLabels:Record<PrivacyAction["kind"],string>={redacted:"Скрытие областей", "ocr-started":"OCR начат",
+  "ocr-completed":"OCR завершён","ocr-cancelled":"OCR отменён","ocr-failed":"OCR не завершён",
+  "text-retained":"Надписи оставлены по ручной отметке","review-set":"Ручная проверка"};
 
 /** OCR reads same-origin fixed assets only. No image upload or recognized-text export. */
 export default function VisionPrivacyPreparation({previews,modality}:{previews:readonly (string|undefined)[];modality:string}) {
@@ -12,6 +18,8 @@ export default function VisionPrivacyPreparation({previews,modality}:{previews:r
   const [rectangle,setRectangle]=useState<PrivacyRectangle>({x:0,y:0,width:1,height:1});
   const [ocr,setOcr]=useState<Record<string,PrivacyOcrResult>>({}),[ocrBusy,setOcrBusy]=useState(false),[ocrNotice,setOcrNotice]=useState("");
   const [keptText,setKeptText]=useState<Record<string,string>>({});
+  const [journal,setJournal]=useState<PrivacyJournal|null>(null);
+  const journalRef=useRef<PrivacyJournal|null>(null);
   const scan=useRef<AbortController|null>(null);
   const generation=useRef(0);
   useEffect(()=>()=>{++generation.current;scan.current?.abort();},[]);
@@ -20,12 +28,19 @@ export default function VisionPrivacyPreparation({previews,modality}:{previews:r
   const unresolvedText=!!currentOcr?.regions.length&&keptText[frame.frameId]!==frame.sha256;
   let validRectangle=false;try{if(frame){validatePrivacyRectangle(rectangle,frame.width,frame.height);validRectangle=true;}}catch{}
   const reviewed=frames.length>0&&frames.every(f=>f.pixelReviewSha256===f.sha256&&f.visualReviewSha256===f.sha256);
+  const record=(target:PrivacyFrame,action:PrivacyAction)=>{
+    if(!journalRef.current)throw new Error("Сначала создайте копии и локальный журнал.");
+    const next=appendPrivacyEvent(journalRef.current,target.frameId,target.sha256,action,new Date().toISOString());
+    journalRef.current=next;setJournal(next);
+  };
   const prepare=()=>{
     ++generation.current;setError("");
     try{
       if(!["CT","MR"].includes(modality)||!previews.length||previews.length>4||previews.some(p=>!p?.startsWith("data:image/png;base64,")))
         throw new Error("Сначала дождитесь локальных PNG-миниатюр всех выбранных срезов.");
       const next=previews.map((url,i)=>createPrivacyFrame(pngFromBase64(url!.split(",")[1]),`frame-${i+1}`,modality as "CT"|"MR"));
+      const nextJournal=createPrivacyJournal(next,crypto.randomUUID(),new Date().toISOString());
+      journalRef.current=nextJournal;setJournal(nextJournal);
       setFrames(next);setSelected(0);setRectangle({x:0,y:0,width:1,height:1});setOcr({});setKeptText({});setOcrNotice("");
     }catch(e){setError(e instanceof Error?e.message:"Не удалось подготовить копии.");}
   };
@@ -33,13 +48,16 @@ export default function VisionPrivacyPreparation({previews,modality}:{previews:r
     if(!frame)return;const version=++generation.current;setBusy(true);setError("");
     try{
       const next=await redactPrivacyRegions(frame,regions);if(version!==generation.current)return;
+      record(frame,{kind:"redacted",nextSha256:next.sha256,rectangles:regions});
       setFrames(previous=>previous.map(f=>f.frameId===next.frameId?next:f));
       setOcrNotice("Копия изменена. Повторите поиск надписей и ручную проверку.");
     }catch(e){if(version===generation.current)setError(e instanceof Error?e.message:"Не удалось скрыть область.");}
     finally{if(version===generation.current)setBusy(false);}
   };
   const findText=async()=>{
-    if(!frame)return;const controller=new AbortController(),version=++generation.current;scan.current=controller;
+    if(!frame)return;
+    try{record(frame,{kind:"ocr-started"});}catch(e){setError(e instanceof Error?e.message:"Не удалось записать действие.");return;}
+    const controller=new AbortController(),version=++generation.current;scan.current=controller;
     setBusy(true);setOcrBusy(true);setError("");setOcrNotice("Локальный поиск надписей · до 30 секунд…");
     setFrames(previous=>previous.map(f=>f.frameId===frame.frameId?{...f,pixelReviewSha256:null,visualReviewSha256:null}:f));
     setOcr(previous=>{const next={...previous};delete next[frame.frameId];return next;});
@@ -47,8 +65,10 @@ export default function VisionPrivacyPreparation({previews,modality}:{previews:r
     try{
       const result=await scanPrivacyText(frame,controller.signal);if(version!==generation.current)return;
       if(controller.signal.aborted)throw new DOMException("OCR отменён.","AbortError");
+      record(frame,{kind:"ocr-completed",regionCount:result.regions.length});
       setOcr(previous=>({...previous,[frame.frameId]:result}));setOcrNotice("");
     }catch(e){if(version===generation.current){
+      record(frame,{kind:controller.signal.aborted?"ocr-cancelled":"ocr-failed"});
       if(controller.signal.aborted)setOcrNotice("OCR отменён. Автоматическая проверка не выполнена.");
       else {setOcrNotice("");setError(e instanceof Error?e.message:"OCR не завершён.");}
     }}finally{if(version===generation.current){scan.current=null;setBusy(false);setOcrBusy(false);}}
@@ -56,13 +76,25 @@ export default function VisionPrivacyPreparation({previews,modality}:{previews:r
   const review=(kind:"pixel"|"visual",checked:boolean)=>{
     if(!frame)return;
     if(checked&&unresolvedText){setError("Сначала скройте найденные надписи или отметьте их как неидентифицирующие после просмотра.");return;}
-    setFrames(previous=>previous.map(f=>f.frameId===frame.frameId?markPrivacyReview(f,kind,checked):f));
-  };
-  const download=()=>{
     try{
-      const packet=buildVisionPrivacyPacket(frames,crypto.randomUUID());
+      record(frame,{kind:"review-set",review:kind,checked});
+      setFrames(previous=>previous.map(f=>f.frameId===frame.frameId?markPrivacyReview(f,kind,checked):f));setError("");
+    }catch(e){setError(e instanceof Error?e.message:"Не удалось записать проверку.");}
+  };
+  const retainText=()=>{
+    if(!frame)return;
+    try{record(frame,{kind:"text-retained"});setKeptText(previous=>({...previous,[frame.frameId]:frame.sha256}));setError("");setOcrNotice("");}
+    catch(e){setError(e instanceof Error?e.message:"Не удалось записать отметку.");}
+  };
+  const download=(kind:"candidate"|"journal"|"bundle"="candidate")=>{
+    try{
+      if(!journalRef.current)throw new Error("Сначала создайте копии.");
+      // Even the legacy candidate export must match the recorded actions.
+      const review=exportPrivacyJournal(journalRef.current,frames);
+      const packet=kind==="journal"?review:kind==="bundle"?buildPrivacyReviewBundle(frames,journalRef.current,crypto.randomUUID()):
+        buildVisionPrivacyPacket(frames,crypto.randomUUID());
       const url=URL.createObjectURL(new Blob([JSON.stringify(packet)],{type:"application/json"}));
-      const a=document.createElement("a");a.href=url;a.download="opus-local-privacy-candidate.json";
+      const a=document.createElement("a");a.href=url;a.download=`opus-local-privacy-${kind}.json`;
       a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);setError("");
     }catch(e){setError(e instanceof Error?e.message:"Не удалось сохранить пакет.");}
   };
@@ -93,8 +125,7 @@ export default function VisionPrivacyPreparation({previews,modality}:{previews:r
           {currentOcr.regions.length>0&&<>
             <button type="button" disabled={busy||frame.redactions.length+currentOcr.regions.length>32}
               onClick={()=>void redact(currentOcr.regions.map(r=>r.rectangle))}>Скрыть найденные надписи</button>
-            <button type="button" disabled={busy} onClick={()=>{setKeptText(previous=>({...previous,[frame.frameId]:frame.sha256}));setError("");
-              setOcrNotice("");}}>Оставить надписи: не идентифицируют пациента</button>
+            <button type="button" disabled={busy||!unresolvedText} onClick={retainText}>Оставить надписи: не идентифицируют пациента</button>
           </>}
         </>}
         <p>Поиск на русском и английском выполняется в браузере на одном кадре. Ресурсы OCR загружаются с этого приложения, пиксели на сервер не отправляются. OCR не проверяет лицо и не подтверждает обезличивание.</p>
@@ -107,7 +138,19 @@ export default function VisionPrivacyPreparation({previews,modality}:{previews:r
       <p role="status">Скрытых областей: {frame.redactions.length}. Изменение копии сбрасывает её проверку.</p>
       <label><input type="checkbox" disabled={busy} checked={frame.pixelReviewSha256===frame.sha256} onChange={e=>review("pixel",e.target.checked)}/> Проверил копию: идентифицирующих надписей нет</label>
       <label><input type="checkbox" disabled={busy} checked={frame.visualReviewSha256===frame.sha256} onChange={e=>review("visual",e.target.checked)}/> Проверил копию: лица и узнаваемых признаков нет</label>
-      <button type="button" disabled={busy||!reviewed} onClick={download}>Скачать локальный пакет копий JSON</button>
+      <button type="button" disabled={busy||!reviewed} onClick={()=>download()}>Скачать локальный пакет копий JSON</button>
+      {journal&&<section aria-label="Локальный журнал приватности">
+        <p role="status">Действий в журнале: {journal.events.length} из {MAX_PRIVACY_EVENTS}. Время и проверяющий не подтверждены.</p>
+        <details><summary>История действий</summary><ol>{journal.events.map(e=><li key={e.revision}>
+          {e.revision}. Кадр {e.frameId.slice(-1)} · {actionLabels[e.action.kind]} · {e.declaredAt}
+          {e.action.kind==="ocr-completed"&&` · областей: ${e.action.regionCount}`}
+          {e.action.kind==="redacted"&&` · областей: ${e.action.rectangles.length}`}
+          {e.action.kind==="review-set"&&` · ${e.action.review==="pixel"?"надписи":"узнаваемые признаки"}: ${e.action.checked?"отметка поставлена":"отметка снята"}`}
+        </li>)}</ol></details>
+        <button type="button" disabled={busy} onClick={()=>download("journal")}>Скачать журнал без пикселей JSON</button>
+        <button type="button" disabled={busy||!reviewed} onClick={()=>download("bundle")}>Скачать копии с журналом JSON</button>
+        <p>Сохранение только по вашей команде. Новый набор копий заменит текущий журнал и проверки; сохраните нужный файл заранее. Журнал содержит привязки SHA, но не слова OCR и не оригинальные UID. Пакет с копиями содержит чувствительные пиксели. Это локальные неподписанные записи, не разрешение на облачную передачу.</p>
+      </section>}
     </>}
     <p>Это ручная локальная проверка, не автоматическое подтверждение обезличивания. Пакет может содержать чувствительные пиксели; храните локально. Отправка ещё недоступна: серверная проверка защиты и авторизованный cloud-контур не подключены.</p>
   </section>;

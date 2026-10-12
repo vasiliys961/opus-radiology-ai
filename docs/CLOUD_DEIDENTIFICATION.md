@@ -18,7 +18,9 @@ Baseline main `335d6d3` includes manually merged PR #25 and green Web Actions.
 3. Review the exact copy for identifying text and recognizable visual features.
    Both local checks bind to its SHA. Any redaction resets both checks. Selecting
    another copy preserves each copy's state. Starting again resets all checks.
-4. After both checks on every copy, download the local candidate JSON. No fetch,
+4. After both checks on every copy, download the local candidate JSON.
+   A separate local action journal and reviewed copy+journal bundle are also
+   available; see [PRIVACY_REVIEW_JOURNAL.md](PRIVACY_REVIEW_JOURNAL.md). No fetch,
    upload, provider call, automatic persistence or clinical analysis occurs.
    Treat the file as sensitive: manual review is not proof of anonymity.
 
@@ -92,7 +94,7 @@ Primary references:
 From `web/`: `npm test`, `npm run typecheck`, `npm run build`,
 `npm run test:browser`.
 
-230 Web unit/contract tests cover metadata stripping with unchanged raster bytes,
+239 Web unit/contract tests cover metadata stripping with unchanged raster bytes,
 CRC/shape/critical-chunk/byte/pixel guards, strict base64 at the maximum size,
 rectangle bounds, exact-copy review hashes, field allowlisting, source-free IDs
 and refusal to promote local checks to cloud authorization. Synthetic browser
