@@ -74,7 +74,7 @@ export default function AiWorkflowPanel({ series }: { series: readonly DicomSeri
           {modelsForRole("vision").map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
         </select>
       </label>
-      <label htmlFor="ora-clinical-choice">Клинический синтез
+      <label htmlFor="ora-clinical-choice">Оценщик · проверка и синтез
         <select id="ora-clinical-choice" value={prefs.clinical} onChange={e => set("clinical", e.target.value)}>
           {modelsForRole("clinical").map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
         </select>

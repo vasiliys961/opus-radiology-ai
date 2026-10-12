@@ -216,7 +216,7 @@ export async function runVisionOrchestra(
   }));
   const candidateIds = roles.flatMap(r => r.observations.map(o => r.role + ":" + o.id));
   const critique = await call({
-    provider: input.provider, role: "vision", model: input.visionModel,
+    provider: input.provider, role: "vision", model: input.clinicalModel,
     messages: criticMessages(input, roles), temperature: 0,
   }, signal);
   const critic = parseCritic(parseStrictObject(readCompletionText(critique)), ids, candidateIds);

@@ -1,5 +1,9 @@
 # v1.7 — Gemini Vision Orchestra, synthetic integration milestone
 
+> Исторический этап. Текущий выбор Gemini 3.8/оценщиков, Polza/OpenRouter и ограничения запуска:
+> [PREFERRED_AI_MODELS.md](PREFERRED_AI_MODELS.md). Ниже описано прежнее поведение.
+
+
 Branch: feature/v1.7-gemini-orchestra
 
 ## Implemented code

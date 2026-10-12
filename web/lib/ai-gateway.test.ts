@@ -9,6 +9,19 @@ const request: AiGatewayRequest = {
     {role:"user",content:[{type:"text",text:"MATHEMATICAL PHANTOM"}]},
   ],
 };
+test("Selected evaluator versions omit unsupported temperature on Polza while retaining the output cap",async()=>{
+  const oldKey=process.env.POLZA_API_KEY,oldFetch=globalThis.fetch;
+  process.env.POLZA_API_KEY="polza-fixture";
+  globalThis.fetch=async(url,options)=>{
+    assert.equal(String(url),"https://polza.ai/api/v1/chat/completions");
+    const data=JSON.parse(String(options?.body));assert.ok(["openai/gpt-6.1-sol","anthropic/claude-sonnet-5.5","anthropic/claude-opus-5.5"].includes(data.model));
+    assert.equal(Object.hasOwn(data,"temperature"),false);assert.equal(data.max_tokens,1200);
+    return new Response(JSON.stringify({choices:[]}));
+  };
+  try{for(const model of ["openai/gpt-6.1-sol","anthropic/claude-sonnet-5.5","anthropic/claude-opus-5.5"])
+    await callAiGateway({...request,provider:"polza",model});}
+  finally{globalThis.fetch=oldFetch;if(oldKey===undefined)delete process.env.POLZA_API_KEY;else process.env.POLZA_API_KEY=oldKey;}
+});
 test("Provider gateway transmits configured server bearer and bounded token request",async()=>{
   const oldKey=process.env.OPENROUTER_API_KEY;
   const fetchOld=globalThis.fetch;

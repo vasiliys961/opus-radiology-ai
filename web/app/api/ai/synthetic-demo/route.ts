@@ -80,8 +80,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({error:"Only synthetic modality, region, catalogue model IDs and explicit cost acceptance allowed"},
       {status:400, headers:HEADERS});
   }
-  if (!process.env.OPENROUTER_API_KEY?.trim()) {
-    return NextResponse.json({error:"OpenRouter API key not configured in web/.env.local"},
+  const gateway=input.provider==="polza"?"Polza":"OpenRouter";
+  const keyName=input.provider==="polza"?"POLZA_API_KEY":"OPENROUTER_API_KEY";
+  if (!process.env[keyName]?.trim()) {
+    return NextResponse.json({error:`${gateway}: серверный ключ не настроен`},
       {status:503, headers:HEADERS});
   }
   const release = sharedSyntheticTrialLimiter.acquire();
@@ -91,18 +93,18 @@ export async function POST(request: NextRequest) {
   }
   try {
     const result = await executeSyntheticTrial(input,process.env,fetch,
-      callAiGateway,AbortSignal.timeout(240_000));
+      callAiGateway,AbortSignal.any([request.signal,AbortSignal.timeout(240_000)]));
     return NextResponse.json(result,{headers:HEADERS});
   } catch (error) {
     // Provider raw responses, keys and stack traces must never reach a client.
     if (error instanceof SyntheticTrialFailure) {
       const problems: Record<SyntheticTrialFailure["code"],string> = {
-        "no-key":"OpenRouter key not configured",
-        "catalog-unavailable":"OpenRouter catalogue not reachable with current key",
+        "no-key":"Server key not configured",
+        "catalog-unavailable":"Provider catalogue not reachable with current key",
         "unsupported-model":"Selected models are missing or do not declare required image/text modalities",
         "invalid-result":"Remote result failed the evidence provenance checks",
       };
-      return NextResponse.json({error:problems[error.code]},
+      return NextResponse.json({error:gateway+": "+problems[error.code]},
         {status:error.code === "unsupported-model" ? 422 : 502,headers:HEADERS});
     }
     // Diagnostic codes are safe; provider response bodies and credentials
@@ -119,8 +121,8 @@ export async function POST(request: NextRequest) {
         "429":"OpenRouter rate limit or quota exceeded",
         "503":"OpenRouter endpoint temporarily unavailable",
       };
-      return NextResponse.json({error:hints[providerStatus] ??
-        "OpenRouter returned HTTP "+providerStatus},
+      return NextResponse.json({error:(hints[providerStatus] ??
+        "OpenRouter returned HTTP "+providerStatus).replaceAll("OpenRouter",gateway)},
         {status:502,headers:HEADERS});
     }
     return NextResponse.json({error:"Synthetic AI experiment failed: provider access, model JSON or quota may be incompatible"},

@@ -4,11 +4,12 @@
  * Security invariants:
  * - No patient data, prompt, image, filename or clinical context accepted.
  * - API tokens never leave the server; only boolean configuration status does.
- * - The only remote catalogue URL is a constant OpenRouter endpoint.
+ * - Remote catalogue URLs are fixed documented OpenRouter/Polza endpoints.
  * - A fetched model ID is a catalogue claim, NOT proof of access, reliability,
  *   billing permission, residency compliance or diagnostic suitability.
  */
 import type { AiProvider } from "./ai-gateway";
+import { modelsForRole } from "./v17-models.ts";
 
 export type CatalogModel = {
   id: string;
@@ -38,7 +39,7 @@ export type ProviderReadinessReport = {
 export type ProviderEnv = Readonly<Record<string, string | undefined>>;
 export type CatalogFetcher = typeof fetch;
 
-const CATALOG_URL = "https://openrouter.ai/api/v1/models";
+const CATALOG_URLS = {openrouter:"https://openrouter.ai/api/v1/models",polza:"https://polza.ai/api/v1/models"} as const;
 const CATALOG_MAX_BYTES = 8_000_000;
 const MODEL_ID_PATTERN = /^(?!.*:\/\/)[a-zA-Z0-9][a-zA-Z0-9/:._+-]{0,159}$/;
 const PROVIDER_ENV = {
@@ -142,17 +143,25 @@ export async function readBoundedJson(response: Response): Promise<unknown> {
  * validation immediately before any paid synthetic inference. This is never
  * treated as evidence of account entitlement or clinical fitness.
  */
-export async function loadOpenRouterCatalogue(
-  apiKey: string, fetcher: CatalogFetcher = fetch,
+export async function loadProviderCatalogue(
+  provider:AiProvider,apiKey: string, fetcher: CatalogFetcher = fetch,
 ): Promise<CatalogModel[]> {
   if (!apiKey || apiKey.length > 512) throw new Error("Invalid provider configuration");
-  const response = await fetcher(CATALOG_URL, {
+  const response = await fetcher(CATALOG_URLS[provider], {
     method: "GET", cache: "no-store",
     headers: { Authorization: "Bearer " + apiKey, Accept: "application/json" },
-    signal: AbortSignal.timeout(10_000),
+    signal: AbortSignal.timeout(10_000),redirect:"error",
   });
   if (!response.ok) throw new Error("Provider catalogue unavailable");
   return parseOpenRouterModels(await readBoundedJson(response));
+}
+export const loadOpenRouterCatalogue=(apiKey:string,fetcher:CatalogFetcher=fetch)=>loadProviderCatalogue("openrouter",apiKey,fetcher);
+/** Exact curated IDs, never alphabetical examples, aliases or downgraded substitutes. */
+export function preferredCatalogueModels(role:"vision"|"clinical",catalogue:readonly CatalogModel[]):CatalogModel[] {
+  return modelsForRole(role).flatMap(preferred=>{
+    const model=catalogue.find(m=>m.id===preferred.id);
+    return model?.acceptsImages&&model.acceptsText&&model.producesText?[{...model,name:preferred.label}]:[];
+  });
 }
 
 /** Only a researcher-initiated metadata request is made; nothing clinical is sent. */
@@ -178,55 +187,27 @@ export async function inspectProvider(
     base.notes.unshift("Ключ этого провайдера на сервере не настроен.");
     return base;
   }
-  if (provider === "polza") {
-    base.catalogStatus = "not-supported";
-    base.notes.unshift("Каталог моделей Polza пока не проверяется: нужен подтверждённый endpoint и контракт.");
-    return base;
-  }
   let catalogue: CatalogModel[];
   try {
-    catalogue = await loadOpenRouterCatalogue(env[names.key]!.trim(), fetcher);
+    catalogue = await loadProviderCatalogue(provider,env[names.key]!.trim(), fetcher);
   } catch {
     // Never return the remote response body or the API key to the browser.
     base.catalogStatus = "unavailable";
-    base.notes.unshift("Не удалось проверить каталог OpenRouter; проверьте сеть, ключ и ограничения аккаунта.");
+    base.notes.unshift("Не удалось проверить каталог выбранного шлюза; проверьте сеть, ключ и ограничения аккаунта.");
     return base;
   }
   const matches = compareConfiguredRoles(visionId, clinicalId, catalogue);
-  const summary = (values: CatalogModel[]) => {
-    // Show diverse REAL catalogue choices. Alphabetical-only order can fill
-    // the entire menu with one provider and hide Gemini completely.
-    const sorted = [...values].sort((a,b)=>a.id.localeCompare(b.id));
-    const selected: CatalogModel[] = [];
-    const quotas: Array<[string,number]> = [
-      ["google/",6], ["openai/",4], ["anthropic/",3],
-    ];
-    const used = new Set<string>();
-    for (const [prefix, quota] of quotas) {
-      for (const item of sorted.filter(m=>m.id.startsWith(prefix)).slice(0,quota)) {
-        selected.push(item);
-        used.add(item.id);
-      }
-    }
-    for (const model of sorted)
-      if (!used.has(model.id) && selected.length < 14) {
-        selected.push(model);
-        used.add(model.id);
-      }
-    return selected.slice(0,14);
-  };
   return {
     ...base, catalogStatus: "verified-response",
     vision: matches.vision, clinical: matches.clinical,
     suggestions: {
-      vision: summary(catalogue.filter(x => x.acceptsImages && x.producesText)),
-      clinical: summary(catalogue.filter(x => x.acceptsText && x.producesText)),
+      vision: preferredCatalogueModels("vision",catalogue),
+      clinical: preferredCatalogueModels("clinical",catalogue),
     },
     notes: [
-      "Проверен ответ каталога OpenRouter без отправки DICOM или клинического текста.",
+      "Проверен каталог выбранного шлюза без отправки DICOM или клинического текста.",
       TEXT_NOTE,
-      "Серверные идентификаторы моделей задаются через RADIOLOGY_OPENROUTER_VISION_MODEL " +
-      "и RADIOLOGY_OPENROUTER_CLINICAL_MODEL в web/.env.local. Выбор в браузере пока только предпочтение.",
+      "Для синтетической пробы используются модели, выбранные выше. Если точного ID нет в каталоге или нет нужной модальности, запуск блокируется без подмены.",
     ],
   };
 }

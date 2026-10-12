@@ -35,7 +35,9 @@ export async function callAiGateway(request: AiGatewayRequest, signal?: AbortSig
     // All research completions have an explicit output token ceiling to avoid
     // accidental unbounded spending. This is not an account spending limit.
     body: JSON.stringify({ model: request.model, messages: request.messages,
-      temperature: request.temperature ?? 0.1,
+      // These evaluator versions do not advertise temperature in either catalogue.
+      ...(["openai/gpt-6.1-sol","anthropic/claude-sonnet-5.5","anthropic/claude-opus-5.5"].includes(request.model)?{}:
+        {temperature:request.temperature??0.1}),
       max_tokens: Number.isInteger(request.maxTokens) &&
         request.maxTokens! >= 1 && request.maxTokens! <= 1500 ? request.maxTokens : 1200 }),
     signal,

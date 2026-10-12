@@ -29,6 +29,9 @@ export function defaultModelFor(role: "vision" | "clinical"): string {
 export function modelsForRole(role: PipelineRole): readonly CatalogEntry[] {
   return AI_CATALOG.filter(m => m.role === role);
 }
+export function isPreferredModel(role:"vision"|"clinical",id:unknown):id is string {
+  return typeof id==="string"&&modelsForRole(role).some(m=>m.engine==="api"&&m.id===id);
+}
 /** Selection is explicit; provider never changes silently due to assumed region. */
 export function changeProvider(_current: ProviderId, selected: ProviderId): ProviderId {
   if (selected !== "polza" && selected !== "openrouter") throw new Error("Invalid provider");
