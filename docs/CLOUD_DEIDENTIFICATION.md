@@ -60,9 +60,12 @@ Existing 8,388,608 voxel / 48 MiB MPR / Safe Mode guards remain unchanged.
 
 ## Still required before patient cloud can open
 
-Local PNG metadata removal is working. Automatic pixel OCR, recognizable-feature
-removal/defacing, independent de-identification verification and dataset acceptance
-are not implemented. Human declarations are local and unauthenticated.
+Local PNG metadata removal and optional local RU/EN OCR text localization are
+working; see [LOCAL_PRIVACY_OCR.md](LOCAL_PRIVACY_OCR.md). OCR assists rectangle
+selection/batch raster redaction and never certifies anonymity or checks a face.
+Recognizable-feature removal/defacing, independent de-identification verification
+and dataset acceptance are not implemented. Human declarations remain local and
+unauthenticated.
 
 An approved provider/processing context, clinician authorization, per-study legal
 authority, trusted server-side checks and audit/retention controls are also absent.
@@ -89,7 +92,7 @@ Primary references:
 From `web/`: `npm test`, `npm run typecheck`, `npm run build`,
 `npm run test:browser`.
 
-223 Web unit/contract tests cover metadata stripping with unchanged raster bytes,
+230 Web unit/contract tests cover metadata stripping with unchanged raster bytes,
 CRC/shape/critical-chunk/byte/pixel guards, strict base64 at the maximum size,
 rectangle bounds, exact-copy review hashes, field allowlisting, source-free IDs
 and refusal to promote local checks to cloud authorization. Synthetic browser

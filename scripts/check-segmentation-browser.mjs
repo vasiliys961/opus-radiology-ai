@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
+import { createServer } from 'node:net';
 const root=fileURLToPath(new URL('../',import.meta.url));
 const require=createRequire(new URL('../web/package.json',import.meta.url));
 const {chromium}=require('playwright');
@@ -14,19 +15,21 @@ const fixture=await mkdtemp(join(tmpdir(),'opus-browser-phantom-'));
 const results=join(root,'web/browser-results');
 await mkdir(results,{recursive:true});
 execFileSync(process.execPath,[join(root,'scripts/generate-segmentation-phantom.mjs'),fixture],{stdio:'pipe'});
-const server=spawn(process.execPath,['node_modules/next/dist/bin/next','start','--hostname','127.0.0.1','--port','3131'],{cwd:root+'/web',stdio:['ignore','pipe','pipe']});
+const port=await new Promise((resolve,reject)=>{const probe=createServer();probe.once('error',reject);probe.listen(0,'127.0.0.1',()=>{const address=probe.address();probe.close(()=>resolve(address.port));});});
+const baseUrl=`http://127.0.0.1:${port}`;
+const server=spawn(process.execPath,['node_modules/next/dist/bin/next','start','--hostname','127.0.0.1','--port',String(port)],{cwd:root+'/web',stdio:['ignore','pipe','pipe']});
 let logs='';server.stdout.on('data',b=>logs+=b);server.stderr.on('data',b=>logs+=b);
 let browser,page;const errors=[];
 try {
   for(let i=0;i<80;i++) {
-    try {const r=await fetch('http://127.0.0.1:3131');if(r.ok)break;}catch{}
+    try {const r=await fetch(baseUrl);if(r.ok)break;}catch{}
     if(i===79)throw new Error('Server not ready: '+logs);
     await new Promise(r=>setTimeout(r,250));
   }
   browser=await chromium.launch({headless:true,args:['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
   page=await browser.newPage({viewport:{width:1600,height:1000}});
   page.on('pageerror',e=>errors.push(e.message));
-  await page.goto('http://127.0.0.1:3131',{waitUntil:'networkidle'});
+  await page.goto(baseUrl,{waitUntil:'networkidle'});
   const computeModes=await page.locator('.ora-ai-compute-modes').innerText();
   assert.match(computeModes,/На Mac · ONNX CPU/);
   assert.match(computeModes,/Облако · OpenRouter/);
@@ -35,10 +38,10 @@ try {
   // In production, even a same-origin read-only provider probe remains closed.
   // API credentials, DICOM and clinical context are never exposed.
   const readinessResponse=await page.request.get(
-    'http://127.0.0.1:3131/api/ai/provider-readiness?provider=openrouter');
+    baseUrl+'/api/ai/provider-readiness?provider=openrouter');
   assert.equal(readinessResponse.status(),404);
   assert.doesNotMatch(await readinessResponse.text(),/OPENROUTER_API_KEY|secret|sk-/);
-  const blockedUpload=await page.request.post('http://127.0.0.1:3131/api/ai',{
+  const blockedUpload=await page.request.post(baseUrl+'/api/ai',{
     data:{provider:'openrouter',role:'vision',model:'never-forward',messages:[
       {role:'user',content:'nonclinical sentinel'}
     ]},
@@ -46,8 +49,8 @@ try {
   assert.equal(blockedUpload.status(),410);
   assert.match(await blockedUpload.text(),/disabled/);
   const deniedSyntheticDemo=await page.request.post(
-    'http://127.0.0.1:3131/api/ai/synthetic-demo',{
-      headers:{origin:'http://127.0.0.1:3131','content-type':'application/json',
+    baseUrl+'/api/ai/synthetic-demo',{
+      headers:{origin:baseUrl,'content-type':'application/json',
         'sec-fetch-site':'same-origin'},
       data:{
         modality:'MR',region:'head',visionModel:'google/fixture',
@@ -57,7 +60,7 @@ try {
   assert.equal(deniedSyntheticDemo.status(),404);
   assert.doesNotMatch(await deniedSyntheticDemo.text(),/OPENROUTER_API_KEY|secret|sk-/);
   const deniedPhantomPreview=await page.request.get(
-    'http://127.0.0.1:3131/api/ai/synthetic-demo/preview?region=head&modality=MR&frame=0');
+    baseUrl+'/api/ai/synthetic-demo/preview?region=head&modality=MR&frame=0');
   assert.equal(deniedPhantomPreview.status(),404);
 
 
@@ -237,7 +240,7 @@ try {
   assert.equal(await reviewText.isChecked(),false);assert.equal(await reviewFace.isChecked(),false);
   assert.equal(await privacyDownloadButton.isDisabled(),true);
   page.off('request',observePrivacyRequest);assert.deepEqual(privacyRequests,[]);
-  const forgedPrivacyStatus=await page.request.post('http://127.0.0.1:3131/api/ai',{
+  const forgedPrivacyStatus=await page.request.post(baseUrl+'/api/ai',{
     data:{...privacyPacket,transmissionPermitted:true,deidentificationVerified:true,physicianAuthentication:true,studyConsent:true},
   });
   assert.equal(forgedPrivacyStatus.status(),410);
@@ -327,7 +330,7 @@ try {
   let localJobs=0;
   await page.route('http://127.0.0.1:8765/**',async route=>{
     const r=route.request();
-    const headers={'access-control-allow-origin':'http://127.0.0.1:3131',
+    const headers={'access-control-allow-origin':baseUrl,
       'access-control-allow-headers':'authorization,content-type','access-control-allow-methods':'GET,POST,PUT,DELETE'};
     if(r.method()==='OPTIONS'){await route.fulfill({status:204,headers});return;}
     if(r.url().endsWith('/v1/capabilities'))await route.fulfill({status:200,headers,contentType:'application/json',body:JSON.stringify({
@@ -390,7 +393,7 @@ try {
   await page.unroute('http://127.0.0.1:8765/**');
   await page.route('http://127.0.0.1:8765/**',async route=>{
     const r=route.request(),path=new URL(r.url()).pathname;
-    const headers={'access-control-allow-origin':'http://127.0.0.1:3131',
+    const headers={'access-control-allow-origin':baseUrl,
       'access-control-allow-headers':'authorization,content-type','access-control-allow-methods':'GET,POST,PUT,DELETE'};
     const json=body=>route.fulfill({status:200,headers,contentType:'application/json',body:JSON.stringify(body)});
     if(r.method()==='OPTIONS')return route.fulfill({status:204,headers});
@@ -721,7 +724,73 @@ try {
   console.log('LLM LPS anchors: active mask target/different label, three-plane navigation, wrong mask/source/outside/rejected abstention and export (synthetic only)');
   console.log('Bound specialist Evidence -> local review/export -> occupied-point MPR navigation -> lifecycle clear passed (synthetic only)');
   console.log('Memory/disk/model errors -> retry without reload -> chunk upload -> bound mask -> three MPR planes passed (synthetic CT/prediction only)');
+  // Actual local OCR, separate synthetic text fixture. No clinical model/data.
+  await page.reload({waitUntil:'networkidle'});
+  const textPixels=await page.evaluate(()=>{
+    const canvas=document.createElement('canvas');canvas.width=64;canvas.height=64;
+    const ctx=canvas.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,64,64);
+    ctx.fillStyle='black';ctx.font='18px Arial';ctx.fillText('TEST',5,24);ctx.fillText('ТЕСТ',5,48);
+    const rgba=ctx.getImageData(0,0,64,64).data;return Array.from({length:4096},(_,i)=>Math.round(rgba[i*4]/255*1400));
+  });
+  const textDicom=await readFile(files[0]),textAt=textDicom.length-64*64*2;
+  textPixels.forEach((v,i)=>textDicom.writeUInt16LE(v,textAt+i*2));
+  const ocrDicomPath=join(fixture,'synthetic-ocr.dcm');await writeFile(ocrDicomPath,textDicom);
+  await page.locator('input[accept*=".dcm"]').setInputFiles([ocrDicomPath,...files.slice(1)]);
+  const planButton=page.getByRole('button',{name:'Сформировать план',exact:true});
+  await page.waitForFunction(()=>{const b=document.querySelector('.ora-vision-plan-controls button');return b&&!b.disabled;});
+  await planButton.click();await page.locator('.ora-vision-plan-thumbnail').nth(3).waitFor();
+  const ocrPrivacy=page.getByRole('region',{name:'Подготовка обезличенных кадров',exact:true});
+  await ocrPrivacy.getByRole('button',{name:'Подготовить копии без метаданных',exact:true}).click();
+  const ocrPanel=ocrPrivacy.getByRole('region',{name:'Локальный поиск надписей',exact:true});
+  const ocrRequests=[],watchOcr=request=>ocrRequests.push({url:request.url(),method:request.method(),body:request.postData()});
+  page.on('request',watchOcr);
+  await ocrPanel.getByRole('button',{name:'Найти надписи локально',exact:true}).click();
+  await ocrPanel.getByRole('button',{name:'Отменить OCR',exact:true}).click();
+  await ocrPanel.getByText(/OCR отменён/).waitFor();
+  assert.equal(await ocrPrivacy.getByRole('button',{name:'Скачать локальный пакет копий JSON',exact:true}).isDisabled(),true);
+  await ocrPanel.getByRole('button',{name:'Найти надписи локально',exact:true}).click();
+  await ocrPanel.getByText(/Областей с надписями:/).waitFor({timeout:35000});
+  const detected=await ocrPanel.locator('li').count();assert.ok(detected>=2&&detected<=32,'Actual RU/EN OCR must detect synthetic words');
+  assert.doesNotMatch(await ocrPanel.innerText(),/TEST|ТЕСТ/); // recognized text never shown
+  const ocrTextReview=ocrPrivacy.getByRole('checkbox',{name:'Проверил копию: идентифицирующих надписей нет',exact:true});
+  await ocrTextReview.dispatchEvent('click');
+  assert.equal(await ocrTextReview.isChecked(),false);await ocrPrivacy.getByText(/Сначала скройте найденные надписи/).waitFor();
+  await ocrPanel.getByRole('button',{name:'Оставить надписи: не идентифицируют пациента',exact:true}).click();
+  await ocrTextReview.check();assert.equal(await ocrPanel.locator('li').count(),detected); // acknowledgement retains detections
+  await ocrPanel.getByRole('button',{name:'Найти надписи локально',exact:true}).click();
+  await ocrPanel.getByText(/Областей с надписями:/).waitFor({timeout:35000});
+  assert.equal(await ocrTextReview.isChecked(),false); // a new scan clears the previous acknowledgement
+  await ocrPanel.getByRole('button',{name:'Выбрать область 1',exact:true}).click();
+  const regionX=Number(await ocrPrivacy.getByRole('spinbutton',{name:'X',exact:true}).inputValue());
+  const regionY=Number(await ocrPrivacy.getByRole('spinbutton',{name:'Y',exact:true}).inputValue());
+  const unchangedSource=await page.locator('.ora-vision-plan-thumbnail').first().getAttribute('src');
+  await ocrPanel.getByRole('button',{name:'Скрыть найденные надписи',exact:true}).click();
+  await ocrPrivacy.getByText(new RegExp('Скрытых областей: '+detected)).waitFor();
+  assert.equal(await page.locator('.ora-vision-plan-thumbnail').first().getAttribute('src'),unchangedSource);
+  const black=await page.evaluate(async({x,y})=>{
+    const img=document.querySelector('.ora-privacy-preview');await img.decode();
+    const c=document.createElement('canvas');c.width=64;c.height=64;const ctx=c.getContext('2d');ctx.drawImage(img,0,0);
+    return [...ctx.getImageData(x,y,1,1).data];
+  },{x:regionX,y:regionY});assert.deepEqual(black,[0,0,0,255]);
+  assert.equal(await ocrPrivacy.getByRole('checkbox',{name:'Проверил копию: идентифицирующих надписей нет',exact:true}).isChecked(),false);
+  await ocrPanel.getByRole('button',{name:'Найти надписи локально',exact:true}).click();
+  await ocrPanel.getByText(/Областей с надписями: 0/).waitFor({timeout:35000});
+  // Empty OCR output still never checks the human review box or releases cloud.
+  assert.equal(await ocrPrivacy.getByRole('checkbox',{name:'Проверил копию: идентифицирующих надписей нет',exact:true}).isChecked(),false);
+  assert.equal(await ocrPrivacy.getByRole('button',{name:'Скачать локальный пакет копий JSON',exact:true}).isDisabled(),true);
+  page.off('request',watchOcr);
+  assert.ok(ocrRequests.some(r=>r.url.endsWith('/eng.traineddata.gz')));
+  assert.ok(ocrRequests.some(r=>r.url.endsWith('/rus.traineddata.gz')));
+  const unexpectedOcrRequests=ocrRequests.filter(r=>!(r.method==='GET'&&!r.body&&(r.url.startsWith(baseUrl+'/api/privacy-ocr/assets/v1/')||
+    r.url.startsWith(baseUrl+'/_next/static/')||r.url===baseUrl+'/favicon.ico'|| // background viewer/static assets, never uploads
+    r.url.startsWith('data:application/octet-stream;base64,AGFzbQ')))); // embedded public WASM; no network destination
+  assert.deepEqual(unexpectedOcrRequests.map(r=>{const u=new URL(r.url);return {method:r.method,protocol:u.protocol,
+    path:u.protocol==='http:'||u.protocol==='https:'?u.pathname:'local-data',hasBody:!!r.body};}),[]);
+  assert.equal((await page.request.post(baseUrl+'/api/privacy-ocr/assets/v1/host-worker.js',{data:{pixels:'synthetic'}})).status(),405);
+  assert.equal((await page.request.get(baseUrl+'/api/privacy-ocr/assets/v1/package.json')).status(),404);
+  await ocrPrivacy.screenshot({path:join(results,'synthetic-privacy-ocr.png')});
+  console.log('Actual local RU/EN Tesseract OCR: synthetic words, cancel/restart, SHA-bound boxes, raster batch redaction, empty rescan still unverified, same-origin GET assets only and no pixel/text upload');
   assert.deepEqual(errors,[]);
-  console.log('PASS: overlays, volumes, full scalar NIfTI export (all voxels), checksummed model-result handoff, wrong-package rejection, 3D/MIP controls and resource reset on 2D/MPR. No real model inference performed.');
+  console.log('PASS: overlays, volumes, full scalar NIfTI export (all voxels), checksummed model-result handoff, wrong-package rejection, 3D/MIP controls and resource reset on 2D/MPR. No trained medical model inference performed; actual OCR used synthetic text only.');
 }catch(e){console.error('FAIL:',e);console.error('PAGE ERRORS:',errors);console.error('SERVER:',logs);if(page){console.error('ALERTS:',await page.locator('[role=alert]').allTextContents());await page.screenshot({path:join(results,'failure.png'),fullPage:true}).catch(()=>{});}process.exitCode=1;}
 finally{await browser?.close();server.kill('SIGTERM');await rm(fixture,{recursive:true,force:true});}
