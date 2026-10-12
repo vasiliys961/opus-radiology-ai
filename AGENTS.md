@@ -265,3 +265,23 @@ controls, provider context and audit/retention remain pending; arbitrary `/api/a
 stays HTTP 410 and forged client flags cannot enable it. See
 `docs/CLOUD_DEIDENTIFICATION.md`. Four modes, optional-LLM Evidence separation,
 .env.local, all R231/MPR/resource guards and R1 acceptance stay unchanged.
+
+
+## Local privacy OCR assistance — 2026-10-12 (feature branch)
+
+Baseline main `d48f7ff` includes manually merged PR #26 and green Web Actions.
+Privacy copies now support opt-in actual Tesseract RU/EN text localization,
+SHA-bound native rectangles and batch raster redaction. Recognized strings remain
+in ephemeral workers; only coordinates/uncalibrated OCR confidence reach UI.
+Positive detections require hiding or an explicit local non-identifying-text
+acknowledgement; counts are retained. Re-scan/image changes revoke prior marks;
+zero detections never authorize cloud or complete human review.
+
+Pinned code/core/language assets are served as verified static same-origin GETs,
+not a pixel upload endpoint. No CDN, persisted OCR/image cache or provider call.
+One same-tab slot serializes OCR and R231; owned workers stop on cancel/source
+replacement/failure/30-second timeout. This is not cross-tab/OS memory admission
+or an M1/Safari benchmark. All existing worker/resource/MPR/SHA guards remain.
+See `docs/LOCAL_PRIVACY_OCR.md` for pins, licensing, tests and pending independent
+privacy/server release. Four modes, optional LLMs through Evidence, .env.local,
+patient/cloud/remote OFF and R1 boundaries remain unchanged.

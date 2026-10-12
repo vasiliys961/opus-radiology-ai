@@ -290,6 +290,11 @@ button:disabled { cursor: not-allowed; }
 .ora-privacy-preparation button:disabled{opacity:.45;cursor:not-allowed}
 .ora-privacy-preview-scroll{max-height:512px;overflow:auto;background:#000}
 .ora-privacy-preview{display:block;max-width:none;background:#000}
+.ora-privacy-image-region{position:relative;width:max-content}
+.ora-privacy-selection{position:absolute;inset:0;pointer-events:none}
+.ora-privacy-ocr{display:flex;flex-direction:column;gap:8px;padding:10px;border:1px solid #c9dfd5;border-radius:7px}
+.ora-privacy-ocr ul{max-height:160px;overflow:auto;margin:0;padding-left:20px;font-size:11px;color:#48665a}
+.ora-privacy-ocr li{margin:4px 0}.ora-privacy-ocr li button{margin-left:8px;font-size:11px}
 .ora-privacy-rectangle{display:flex;gap:8px;flex-wrap:wrap}
 .ora-privacy-rectangle label{display:flex;flex-direction:column;gap:4px}
 .ora-privacy-rectangle input{width:80px;padding:6px;border:1px solid #c9dfd5;border-radius:5px;background:#fff;color:#264d3d}

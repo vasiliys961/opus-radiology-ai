@@ -5,6 +5,7 @@ import type { AnalysisStream } from "../lib/analysis-stream";
 import type { SegmentationResult } from "../lib/analysis-package";
 import type { LabelMask } from "../lib/segmentation-mask";
 import type { SegmentationEvidence } from "../lib/segmentation-evidence";
+import { acquireBrowserCompute } from "../lib/browser-compute-slot";
 
 export default function LocalLungmaskPanel({ready, onPrepare, onResult, onBusy}: {
   ready: boolean; onPrepare: (signal: AbortSignal)=>Promise<AnalysisStream>;
@@ -26,7 +27,9 @@ export default function LocalLungmaskPanel({ready, onPrepare, onResult, onBusy}:
     const controller=new AbortController();active.current=controller;
     setBusy(true);callbacks.current.onBusy(true);setError("");setMetrics(null);setProfile(undefined);
     const session={endpoint,token};
+    let release:(()=>void)|undefined;
     try {
+      release=acquireBrowserCompute("local-r231");
       setStatus("Проверка локальной модели…");
       setProfile(await checkLocalWorker(session,controller.signal));
       setStatus("Проверка скалярных данных выбранной серии…");
@@ -39,6 +42,7 @@ export default function LocalLungmaskPanel({ready, onPrepare, onResult, onBusy}:
       if(controller.signal.aborted)setStatus("Ожидание отменено; запрос удаления отправлен worker. При потере связи файлы удаляются по TTL.");
       else {setStatus("");setError(cause instanceof Error?cause.message:"Локальное задание не выполнено.");}
     } finally {
+      release?.();
       if(active.current===controller){active.current=null;setBusy(false);callbacks.current.onBusy(false);}
     }
   };
