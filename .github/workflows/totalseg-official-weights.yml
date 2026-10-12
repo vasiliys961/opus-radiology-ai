@@ -1,0 +1,24 @@
+name: TotalSegmentator official weights audit (manual)
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-public-archives:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download official Dataset297 and Dataset298 without extracting
+        run: |
+          python scripts/fetch-totalsegmentator-weights.py \
+            --research-download --output "${RUNNER_TEMP}/opus-totalseg-weights"
+      - name: Confirm archive contents and archive hashes (no torch/inference)
+        run: |
+          python scripts/check-totalseg-archives.py \
+            --directory "${RUNNER_TEMP}/opus-totalseg-weights"
+      - name: Remove archives on ephemeral runner
+        if: always()
+        run: rm -rf "${RUNNER_TEMP}/opus-totalseg-weights"
