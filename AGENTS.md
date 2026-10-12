@@ -1,5 +1,19 @@
 # Opus Radiology AI — Instructions for Future Chats, Cursor and Coding Agents
 
+## TotalSegmentator offline preparation — 2026-10-12
+
+Separate read-only CT/fast/lung-lobe task and installed-asset audit now exists in
+services/imaging-ai/totalsegmentator_audit.py and scripts/audit-totalsegmentator.py.
+Candidate package 2.18.0/Torch 2.6.0 is opt-in only. ROI needs both Dataset297
+(3 mm inference) and Dataset298 (6 mm localization). Class IDs 10–14 are distinct
+from R231; unknown/MR/restricted tasks refuse. No package import, weight download,
+model execution or patient transfer; files are hashed in bounded reads and remain
+unverified. No licence token/home path is exported. canRun/adapterConnected remain
+false until curated SHA/licence, isolated no-network adapter, memory and real
+source-grid/MPR/Evidence acceptance. See docs/TOTALSEGMENTATOR_PREPARATION.md.
+MODEL-03 inference remains PLANNED. R231/.env.local/four modes are unchanged.
+
+
 **Single source of truth:** [docs/OPUS_RADIOLOGY_MASTER_SPEC.md](docs/OPUS_RADIOLOGY_MASTER_SPEC.md) and [REQUIREMENTS.md](REQUIREMENTS.md). These are product goals, NOT claims that every feature works now.
 
 Before any implementation: inspect live GitHub \`main\`, its CI status, branch diff, installed checkpoints and user-reported Mac results. Keep source-backed "implemented" separate from "planned".

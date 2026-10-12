@@ -1,6 +1,20 @@
 # OPUS RADIOLOGY AI — ЕДИНЫЙ ПАСПОРТ КОНЕЧНОГО ПРОДУКТА
 **Living specification / Source of Truth · версия 2.0, 2026-10-11**
 
+## TotalSegmentator offline preparation — 2026-10-12
+
+Separate read-only CT/fast/lung-lobe task and installed-asset audit now exists in
+services/imaging-ai/totalsegmentator_audit.py and scripts/audit-totalsegmentator.py.
+Candidate package 2.18.0/Torch 2.6.0 is opt-in only. ROI needs both Dataset297
+(3 mm inference) and Dataset298 (6 mm localization). Class IDs 10–14 are distinct
+from R231; unknown/MR/restricted tasks refuse. No package import, weight download,
+model execution or patient transfer; files are hashed in bounded reads and remain
+unverified. No licence token/home path is exported. canRun/adapterConnected remain
+false until curated SHA/licence, isolated no-network adapter, memory and real
+source-grid/MPR/Evidence acceptance. See docs/TOTALSEGMENTATOR_PREPARATION.md.
+MODEL-03 inference remains PLANNED. R231/.env.local/four modes are unchanged.
+
+
 > **Правило для новых чатов, Cursor и всех AI-разработчиков:** считать этот файл общей целью проекта, а не заявлением, что все перечисленные возможности уже готовы. Сначала сверить \`main\` GitHub, CI, реальные исходники и раздел «Фактическое состояние», затем продолжить разработку следующего неполного этапа. Никаких имитаций диагностики, выдуманных моделей, неподтверждённых измерений или «зелёных» статусов без запуска проверок.
 
 **Репозиторий:** https://github.com/vasiliys961/opus-radiology-ai  
