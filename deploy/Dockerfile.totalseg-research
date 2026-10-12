@@ -1,0 +1,13 @@
+# Optional Linux CPU inference image: deliberately not built automatically in CI.
+FROM python:3.11-slim
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 \
+    TOTALSEG_HOME_DIR=/models
+WORKDIR /opt/opus
+RUN python -m pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.6.0
+RUN python -m pip install --no-cache-dir "TotalSegmentator==2.18.0" "numpy>=1.26.4,<2.0" "nibabel>=5.2,<6.0"
+COPY services/imaging-ai/totalsegmentator_offline_exec.py /opt/opus/totalsegmentator_offline_exec.py
+COPY services/imaging-ai/totalsegmentator_audit.py /opt/opus/totalsegmentator_audit.py
+COPY services/imaging-ai/totalsegmentator_result.py /opt/opus/totalsegmentator_result.py
+RUN useradd --system --uid 10001 --home-dir /nonexistent --shell /usr/sbin/nologin opus
+USER 10001:10001
+ENTRYPOINT ["python", "/opt/opus/totalsegmentator_offline_exec.py"]

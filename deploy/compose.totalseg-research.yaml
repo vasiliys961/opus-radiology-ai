@@ -1,0 +1,32 @@
+# ONLY for public / synthetic CT data on a separately provisioned Linux host.
+services:
+  totalseg-research:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.totalseg-research
+    network_mode: none
+    read_only: true
+    user: "10001:10001"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 256
+    mem_limit: 12g
+    cpus: "4.0"
+    tmpfs:
+      - /tmp:size=2g,mode=1777
+    volumes:
+      - type: bind
+        source: ${OPUS_TOTALSEG_MODEL_HOME:?Provide an existing official TotalSegmentator model cache}
+        target: /models
+        read_only: true
+      - type: bind
+        source: ${OPUS_PUBLIC_CT_NII:?Provide a PUBLIC CT .nii absolute path}
+        target: /data/input.nii
+        read_only: true
+      - type: bind
+        source: ${OPUS_RESEARCH_OUTPUT_DIR:?Provide an existing writable output directory}
+        target: /output
+    command: ["--input","/data/input.nii","--output","/output/totalseg_lobes.nii","--research-confirmed"]
+    restart: "no"
