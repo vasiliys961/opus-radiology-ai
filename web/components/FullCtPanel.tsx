@@ -9,6 +9,7 @@ import {acquireBrowserCompute} from "../lib/browser-compute-slot";
 export default function FullCtPanel({series,files,enabled,onBusy,onResult}: {
   series:DicomSeries;files:File[];enabled:boolean;onBusy:(busy:boolean)=>void;onResult:(ticket:FullCtTicket|null)=>void;
 }) {
+  const [endpoint,setEndpoint]=useState("http://127.0.0.1:8765");
   const [token,setToken]=useState(""),[confirmed,setConfirmed]=useState(false),[busy,setBusy]=useState(false);
   const [status,setStatus]=useState(""),[error,setError]=useState(""),[result,setResult]=useState<FullCtTicket|null>(null);
   const active=useRef<AbortController|null>(null),owned=useRef<FullCtTicket|null>(null),generation=useRef(0);
@@ -36,7 +37,7 @@ export default function FullCtPanel({series,files,enabled,onBusy,onResult}: {
     let release:(()=>void)|undefined;
     try {
       release=acquireBrowserCompute("local-r231");
-      const session={endpoint:"http://127.0.0.1:8765",token};await checkFullCtWorker(session,controller.signal);
+      const session={endpoint,token};await checkFullCtWorker(session,controller.signal);
       const read=await createFullCtReader(files);
       const packet=await prepareFullCtStream(series,read,controller.signal,n=>{
         if(revision===generation.current)setStatus(`Проверка и SHA полной КТ: ${n}/${series.members.length}`);
@@ -53,6 +54,7 @@ export default function FullCtPanel({series,files,enabled,onBusy,onResult}: {
     <p>{series.members.length} исходных срезов. Декодируется один срез за раз; полная маска остаётся на диске worker, в MPR загружается только выбранный диапазон.</p>
     <p>Исследовательский режим для открытой КТ грудной клетки. Это обработка всех загруженных кадров, не подтверждение полноты исследования или клинической точности.</p>
     {unsupported&&<p role="status">Полный поток недоступен: {unsupported}</p>}
+    <label>Адрес полного локального worker<input aria-label="Адрес полного локального worker" value={endpoint} disabled={busy||!!result} onChange={e=>setEndpoint(e.target.value)}/></label>
     <label>Токен полного локального задания<input aria-label="Токен полного локального задания" type="password" autoComplete="off" value={token} disabled={busy||!!result} onChange={e=>setToken(e.target.value)}/></label>
     <label><input type="checkbox" checked={confirmed} disabled={busy||!!result} onChange={e=>setConfirmed(e.target.checked)}/> Подтверждаю открытую исследовательскую КТ грудной клетки в HU, без реальных пациентов.</label>
     <button type="button" disabled={!enabled||!!unsupported||busy||!confirmed||!token||!!result} onClick={()=>void run()}>Обработать всю КТ локально</button>

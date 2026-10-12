@@ -1,0 +1,212 @@
+{
+  "resourceObservation": {
+    "pidNamespaceFallback": true,
+    "sampleIntervalSeconds": 1,
+    "samples": 146,
+    "minimumAvailableRamBytes": 8207929344,
+    "peakProcessTreeRssBytes": 1923354624,
+    "initialSwapUsedBytes": 0,
+    "peakSwapUsedBytes": 0,
+    "finalSwapUsedBytes": 0,
+    "limitations": [
+      "Summed RSS double-counts shared pages; not private or physical memory.",
+      "System available RAM and swap include unrelated applications.",
+      "One-second sampling can miss short peaks; responsiveness is not evaluated."
+    ],
+    "peakSwapGrowthBytes": 0,
+    "finalSwapChangeBytes": 0
+  },
+  "schema": "opus-r231-full-browser-verification/v1",
+  "status": "passed",
+  "actualTrainedInference": true,
+  "reference": {
+    "collection": "TCIA LCTSC",
+    "license": "CC BY 3.0",
+    "sourceContentChainSha256": "bb4b90496cf2d83dac83e729ef271091962d532a18db201c6e2d99d42dcb5f61",
+    "originalFrames": 103,
+    "selectedFrames": 103,
+    "selectedIndicesZeroBased": [
+      0,
+      102
+    ],
+    "allSourceFrames": true,
+    "fullChest": false
+  },
+  "dimensions": [
+    512,
+    512,
+    103
+  ],
+  "affineLps": [
+    0.976562,
+    0,
+    0,
+    -250,
+    0,
+    0.976562,
+    0,
+    -156,
+    0,
+    0,
+    3,
+    40
+  ],
+  "inputSha256": "99615ddb66e09bd46c2ff70c352d73414285145b358e448682b7cffc41249738",
+  "maskSha256": "73eb445bfe3a66bc23bebed0df819bf8441444818a6fb94902a6ef6e8ee66a86",
+  "weightsSha256": "d5d2fc3df432115933491f115b283e94d1f5c841c0e82f6e7bd2d65d3ccde69f",
+  "labelVoxels": [
+    25797709,
+    545694,
+    657429
+  ],
+  "inferenceMetrics": {
+    "schema": "opus-worker-metrics/v1",
+    "device": "cpu",
+    "batchSize": 1,
+    "inferenceSeconds": 116.761,
+    "totalSeconds": 118.123,
+    "peakRssMiB": 588.92,
+    "memoryMeasurement": "process RSS sampled every 20 ms plus getrusage high-water where available",
+    "platform": "Linux",
+    "machine": "x86_64",
+    "torchVersion": "2.6.0+cpu",
+    "dimensions": [
+      512,
+      512,
+      103
+    ],
+    "resourceProfile": "safe",
+    "threads": 1,
+    "interOpThreads": 1,
+    "inferenceImplementation": "full-ct-streamed-r231/v2",
+    "weightsLoading": "meta-assign-cpu-float32",
+    "simpleItkImported": false,
+    "clinicalStatus": "unverified_research_draft",
+    "preflight": {
+      "profile": "safe",
+      "estimatedModelRamBytes": 974127104,
+      "requiredRamBytes": 1376780288,
+      "requiredDiskBytes": 161218912,
+      "maxRssBytes": 1108344832,
+      "systemReserveBytes": 268435456,
+      "threads": 1,
+      "interOpThreads": 1,
+      "availableRamBytes": 8434847744,
+      "availableDiskBytes": 26884489216,
+      "guardDecision": "allow"
+    },
+    "guardDecision": "allow"
+  },
+  "preflight": {
+    "profile": "safe",
+    "estimatedModelRamBytes": 974127104,
+    "requiredRamBytes": 1376780288,
+    "requiredDiskBytes": 161218912,
+    "maxRssBytes": 1108344832,
+    "systemReserveBytes": 268435456,
+    "threads": 1,
+    "interOpThreads": 1,
+    "availableRamBytes": 8434847744,
+    "availableDiskBytes": 26884489216,
+    "guardDecision": "allow"
+  },
+  "guardDecision": "allow",
+  "peakRssMiB": 588.92,
+  "controller": {
+    "platform": "linux",
+    "machine": "x64",
+    "browser": "134.0.6998.35"
+  },
+  "timings": {
+    "totalSeconds": 144.576705902
+  },
+  "chunkCount": 825,
+  "uploadedBytes": 108003680,
+  "slabs": [
+    {
+      "start": 0,
+      "count": 32,
+      "slabMaskSha256": "ad050f18117610dbc51c0023edceec661a371820e083845ec581b8eb9f0bb086",
+      "labelVoxels": [
+        8304628,
+        20880,
+        63100
+      ],
+      "overlayPixels": [
+        1900,
+        953,
+        481
+      ]
+    },
+    {
+      "start": 32,
+      "count": 32,
+      "slabMaskSha256": "44e030b498b5b0249868765fd31deeaead7ae7688ac2124240ee92c493a99ba4",
+      "labelVoxels": [
+        7720044,
+        323502,
+        345062
+      ],
+      "overlayPixels": [
+        3960,
+        979,
+        1986
+      ]
+    },
+    {
+      "start": 64,
+      "count": 32,
+      "slabMaskSha256": "24858be05b453d9c0bfda83692093b7b5d6df9039943f34e98bf987139894089",
+      "labelVoxels": [
+        7938029,
+        201312,
+        249267
+      ],
+      "overlayPixels": [
+        2012,
+        2275,
+        1364
+      ]
+    },
+    {
+      "start": 96,
+      "count": 7,
+      "slabMaskSha256": "4c346dd93432951840d811f422e8198d1cc7fdd1b2e3c781c4d2429da9d4d649",
+      "labelVoxels": [
+        1835008,
+        0,
+        0
+      ],
+      "overlayPixels": [
+        0,
+        0,
+        0
+      ]
+    }
+  ],
+  "fullMaskGets": 0,
+  "completeMaskShaVerified": true,
+  "jobDeleted": true,
+  "clinicalDice": null,
+  "M1Acceptance": "pending separate system/browser/swap/responsiveness and Safari verification",
+  "limitations": [
+    "All supplied reference frames, anatomical completeness unverified.",
+    "No clinical accuracy evaluation.",
+    "Model RSS is separate from browser/system memory.",
+    "Page egress interception is not an OS network sandbox.",
+    "Chromium verification does not verify Safari."
+  ],
+  "verificationCode": {
+    "baselineMain": "bf967e53884036a307406be7d6a0b72e074297b2",
+    "checkout": "feature working tree before publication",
+    "sourceFilesSha256": {
+      "scripts/check-r231-browser.mjs": "767dcca8f5abc8204a98b3f3671f7d06363340e44b022e14fddd362bd5b00370",
+      "scripts/r231-full-browser.mjs": "c6a630830a8cc9f87d0f00b608da6a6b8c528887f9ac63c58c8d4557ebacd8c1",
+      "scripts/observe-r231-resources.py": "bd99bbef4f84794335147795a457046e66075020d2aa6d28d9abf831e67fbc59",
+      "services/imaging-ai/worker.py": "7da65c01609e40a8af8f0931d80e4a2e2225a4264908e4e61a7dbe9134a46ab1",
+      "services/imaging-ai/r231.py": "49dd540c8938b22332ac3786eb95ebc7a136f166f3b2be177e257b4e5a301a9a",
+      "services/imaging-ai/process_memory.py": "2199c0ecc8ca74da3fb7977ad9603895f5eb96ca86043b444ca8e22ef9cb512d",
+      "web/components/FullCtPanel.tsx": "be9c0a82476b360582c91d0e7123a41e130939a571443d89403dbd7dbcf9f1b5"
+    }
+  }
+}
