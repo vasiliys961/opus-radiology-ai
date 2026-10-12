@@ -1,0 +1,33 @@
+name: TotalSegmentator server image smoke (manual)
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build real CPU research image
+        run: docker build --pull -f deploy/Dockerfile.totalseg-research -t opus-totalseg-research:smoke .
+      - name: Verify installed packages in image (no inference)
+        run: |
+          docker run --rm --network none --read-only --tmpfs /tmp:rw,size=64m \
+            --entrypoint python opus-totalseg-research:smoke -c \
+            'import importlib.metadata as m; assert m.version("TotalSegmentator") == "2.18.0"; assert m.version("torch").split("+")[0] == "2.6.0"; print("packages-ok")'
+      - name: Reject missing explicit research confirmation without loading weights
+        run: |
+          set +e
+          docker run --rm --network none --read-only --tmpfs /tmp:rw,size=64m \
+            --entrypoint python opus-totalseg-research:smoke \
+            /opt/opus/totalsegmentator_offline_exec.py --input /does-not-exist.nii --output /tmp/out.nii \
+            > stdout.txt 2> stderr.txt
+          code=$?
+          set -e
+          cat stderr.txt
+          if [ "$code" -ne 2 ]; then echo "Expected disabled-by-default exit 2"; exit 1; fi
+          grep -q '"status": "failed"' stderr.txt
+          ! test -s stdout.txt
