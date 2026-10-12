@@ -38,7 +38,7 @@ Canonical vision and implementation truth: **[docs/OPUS_RADIOLOGY_MASTER_SPEC.md
 | PRIV-02 | P0 | Local patient analysis isolated: loopback-only worker, access control, no analytics/PHI logs/CI, local encrypted patient storage if persisted, audit and lifecycle deletion. | PARTIAL — research-only loopback boundary; clinical patient storage/access/audit not released |
 | PRIV-03 | P0 | Server patient mode: TLS, role-based access, tenant isolation, encryption, authenticated jobs, limited retention, documented applicable jurisdiction, private provider agreements. | PLANNED |
 | COST-01 | P1 | **No mandatory subscriptions** or paid APIs to operate browser, offline AI and local evidence; code/weights licenses independently verified. | PARTIAL (core OSS components) |
-| COST-02 | P0 | For optional paid models: preflight costs and frame/token limits, explicit approval, daily/monthly hard cap, idempotent billing, retry controls and kill switch. | PARTIAL (synthetic throttles; production budget PLANNED) |
+| COST-02 | P0 | For optional paid models: preflight costs and frame/token limits, explicit approval, daily/monthly hard cap, idempotent billing, retry controls and kill switch. | PARTIAL (synthetic throttles and completed-trial provider usage/cost; production budget PLANNED) |
 | COST-03 | P1 | Per-model/licensed-weights record of access restrictions, countries, commercial status and software versions; MedGemma excluded per project constraint. | PLANNED |
 | REVIEW-01 | P0 | Every generated clinical text is an **unverified draft** until signed by authorized clinician; one-click study-linked evidence review. | PARTIAL — bound local journal/restore, printable report and separate versioned general/label reviewer text with stale-review warning and existing-label MPR navigation; authenticated clinician identity, protected persistence and signature PLANNED |
 | REVIEW-02 | P0 | No marketing claim of sensitivity/specificity/clinical validity without independent held-out evaluation on each anatomical task. | Policy implemented; clinical validation PLANNED |
@@ -282,3 +282,18 @@ unsigned local snapshot, not trusted privacy acceptance or server authorization.
 No new paid call/patient transfer/.env.local change or guard relaxation. Four
 modes, specialist/optional-LLM Evidence separation and R1/Mac/Safari/full CT
 boundaries remain. See `docs/LOCAL_PRIVACY_READINESS.md`.
+
+
+## Synthetic provider usage accounting — 2026-10-12
+
+Baseline main `22dc41b` includes manually merged PR #31 and green Web Actions.
+Successful synthetic trials now retain launch-ordered five-step numeric usage,
+provider-reported RUB/Polza or USD/OpenRouter cost and a metadata-only JSON/UI
+summary. Missing/invalid values and incomplete totals stay unknown, not free;
+cache/reasoning are subcounts. Old exports remain compatible without usage.
+No extra API request or new paid/model run; failed/cancelled spending, production
+preflight/hard budgets and persistent billing remain pending (COST-02 PARTIAL).
+The user's supplied OpenRouter Gemini/Sonnet synthetic completion is documented
+separately from automated mocked verification and clinical acceptance. See
+`docs/SYNTHETIC_PROVIDER_USAGE.md`. Patient Cloud, .env.local, four modes,
+Evidence separation and R231/Safe/MPR/resource boundaries remain unchanged.

@@ -104,6 +104,40 @@ try {
     await trial.getByRole('alert').waitFor();
     assert.deepEqual(trialSubmissions.at(-1),{provider,modality:'CT',region:'chest',visionModel:'google/gemini-3.8-flash',clinicalModel:judge,acknowledgePaidSyntheticExperiment:true});
   }
+  // Provider-reported costs, missing cost and legacy v1 exports. No paid requests.
+  await page.unroute('**/api/ai/synthetic-demo');let usageFixture='partial';
+  await page.route('**/api/ai/synthetic-demo',route=>{
+    const request=route.request().postDataJSON(),currency=request.provider==='polza'?'RUB':'USD';
+    const usage={schema:'opus-provider-usage/v1',source:'provider-response',scope:'completed-trial-only',
+      provider:request.provider,currency,calls:['anatomy','observations','quality','critic','synthesis'].map((step,i)=>({
+        step,requestedModel:i<3?request.visionModel:request.clinicalModel,promptTokens:100,completionTokens:20,totalTokens:120,
+        cachedTokens:10,reasoningTokens:5,reportedCost:usageFixture==='partial'&&i===0?null:0.1,currency})),
+      totals:{promptTokens:500,completionTokens:100,totalTokens:600,reportedCost:usageFixture==='partial'?null:0.5},
+      callsWithReportedCost:usageFixture==='partial'?4:5};
+    return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
+      schema:'opus-synthetic-trial/v1',sample:'non-patient-mathematical-phantom',region:request.region,
+      patientDataSubmitted:false,remoteInferencePerformed:true,...(usageFixture==='legacy'?{}:{usage}),result:{
+        schema:'opus-orchestra/v1',provider:request.provider,modality:request.modality,
+        visionModel:request.visionModel,clinicalModel:request.clinicalModel,sourceImages:[],roleResponses:[],
+        critic:{needsRecheck:[],conflicts:[],limitations:[]},evidence:{findings:[]},
+        clinicalDraft:{summary:'Synthetic usage fixture only',limitations:[]},clinicalStatus:'unverified_research_draft'}})});
+  });
+  for(const [provider,fixtureMode] of [['polza','complete'],['openrouter','legacy'],['openrouter','partial']]){
+    usageFixture=fixtureMode;await page.locator('#ora-provider-choice').selectOption(provider);
+    const gateway=provider==='polza'?'Polza':'OpenRouter';
+    await page.getByRole('button',{name:'Проверить '+gateway,exact:true}).click();
+    const trial=page.getByRole('region',{name:'Эксперимент '+gateway+' с искусственными изображениями',exact:true});
+    await trial.locator('#ora-synthetic-cost-ack').check();await trial.getByRole('button',{name:'Запустить реальный '+gateway+'-тест',exact:true}).click();
+    const report=trial.getByRole('region',{name:'Токены и стоимость синтетического прогона',exact:true});await report.waitFor();
+    assert.match(await report.innerText(),fixtureMode==='complete'?/0\.500000 RUB/:fixtureMode==='legacy'?/нет usage/:/Неизвестно/);
+    if(fixtureMode!=='legacy')assert.equal(await report.locator('tbody tr').count(),5);
+    const downloaded=page.waitForEvent('download');await trial.getByRole('button',{name:'Сохранить исследовательский JSON',exact:true}).click();
+    const path=join(fixture,'usage-'+fixtureMode+'.json');await (await downloaded).saveAs(path);
+    const saved=JSON.parse(await readFile(path,'utf8'));
+    if(fixtureMode==='legacy')assert.equal(Object.hasOwn(saved,'usage'),false);
+    else {assert.equal(saved.usage.currency,provider==='polza'?'RUB':'USD');assert.equal(saved.usage.totals.reportedCost,fixtureMode==='partial'?null:0.5);}
+  }
+  console.log('Synthetic usage UI/export: RUB reported costs, partial unknown costs and legacy missing usage; provider responses mocked');
   // Changing evaluator cancels an outstanding request; a late old response
   // cannot be shown under the new selection and cost acknowledgement is reset.
   await page.unroute('**/api/ai/synthetic-demo');let releaseOldResponse;

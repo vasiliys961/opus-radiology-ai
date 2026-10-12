@@ -5,6 +5,7 @@ import type {ProviderReadinessReport} from "../lib/provider-readiness";
 import type {SyntheticTrialResult} from "../lib/synthetic-live-research";
 import type {SyntheticRegion} from "../lib/synthetic-vision-phantom";
 import {useAnalysisSound} from "./AnalysisSoundProvider";
+import SyntheticUsageReport from "./SyntheticUsageReport";
 
 type Props = {
   diagnostic: ProviderReadinessReport;
@@ -159,6 +160,7 @@ export default function SyntheticResearchPanel({diagnostic,selectedVision:vision
         <div><b>{result.result.evidence.findings.length}</b><small>Наблюдения (невериф.)</small></div>
         <div><b>{result.result.critic.needsRecheck.length}</b><small>Повторная проверка</small></div>
       </div>
+      <SyntheticUsageReport usage={result.usage}/>
       <h3>Исследовательский текст</h3>
       <p>{result.result.clinicalDraft.summary}</p>
       {result.result.clinicalDraft.limitations.length>0 && <ul>{

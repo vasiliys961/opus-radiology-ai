@@ -41,7 +41,7 @@ export type OrchestraResult = {
   clinicalDraft: ClinicalDraft;
   clinicalStatus: "unverified_research_draft";
 };
-type Completion = { choices?: unknown };
+type Completion = { choices?: unknown; usage?: unknown };
 export type CompletionCaller = (request: AiGatewayRequest, signal?: AbortSignal) => Promise<Completion>;
 const ROLES: readonly VisionRole[] = ["anatomy", "observations", "quality"];
 const rolePrompt: Record<VisionRole, string> = {
