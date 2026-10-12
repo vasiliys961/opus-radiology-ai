@@ -859,6 +859,91 @@ try {
   console.log('LLM LPS anchors: active mask target/different label, three-plane navigation, wrong mask/source/outside/rejected abstention and export (synthetic only)');
   console.log('Bound specialist Evidence -> local review/export -> occupied-point MPR navigation -> lifecycle clear passed (synthetic only)');
   console.log('Memory/disk/model errors -> retry without reload -> chunk upload -> bound mask -> three MPR planes passed (synthetic CT/prediction only)');
+  // Explicit native CT slab: exact physical subset, full 2D remains available.
+  await page.getByRole('button',{name:'2D',exact:true}).click();await page.locator('.cs-stack').waitFor();
+  const slabPanel=page.getByRole('region',{name:'Фрагмент КТ для MPR и локального AI',exact:true});
+  await slabPanel.getByLabel('Первый срез фрагмента КТ',{exact:true}).fill('0');
+  await slabPanel.getByLabel('Последний срез фрагмента КТ',{exact:true}).fill('14');
+  await slabPanel.getByRole('button',{name:'Открыть фрагмент в MPR',exact:true}).click();
+  await slabPanel.getByRole('alert').waitFor();assert.equal(await page.locator('.ora-mpr').count(),0);
+  await slabPanel.getByLabel('Первый срез фрагмента КТ',{exact:true}).fill('7');
+  await slabPanel.getByRole('button',{name:'Открыть фрагмент в MPR',exact:true}).click();
+  await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='Подготовить пакет серии'&&!b.disabled));
+  assert.match(await page.locator('.ora-mpr-volume-stats').innerText(),/7–14 из 32/);
+  assert.match(await page.locator('.ora-mpr-volume-stats').innerText(),/64 × 64 × 8/);
+  assert.equal(await slabPanel.getByLabel('Первый срез фрагмента КТ',{exact:true}).isDisabled(),true);
+  assert.equal(await page.locator('.ora-package-ready').count(),0);
+  assert.equal(await page.locator('.ora-mask-provenance').count(),0);
+  await page.locator('.ora-analysis-package>summary').click();
+  await page.getByRole('button',{name:'Подготовить пакет серии',exact:true}).click();await page.locator('.ora-package-ready').waitFor();
+  const slabNiftiPath=join(fixture,'slab.nii'),slabRequestPath=join(fixture,'slab-request.json');
+  await download('Скачать объём .nii',slabNiftiPath);await download('Скачать паспорт .json',slabRequestPath);
+  const slabBytes=await readFile(slabNiftiPath),slabRequest=JSON.parse(await readFile(slabRequestPath,'utf8'));
+  assert.deepEqual(slabRequest.geometry.dimensions,[64,64,8]);assert.equal(slabRequest.frameCount,8);
+  assert.equal(slabRequest.inputSha256,createHash('sha256').update(slabBytes).digest('hex'));
+  assert.equal(slabRequest.coverage,'not-confirmed');assert.equal(slabBytes.length,352+64*64*8*4);
+  const sa=slabRequest.geometry.affineLps,zEnds=[sa[11],sa[10]*7+sa[11]].sort((a,b)=>a-b);
+  assert.deepEqual(zEnds,[-19,-5]);
+  for(let k=0;k<8;k++)for(let j=0;j<64;j++)for(let i=0;i<64;i++){
+    const x=sa[0]*i+sa[1]*j+sa[2]*k+sa[3],y=sa[4]*i+sa[5]*j+sa[6]*k+sa[7],z=sa[8]*i+sa[9]*j+sa[10]*k+sa[11];
+    const inner=(x-9)**2+(y+2)**2+z*z<36,outer=x*x+y*y+z*z<256;
+    assert.equal(slabBytes.readFloatLE(352+4*(i+64*(j+64*k))),inner?1400:outer?Math.round(850+200*x/16):0);
+  }
+  await page.locator('input[accept=".nii,.nii.gz"]').setInputFiles(join(ctFixture,'synthetic-mask.nii'));
+  await page.locator('.ora-mask-error').waitFor();assert.equal(await page.locator('.ora-mask-success').count(),0);
+  // Same real browser job/chunk contract for the selected slab, mocked worker only.
+  const slabMask=Buffer.alloc(352+64*64*8*2);slabBytes.copy(slabMask,0,0,352);
+  slabMask.writeInt16LE(512,70);slabMask.writeInt16LE(16,72);
+  for(let i=0;i<64*64*8;i++)slabMask.writeUInt16LE(slabBytes.readFloatLE(352+i*4)===1400?2:slabBytes.readFloatLE(352+i*4)>0?1:0,352+i*2);
+  const slabUploadHash=createHash('sha256');let slabJobRequest,slabOffset=0,slabChunks=0,slabDeleted=false;
+  await page.unroute('http://127.0.0.1:8765/**');
+  await page.route('http://127.0.0.1:8765/**',async route=>{
+    const r=route.request(),path=new URL(r.url()).pathname;
+    const headers={'access-control-allow-origin':baseUrl,'access-control-allow-headers':'authorization,content-type',
+      'access-control-allow-methods':'GET,POST,PUT,DELETE'};
+    const json=value=>route.fulfill({status:200,headers,contentType:'application/json',body:JSON.stringify(value)});
+    if(r.method()==='OPTIONS')return route.fulfill({status:204,headers});
+    if(path.endsWith('/capabilities'))return json({schema:'opus-worker-capabilities/v1',mode:'local',device:'cpu',dataPolicy:'public-reference-only',
+      patientMode:false,externalEgress:false,concurrency:1,maxVoxels:8388608,chunkUpload:{version:1,maxChunkBytes:262144},
+      model:{id:'lungmask-R231',version:'0.2.20',weightsSha256:'d5d2fc3df432115933491f115b283e94d1f5c841c0e82f6e7bd2d65d3ccde69f',ready:true}});
+    if(r.method()==='POST'&&path==='/v1/jobs'){
+      slabJobRequest=r.postDataJSON().request;assert.equal(slabJobRequest.frameCount,8);assert.deepEqual(slabJobRequest.geometry,slabRequest.geometry);
+      assert.equal(slabJobRequest.inputSha256,slabRequest.inputSha256);
+      return json({jobId:localId,state:'uploading',upload:{receivedBytes:0,maxChunkBytes:262144}});
+    }
+    if(r.method()==='PUT'){
+      const bytes=r.postDataBuffer();slabUploadHash.update(bytes);slabOffset+=bytes.length;slabChunks++;
+      return json({state:'receiving_chunks',uploadedBytes:slabOffset});
+    }
+    if(r.method()==='POST'){
+      assert.equal(slabUploadHash.digest('hex'),slabJobRequest.inputSha256);assert.equal(slabOffset,slabBytes.length);return json({state:'queued'});
+    }
+    if(r.method()==='DELETE'){slabDeleted=true;return route.fulfill({status:204,headers});}
+    if(path.endsWith('/mask'))return route.fulfill({status:200,headers:{...headers,'content-length':String(slabMask.length)},body:slabMask});
+    return json({schema:'opus-worker-job-status/v1',jobId:localId,state:'succeeded',result:{
+      schema:'opus-segmentation-result/v1',requestId:slabJobRequest.requestId,sourceIdentitySha256:slabJobRequest.sourceIdentitySha256,
+      inputSha256:slabJobRequest.inputSha256,maskSha256:createHash('sha256').update(slabMask).digest('hex'),
+      model:{id:'lungmask-R231',version:'0.2.20',weightsSha256:'d5d2fc3df432115933491f115b283e94d1f5c841c0e82f6e7bd2d65d3ccde69f',modality:'CT',task:'synthetic-slab-contract-only'},
+      labels:[{id:1,name:'Synthetic outer'},{id:2,name:'Synthetic inner'}],limitations:['Synthetic prediction only; no trained inference']},
+      metrics:{device:'cpu',inferenceSeconds:0,totalSeconds:0,peakRssMiB:0,platform:'synthetic',machine:'fixture',
+        preflight:{...resourcePreflight,availableRamBytes:4*1024**3},guardDecision:'allow',resourceProfile:'safe',threads:1,interOpThreads:1}});
+  });
+  await page.locator('.ora-local-lungmask>summary').click();
+  const slabLocal=page.locator('.ora-local-lungmask');
+  await slabLocal.getByLabel('Токен локального worker').fill('synthetic-test-token-for-browser-only-123456789');
+  await slabLocal.locator('input[type=checkbox]').check();
+  await slabLocal.getByRole('button',{name:'Сегментировать лёгкие локально',exact:true}).click();
+  await page.locator('.ora-mask-provenance').waitFor();assert.equal(slabDeleted,true);assert.ok(slabChunks>=2);
+  assert.equal(await page.locator('.ora-mpr-mask-overlay').count(),3);
+  await page.waitForFunction(()=>[...document.querySelectorAll('.ora-mpr-mask-overlay')].every(c=>{
+    const d=c.getContext('2d').getImageData(0,0,c.width,c.height).data;for(let i=3;i<d.length;i+=4)if(d[i])return true;return false;
+  }));
+  await slabPanel.getByRole('button',{name:'Вернуть полную серию в 2D',exact:true}).click();
+  await page.locator('.cs-stack').waitFor();assert.match(await page.locator('.cs-slider-row label').innerText(),/\/ 32/);
+  assert.equal(await page.locator('.ora-mpr').count(),0);assert.equal(await page.locator('.ora-package-ready').count(),0);
+  await mpr.click();await page.waitForFunction(()=>document.querySelector('.ora-mpr-volume-stats')?.textContent?.includes('64 × 64 × 32'));
+  assert.equal(await page.locator('.ora-mask-provenance').count(),0);
+  console.log('Bounded CT slab: invalid range refused, exact native 7–14/32 scalar/SHA/LPS export, wrong full mask refused, job/chunks/bound mask in three MPR planes/delete, reset and full 2D/MPR restored (mocked inference only)');
   // Actual local OCR, separate synthetic text fixture. No clinical model/data.
   await page.reload({waitUntil:'networkidle'});
   const textPixels=await page.evaluate(()=>{

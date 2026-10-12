@@ -534,6 +534,7 @@ export default function CornerstoneMPR({ files, sourceSeries, quality, show3D, o
       <p className={quality.interpolationRisk === "high" ? "ora-mpr-quality-warn" : ""}>{quality.message}</p>
       <div className="ora-mpr-volume-stats">
         <span>Исходные срезы: <b>{files.length}</b></span>
+        {sourceSeries.selection&&<span>{sourceSeries.label} · только выбранный диапазон, не полная серия</span>}
         {volumeStats && <><span>Сетка: <b>{volumeStats.dimensions.join(" × ")}</b></span>
           <span>Декодированные пиксели: <b>{Number.isFinite(volumeStats.decodedMiB) ? volumeStats.decodedMiB.toFixed(1) + " МиБ" : "неизвестно"}</b></span></>}
       </div>

@@ -17,7 +17,7 @@ Canonical vision and implementation truth: **[docs/OPUS_RADIOLOGY_MASTER_SPEC.md
 | VIEW-03 | P1 | Audit **all** series: technical readiness, sequence uncertainty, coverage limitations, errors; click through series. | IMPLEMENTED (Study Intelligence) |
 | VIEW-04 | P1 | Multi-series task gating: T1/T1c/T2/FLAIR, DWI/ADC and multiphase CT only after evidence from actual tags/pixels. | PARTIAL (simple tag heuristics only) |
 | DATA-01 | P0 | Export exact selected 3D volume, source/series geometry, checksums and model-compatible full-resolution scalars; never use windowed PNG as quantitative source. | IMPLEMENTED to 8,388,608 voxels |
-| DATA-02 | P0 | Stream **large** CT/MRI (e.g., 512×512×300) via chunking/mmap without 8GB OOM; preserve voxel spacing, LPS/RAS, HU, SOP provenance and cancellation. | PARTIAL — bounded local upload; native large-volume viewer/model/mask pipeline pending |
+| DATA-02 | P0 | Stream **large** CT/MRI (e.g., 512×512×300) via chunking/mmap without 8GB OOM; preserve voxel spacing, LPS/RAS, HU, SOP provenance and cancellation. | PARTIAL — bounded local upload and explicit consecutive native CT slab selection for MPR/local AI; full native large-volume viewer/model/mask pipeline pending |
 | DATA-03 | P0 | Result returns with original study/series/frame coords and source identity; reject mismatched or fabricated masks. | IMPLEMENTED for existing NIfTI mask import; richer findings PLANNED |
 | EXEC-01 | P1 | Browser-only lightweight model via WASM without Python; must expose actual runtime compatibility and fail to unsupported. | PLANNED |
 | EXEC-02 | P1 | \`127.0.0.1\` local-worker with versioned job contract, capabilities, model registry, uploads in bounded chunks, cancel/progress, authenticated browser origin and zero external patient egress by default. | PARTIAL — bounded authenticated loopback R231 research worker; patient/remote/large-volume modes blocked |
@@ -282,3 +282,17 @@ unsigned local snapshot, not trusted privacy acceptance or server authorization.
 No new paid call/patient transfer/.env.local change or guard relaxation. Four
 modes, specialist/optional-LLM Evidence separation and R1/Mac/Safari/full CT
 boundaries remain. See `docs/LOCAL_PRIVACY_READINESS.md`.
+
+
+## Bounded native CT slab — 2026-10-12
+
+Baseline main `22dc41b` has PR #31 merged and green Web Actions. An explicit
+consecutive native CT range now feeds MPR and the existing local R231 action,
+while full 2D remains available. The entire source geometry is rechecked; bounds
+are min(32 frames, existing voxel/raw/file limits). No resampling or pixel copy.
+Selected SOP identity, shifted LPS/scalars/SHA and strict worker contract remain
+bound. Selection/source changes tear down masks/packages/jobs; owned 2D decoded
+cache is released. See `docs/BOUNDED_CT_SLAB.md`.
+This is partial slab support, not full-CT stitching, a trained-model rerun or a
+Mac/Safari benchmark. Four modes/Evidence/optional LLMs, .env.local, patient/cloud
+OFF and R231/Safe/resource limits stay unchanged; R1 remains PARTIAL.

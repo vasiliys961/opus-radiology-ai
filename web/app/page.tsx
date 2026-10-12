@@ -14,6 +14,8 @@ import AiWorkflowPanel from "../components/AiWorkflowPanel";
 import AiEvidenceReview from "../components/AiEvidenceReview";
 import StudyIntelligencePanel from "../components/StudyIntelligencePanel";
 import VisionFramePlanningPanel from "../components/VisionFramePlanningPanel";
+import CtSlabSelection from "../components/CtSlabSelection";
+import type {DicomSeries} from "../lib/dicom-series";
 import { AnalysisSoundProvider } from "../components/AnalysisSoundProvider";
 
 // Keep the sizable Cornerstone engine outside the initial dashboard bundle.
@@ -79,6 +81,7 @@ export default function Home() {
   const [dragged, setDragged] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [viewMode, setViewMode] = useState<"2d" | "mpr" | "3d">("2d");
+  const [slab,setSlab]=useState<{parent:DicomSeries;series:DicomSeries}|null>(null);
   const [dicomPreview, setDicomPreview] = useState<{ id: string; url: string; metadata: DicomPreviewMetadata } | null>(null);
   const [dicomLoading, setDicomLoading] = useState(false);
   const [indexing, setIndexing] = useState(false);
@@ -101,8 +104,13 @@ export default function Home() {
     const byId = new Map(files.map((item) => [item.id, item.file]));
     return activeSeries.members.map((item) => byId.get(item.id)).filter((file): file is File => !!file);
   }, [activeSeries, files]);
-  const mprCheck = useMemo(() => checkMprEligibility(activeSeries, cornerstoneFiles.map(f => f.size)), [activeSeries, cornerstoneFiles]);
-  const mprQuality = useMemo(() => assessMprQuality(activeSeries), [activeSeries]);
+  // A replaced/modified source immediately invalidates a previous selection.
+  const selectedSlab=slab?.parent===activeSeries?slab.series:null;
+  const volumeSeries=selectedSlab??activeSeries;
+  const volumeFiles=useMemo(()=>selectedSlab?selectedSlab.members.map(m=>localDicomById.get(m.id)!).filter(Boolean):cornerstoneFiles,
+    [selectedSlab,localDicomById,cornerstoneFiles]);
+  const mprCheck = useMemo(() => checkMprEligibility(volumeSeries, volumeFiles.map(f => f.size)), [volumeSeries, volumeFiles]);
+  const mprQuality = useMemo(() => assessMprQuality(volumeSeries), [volumeSeries]);
   // Every series is checked independently. A 40-slice sequence from the same
   // study can have a different acquisition geometry from a valid 20-slice one.
   const compatibleSeries = useMemo(() => {
@@ -112,9 +120,9 @@ export default function Home() {
   }, [series, files]);
   const compatibleAlternative = compatibleSeries.find(group => group.key !== activeSeries?.key) ?? null;
   const hasCornerstone = active?.kind === "dicom" && cornerstoneFiles.length > 0;
-  const showMpr = hasCornerstone && viewMode !== "2d" && mprCheck.eligible;
+  const showMpr = hasCornerstone && viewMode !== "2d" && mprCheck.eligible&&(!slab||slab.parent===activeSeries);
   // Reset MPR on series changes and preserve normal 2D stack as the fallback.
-  useEffect(() => { setViewMode("2d"); }, [activeSeries?.key]);
+  useEffect(() => { setViewMode("2d");setSlab(null); }, [activeSeries]);
   const sliceIndex = activeSeries?.members.findIndex((m) => m.id === activeId) ?? -1;
   const selectSlice = (index: number) => {
     if (!activeSeries) return;
@@ -308,6 +316,10 @@ export default function Home() {
                       : activeSeries.warning ?? "MPR/3D недоступны без подтверждённого объёма"}
                   </p>
                   <p className={mprCheck.eligible ? "ora-series-ok" : "ora-series-warning"}>MPR: {mprCheck.reason}</p>
+                  <CtSlabSelection series={activeSeries} fileSizes={cornerstoneFiles.map(f=>f.size)} selected={selectedSlab}
+                    disabled={viewMode!=="2d"||indexing} onSelect={selection=>{
+                      setSlab(selection?{parent:activeSeries,series:selection}:null);setViewMode(selection?"mpr":"2d");
+                    }}/>
                 </>}
               </div>}
               <div className="ora-file-summary"><Icon name="shield" size={16}/> Файлы остаются в браузере. Не используйте снимки с персональными данными при тестировании. Размер: {files.length ? formatSize(totalSize) : "0 МБ"}</div>
@@ -330,7 +342,7 @@ export default function Home() {
               </div>}
               {hasCornerstone ?
                 <div className="ora-cornerstone-host">{showMpr
-                  ? <CornerstoneMPR key={`mpr-${activeSeries!.key}`} files={cornerstoneFiles} sourceSeries={activeSeries!} quality={mprQuality} show3D={viewMode === "3d"} onShow3DChange={enabled => setViewMode(enabled ? "3d" : "mpr")}/>
+                  ? <CornerstoneMPR key={`mpr-${volumeSeries!.key}`} files={volumeFiles} sourceSeries={volumeSeries!} quality={mprQuality} show3D={viewMode === "3d"} onShow3DChange={enabled => setViewMode(enabled ? "3d" : "mpr")}/>
                   : <CornerstoneStack key={activeSeries!.key} files={cornerstoneFiles} selectedIndex={sliceIndex >= 0 ? sliceIndex : 0} modality={activeSeries!.modality} onSliceChange={(index) => { const member = activeSeries!.members[index]; if (member) setActiveId(member.id); }}/>}</div>
                 : <>
                   <div className="ora-viewer-body" tabIndex={0}>
