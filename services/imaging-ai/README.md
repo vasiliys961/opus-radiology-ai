@@ -82,3 +82,10 @@ Only synthetic NIfTI/ONNX fixtures; no download of medical weights and no extern
 - \`FastAPI\` in requirements doesn't mean a deployed API exists. The bounded research endpoint has exact Origin/session/Host and contract tests; production patient/remote modes still require independent security, storage and privacy acceptance.
 - Maintain patient-cloud fail-closed gate until authorized privacy/deidentification/security conditions have been demonstrably satisfied. Python dependencies cannot change that.
 - For online providers, there may be paid usage and regional/licensing restrictions; no mandatory subscription or provider account for local core.
+
+
+Full supplied native CT has a separate research v2 path (up to 512x512x300),
+whole compact postprocessing, per-plane disk restoration and bounded mask
+derivatives. V1 limits and patient/remote gates remain unchanged. See
+[full CT streaming](../../docs/FULL_CT_STREAMING.md) for contracts, proof and
+explicit Mac acceptance steps; trained full-CT/M1 acceptance is pending.

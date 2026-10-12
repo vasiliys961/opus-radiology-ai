@@ -8,7 +8,8 @@ export const R231_SHA256 = "d5d2fc3df432115933491f115b283e94d1f5c841c0e82f6e7bd2
 export type WorkerSession = { endpoint: string; token: string };
 export type ResourcePreflight = {availableRamBytes: number; requiredRamBytes: number; availableDiskBytes: number; requiredDiskBytes: number; guardDecision: string; runtimeAvailableRamBytes?: number};
 export type WorkerMetrics = { device: "cpu"; inferenceSeconds: number; totalSeconds: number; peakRssMiB: number; platform: string; machine: string;
-  preflight?: ResourcePreflight; guardDecision?: string; resourceProfile?: "safe" | "balanced"; threads?: number; interOpThreads?: number };
+  preflight?: ResourcePreflight; guardDecision?: string; resourceProfile?: "safe" | "balanced"; threads?: number; interOpThreads?: number;
+  inferenceImplementation?:"full-ct-streamed-r231/v2";torchVersion?:string };
 export class LocalWorkerError extends Error {
   code: string;
   preflight?: ResourcePreflight;
@@ -16,7 +17,7 @@ export class LocalWorkerError extends Error {
     super(message);this.name="LocalWorkerError";this.code=code;this.preflight=preflight;
   }
 }
-function resourcePreflight(value: unknown): ResourcePreflight | undefined {
+export function resourcePreflight(value: unknown): ResourcePreflight | undefined {
   if (!value || typeof value!=="object")return;
   const p=value as ResourcePreflight;
   if (![p.availableRamBytes,p.requiredRamBytes,p.availableDiskBytes,p.requiredDiskBytes].every(n=>Number.isSafeInteger(n)&&n>=0)
@@ -33,12 +34,13 @@ export function workerFailure(detail: unknown, status: number): LocalWorkerError
   const messages: Record<string,string>={
     insufficient_memory:p?`Недостаточно RAM: доступно ${gib(p.availableRamBytes)} ГиБ, требуется ${gib(p.requiredRamBytes)} ГиБ. Закройте лишние вкладки браузера, редакторы и локальные модели, затем нажмите «Повторить R231».`:"Недостаточно RAM. Освободите память и повторите R231.",
     insufficient_disk:p?`Недостаточно места для временных файлов: доступно ${gib(p.availableDiskBytes)} ГиБ, требуется ${gib(p.requiredDiskBytes)} ГиБ. Освободите место на диске и повторите R231.`:"Недостаточно места на диске. Освободите место и повторите R231.",
-    model_memory_budget_exceeded:"Серия превышает безопасный бюджет процесса R231. Выберите явно ограниченную исследовательскую серию; полная КТ пока не поддерживается. Лимит не повышается автоматически.",
+    model_memory_budget_exceeded:"Задание превышает безопасный бюджет процесса R231. Используйте явно ограниченный исследовательский фрагмент; лимит не повышается автоматически.",
     model_not_ready:"Модель R231 недоступна: проверьте веса и закреплённые версии зависимостей в .venv-lungmask, затем перезапустите worker.",
     model_not_installed_or_unverified:"Модель R231 недоступна: проверьте веса и зависимости, затем перезапустите worker.",
     unauthorized:"Неверный сессионный токен. Введите токен текущего worker и повторите R231.",
     origin_or_host_denied:"Worker отклонил origin/адрес. Проверьте точный адрес вкладки и параметр --origin, затем перезапустите worker.",
     worker_busy_delete_previous_job:"Worker занят предыдущим заданием. Отмените его или дождитесь завершения, затем повторите R231.",
+    job_not_found:"Задание уже удалено или истёк срок хранения. Запустите новое задание при необходимости.",
     memory_pressure:`R231 остановлена для защиты системы: доступная RAM упала ниже резерва.${p?` Доступно ${gib(p.runtimeAvailableRamBytes??p.availableRamBytes)} ГиБ; для нового запуска требуется ${gib(p.requiredRamBytes)} ГиБ.`:""} Освободите память и повторите R231. Это не отрицательное медицинское заключение.`,
     rss_limit:"R231 остановлена: процесс превысил безопасный бюджет RAM. Повторите с меньшей явно выбранной исследовательской серией; увеличение лимита автоматически запрещено.",
     timeout:"Превышено время локального задания. Проверьте нагрузку компьютера и повторите R231.",
@@ -60,7 +62,7 @@ const id = (value: unknown): string => {
   if (typeof value!=="string" || !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(value)) throw new Error("Worker вернул неверный ID задания.");
   return value;
 };
-async function call(session: WorkerSession, path: string, init: RequestInit = {}): Promise<Response> {
+export async function call(session: WorkerSession, path: string, init: RequestInit = {}): Promise<Response> {
   if (!/^[A-Za-z0-9_-]{32,128}$/.test(session.token)) throw new Error("Введите сессионный токен из терминала worker.");
   const endpoint=workerEndpoint(session.endpoint);
   let response: Response;
@@ -77,7 +79,7 @@ async function call(session: WorkerSession, path: string, init: RequestInit = {}
   }
   return response;
 }
-async function smallJson(response: Response) {
+export async function smallJson(response: Response) {
   const reader=response.body?.getReader();
   if (!reader) throw new Error("Пустой ответ worker.");
   const chunks: Uint8Array[]=[];let bytes=0;
@@ -94,7 +96,7 @@ async function smallJson(response: Response) {
   return JSON.parse(new TextDecoder().decode(result));
 }
 /** Enforce the advertised size while reading, before allocating the label grid. */
-async function boundedMask(response: Response, length: number): Promise<ArrayBuffer> {
+export async function boundedMask(response: Response, length: number): Promise<ArrayBuffer> {
   const reader=response.body?.getReader();
   if(!reader) throw new Error("Пустая маска worker.");
   const buffer=new ArrayBuffer(length), target=new Uint8Array(buffer);let offset=0;
@@ -116,7 +118,7 @@ export async function checkLocalWorker(session: WorkerSession, signal?: AbortSig
   }
   return ["safe","balanced"].includes(c.resourceProfile?.name)?c.resourceProfile.name:undefined;
 }
-function pause(signal: AbortSignal): Promise<void> {
+export function pause(signal: AbortSignal): Promise<void> {
   return new Promise((resolve,reject)=>{
     const abort=()=>{clearTimeout(timer);reject(new DOMException("Задание отменено.","AbortError"));};
     const timer=setTimeout(()=>{signal.removeEventListener("abort",abort);resolve();},400);

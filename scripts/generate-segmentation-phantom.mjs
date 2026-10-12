@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 const destination = process.argv[2] ? resolve(process.argv[2]) : fileURLToPath(new URL("../test-data/generated-segmentation-phantom/",import.meta.url));
 const modality=process.argv[3]??"MR";
 if(!["MR","CT"].includes(modality))throw new Error("Synthetic fixture supports only MR or CT tags");
+const huMode=process.argv[4]==='rescale-hu';
+if(process.argv[4]&&(!huMode||modality!=='CT'))throw new Error('Optional rescale-hu requires CT');
 const slices = resolve(destination,"dicom");
 await mkdir(slices,{recursive:true});
 const nx=64,ny=64,nz=32;
@@ -45,6 +47,7 @@ for(let k=0;k<nz;k++) {
     tag(0x20,0x32,"DS",`-32\\-32\\${k*2-31}`),tag(0x20,0x37,"DS","1\\0\\0\\0\\1\\0"),tag(0x20,0x52,"UI",`${root}.3`),
     tag(0x28,2,"US",us(1)),tag(0x28,4,"CS","MONOCHROME2"),
     tag(0x28,0x10,"US",us(ny)),tag(0x28,0x11,"US",us(nx)),tag(0x28,0x30,"DS","1\\1"),
+    ...(huMode?[tag(0x28,0x1052,"DS","-1000"),tag(0x28,0x1053,"DS","1")]:[]),
     tag(0x28,0x100,"US",us(16)),tag(0x28,0x101,"US",us(12)),tag(0x28,0x102,"US",us(11)),tag(0x28,0x103,"US",us(0)),
     tag(0x28,0x1050,"DS","700"),tag(0x28,0x1051,"DS","1400"),tag(0x7fe0,0x10,"OW",pixels),
   ]);

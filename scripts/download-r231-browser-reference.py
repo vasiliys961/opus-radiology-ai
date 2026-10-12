@@ -24,10 +24,10 @@ CONTENT_CHAIN = "bb4b90496cf2d83dac83e729ef271091962d532a18db201c6e2d99d42dcb5f6
 FIRST, COUNT, TOTAL = 35, 32, 103
 
 
-def nifti_header(affine):
+def nifti_header(affine, count=COUNT):
     h = bytearray(352)
     struct.pack_into("<i", h, 0, 348)
-    struct.pack_into("<4h", h, 40, 3, 512, 512, COUNT)
+    struct.pack_into("<4h", h, 40, 3, 512, 512, count)
     struct.pack_into("<hh", h, 70, 16, 32)
     struct.pack_into("<4f", h, 76, 1, abs(affine[0]), abs(affine[5]), abs(affine[10]))
     struct.pack_into("<ff", h, 108, 352, 1)
@@ -38,7 +38,7 @@ def nifti_header(affine):
     return h
 
 
-def prepare(archive, output):
+def prepare(archive, output, full_series=False):
     output = Path(output).resolve()
     if output.is_relative_to(ROOT) or output.exists():
         raise ValueError("Choose a new directory outside the repository")
@@ -70,14 +70,15 @@ def prepare(archive, output):
         hashes = [hashlib.sha256(z.read(e)).digest() for _, e, _ in frames]
         if hashlib.sha256(b"".join(hashes)).hexdigest() != CONTENT_CHAIN:
             raise ValueError("Reference DICOM content changed; review before use")
-        chosen = frames[FIRST:FIRST+COUNT]
+        first_index, count = (0, TOTAL) if full_series else (FIRST, COUNT)
+        chosen = frames[first_index:first_index+count]
         first = chosen[0][2]
         candidates = []
         for reverse in (False, True):
             ordered = list(reversed(chosen)) if reverse else chosen
             origin = list(map(float, ordered[0][2].ImagePositionPatient))
             affine = [float(first.PixelSpacing[1]), 0, 0, origin[0], 0, float(first.PixelSpacing[0]), 0, origin[1], 0, 0, -3 if reverse else 3, origin[2]]
-            digest = hashlib.sha256(nifti_header(affine))
+            digest = hashlib.sha256(nifti_header(affine, count))
             for _, e, _ in ordered:
                 with z.open(e) as stream:
                     d = pydicom.dcmread(stream)
@@ -94,11 +95,13 @@ def prepare(archive, output):
         manifest = {"schema": "opus-r231-browser-reference/v1", "collection": "TCIA LCTSC",
                     "license": "CC BY 3.0", "collectionUrl": "https://www.cancerimagingarchive.net/collection/lctsc/",
                     "doi": "10.7937/K9/TCIA.2017.3R3FVZ08", "sourceContentChainSha256": CONTENT_CHAIN,
-                    "originalFrames": TOTAL, "selectedFrames": COUNT,
-                    "selectedIndicesZeroBased": [FIRST, FIRST+COUNT-1], "fullChest": False,
-                    "selection": "32 unchanged consecutive central source slices; no resampling, pixel crop or repeated frames",
-                    "dimensions": [512, 512, COUNT], "niftiCandidates": candidates,
-                    "selectedFileSha256": [h.hex() for h in hashes[FIRST:FIRST+COUNT]]}
+                    "originalFrames": TOTAL, "selectedFrames": count,
+                    "selectedIndicesZeroBased": [first_index, first_index+count-1], "fullChest": False,
+                    "allSourceFrames": full_series,
+                    "selection": (f"All {TOTAL} unchanged source frames; anatomical completeness unverified" if full_series else
+                                  "32 unchanged consecutive central source slices; no resampling, pixel crop or repeated frames"),
+                    "dimensions": [512, 512, count], "niftiCandidates": candidates,
+                    "selectedFileSha256": [h.hex() for h in hashes[first_index:first_index+count]]}
         (output / "reference.json").write_text(json.dumps(manifest, indent=2))
         return manifest
 
@@ -106,12 +109,13 @@ def prepare(archive, output):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--full-series", action="store_true", help="Prepare all 103 source frames for the separate full-CT v2 UI; not a clinical coverage claim")
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--download-public-reference", action="store_true")
     source.add_argument("--archive", type=Path, help="Previously downloaded public reference ZIP; content still verified")
     args = parser.parse_args()
     if args.archive:
-        manifest = prepare(args.archive, args.output)
+        manifest = prepare(args.archive, args.output, args.full_series)
     else:
         metadata = json.load(urllib.request.urlopen(BASE+"getSeries?SeriesInstanceUID="+SERIES, timeout=30))
         if len(metadata) != 1 or metadata[0].get("Collection") != "LCTSC" or metadata[0].get("LicenseURI") != "http://creativecommons.org/licenses/by/3.0/":
@@ -125,8 +129,8 @@ def main():
                     if size > 30 * 1024**2:
                         raise ValueError("Reference download limit")
                     stream.write(chunk)
-            manifest = prepare(archive, args.output)
-    print(json.dumps({"status": "prepared", "originalFrames": TOTAL, "selectedFrames": COUNT,
+            manifest = prepare(archive, args.output, args.full_series)
+    print(json.dumps({"status": "prepared", "originalFrames": TOTAL, "selectedFrames": manifest["selectedFrames"],
                       "fullChest": False, "sourceContentChainSha256": manifest["sourceContentChainSha256"]}))
 
 

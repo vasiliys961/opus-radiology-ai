@@ -9,10 +9,10 @@ import { maskColor, MAX_MASK_FILE_BYTES, readNiftiMaskFile, type LabelMask, type
 import { assertResultBinding, MAX_RESULT_JSON_BYTES, parseSegmentationResult, sha256, type AnalysisPackage, type AnalysisRequest, type SegmentationResult } from "../lib/analysis-package";
 
 export type MaskDisplay = { visible: boolean; opacity: number; label: number | null };
-type Summary = { name: string; labels: LabelMask["labels"]; result?: SegmentationResult; evidence?: SegmentationEvidence; evidenceRevision?: number };
+type Summary = { name: string; labels: LabelMask["labels"]; result?: SegmentationResult; evidence?: SegmentationEvidence; evidenceRevision?: number; fullCtDerived?:boolean };
 type DownloadPackage = { request: AnalysisRequest; volumeUrl: string; manifestUrl: string };
 
-export default function SegmentationControls({ ready, onPrepare, onPrepareStream, onImport, onDisplay, onClear, onNavigatePoint, onSampleMask }: {
+export default function SegmentationControls({ ready, onPrepare, onPrepareStream, onImport, onDisplay, onClear, onNavigatePoint, onSampleMask,onFullCtLoad }: {
   ready: boolean;
   onPrepare: (signal: AbortSignal) => Promise<AnalysisPackage>;
   onPrepareStream: (signal: AbortSignal) => Promise<AnalysisStream>;
@@ -21,6 +21,7 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
   onClear: () => void;
   onNavigatePoint: (point: Point3) => void;
   onSampleMask: (point: Point3) => number | null;
+  onFullCtLoad?: (signal:AbortSignal)=>Promise<LabelMask>;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const resultInput = useRef<HTMLInputElement>(null);
@@ -38,6 +39,10 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
   const [exportError, setExportError] = useState("");
   const [localCommandCopied, setLocalCommandCopied] = useState(false);
   const [workerBusy, setWorkerBusy] = useState(false);
+  useEffect(()=>{
+    if(!onFullCtLoad){version.current++;preparation.current?.abort();setBusy(false);
+      setSummary(current=>{if(current?.fullCtDerived){callbacks.current.onClear();return null;}return current;});}
+  },[Boolean(onFullCtLoad)]);
   const localOnnxCommand = packet ? [
     'cd "$HOME/Desktop/opus-radiology-ai-github"',
     'source .venv-local-ai/bin/activate',
@@ -130,13 +135,23 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
     catch(cause) {setError(cause instanceof Error ? cause.message : String(cause));}
   };
   const selected = display.label===null ? null : summary?.labels.find(l=>l.id===display.label);
+  const loadFull=async()=>{
+    if(!onFullCtLoad)return;const revision=++version.current,controller=new AbortController();
+    preparation.current?.abort();preparation.current=controller;setBusy(true);setError("");
+    try{const mask=await onFullCtLoad(controller.signal);if(revision!==version.current||controller.signal.aborted)return;
+      const next={visible:true,opacity:0.4,label:null};callbacks.current.onImport(mask,next);
+      setSummary({name:"R231 · привязанный фрагмент полного задания (Evidence — в полной КТ)",labels:mask.labels,fullCtDerived:true});setDisplay(next);
+    }catch(e){if(revision===version.current)setError(e instanceof Error?e.message:"Ошибка фрагмента полной маски.");}
+    finally{if(revision===version.current){setBusy(false);preparation.current=null;}}
+  };
   const voxels = selected?.voxels ?? summary?.labels.reduce((n,l)=>n+l.voxels,0) ?? 0;
   const volumeMl = selected?.volumeMl ?? summary?.labels.reduce((n,l)=>n+l.volumeMl,0) ?? 0;
 
   return <section className="ora-mask-controls" aria-label="Готовая сегментационная маска">
     <div className="ora-mask-heading"><strong>Сегментация · готовая маска</strong><span>Локальный импорт</span></div>
     <p>Загрузите NIfTI-маску именно выбранной DICOM-серии. Проверяются размеры, положение и ориентация. Для открытой исследовательской КТ доступна опциональная локальная Lungmask R231 после отдельной установки.</p>
-    <LocalLungmaskPanel ready={ready&&!busy&&!exportBusy} onBusy={setWorkerBusy}
+    {onFullCtLoad&&<button type="button" disabled={!ready||busy||exportBusy||workerBusy} onClick={()=>void loadFull()}>Показать маску полного задания для этого фрагмента</button>}
+    <LocalLungmaskPanel ready={ready&&!busy&&!exportBusy&&!onFullCtLoad} onBusy={setWorkerBusy}
       onPrepare={signal=>callbacks.current.onPrepareStream(signal)} onResult={(mask,result,evidence)=>{
         const next={visible:true,opacity:0.4,label:null};
         callbacks.current.onImport(mask,next);

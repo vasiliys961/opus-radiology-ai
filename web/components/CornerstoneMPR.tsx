@@ -12,6 +12,7 @@ import { assertMaskMatchesSource, renderMaskPlane, sampleMaskLabel, sourceGeomet
 import { prepareAnalysisPackage, type AnalysisPackage } from "../lib/analysis-package";
 import { prepareAnalysisStream, type AnalysisStream } from "../lib/analysis-stream";
 import type { DicomSeries } from "../lib/dicom-series";
+import {loadFullCtSlab,type FullCtTicket} from "../lib/full-ct-worker";
 
 const PLANE_NAMES = ["axial", "coronal", "sagittal"] as const;
 type Plane = typeof PLANE_NAMES[number];
@@ -47,7 +48,7 @@ const captions: Record<Plane,string> = { axial:"АКСИАЛЬНАЯ", coronal:"
  * All input stays in the browser and is gated by checkMprEligibility upstream.
  * This is NOT a calibrated diagnostic viewer or a measurement instrument.
  */
-export default function CornerstoneMPR({ files, sourceSeries, quality, show3D, onShow3DChange }: { files: File[]; sourceSeries: DicomSeries; quality: MprQuality; show3D: boolean; onShow3DChange: (enabled: boolean) => void }) {
+export default function CornerstoneMPR({ files, sourceSeries, fullCt, quality, show3D, onShow3DChange }: { files: File[]; sourceSeries: DicomSeries; fullCt?:FullCtTicket; quality: MprQuality; show3D: boolean; onShow3DChange: (enabled: boolean) => void }) {
   const axial = useRef<HTMLDivElement>(null);
   const coronal = useRef<HTMLDivElement>(null);
   const sagittal = useRef<HTMLDivElement>(null);
@@ -549,6 +550,8 @@ export default function CornerstoneMPR({ files, sourceSeries, quality, show3D, o
       <small>{interpolation === "linear" ? "Линейная интерполяция сглаживает границы между вокселями." : "Ближайший сосед показывает ступенчатость дискретных данных, но не добавляет деталей."}</small>
     </div>
     <SegmentationControls ready={ready}
+      onFullCtLoad={fullCt&&(sourceSeries.selection||files.length<=32&&files.length===fullCt.request.frameCount)?
+        signal=>loadFullCtSlab(fullCt,sourceSeries.selection?.startIndex??0,files.length,signal):undefined}
       onPrepare={signal=>{
         if (!runtime.current) throw new Error("Объём ещё не готов.");
         return runtime.current.preparePackage(signal);

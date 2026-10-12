@@ -944,6 +944,94 @@ try {
   await mpr.click();await page.waitForFunction(()=>document.querySelector('.ora-mpr-volume-stats')?.textContent?.includes('64 × 64 × 32'));
   assert.equal(await page.locator('.ora-mask-provenance').count(),0);
   console.log('Bounded CT slab: invalid range refused, exact native 7–14/32 scalar/SHA/LPS export, wrong full mask refused, job/chunks/bound mask in three MPR planes/delete, reset and full 2D/MPR restored (mocked inference only)');
+  // Full-series path decodes actual mathematical DICOM planes without a full MPR
+  // volume. The local worker/inference response is mocked; no trained model runs.
+  const huFixture=join(fixture,'full-native-hu');
+  execFileSync(process.execPath,[join(root,'scripts/generate-segmentation-phantom.mjs'),huFixture,'CT','rescale-hu'],{stdio:'pipe'});
+  await page.reload({waitUntil:'networkidle'});
+  await page.locator('input[accept*=".dcm"]').setInputFiles((await readdir(huFixture+'/dicom')).sort().map(n=>huFixture+'/dicom/'+n));
+  await page.locator('.cs-stack').waitFor();
+  let fullJobRequest,fullInput,fullMask,fullDeleted=false,fullMaskGets=0,fullSlabBad=true;
+  const fullBlocks=[];let fullOffset=0;const fullIdentifier='22222222-2222-4222-8222-222222222222';
+  await page.unroute('http://127.0.0.1:8765/**');
+  await page.route('http://127.0.0.1:8765/**',async route=>{
+    const r=route.request(),path=new URL(r.url()).pathname;
+    const headers={'access-control-allow-origin':baseUrl,'access-control-allow-headers':'authorization,content-type',
+      'access-control-allow-methods':'GET,POST,PUT,DELETE','access-control-expose-headers':'X-Opus-Mask-Proof'};
+    const json=value=>route.fulfill({status:200,headers,contentType:'application/json',body:JSON.stringify(value)});
+    if(r.method()==='OPTIONS')return route.fulfill({status:204,headers});
+    if(path.endsWith('/capabilities'))return json({schema:'opus-worker-capabilities/v1',mode:'local',device:'cpu',dataPolicy:'public-reference-only',
+      patientMode:false,externalEgress:false,concurrency:1,maxVoxels:8388608,chunkUpload:{version:1,maxChunkBytes:262144},
+      model:{id:'lungmask-R231',version:'0.2.20',weightsSha256:'d5d2fc3df432115933491f115b283e94d1f5c841c0e82f6e7bd2d65d3ccde69f',ready:true},
+      fullCt:{requestSchema:'opus-analysis-request/v2',maxPlane:512,maxFrames:300,maskAccess:'bounded-slabs-only'}});
+    if(r.method()==='POST'&&path==='/v1/jobs'){
+      fullJobRequest=r.postDataJSON().request;assert.equal(fullJobRequest.schema,'opus-analysis-request/v2');assert.equal(fullJobRequest.frameCount,32);
+      assert.deepEqual(fullJobRequest.geometry.dimensions,[64,64,32]);return json({jobId:fullIdentifier});
+    }
+    if(r.method()==='PUT'){
+      assert.equal(Number(path.split('/').at(-1)),fullOffset);const block=r.postDataBuffer();assert.ok(block.length<=131072);
+      fullBlocks.push(block);fullOffset+=block.length;return json({state:'receiving_chunks',uploadedBytes:fullOffset});
+    }
+    if(path.endsWith('/input/complete')){
+      fullInput=Buffer.concat(fullBlocks);assert.equal(fullInput.length,352+64*64*32*4);
+      assert.equal(createHash('sha256').update(fullInput).digest('hex'),fullJobRequest.inputSha256);
+      const fa=fullJobRequest.geometry.affineLps;
+      fullMask=Buffer.alloc(352+64*64*32);fullInput.copy(fullMask,0,0,352);fullMask.writeInt16LE(2,70);fullMask.writeInt16LE(8,72);
+      for(let z=0;z<32;z++)for(let y=0;y<64;y++)for(let x=0;x<64;x++){
+        const px=fa[0]*x+fa[1]*y+fa[2]*z+fa[3],py=fa[4]*x+fa[5]*y+fa[6]*z+fa[7],pz=fa[8]*x+fa[9]*y+fa[10]*z+fa[11];
+        const inner=(px-9)**2+(py+2)**2+pz*pz<36,outer=px*px+py*py+pz*pz<256;
+        const i=x+64*(y+64*z);assert.equal(fullInput.readFloatLE(352+i*4),(inner?1400:outer?Math.round(850+200*px/16):0)-1000);
+        fullMask[352+i]=inner?2:outer?1:0;
+      }
+      return json({state:'queued'});
+    }
+    if(r.method()==='DELETE'){fullDeleted=true;return route.fulfill({status:204,headers});}
+    if(path.endsWith('/mask')){fullMaskGets++;return route.fulfill({status:500,headers});}
+    if(path.endsWith('/mask-slab')){
+      const {start,count}=r.postDataJSON();assert.equal(start,19);assert.equal(count,8);
+      const mask=Buffer.alloc(352+64*64*count);fullMask.copy(mask,0,0,352);fullMask.copy(mask,352,352+start*64*64,352+(start+count)*64*64);
+      mask.writeInt16LE(count,46);const affine=[...fullJobRequest.geometry.affineLps];
+      for(let row=0;row<3;row++)affine[row*4+3]+=affine[row*4+2]*start;
+      affine.forEach((v,i)=>mask.writeFloatLE(i<8?-v:v,280+i*4));
+      const proof={schema:'opus-full-ct-slab/v1',jobId:fullIdentifier,requestId:fullJobRequest.requestId,
+        sourceIdentitySha256:fullJobRequest.sourceIdentitySha256,inputSha256:fullJobRequest.inputSha256,
+        fullMaskSha256:fullSlabBad?'d'.repeat(64):createHash('sha256').update(fullMask).digest('hex'),slabMaskSha256:createHash('sha256').update(mask).digest('hex'),
+        geometry:{dimensions:[64,64,count],affineLps:affine},start,count,sourceFrameCount:32};
+      return route.fulfill({status:200,headers:{...headers,'X-Opus-Mask-Proof':Buffer.from(JSON.stringify(proof)).toString('base64')},body:mask});
+    }
+    const labelVoxels=[1,2].map(label=>fullMask.subarray(352).filter(v=>v===label).length);
+    return json({state:'succeeded',result:{schema:'opus-segmentation-result/v1',requestId:fullJobRequest.requestId,
+      sourceIdentitySha256:fullJobRequest.sourceIdentitySha256,inputSha256:fullJobRequest.inputSha256,
+      maskSha256:createHash('sha256').update(fullMask).digest('hex'),model:{id:'lungmask-R231',version:'0.2.20',
+        weightsSha256:'d5d2fc3df432115933491f115b283e94d1f5c841c0e82f6e7bd2d65d3ccde69f',modality:'CT',task:'synthetic-full-contract-only'},
+      labels:[{id:1,name:'Synthetic outer'},{id:2,name:'Synthetic inner'}],limitations:['No trained inference'],
+      fullVolume:{dimensions:[64,64,32],labelVoxels,coverage:'all-supplied-frames',clinicalStatus:'unverified_research_draft'}},
+      metrics:{device:'cpu',inferenceSeconds:0,totalSeconds:0,peakRssMiB:0,inferenceImplementation:'full-ct-streamed-r231/v2',platform:'Linux',machine:'x86_64'}});
+  });
+  const fullPanel=page.getByRole('group',{name:'Полная КТ через локальный R231',exact:true});
+  await page.locator('details[aria-label="Полная КТ через локальный R231"]>summary').click();
+  await fullPanel.getByLabel('Токен полного локального задания',{exact:true}).fill('synthetic-full-session-token-123456789');
+  await fullPanel.locator('input[type=checkbox]').check();
+  await fullPanel.getByRole('button',{name:'Обработать всю КТ локально',exact:true}).click();
+  await fullPanel.getByRole('button',{name:'Скачать Evidence полной КТ',exact:true}).waitFor({timeout:60000});
+  assert.equal(fullDeleted,false);assert.equal(fullMaskGets,0);assert.equal(await page.locator('.ora-mpr').count(),0);
+  const fullDownload=page.waitForEvent('download');await fullPanel.getByRole('button',{name:'Скачать Evidence полной КТ',exact:true}).click();
+  const fullPath=join(fixture,'full-ct-report.json');await (await fullDownload).saveAs(fullPath);const fullReport=JSON.parse(await readFile(fullPath,'utf8'));
+  assert.equal(fullReport.schema,'opus-full-ct-evidence/v1');assert.equal(fullReport.request.frameCount,32);
+  assert.equal(JSON.stringify(fullReport).includes('synthetic-full-session-token'),false);
+  await slabPanel.getByLabel('Первый срез фрагмента КТ',{exact:true}).fill('20');await slabPanel.getByLabel('Последний срез фрагмента КТ',{exact:true}).fill('27');
+  await slabPanel.getByRole('button',{name:'Открыть фрагмент в MPR',exact:true}).click();
+  const showFullMask=page.getByRole('button',{name:'Показать маску полного задания для этого фрагмента',exact:true});
+  await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='Показать маску полного задания для этого фрагмента'&&!b.disabled));
+  await showFullMask.click();await page.locator('.ora-mask-error').waitFor();assert.match(await page.locator('.ora-mask-error').innerText(),/Чужой/);
+  fullSlabBad=false;await showFullMask.click();await page.locator('.ora-mask-success').waitFor();
+  await page.waitForFunction(()=>[...document.querySelectorAll('.ora-mpr-mask-overlay')].every(c=>{
+    const d=c.getContext('2d').getImageData(0,0,c.width,c.height).data;for(let i=3;i<d.length;i+=4)if(d[i])return true;return false;
+  }));
+  await fullPanel.getByRole('button',{name:'Удалить полное задание и маску',exact:true}).click();
+  await fullPanel.getByText('Полное задание удалено.',{exact:true}).waitFor();assert.equal(fullDeleted,true);
+  await page.locator('.ora-mask-success').waitFor({state:'detached'});assert.equal(fullMaskGets,0);
+  console.log('Full CT: actual per-plane DICOM/rescale/SHA streaming, full job retained without full mask download, Evidence without token, forged crop refused, bound crop in MPR and explicit job/overlay deletion (mocked inference)');
   // Actual local OCR, separate synthetic text fixture. No clinical model/data.
   await page.reload({waitUntil:'networkidle'});
   const textPixels=await page.evaluate(()=>{

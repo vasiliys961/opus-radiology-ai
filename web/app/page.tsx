@@ -15,6 +15,8 @@ import AiEvidenceReview from "../components/AiEvidenceReview";
 import StudyIntelligencePanel from "../components/StudyIntelligencePanel";
 import VisionFramePlanningPanel from "../components/VisionFramePlanningPanel";
 import CtSlabSelection from "../components/CtSlabSelection";
+import FullCtPanel from "../components/FullCtPanel";
+import type {FullCtTicket} from "../lib/full-ct-worker";
 import type {DicomSeries} from "../lib/dicom-series";
 import { AnalysisSoundProvider } from "../components/AnalysisSoundProvider";
 
@@ -82,6 +84,8 @@ export default function Home() {
   const [zoom, setZoom] = useState(1);
   const [viewMode, setViewMode] = useState<"2d" | "mpr" | "3d">("2d");
   const [slab,setSlab]=useState<{parent:DicomSeries;series:DicomSeries}|null>(null);
+  const [fullBusy,setFullBusy]=useState(false);
+  const [fullCt,setFullCt]=useState<{parent:DicomSeries;ticket:FullCtTicket}|null>(null);
   const [dicomPreview, setDicomPreview] = useState<{ id: string; url: string; metadata: DicomPreviewMetadata } | null>(null);
   const [dicomLoading, setDicomLoading] = useState(false);
   const [indexing, setIndexing] = useState(false);
@@ -317,9 +321,11 @@ export default function Home() {
                   </p>
                   <p className={mprCheck.eligible ? "ora-series-ok" : "ora-series-warning"}>MPR: {mprCheck.reason}</p>
                   <CtSlabSelection series={activeSeries} fileSizes={cornerstoneFiles.map(f=>f.size)} selected={selectedSlab}
-                    disabled={viewMode!=="2d"||indexing} onSelect={selection=>{
+                    disabled={viewMode!=="2d"||indexing||fullBusy} onSelect={selection=>{
                       setSlab(selection?{parent:activeSeries,series:selection}:null);setViewMode(selection?"mpr":"2d");
                     }}/>
+                  <FullCtPanel series={activeSeries} files={cornerstoneFiles} enabled={viewMode==="2d"&&!indexing}
+                    onBusy={setFullBusy} onResult={ticket=>setFullCt(ticket?{parent:activeSeries,ticket}:null)}/>
                 </>}
               </div>}
               <div className="ora-file-summary"><Icon name="shield" size={16}/> Файлы остаются в браузере. Не используйте снимки с персональными данными при тестировании. Размер: {files.length ? formatSize(totalSize) : "0 МБ"}</div>
@@ -330,7 +336,7 @@ export default function Home() {
             <div className="ora-viewer-card">
               <div className="ora-viewer-head">
                 <div><span className="ora-heading-icon ora-heading-icon-dark"><Icon name="scan" size={18}/></span><div><h2>Просмотр изображения</h2><p>{hasCornerstone ? `${activeSeries?.label ?? "DICOM"} · Cornerstone3D` : active ? active.file.name : "Нет выбранного исследования"}</p></div></div>
-                {hasCornerstone ? <div className="ora-mode-actions"><span className="ora-viewer-engine">DICOM · {cornerstoneFiles.length} кадр(ов)</span><div className="ora-mode-buttons" role="group" aria-label="Режим просмотра"><button type="button" className={viewMode === "2d" ? "ora-mpr-toggle active" : "ora-mpr-toggle"} aria-pressed={viewMode === "2d"} onClick={() => setViewMode("2d")}>2D</button><button type="button" className={viewMode === "mpr" ? "ora-mpr-toggle active" : "ora-mpr-toggle"} aria-pressed={viewMode === "mpr"} disabled={!mprCheck.eligible} title={mprCheck.reason} onClick={() => setViewMode("mpr")}>MPR · 3 плоскости</button><button type="button" className={viewMode === "3d" ? "ora-mpr-toggle active" : "ora-mpr-toggle"} aria-pressed={viewMode === "3d"} disabled={!mprCheck.eligible} title={mprCheck.reason} onClick={() => setViewMode("3d")}>3D · Объём</button></div></div> :
+                {hasCornerstone ? <div className="ora-mode-actions"><span className="ora-viewer-engine">DICOM · {cornerstoneFiles.length} кадр(ов)</span><div className="ora-mode-buttons" role="group" aria-label="Режим просмотра"><button type="button" className={viewMode === "2d" ? "ora-mpr-toggle active" : "ora-mpr-toggle"} aria-pressed={viewMode === "2d"} onClick={() => setViewMode("2d")}>2D</button><button type="button" className={viewMode === "mpr" ? "ora-mpr-toggle active" : "ora-mpr-toggle"} aria-pressed={viewMode === "mpr"} disabled={fullBusy||!mprCheck.eligible} title={mprCheck.reason} onClick={() => setViewMode("mpr")}>MPR · 3 плоскости</button><button type="button" className={viewMode === "3d" ? "ora-mpr-toggle active" : "ora-mpr-toggle"} aria-pressed={viewMode === "3d"} disabled={fullBusy||!mprCheck.eligible} title={mprCheck.reason} onClick={() => setViewMode("3d")}>3D · Объём</button></div></div> :
                 <div className="ora-viewer-tools"><button type="button" title="Уменьшить" disabled={!url} onClick={()=>setZoom(z=>Math.max(.5,Number((z-.25).toFixed(2))))}><Icon name="minus" size={17}/></button><span>{Math.round(zoom*100)}%</span><button type="button" title="Увеличить" disabled={!url} onClick={()=>setZoom(z=>Math.min(4,Number((z+.25).toFixed(2))))}><Icon name="plus" size={17}/></button><button type="button" title="Сбросить масштаб" disabled={!url} onClick={()=>setZoom(1)}><Icon name="fit" size={17}/></button></div>}
               </div>
               {hasCornerstone && !mprCheck.eligible && <div className="ora-mpr-blocker" role="status">
@@ -342,7 +348,8 @@ export default function Home() {
               </div>}
               {hasCornerstone ?
                 <div className="ora-cornerstone-host">{showMpr
-                  ? <CornerstoneMPR key={`mpr-${volumeSeries!.key}`} files={volumeFiles} sourceSeries={volumeSeries!} quality={mprQuality} show3D={viewMode === "3d"} onShow3DChange={enabled => setViewMode(enabled ? "3d" : "mpr")}/>
+                  ? <CornerstoneMPR key={`mpr-${volumeSeries!.key}`} files={volumeFiles} sourceSeries={volumeSeries!}
+                    fullCt={fullCt?.parent===activeSeries?fullCt.ticket:undefined} quality={mprQuality} show3D={viewMode === "3d"} onShow3DChange={enabled => setViewMode(enabled ? "3d" : "mpr")}/>
                   : <CornerstoneStack key={activeSeries!.key} files={cornerstoneFiles} selectedIndex={sliceIndex >= 0 ? sliceIndex : 0} modality={activeSeries!.modality} onSliceChange={(index) => { const member = activeSeries!.members[index]; if (member) setActiveId(member.id); }}/>}</div>
                 : <>
                   <div className="ora-viewer-body" tabIndex={0}>

@@ -368,3 +368,22 @@ cache is released. See `docs/BOUNDED_CT_SLAB.md`.
 This is partial slab support, not full-CT stitching, a trained-model rerun or a
 Mac/Safari benchmark. Four modes/Evidence/optional LLMs, .env.local, patient/cloud
 OFF and R231/Safe/resource limits stay unchanged; R1 remains PARTIAL.
+
+
+## Full supplied CT disk-streaming stage — 2026-10-12
+
+Baseline main `b60badd` includes manually merged PR #33 and green Web/Python CI.
+A separate opus-analysis-request/v2 path decodes one owned native CT plane at a
+time, hashes/transmits exact HU in bounded chunks, preserves whole compact R231
+postprocessing and writes native masks per plane. Completed jobs serve only
+SHA/source/range-bound MPR derivatives and export full quantitative research
+Evidence without secrets. Native support is capped at 512x512x300; v1/manual
+export/generic mask/MPR guards remain unchanged. Safe admission/runtime pressure,
+one-job/origin/token and TTL controls remain. See docs/FULL_CT_STREAMING.md.
+266 Web tests; 58 Python tests with 3 optional medical-stack skips; production
+build/typecheck/Chromium use actual synthetic DICOM/rescale but mocked inference.
+No new trained full-CT/M1/Safari/system-memory/clinical acceptance is claimed.
+Four modes and specialist/optional-LLM separation remain; patient/cloud/remote
+release and .env.local are unchanged. R1 remains PARTIAL pending hardware/model
+acceptance. The public reference preparer has explicit --full-series opt-in;
+default 32-slice verification stays unchanged.
