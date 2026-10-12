@@ -1,0 +1,59 @@
+name: TotalSegmentator public CT real inference (manual, experimental)
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ct-inference:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify resources before heavyweight work
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          m={}
+          for line in Path("/proc/meminfo").read_text().splitlines():
+              if line.startswith(("MemTotal:","MemAvailable:")):
+                  key,value,*_=line.split()
+                  m[key[:-1]]=int(value)*1024
+          print("Memory GiB:",{k:round(v/1024**3,2) for k,v in m.items()})
+          assert m["MemTotal"] >= 14*1024**3
+          assert m["MemAvailable"] >= 12*1024**3
+          PY
+      - name: Download small PUBLIC upstream example CT and verify input shape
+        run: |
+          python scripts/download-totalseg-public-ct.py --output "${RUNNER_TEMP}/public_ct.nii"
+          python - "${RUNNER_TEMP}/public_ct.nii" <<'PY'
+          import sys
+          sys.path.insert(0,"services/imaging-ai")
+          from totalsegmentator_input import inspect_input
+          print(inspect_input(sys.argv[1]))
+          PY
+      - name: Download and provision official public model checkpoints
+        run: |
+          python scripts/fetch-totalsegmentator-weights.py --research-download --output "${RUNNER_TEMP}/archives"
+          python scripts/provision-totalsegmentator-weights.py \
+            --archives "${RUNNER_TEMP}/archives" \
+            --destination "${RUNNER_TEMP}/models" --research-provision
+          python scripts/verify-totalsegmentator-provision.py --weights-root "${RUNNER_TEMP}/models"
+          rm -rf "${RUNNER_TEMP}/archives"
+      - name: Build actual CPU model container
+        run: docker build -f deploy/Dockerfile.totalseg-research -t opus-totalseg-experiment .
+      - name: Execute model on public CT in offline container
+        run: |
+          mkdir -p "${RUNNER_TEMP}/out"
+          chmod 777 "${RUNNER_TEMP}/out"
+          timeout --signal=TERM --kill-after=20s 38m \
+            python scripts/run-totalseg-first-inference.py \
+              --input "${RUNNER_TEMP}/public_ct.nii" \
+              --models "${RUNNER_TEMP}/models" \
+              --output "${RUNNER_TEMP}/out" --research-confirmed
+      - name: Remove checkpoint cache and CT
+        if: always()
+        run: |
+          rm -rf "${RUNNER_TEMP}/archives" "${RUNNER_TEMP}/models" \
+            "${RUNNER_TEMP}/public_ct.nii" "${RUNNER_TEMP}/out"
