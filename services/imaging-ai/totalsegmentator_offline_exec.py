@@ -31,7 +31,18 @@ def run(input_path, output_path, *, confirmed=False, expected_source_sha=None):
     affine=img.affine.copy()
     affine[:2,:]*=-1
     lps=[float(affine[row,col]) for row in range(3) for col in range(4)]
-    # Strict read-only root filesystem: third-party libraries require writable\n    # HOME/cache/config. Provision only under the container tmpfs.\n    import os\n    for key in ("HOME", "XDG_CACHE_HOME", "MPLCONFIGDIR", "TORCH_HOME", "TOTALSEG_HOME_DIR"):\n        cache = Path(os.environ.get(key, ""))\n        if not cache.is_absolute() or not cache.is_relative_to("/tmp"):\n            raise ValueError("invalid_runtime_cache_path")\n        cache.mkdir(parents=True, exist_ok=True)\n        probe = cache / ".opus-write-probe"\n        with probe.open("xb") as handle:\n            handle.write(b"ok")\n        probe.unlink()\n    from totalsegmentator_audit import LUNG_LOBES
+    # Third-party libraries require writable cache locations under tmpfs.
+    import os
+    for key in ("HOME", "XDG_CACHE_HOME", "MPLCONFIGDIR", "TORCH_HOME", "TOTALSEG_HOME_DIR"):
+        cache = Path(os.environ.get(key, ""))
+        if not cache.is_absolute() or not cache.is_relative_to("/tmp"):
+            raise ValueError("invalid_runtime_cache_path")
+        cache.mkdir(parents=True, exist_ok=True)
+        probe = cache / ".opus-write-probe"
+        with probe.open("xb") as handle:
+            handle.write(b"ok")
+        probe.unlink()
+    from totalsegmentator_audit import LUNG_LOBES
     from totalsegmentator_result import validate_native_mask
     from totalsegmentator.python_api import totalsegmentator
     try:
