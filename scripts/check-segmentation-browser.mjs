@@ -264,6 +264,9 @@ try {
   };
   const journalButton=privacy.getByRole('button',{name:'Скачать журнал без пикселей JSON',exact:true});
   const bundleButton=privacy.getByRole('button',{name:'Скачать копии с журналом JSON',exact:true});
+  const preparationStatus=privacy.getByRole('region',{name:'Готовность локальных копий к проверке',exact:true});
+  await preparationStatus.getByText(/0\/4 кадров проверено вручную/).waitFor();
+  assert.equal(await preparationStatus.locator('tbody tr').count(),4);
   assert.equal(await bundleButton.isDisabled(),true);
   assert.equal(await privacyDownloadButton.isDisabled(),true);
   await privacySelect.selectOption('1');await reviewText.check();await reviewFace.check();
@@ -301,6 +304,14 @@ try {
     assert.ok(types.every(t=>['IHDR','IDAT','IEND'].includes(t)));
   }
   const bundle=await savePrivacyJson(privacy,'Скачать копии с журналом JSON','privacy-review-bundle.json');
+  await preparationStatus.getByText(/4\/4 кадров проверено вручную/).waitFor();
+  const readiness=await savePrivacyJson(privacy,'Скачать локальный статус без пикселей JSON','privacy-readiness.json');
+  assert.equal(readiness.schema,'opus-local-privacy-readiness/v1');assert.equal(readiness.localReviewDone,true);
+  assert.equal(readiness.transmissionPermitted,false);assert.equal(readiness.deidentificationVerified,false);
+  assert.equal(readiness.validation,'local-copy-sha-and-journal-checked');
+  assert.equal(readiness.serverChecks.length,7);assert.ok(readiness.serverChecks.every(c=>c.status==='not-connected'));
+  assert.deepEqual(readiness.frames.map(f=>f.sha256),privacyPacket.frames.map(f=>f.sha256));
+  assert.doesNotMatch(JSON.stringify(readiness),new RegExp(phiSentinel+'|pngBase64|sopInstanceUid|clinicalContext|token|initialFrames'));
   assert.equal(bundle.schema,'opus-vision-privacy-review/v1');
   assert.deepEqual(bundle.candidate.frames,privacyPacket.frames);
   assert.equal(bundle.review.journal.actor,'local-unverified');assert.equal(bundle.review.transmissionPermitted,false);
@@ -313,6 +324,7 @@ try {
   assert.equal(bundle.review.journalSha256,createHash('sha256').update(JSON.stringify(bundle.review.journal)).digest('hex'));
   const journalOnly=await savePrivacyJson(privacy,'Скачать журнал без пикселей JSON','privacy-journal-only.json');
   assert.deepEqual(journalOnly,bundle.review);
+  assert.equal(readiness.journalSha256,journalOnly.journalSha256);assert.equal(readiness.journalRevision,11);
   assert.doesNotMatch(JSON.stringify(journalOnly),new RegExp(phiSentinel+'|pngBase64|sopInstanceUid|seriesUid|filename|clinicalContext'));
   await privacySelect.selectOption('1');
   assert.equal(await privacyImage.evaluate(img=>img.getBoundingClientRect().width===img.naturalWidth),true);
@@ -323,6 +335,9 @@ try {
   assert.equal(await bundleButton.isDisabled(),true);assert.equal(await journalButton.isDisabled(),false);
   const resetJournal=await savePrivacyJson(privacy,'Скачать журнал без пикселей JSON','privacy-reset-journal.json');
   assert.equal(resetJournal.journal.events.length,0);assert.notEqual(resetJournal.journal.sessionId,journalOnly.journal.sessionId);
+  await preparationStatus.getByText(/0\/4 кадров проверено вручную/).waitFor();
+  const draftStatus=await savePrivacyJson(privacy,'Скачать локальный статус без пикселей JSON','privacy-draft-readiness.json');
+  assert.equal(draftStatus.localReviewDone,false);assert.equal(draftStatus.status,'needs-local-review');
   const restoreInput=privacy.getByLabel('Восстановить копии с журналом JSON',{exact:true});
   await restoreInput.setInputFiles({name:'broken.json',mimeType:'application/json',buffer:Buffer.from('{"SYNTHETIC-SECRET":oops}')});
   await privacy.getByRole('alert').filter({hasText:/Пакет повреждён/}).waitFor();
@@ -335,6 +350,7 @@ try {
   await privacy.getByRole('alert').filter({hasText:/Нужен пакет копий с журналом/}).waitFor();
   await restoreInput.setInputFiles(join(fixture,'privacy-review-bundle.json'));
   await privacy.getByText(/Копии и история восстановлены/).waitFor();
+  await preparationStatus.getByText(/0\/4 кадров проверено вручную/).waitFor();
   assert.equal(await privacyDownloadButton.isDisabled(),true);assert.equal(await bundleButton.isDisabled(),true);
   assert.equal(await reviewText.isChecked(),false);assert.equal(await reviewFace.isChecked(),false);
   await privacySelect.selectOption('1');assert.deepEqual(await outgoingPixel(),[0,0,0,255]);
@@ -895,6 +911,10 @@ try {
   assert.equal(await ocrPrivacy.getByRole('checkbox',{name:'Проверил копию: идентифицирующих надписей нет',exact:true}).isChecked(),false);
   await ocrPanel.getByRole('button',{name:'Найти надписи локально',exact:true}).click();
   await ocrPanel.getByText(/Областей с надписями: 0/).waitFor({timeout:35000});
+  const ocrStatus=await savePrivacyJson(ocrPrivacy,'Скачать локальный статус без пикселей JSON','privacy-ocr-readiness.json');
+  assert.equal(ocrStatus.frames[0].ocrState,'no-text-found');assert.equal(ocrStatus.frames[0].regionCount,0);
+  assert.equal(ocrStatus.frames[0].textReviewed,false);assert.equal(ocrStatus.localReviewDone,false);
+  assert.equal(ocrStatus.transmissionPermitted,false);assert.doesNotMatch(JSON.stringify(ocrStatus),/TEST|ТЕСТ|pngBase64|confidence/);
   // Empty OCR output still never checks the human review box or releases cloud.
   assert.equal(await ocrPrivacy.getByRole('checkbox',{name:'Проверил копию: идентифицирующих надписей нет',exact:true}).isChecked(),false);
   assert.equal(await ocrPrivacy.getByRole('button',{name:'Скачать локальный пакет копий JSON',exact:true}).isDisabled(),true);

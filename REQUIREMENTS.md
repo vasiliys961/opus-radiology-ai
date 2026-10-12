@@ -34,7 +34,7 @@ Canonical vision and implementation truth: **[docs/OPUS_RADIOLOGY_MASTER_SPEC.md
 | LLM-01 | P1 | Optional LLM adapters: Gemini, Claude Opus, GPT and permitted open-compatible models; API keys server side; real credentials tested only in user environment. | PARTIAL (OpenRouter synthetic only, Polza diagnostic) |
 | LLM-02 | P0 | LLM is **not necessary** for full offline viewer/AI tasks and may never silently substitute for missing specialist model. | PARTIAL architectural constraint |
 | LLM-03 | P1 | Parallel Vision/model calls under budget, transparent 'what was actually seen' ledger, structured comparison, independent critique and evidence review. | PARTIAL (synthetic pipeline only) |
-| PRIV-01 | P0 | Real patient cloud egress remains hard OFF until server-verified auth, lawful purpose, de-ID tags + pixel checks, retention, processor contract/jurisdiction and audit; no client checkboxes overriding. | IMPLEMENTED OFF gate; bounded local pixel-only copies, PNG metadata stripping, RU/EN OCR text localization, actual raster redaction and SHA-bound manual review with bounded local journal/export/restore PARTIAL; independent de-ID/server authorization/production policy PLANNED |
+| PRIV-01 | P0 | Real patient cloud egress remains hard OFF until server-verified auth, lawful purpose, de-ID tags + pixel checks, retention, processor contract/jurisdiction and audit; no client checkboxes overriding. | IMPLEMENTED OFF gate; bounded local pixel-only copies, PNG metadata stripping, RU/EN OCR text localization, actual raster redaction and SHA-bound manual review with bounded local journal/export/restore and local readiness status PARTIAL; independent de-ID/server authorization/production policy PLANNED |
 | PRIV-02 | P0 | Local patient analysis isolated: loopback-only worker, access control, no analytics/PHI logs/CI, local encrypted patient storage if persisted, audit and lifecycle deletion. | PARTIAL — research-only loopback boundary; clinical patient storage/access/audit not released |
 | PRIV-03 | P0 | Server patient mode: TLS, role-based access, tenant isolation, encryption, authenticated jobs, limited retention, documented applicable jurisdiction, private provider agreements. | PLANNED |
 | COST-01 | P1 | **No mandatory subscriptions** or paid APIs to operate browser, offline AI and local evidence; code/weights licenses independently verified. | PARTIAL (core OSS components) |
@@ -266,3 +266,19 @@ Public catalogue presence is not account access or radiological accuracy. Paid
 completions are mocked in verification; no patient data/new paid test/medical
 model rerun, .env.local change, cloud release or guard relaxation. Four modes and
 specialist/optional-LLM Evidence separation remain. See `docs/PREFERRED_AI_MODELS.md`.
+
+
+## Local privacy preparation readiness — 2026-10-12 (feature branch)
+
+Baseline main `4473328` includes manually merged PR #30 and green Web Actions.
+Each sampled copy now shows SHA-bound optional OCR, both human marks and redaction
+count; busy/stale/unreviewed states remain distinct. Seven server policy checks
+are shown separately as unconnected. On-demand metadata-only readiness export
+validates exact PNGs/current journal; it never serializes pixels, words, PHI,
+tokens or raw history, and cloud/de-ID flags always remain false.
+
+Rendering does not decode/hash/copy images or run models/network. This is an
+unsigned local snapshot, not trusted privacy acceptance or server authorization.
+No new paid call/patient transfer/.env.local change or guard relaxation. Four
+modes, specialist/optional-LLM Evidence separation and R1/Mac/Safari/full CT
+boundaries remain. See `docs/LOCAL_PRIVACY_READINESS.md`.

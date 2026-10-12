@@ -103,3 +103,7 @@ and unchanged originals, re-review/reset, all-frame export requirements, matchin
 SHA and metadata-free packet, no requests and refusal of forged release flags.
 Existing SHA/binding/MPR/resource/privacy regressions remain. No real patients,
 trained medical models, paid provider reruns or actual cloud acceptance tests.
+
+Current per-copy local preparation status and checked metadata-only export:
+[LOCAL_PRIVACY_READINESS.md](LOCAL_PRIVACY_READINESS.md). Local review completion
+does not verify any server release requirement.

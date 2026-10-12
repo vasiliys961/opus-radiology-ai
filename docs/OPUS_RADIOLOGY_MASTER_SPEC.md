@@ -571,3 +571,19 @@ Public catalogue presence is not account access or radiological accuracy. Paid
 completions are mocked in verification; no patient data/new paid test/medical
 model rerun, .env.local change, cloud release or guard relaxation. Four modes and
 specialist/optional-LLM Evidence separation remain. See `docs/PREFERRED_AI_MODELS.md`.
+
+
+## Local privacy preparation readiness — 2026-10-12 (feature branch)
+
+Baseline main `4473328` includes manually merged PR #30 and green Web Actions.
+Each sampled copy now shows SHA-bound optional OCR, both human marks and redaction
+count; busy/stale/unreviewed states remain distinct. Seven server policy checks
+are shown separately as unconnected. On-demand metadata-only readiness export
+validates exact PNGs/current journal; it never serializes pixels, words, PHI,
+tokens or raw history, and cloud/de-ID flags always remain false.
+
+Rendering does not decode/hash/copy images or run models/network. This is an
+unsigned local snapshot, not trusted privacy acceptance or server authorization.
+No new paid call/patient transfer/.env.local change or guard relaxation. Four
+modes, specialist/optional-LLM Evidence separation and R1/Mac/Safari/full CT
+boundaries remain. See `docs/LOCAL_PRIVACY_READINESS.md`.
