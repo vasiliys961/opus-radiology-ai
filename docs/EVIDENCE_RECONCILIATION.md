@@ -123,6 +123,8 @@ download. Specialist changes/resets now append a local review journal included
 in the comparison snapshot, with source-bound standalone export/restore; see
 `EVIDENCE_REVIEW_HISTORY.md`. Authenticated persistent physician audit, signature
 and clinical approval remain planned.
+The combined card now exports readable local HTML with the current specialist
+review, supplied hypotheses and fresh comparison/point QC; see `EVIDENCE_REPORT.md`.
 
 ## Validation and remaining work
 

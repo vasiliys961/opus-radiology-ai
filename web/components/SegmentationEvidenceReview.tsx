@@ -4,6 +4,7 @@ import { type EvidenceDecision, type SegmentationEvidence } from "../lib/segment
 import { changeEvidenceReview, MAX_REVIEW_JSON_BYTES, restoreEvidenceReview, startEvidenceReview } from "../lib/evidence-review-history";
 import type { Point3 } from "../lib/segmentation-mask";
 import EvidenceComparisonReview from "./EvidenceComparisonReview";
+import EvidenceReportDownload from "./EvidenceReportDownload";
 const decisionLabel: Record<EvidenceDecision,string>={unreviewed:"Не проверено врачом",requires_recheck:"На перепроверку",rejected:"Отклонено локально"};
 
 /** Mount with a binding key so replacement/series changes discard old reviews. */
@@ -53,6 +54,7 @@ export default function SegmentationEvidenceReview({evidence,onNavigate,onSample
     </li>)}</ul>
     {!review.observations.length&&<p>Ненулевых меток нет. Отсутствие разметки не означает отсутствие патологии.</p>}
     <div className="ora-evidence-actions"><button type="button" onClick={()=>download(review,"evidence")}>Скачать Evidence JSON</button></div>
+    <EvidenceReportDownload evidence={review}/>
     <section className="ora-review-history" aria-label="История проверки Evidence">
       <h3>История проверки · версия {review.reviewHistory.events.length}</h3>
       <p>Изменения сохраняются в памяти страницы и локальном JSON. Сброс отметки добавляет новую запись. Автор и время не удостоверены; это не электронная подпись.</p>

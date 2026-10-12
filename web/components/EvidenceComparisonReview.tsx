@@ -3,6 +3,7 @@ import { useRef, useState } from "react";
 import { COMPARISON_REASONS, MAX_LLM_MEASUREMENTS_BYTES, createLlmMeasurementTemplate, parseLlmMeasurements, reconcileEvidence, type LlmMeasurements } from "../lib/evidence-reconciliation";
 import type { SegmentationEvidence } from "../lib/segmentation-evidence";
 import type { Point3 } from "../lib/segmentation-mask";
+import EvidenceReportDownload from "./EvidenceReportDownload";
 
 export default function EvidenceComparisonReview({evidence,onNavigate,onSampleMask}: {
   evidence: SegmentationEvidence;
@@ -64,6 +65,7 @@ export default function EvidenceComparisonReview({evidence,onNavigate,onSampleMa
       </li>)}</ul>
       <div className="ora-evidence-actions">
         <button type="button" onClick={() => download(comparison, "comparison")}>Скачать сопоставление JSON</button>
+        <EvidenceReportDownload evidence={evidence} llm={llm} onSampleMask={onSampleMask}/>
         <button type="button" onClick={() => {++importVersion.current; setLlm(null); setError("");setNavigationError("");}}>Удалить гипотезы LLM</button>
       </div>
       <small>Совпадение чисел не доказывает клиническое согласие. Порог клинической значимости не задан. Оба результата остаются видны; сравнение не подписывает заключение.</small>

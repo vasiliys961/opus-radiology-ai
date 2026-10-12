@@ -58,6 +58,11 @@ export function parseEvidenceReviewHistory(raw: string, evidence: SegmentationEv
     throw new Error("История превышает лимит 256 КБ.");
   let parsed: unknown;
   try {parsed = JSON.parse(raw);} catch {throw new Error("Файл истории не содержит корректный JSON.");}
+  return normalizeEvidenceReviewHistory(parsed,evidence);
+}
+
+/** Object-side allowlisting avoids copying opaque fields in local reports. */
+export function normalizeEvidenceReviewHistory(parsed: unknown, evidence: SegmentationEvidence): EvidenceReviewHistory {
   const r = object(parsed), b = object(r.binding), expected = binding(evidence);
   if (r.schema !== "opus-evidence-review/v1" || r.provenance !== "local-unverified" ||
     !Array.isArray(r.events) || r.events.length > MAX_REVIEW_EVENTS) throw new Error("Неподдерживаемая история проверки.");

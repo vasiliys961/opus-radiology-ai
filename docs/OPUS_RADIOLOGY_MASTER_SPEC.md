@@ -422,3 +422,23 @@ not clinical sign-off. See `docs/EVIDENCE_REVIEW_HISTORY.md`.
 The 512-event/256-KB journal bound adds metadata only. No model rerun, volume copy,
 guard change, paid provider or patient/cloud/remote activation. Four modes and
 Mac/Safari/full-chest/clinical R1 acceptance remain unchanged.
+
+## Local printable report increment — 2026-10-12
+
+Baseline main `2c5d090` contains manually merged PR #22 and green Web Actions.
+The Evidence and comparison cards now download an offline printable HTML report
+separating mask measurements, imported LLM hypotheses, numeric/spatial QC and
+current local history. Source/model/grid/hash provenance and coverage limits are
+explicit. Rejections and reasons not to compare remain visible; missing/empty
+evidence is not a normal finding. Review-history consistency is checked before
+export. No clinical opinion, confidence or physician signature is invented.
+
+The report has fixed print CSS, escaped text, a no-network/no-script policy and
+no image/raw-payload embedding. Optional browser print/save-PDF uses the local
+file; generation is metadata-only, capped at 2 MiB, without model reruns or
+volume copies. This is an unsigned research snapshot, not an authenticated
+clinical report or de-ID guarantee. See `docs/EVIDENCE_REPORT.md`.
+
+Clinical text editing/sign-off, protected report storage/audit and Safari print
+acceptance remain planned. Four modes, optional LLMs, all resource limits and
+patient/cloud/remote OFF remain unchanged; R1 is still PARTIAL.
