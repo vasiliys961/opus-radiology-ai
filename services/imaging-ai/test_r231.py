@@ -309,7 +309,7 @@ def test_running_guard_reaps_child_and_preserves_retry(client, monkeypatch, fail
             monkeypatch.setattr(worker.psutil, "virtual_memory", lambda: SimpleNamespace(available=1))
         else:
             measured = SimpleNamespace(memory_info=lambda: SimpleNamespace(rss=3 * 1024**3), children=lambda **_: [])
-            monkeypatch.setattr(worker.psutil, "Process", lambda _: measured)
+            monkeypatch.setattr(worker, "child_process", lambda _: measured)
         return process
     monkeypatch.setattr(worker.asyncio, "create_subprocess_exec", waiting_child)
     r, content = packet()

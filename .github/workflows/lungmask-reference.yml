@@ -2,6 +2,12 @@ name: Real R231 public reference (manual)
 
 on:
   workflow_dispatch:
+    inputs:
+      coverage:
+        description: Public browser reference coverage (not clinical/M1 acceptance)
+        type: choice
+        options: [partial, full]
+        default: partial
 
 permissions:
   contents: read
@@ -33,10 +39,14 @@ jobs:
           npm ci --no-audit --no-fund
           NEXT_TELEMETRY_DISABLED=1 npm run build
           npx playwright install --with-deps chromium
-      - name: Explicit public partial LCTSC reference (32 of 103 unchanged slices)
-        run: python scripts/download-r231-browser-reference.py --download-public-reference --output "$RUNNER_TEMP/lctsc-reference"
-      - name: Actual R231 browser upload and MPR (partial coverage, not M1 acceptance)
-        run: node scripts/check-r231-browser.mjs --python "$(command -v python)" --weights "$RUNNER_TEMP/r231.pth" --reference "$RUNNER_TEMP/lctsc-reference" --report "$RUNNER_TEMP/r231-browser.json"
+      - name: Actual R231 public browser reference (declared coverage, not M1 acceptance)
+        env:
+          REFERENCE_COVERAGE: ${{ inputs.coverage }}
+        run: |
+          reference_options=()
+          if [[ "$REFERENCE_COVERAGE" == "full" ]]; then reference_options+=(--full-series); fi
+          python scripts/download-r231-browser-reference.py --download-public-reference --output "$RUNNER_TEMP/lctsc-reference" "${reference_options[@]}"
+          node scripts/check-r231-browser.mjs --python "$(command -v python)" --weights "$RUNNER_TEMP/r231.pth" --reference "$RUNNER_TEMP/lctsc-reference" --report "$RUNNER_TEMP/r231-browser.json" "${reference_options[@]}"
       - uses: actions/upload-artifact@v4
         with:
           name: r231-engineering-metrics-no-images

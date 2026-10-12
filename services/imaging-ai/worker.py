@@ -22,6 +22,7 @@ import psutil
 
 from r231 import MAX_INPUT, MAX_VOXELS, VERSION, WEIGHTS_SHA256, check_weights, validate_request
 from resource_guard import PROFILES, preflight
+from process_memory import child_process
 from r231_inference import model_source
 from full_ct import FULL_MAX_INPUT, FULL_MAX_FRAMES, is_full_request, crop_mask
 
@@ -243,7 +244,7 @@ def create_app(weights, token, origin="http://localhost:3000", port=8765, tempor
                     proc.kill()
                     break
                 try:
-                    measured = psutil.Process(proc.pid)
+                    measured = child_process(proc.pid)
                     rss = measured.memory_info().rss + sum(c.memory_info().rss for c in measured.children(recursive=True))
                     job["peakRssMiB"] = max(job["peakRssMiB"], round(rss / 1024**2, 2))
                     if rss > diagnostic["maxRssBytes"]:

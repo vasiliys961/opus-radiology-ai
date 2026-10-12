@@ -150,7 +150,8 @@ def run(directory, weights, profile="safe"):
     except ImportError:
         high_water = lambda: 0
     try:
-        process = psutil.Process()
+        from process_memory import own_process
+        process = own_process()
         memory_method = "process RSS sampled every 20 ms plus getrusage high-water where available"
         rss_bytes = lambda: max(process.memory_info().rss, high_water())
     except psutil.Error:

@@ -12,10 +12,12 @@ import { dirname, join, resolve, relative, isAbsolute, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 import net from 'node:net';
+import {verifyFullBrowser} from './r231-full-browser.mjs';
 
 async function main() {
 const root=fileURLToPath(new URL('../',import.meta.url));
 const args=process.argv.slice(2);
+const full=args.includes("--full-series"), frames=full?103:32;
 const value=name=>{const i=args.indexOf(name);if(i<0||!args[i+1])throw Error(`Required ${name}`);return args[i+1];};
 const python=value('--python'), weights=resolve(value('--weights'));
 const reference=await realpath(value('--reference')), report=resolve(value('--report'));
@@ -26,17 +28,18 @@ const manifest=JSON.parse(await readFile(join(reference,'reference.json'),'utf8'
 assert.equal(manifest.schema,'opus-r231-browser-reference/v1');
 assert.equal(manifest.sourceContentChainSha256,'bb4b90496cf2d83dac83e729ef271091962d532a18db201c6e2d99d42dcb5f61');
 assert.equal(manifest.fullChest,false);assert.equal(manifest.originalFrames,103);
-assert.deepEqual(manifest.selectedIndicesZeroBased,[35,66]);
-assert.deepEqual(manifest.dimensions,[512,512,32]);
-assert.equal(manifest.selectedFileSha256.length,32);
+assert.deepEqual(manifest.selectedIndicesZeroBased,full?[0,102]:[35,66]);
+if(full)assert.equal(manifest.allSourceFrames,true);
+assert.deepEqual(manifest.dimensions,[512,512,frames]);
+assert.equal(manifest.selectedFileSha256.length,frames);
 const names=(await readdir(join(reference,'dicom'))).sort();
-assert.equal(names.length,32);
+assert.equal(names.length,frames);
 const selectedChain=createHash('sha256');
 for(const digest of manifest.selectedFileSha256) {
   assert.match(digest,/^[a-f0-9]{64}$/);selectedChain.update(Buffer.from(digest,'hex'));
 }
-assert.equal(selectedChain.digest('hex'),'886f229ed355f669e4f5798f50b305c4823aaee949c04253660075c4e75afe30');
-assert.deepEqual(manifest.niftiCandidates,[
+assert.equal(selectedChain.digest('hex'),full?manifest.sourceContentChainSha256:'886f229ed355f669e4f5798f50b305c4823aaee949c04253660075c4e75afe30');
+if(!full)assert.deepEqual(manifest.niftiCandidates,[
   {affineLps:[0.976562,0,0,-250,0,0.976562,0,-156,0,0,3,145],inputSha256:'23d0065256550d22ccbe62a1ef4029ddf57bb0ef6334874875c244fc791a35d3'},
   {affineLps:[0.976562,0,0,-250,0,0.976562,0,-156,0,0,-3,238],inputSha256:'f81b3edb3c591afa699b7c6e081a90c57cb2b7a1e8d8e1e7025c3992c45487a6'},
 ]);
@@ -56,10 +59,11 @@ const appOrigin=`http://127.0.0.1:${appPort}`, workerOrigin=`http://127.0.0.1:${
 const require=createRequire(new URL('../web/package.json',import.meta.url));
 const {chromium}=require('playwright');
 let worker,server,browser,page,token,stage='start',jobId,request,outputStatus,maskPromise;
-let uploaded=0,chunkCount=0,deleted=false,observerError=null;
+let uploaded=0,chunkCount=0,deleted=false,observerError=null,fullMaskGets=0,slabReply=null,inputHeader=null;
 const workerHttp={capabilities:null,modelReady:null,createJob:null,firstChunk:null};
 let resourceDiagnostic=null;
 let workerRequestFailed=false;
+let resourceObserver;
 const hash=createHash('sha256'), destinations=new Set(), errors=[];
 const started=performance.now(), timings={};
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
@@ -77,6 +81,12 @@ const stop=async child=>{
   child.kill('SIGKILL');await exited;
 };
 try {
+  if(full) {
+    const sampler=spawn(python,[join(root,'scripts/observe-r231-resources.py'),'--parent',String(process.pid)],{stdio:['pipe','pipe','ignore']});
+    let aggregate='';sampler.stdout.on('data',b=>{aggregate+=b;if(aggregate.length>8192)sampler.kill();});
+    const done=once(sampler,'exit');
+    resourceObserver=async()=>{sampler.stdin.end('stop\n');await done;assert.equal(sampler.exitCode,0);return JSON.parse(aggregate);};
+  }
   worker=spawn(python,[join(root,'services/imaging-ai/worker.py'),'--weights',weights,'--origin',appOrigin,'--port',String(workerPort)],
     {stdio:['ignore','pipe','ignore']});
   // Consume but never print the ephemeral bearer token.
@@ -118,11 +128,13 @@ try {
       destinations.add(url.origin);
       // Relay unchanged REAL worker replies for independent inspection. This
       // avoids Chromium evicting getResponseBody while the browser streams it.
-      if(url.origin===workerOrigin&&route.request().method()==='GET'&&/^\/v1\/jobs\//.test(url.pathname)) {
+      if(url.origin===workerOrigin&&/^\/v1\/jobs\//.test(url.pathname)&&
+        (route.request().method()==='GET'||url.pathname.endsWith('/mask-slab'))) {
         try {
           const response=await route.fetch({maxRedirects:0});
           const body=await response.body();
-          if(url.pathname.endsWith('/mask'))maskPromise=Promise.resolve(body);
+          if(url.pathname.endsWith('/mask-slab'))slabReply={bytes:body,proof:response.headers()['x-opus-mask-proof']};
+          else if(url.pathname.endsWith('/mask')){fullMaskGets++;maskPromise=Promise.resolve(body);}
           else if(response.ok()) {
             const data=JSON.parse(body.toString());resourceDiagnostic=data;
             if(data.state==='succeeded'){outputStatus=data;jobId=data.jobId;}
@@ -141,10 +153,11 @@ try {
       if(url.pathname.includes('/input/chunks/')&&r.method()==='PUT') {
         assert.equal(Number(url.pathname.split('/').at(-1)),uploaded);
         const bytes=r.postDataBuffer();assert.ok(bytes&&bytes.length<=131072);
+        if(uploaded===0)inputHeader=Buffer.from(bytes.subarray(0,352));
         uploaded+=bytes.length;chunkCount++;hash.update(bytes);
       }
       if(url.pathname.endsWith('/input/complete')&&r.method()==='POST') {
-        assert.equal(uploaded,352+512*512*32*4);
+        assert.equal(uploaded,352+512*512*frames*4);
         assert.equal(hash.digest('hex'),request.inputSha256);
         assert.ok(manifest.niftiCandidates.some(c=>c.inputSha256===request.inputSha256));
       }
@@ -154,6 +167,32 @@ try {
   stage='import-original-public-slices';
   await page.goto(appOrigin,{waitUntil:'networkidle'});
   await page.locator('input[accept*=".dcm"]').setInputFiles(files);
+  if(full) {
+    const observed=()=>({request,outputStatus,deleted,jobId,fullMaskGets,slabReply,inputHeader});
+    const {counts,slabs}=await verifyFullBrowser({page,workerOrigin,token,manifest,observed,setStage:s=>{stage=s;}});
+    if(observerError)throw observerError;
+    assert.equal(errors.length,0);assert.ok(deleted);
+    const gone=await page.request.get(`${workerOrigin}/v1/jobs/${jobId}`,{headers:{Origin:appOrigin,Authorization:`Bearer ${token}`}});
+    assert.equal(gone.status(),404);
+    const browserVersion=await browser.version();await browser.close();browser=null;await stop(server);await stop(worker);
+    const resourceObservation=await resourceObserver();resourceObserver=null;
+    timings.totalSeconds=(performance.now()-started)/1000;
+    const record={resourceObservation,schema:'opus-r231-full-browser-verification/v1',status:'passed',actualTrainedInference:true,
+      reference:{collection:manifest.collection,license:manifest.license,sourceContentChainSha256:manifest.sourceContentChainSha256,
+        originalFrames:103,selectedFrames:103,selectedIndicesZeroBased:[0,102],allSourceFrames:true,fullChest:false},
+      dimensions:request.geometry.dimensions,affineLps:request.geometry.affineLps,inputSha256:request.inputSha256,
+      maskSha256:outputStatus.result.maskSha256,weightsSha256:outputStatus.result.model.weightsSha256,labelVoxels:counts,
+      inferenceMetrics:outputStatus.metrics,preflight:outputStatus.metrics.preflight,guardDecision:outputStatus.metrics.guardDecision,
+      peakRssMiB:outputStatus.metrics.peakRssMiB,controller:{platform:os.platform(),machine:os.arch(),browser:browserVersion},
+      timings,chunkCount,uploadedBytes:uploaded,slabs,fullMaskGets,completeMaskShaVerified:true,jobDeleted:true,
+      clinicalDice:null,M1Acceptance:'pending separate system/browser/swap/responsiveness and Safari verification',
+      limitations:['All supplied reference frames, anatomical completeness unverified.','No clinical accuracy evaluation.',
+        'Model RSS is separate from browser/system memory.','Page egress interception is not an OS network sandbox.',
+        'Chromium verification does not verify Safari.']};
+    await writeFile(report,JSON.stringify(record,null,2),{flag:'wx',mode:0o600});
+    console.log(JSON.stringify({status:'passed',selectedFrames:103,actualTrainedInference:true,completeMaskShaVerified:true,peakRssMiB:record.peakRssMiB}));
+    return;
+  }
   await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='MPR · 3 плоскости'&&!b.disabled));
   await page.getByRole('button',{name:'MPR · 3 плоскости',exact:true}).click();
   await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='Подготовить пакет серии'&&!b.disabled));
@@ -231,7 +270,7 @@ try {
   console.log(JSON.stringify({status:'passed',actualTrainedInference:true,selectedFrames:32,fullChest:false,
     labelVoxels:counts,overlayPixels,metrics:outputStatus.metrics,timings}));
 } catch(cause) {
-  const uiAlert=page?await page.locator('.ora-local-lungmask [role=alert]').isVisible().catch(()=>false):false;
+  const uiAlert=page?await page.locator(full?'details[aria-label="Полная КТ через локальный R231"] [role=alert]':'.ora-local-lungmask [role=alert]').isVisible().catch(()=>false):false;
   // Project only numeric diagnostics and allowlisted decisions; no raw errors,
   // token-bearing Playwright call logs or worker response bodies.
   const preflight={};
@@ -239,18 +278,19 @@ try {
     const n=resourceDiagnostic?.preflight?.[key];if(Number.isSafeInteger(n)&&n>=0)preflight[key]=n;
   }
   const guardDecision=resourceDiagnostic?.guardDecision??resourceDiagnostic?.preflight?.guardDecision;
-  const diagnostic={schema:'opus-r231-browser-verification/v1',status:'failed',actualTrainedInference:outputStatus?true:uploaded===0?false:null,
+  const diagnostic={schema:full?'opus-r231-full-browser-verification/v1':'opus-r231-browser-verification/v1',status:'failed',actualTrainedInference:outputStatus?true:uploaded===0?false:null,
     stage,uploaded,chunkCount,deleted,statusReceived:Boolean(outputStatus),maskReceived:Boolean(maskPromise),
     inputSha256:request?.inputSha256,geometry:request?.geometry,observerFailed:Boolean(observerError),errorCount:errors.length,
     errorType:cause instanceof Error?cause.name:'unknown',uiAlert,workerHttp,workerRequestFailed,preflight,
     guardDecision:['allow','reject-memory','reject-disk','reject-model-budget','stop-memory-pressure','stop-rss-limit','stop-timeout'].includes(guardDecision)?guardDecision:null,
-    peakRssMiB:Number.isFinite(resourceDiagnostic?.peakRssMiB)?resourceDiagnostic.peakRssMiB:null};
+    peakRssMiB:Number.isFinite(outputStatus?.metrics?.peakRssMiB)?outputStatus.metrics.peakRssMiB:Number.isFinite(resourceDiagnostic?.peakRssMiB)?resourceDiagnostic.peakRssMiB:null};
   await writeFile(report,JSON.stringify(diagnostic,null,2),{flag:'wx',mode:0o600});
   console.error(JSON.stringify(diagnostic));
   console.error(`FAIL: real R231 browser verification at ${stage}; no screenshots or source pixels saved.`);
   process.exitCode=1;
 } finally {
   await browser?.close();await stop(server);await stop(worker);
+  if(resourceObserver)await resourceObserver().catch(()=>{});
 }
 
 }

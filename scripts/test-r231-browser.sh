@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Opt-in reproducible public partial-reference test. No model/dependency auto-install.
+# Opt-in reproducible public reference test. No model/dependency auto-install.
 set -euo pipefail
-if [[ "${1:-}" != "--download-public-reference" ]]; then
-  echo "Usage: bash scripts/test-r231-browser.sh --download-public-reference"
-  echo "Downloads public CC BY 3.0 LCTSC; tests 32 of 103 original slices, not full chest."
+if [[ "${1:-}" != "--download-public-reference" || $# -gt 2 || ( $# -eq 2 && "$2" != "--full-series" ) ]]; then
+  echo "Usage: bash scripts/test-r231-browser.sh --download-public-reference [--full-series]"
+  echo "Downloads public CC BY 3.0 LCTSC; tests 32 slices by default or all 103 with --full-series; anatomy unverified."
   exit 2
 fi
 project_root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -20,7 +20,7 @@ if [[ -e "$task_destination" ]]; then
   exit 2
 fi
 mkdir -m 700 "$task_destination"
-"$task_python" scripts/download-r231-browser-reference.py --download-public-reference --output "$task_destination/reference"
+"$task_python" scripts/download-r231-browser-reference.py --download-public-reference --output "$task_destination/reference" "${@:2}"
 (
   cd web
   npm ci --no-audit --no-fund
@@ -28,6 +28,6 @@ mkdir -m 700 "$task_destination"
   npx playwright install chromium
 )
 node scripts/check-r231-browser.mjs --python "$task_python" --weights "$task_weights" \
-  --reference "$task_destination/reference" --report "$task_destination/metrics.json"
+  --reference "$task_destination/reference" --report "$task_destination/metrics.json" "${@:2}"
 echo "Verification report: $task_destination/metrics.json"
-echo "Partial CT reference preserved locally. M1/Safari/total system RAM acceptance remains separate."
+echo "Public reference preserved locally; full-series tests all 103 supplied frames, anatomical completeness unverified. M1/Safari/total system RAM acceptance remains separate."

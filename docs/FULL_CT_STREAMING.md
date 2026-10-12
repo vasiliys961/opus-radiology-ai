@@ -118,3 +118,63 @@ bounded ranges and view the full job's mask without another inference. Check
 original physical slices, both whole-result lung labels and deletion. A guarded
 resource/input/model failure is FAIL/unverified, never a negative clinical result.
 Record system/browser RAM and swap separately before claiming M1 acceptance.
+
+
+## Reproducible complete-reference browser acceptance
+
+After environment/checkpoint installation, one opt-in command prepares the pinned
+public reference and executes **all 103 unchanged source frames**:
+
+```bash
+bash scripts/test-r231-browser.sh --download-public-reference --full-series
+```
+
+Default invocation still verifies the existing 32-frame slab. The new path uses
+one full v2 inference, then sequential native ranges 0–31, 32–63, 64–95 and 96–102.
+Every crop's source/full-mask/range/physical-header/SHA proof is independently
+checked. Crop voxels are hashed in native order to reconstruct the complete mask
+SHA and label counts **without a full native mask allocation**. All ranges render
+three MPR overlays; peripheral empty planes are permitted, while at least one
+range must have visible labels in all three planes. Evidence export, zero full
+mask GETs and DELETE→404 are checked. Inference is never mocked in this command.
+
+The report is `metrics.json` outside the repository, schema
+`opus-r231-full-browser-verification/v1`. PASS requires actual trained inference,
+all 103 frames, exact uploaded scalar SHA, full/crop binding, both whole-series
+labels nonzero, complete mask SHA/counts, MPR and confirmed deletion. Any failure
+writes sanitized diagnostics and exits nonzero; no screenshots/pixels/tokens are
+saved. It does not certify complete anatomy, clinical accuracy or a normal study.
+
+A separate 1 Hz observer records system minimum available RAM/swap and peak summed
+RSS of the controller's process tree. Summed RSS double-counts shared pages; system
+figures include unrelated applications; short peaks and responsiveness remain
+unmeasured. These figures supplement model RSS, not an 8 GB acceptance guarantee.
+The full panel accepts another loopback port under the existing strict session
+validation; the harness uses ephemeral ports without changing `.env.local`.
+
+Manual GitHub Actions `Real R231 public reference` offers `coverage=full`; the
+ordinary CI remains synthetic. Chromium on Linux or Mac does not verify Safari.
+Mac M1/Safari/repeated responsiveness and clinical evaluation remain separate.
+
+
+### Actual complete-reference Linux result
+
+[`verification/r231-full-browser-linux.json`](verification/r231-full-browser-linux.json)
+records one successful trained full-series run from the feature working tree on
+baseline main `bf967e5`; exact runtime source file hashes are attached. All
+512x512x103 source frames, 825 chunks / 108,003,680 input bytes, both lung labels,
+complete mask SHA, four bound native MPR ranges, no full-mask GET and DELETE/404
+pass. Safe CPU inference takes 116.761 s; whole harness takes 144.577 s. Model
+peak RSS is 588.92 MiB. Summed process-tree RSS peaks at 1,834.25 MiB (shared pages
+are counted repeatedly); observed system swap starts/peaks/ends at zero. These
+are Linux measurements, not a demonstrated Mac improvement or responsiveness
+acceptance. Final seven peripheral slices have no lung labels; this is not a
+normal/negative clinical finding. 271 Web tests, 64 Python tests (optional Torch
+installed), typecheck/build and synthetic Chromium regression pass.
+
+The whole-mask SHA uses the exact acknowledged input header with only datatype
+changed to uint8. Crop headers re-encode shifted float32 geometry, so their bytes
+must not be reused to reconstruct the full header: signed-zero representations
+can differ despite an equal physical grid. Crop replies are relayed unchanged by
+the test interceptor, avoiding DevTools response-body eviction; buffers remain
+bounded. No mask/model arithmetic or resource threshold was changed.

@@ -387,3 +387,27 @@ Four modes and specialist/optional-LLM separation remain; patient/cloud/remote
 release and .env.local are unchanged. R1 remains PARTIAL pending hardware/model
 acceptance. The public reference preparer has explicit --full-series opt-in;
 default 32-slice verification stays unchanged.
+
+
+## Full-reference R231 acceptance harness — 2026-10-12
+
+Baseline `bf967e5` includes manually merged PR #34 and successful main Web/Python
+Actions. `scripts/test-r231-browser.sh --download-public-reference --full-series`
+now runs one actual v2 model job on all 103 pinned public LCTSC frames, verifies
+native derivatives across the entire mask, complete mask SHA/label counts, MPR,
+Evidence and DELETE/404. Default partial-reference behavior stays available.
+A 1 Hz technical-only observer supplements model RSS with process-tree/system
+RAM and swap; Linux PID namespace resolution follows only own/direct-child
+processes so watchdogs cannot silently sample an unrelated PID. Safe budgets,
+weights/arithmetic, v1/MPR caps and patient/cloud gates are unchanged.
+
+See `docs/FULL_CT_STREAMING.md` for the reproducible command and separate hardware
+acceptance. Chromium/public all-frame coverage is not anatomical completeness,
+Safari/M1 responsiveness or clinical accuracy. R1 stays PARTIAL until those
+independent checks; TotalSegmentator remains the next specialist-model stage.
+.env.local is untouched; merge is manual.
+
+Actual full-reference Linux acceptance: all 103 original frames, 825 chunks,
+complete mask SHA/counts, four native MPR ranges and DELETE/404 PASS; model RSS
+588.92 MiB, inference 116.761 s. See docs/verification/r231-full-browser-linux.json.
+This does not accept Mac/Safari/clinical accuracy. 271 Web / 64 Python tests pass.
