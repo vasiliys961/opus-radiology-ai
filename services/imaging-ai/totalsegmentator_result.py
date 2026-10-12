@@ -39,7 +39,7 @@ def validate_native_mask(path, dimensions, affine_lps, source_identity_sha256, a
             struct.unpack_from("<hh",header,70)!=(2,8) or
             struct.unpack_from("<f",header,108)[0]!=352 or
             struct.unpack_from("<ff",header,112)!=(1.,0.) or
-            struct.unpack_from("<hh",header,252)[1]!=1):
+            not 1 <= struct.unpack_from("<h",header,254)[0] <= 4):
             raise ValueError("invalid_mask_header")
         actual=list(struct.unpack_from("<12f",header,280))
         actual=[-v if i<8 else v for i,v in enumerate(actual)]
