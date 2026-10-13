@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {parseIchComponentEvidence} from "./ich-component-evidence";
+import {parseIchComponentEvidence} from "./ich-component-evidence.ts";
 import type {IchReferenceComparison} from "./ich-reference-comparison";
 import type {IchResearchReport} from "./ich-research";
 
