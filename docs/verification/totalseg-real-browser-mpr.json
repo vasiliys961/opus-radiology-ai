@@ -1,0 +1,59 @@
+{
+  "schema": "opus-totalseg-real-browser-mpr-verification/v1",
+  "workflowRun": "https://github.com/vasiliys961/opus-radiology-ai/actions/runs/38353633892",
+  "observedAtUtc": "2026-10-13T05:54:56Z",
+  "source": {
+    "collection": "TCIA LCTSC",
+    "public": true,
+    "dimensions": [
+      512,
+      512,
+      103
+    ],
+    "sourceSha256": "99615ddb66e09bd46c2ff70c352d73414285145b358e448682b7cffc41249738"
+  },
+  "inference": {
+    "mode": "CPU",
+    "model": "TotalSegmentator",
+    "elapsedSeconds": 20.78,
+    "exitCode": 0,
+    "clinicalStatus": "not_validated",
+    "readyForClinicalUse": false
+  },
+  "mask": {
+    "sourceFullMaskSha256": "194ac21254aab4a975c2bb66c99b60c2c21c4b24a86588cd6efda52dbbc70d7f",
+    "sourceGridGeometry": "native_contiguous_unresampled",
+    "firstOriginalSliceIndexZeroBased": 35,
+    "lastOriginalSliceIndexZeroBased": 66,
+    "dimensions": [
+      512,
+      512,
+      32
+    ],
+    "slabMaskSha256": "a93791fee531afb4771729a3175800ee529900c6a97864d39c64c9b46e828514",
+    "presentLobeIds": [
+      10,
+      11,
+      12,
+      13,
+      14
+    ]
+  },
+  "browser": {
+    "engine": "Cornerstone MPR",
+    "testBrowser": "Chromium",
+    "axialOverlayPixels": 592,
+    "coronalOverlayPixels": 1019,
+    "sagittalOverlayPixels": 122,
+    "threePlanesPassed": true,
+    "externalBrowserNetwork": false
+  },
+  "noGroundTruthDice": true,
+  "fullAnatomicCoverageVerified": false,
+  "readyForClinicalUse": false,
+  "limitations": [
+    "No independent reference contour Dice; not clinical segmentation accuracy.",
+    "GitHub Chromium does not establish Safari/M1 8 GB acceptance.",
+    "Mask and source DICOM cleared from ephemeral runner; no raw images published."
+  ]
+}
