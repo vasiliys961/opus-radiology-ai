@@ -8,6 +8,7 @@ import { PATIENT_CLOUD_REQUIREMENTS } from "../lib/patient-cloud-policy";
 import type { DicomSeries } from "../lib/dicom-series";
 import { useAnalysisSound } from "./AnalysisSoundProvider";
 import ProviderReadinessPanel from "./ProviderReadinessPanel";
+import HeadHemorrhageVolumePanel from "./HeadHemorrhageVolumePanel";
 
 const PREF_KEY = "opus-radiology-v17-ui-preferences";
 type Preferences = {
@@ -53,6 +54,8 @@ export default function AiWorkflowPanel({ series }: { series: readonly DicomSeri
     if (mounted) window.localStorage.setItem(PREF_KEY, JSON.stringify(prefs));
   }, [prefs, mounted]);
   const readiness = deriveStudyReadiness(series);
+  const headCtSeriesKeys=series.filter(s=>s.modality.toUpperCase()==="CT"&&
+    s.members.length>0&&s.members.every(m=>m.metadata.bodyRegion==="HEAD")).map(s=>s.key);
   const selected = AI_CATALOG.find(model => model.id === prefs.anatomy);
   const set = <K extends keyof Preferences>(key: K, value: Preferences[K]) =>
     setPrefs(previous => ({ ...previous, [key]: value }));
@@ -104,6 +107,7 @@ export default function AiWorkflowPanel({ series }: { series: readonly DicomSeri
         </div>
       </div>
     </section>
+    {headCtSeriesKeys.length>0&&<HeadHemorrhageVolumePanel seriesKeys={headCtSeriesKeys}/>}
     <ProviderReadinessPanel provider={prefs.provider}
       selectedVision={prefs.vision} selectedClinical={prefs.clinical}/>
     <div className="ora-v17-guidance">
