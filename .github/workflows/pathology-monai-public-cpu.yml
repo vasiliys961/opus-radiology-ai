@@ -27,7 +27,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --no-cache-dir torch==2.4.0 --index-url https://download.pytorch.org/whl/cpu
-          python -m pip install --no-cache-dir "monai==1.4.0" "nibabel==5.2.1" "numpy==1.24.4" "pytorch-ignite==0.4.11" "SimpleITK==2.4.0" "huggingface_hub==0.34.4" "tensorboard==2.17.0" "psutil==6.1.1"
+          python -m pip install --no-cache-dir "monai==1.4.0" "nibabel==5.2.1" "numpy==1.24.4" "pytorch-ignite==0.4.11" "SimpleITK==2.4.0" "huggingface_hub==0.34.4" "tensorboard==2.17.0" "psutil==6.1.1" "fire==0.7.1"
       - name: CPU RAM admission before public CT download
         run: |
           python - <<'PY'
