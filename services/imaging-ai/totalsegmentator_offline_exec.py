@@ -39,6 +39,7 @@ def normalize_model_mask(path, dimensions, affine_lps, allowed_labels):
         canonical=np.asarray(array,dtype=np.uint8)
         header=nib.Nifti1Header()
         header.set_data_dtype(np.uint8)
+        header.set_xyzt_units("mm")
         result=nib.Nifti1Image(canonical,image.affine,header=header)
         temp=path.with_name(path.name+".normalized.nii")
         if temp.exists() or temp.is_symlink():

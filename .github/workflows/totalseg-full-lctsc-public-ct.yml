@@ -66,7 +66,15 @@ jobs:
             python scripts/run-totalseg-first-inference.py \
               --input "$RUNNER_TEMP/public_ct.nii" \
               --models "$RUNNER_TEMP/models" \
-              --output "$RUNNER_TEMP/out" --research-confirmed
+              --output "$RUNNER_TEMP/out" --research-confirmed \
+              | tee "$RUNNER_TEMP/out/opus-full-model-report.json"
+          python scripts/extract-totalseg-mpr-slab.py \
+            --mask "$RUNNER_TEMP/out/totalseg_lobes.nii" \
+            --report "$RUNNER_TEMP/out/opus-full-model-report.json" \
+            --output "$RUNNER_TEMP/out/lctsc-mpr-slab.nii" \
+            --manifest "$RUNNER_TEMP/out/lctsc-mpr-slab.json" \
+            --start 35 --count 32 \
+            --expected-source-sha256 99615ddb66e09bd46c2ff70c352d73414285145b358e448682b7cffc41249738
       - name: Remove reference DICOM/CT/checkpoints/masks
         if: always()
         run: |
