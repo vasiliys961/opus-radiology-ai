@@ -1,0 +1,115 @@
+{
+  "schema": "opus-monai-luna16-real-single-ct-inference/v1",
+  "status": "genuine_trained_checkpoint_executed_on_public_ct",
+  "publicStudy": {
+    "sourceSeriesIdSha256": "0e70f7a05cf8963ea61614a599ebb6fb59ad661bd03299d3058ad14d485b2d76",
+    "sourceMhdSha256": "5a1320abf573d50422961f5340e3f8f6391c23f3a13e29a18322034958f6ac1c",
+    "sourceRawSha256": "ca3c712205e3e8a2d9f5cbc19615a7b47c757ccf2a6b5b9b6a4e15ec0d70afc5",
+    "dimensions": [
+      512,
+      512,
+      109
+    ],
+    "luna16GroundTruthNoduleCount": 1
+  },
+  "model": {
+    "id": "monai-lung-nodule-ct-retinanet",
+    "version": "0.6.9",
+    "weightsSha256": "b5e79231466adae93a6fe8e8594029e9add142914e223b879aa0343bb2402d01",
+    "revision": "7226a40a4c3713f7d5469559b7f2fc296fd54825",
+    "modelCheckpointActualSha256Verified": true
+  },
+  "runtime": {
+    "execution": "github-hosted-public-cpu",
+    "elapsedSeconds": 1253.636,
+    "cpu": {
+      "cpu": "linux-x64",
+      "ramAvailableBytes": 15271915520,
+      "monaiVersion": "1.4.0",
+      "torchVersion": "2.4.0+cpu"
+    },
+    "peakObservedModelProcessRssBytes": 5185228800
+  },
+  "coverage": {
+    "sourceFullCtProcessed": true,
+    "onlyOnePublicStudy": true,
+    "inferenceMode": "forced_sliding_window_full_study",
+    "windowVoxels": [
+      192,
+      192,
+      80
+    ],
+    "windowOverlapFraction": 0.25,
+    "upstreamEvaluationPatchModified": true,
+    "sourceWorldCoordinateVerification": "not_yet_completed",
+    "negativeDiagnosticConclusionAllowed": false
+  },
+  "candidates": [
+    {
+      "candidateIndex": 0,
+      "centerMonaiWorldMm": [
+        -63.97557,
+        -5.29118,
+        -85.12885
+      ],
+      "extentMm": [
+        4.90964,
+        4.65318,
+        4.97693
+      ],
+      "rawClassificationScore": 0.981209,
+      "modelLabel": 0,
+      "coordinateFrameVerifiedAgainstSource": false,
+      "clinicalFindingConfirmed": false
+    },
+    {
+      "candidateIndex": 1,
+      "centerMonaiWorldMm": [
+        39.28892,
+        -11.07573,
+        -90.9185
+      ],
+      "extentMm": [
+        6.49812,
+        8.41385,
+        8.79251
+      ],
+      "rawClassificationScore": 0.062326,
+      "modelLabel": 0,
+      "coordinateFrameVerifiedAgainstSource": false,
+      "clinicalFindingConfirmed": false
+    },
+    {
+      "candidateIndex": 2,
+      "centerMonaiWorldMm": [
+        33.66457,
+        24.34399,
+        -98.83364
+      ],
+      "extentMm": [
+        7.89259,
+        8.22975,
+        4.76817
+      ],
+      "rawClassificationScore": 0.044837,
+      "modelLabel": 0,
+      "coordinateFrameVerifiedAgainstSource": false,
+      "clinicalFindingConfirmed": false
+    }
+  ],
+  "candidateCount": 3,
+  "metrics": {
+    "sensitivity": null,
+    "specificity": null,
+    "froc": null,
+    "falsePositivesPerScan": null,
+    "independentValidation": false
+  },
+  "readyForClinicalUse": false,
+  "provenance": {
+    "workflowRunId": 38436406805,
+    "workflowRunUrl": "https://github.com/vasiliys961/opus-radiology-ai/actions/runs/38436406805",
+    "source": "public LUNA16 MONAI trained inference stdout",
+    "preservedFromSuccessfulJob": true
+  }
+}
