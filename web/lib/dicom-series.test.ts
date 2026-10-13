@@ -44,6 +44,42 @@ test('metadata reader stops at PixelData and never needs complete pixel bytes', 
   assert.equal(Object.hasOwn(parsed, 'patientName'), false);
 });
 
+test('missing or empty DICOM DS coordinates never become invented zeros', () => {
+  const invalid = [
+    '', '   ', '  \\  \\  ', '1\\ \\3', '\\0\\3',
+    '1\\2\\', '1\\2', '1\\2\\3\\4',
+    '1\\NaN\\3', '0\\Infinity\\3', '0\\0x10\\3',
+    '0\\1oops\\3',
+  ];
+  for (const position of invalid) {
+    const parsed = parseDicomSeriesHeader(syntheticHeader({position}));
+    assert.equal(parsed.imagePositionPatient, null,
+      'Invalid DS must be absent: '+JSON.stringify(position));
+  }
+});
+
+test('valid signed DS numbers, scientific notation and explicit zero remain valid', () => {
+  for (const [position, expected] of [
+    ['0\\0\\0', [0,0,0]],
+    [' -12.5\\+0\\3.25 ',[-12.5,0,3.25]],
+    ['1E-3\\-.5\\+2.',[0.001,-0.5,2]],
+  ] as const) {
+    assert.deepEqual(parseDicomSeriesHeader(syntheticHeader({position})).imagePositionPatient, expected);
+  }
+});
+
+test('empty DS position blocks spatial sorting and 3D readiness, never an invented origin', () => {
+  const entries = ['0\\0\\0','\\0\\1','0\\0\\2'].map((position,i)=>({
+    id:String(i),name:String(i)+'.dcm',
+    metadata:{...meta({sopInstanceUid:'1.2.3.'+i}),imagePositionPatient:
+      parseDicomSeriesHeader(syntheticHeader({position})).imagePositionPatient},
+  }));
+  const [group] = groupDicomSeries(entries);
+  assert.equal(group.spatiallySorted,false);
+  assert.equal(group.volumeReady,false);
+  assert.match(group.warning??'',/геометр|Порядок/);
+});
+
 test('compressed transfer syntax can be indexed without claiming it can be rendered', () => {
   const data = parseDicomSeriesHeader(syntheticHeader({syntax:'1.2.840.10008.1.2.4.90'}));
   assert.equal(data.transferSyntax, '1.2.840.10008.1.2.4.90');
@@ -151,7 +187,7 @@ test('flags multi-frame images although the header can be indexed', () => {
 });
 
 /** Real-world studies may contain sequence items before the basic image tags. */
-function complexHeader(withPreamble = true): ArrayBuffer {
+function complexHeader(withPreamble = true, position = '0\\0\\3'): ArrayBuffer {
   const chunks: Buffer[] = [];
   if (withPreamble) chunks.push(Buffer.alloc(128), Buffer.from('DICM'));
   function elem(group: number, element: number, vr: string, value: string) {
@@ -176,6 +212,7 @@ function complexHeader(withPreamble = true): ArrayBuffer {
   elem(0x0020, 0x000d, 'UI', '1.2.3');
   elem(0x0020, 0x000e, 'UI', '1.2.3.4');
   elem(0x0008, 0x0018, 'UI', '1.2.3.4.5');
+  elem(0x0020, 0x0032, 'DS', position);
   const pixel = Buffer.alloc(12);
   pixel.writeUInt16LE(0x7fe0, 0); pixel.writeUInt16LE(0x0010, 2);
   pixel.write('OW', 4); pixel.writeUInt32LE(160000, 8);
@@ -202,4 +239,13 @@ test('raw explicit-VR DICOM without 128-byte preamble is identified for indexing
 test('non-DICOM bytes are rejected rather than invented as a series', async () => {
   const file = new File([new Uint8Array([1,2,3,4])], 'invalid.dcm');
   await assert.rejects(readDicomSeriesHeader(file), /Не удалось разобрать структуру DICOM/);
+});
+
+test('complex SQ parser also rejects empty DS components (not just fast Part-10 path)', async () => {
+  const invalid = new File([complexHeader(true, ' \\ \\4')], 'synthetic-invalid-complex.dcm');
+  const bad = await readDicomSeriesHeader(invalid);
+  assert.equal(bad.imagePositionPatient, null);
+  const valid = new File([complexHeader(true, '-2\\0\\4.5')], 'synthetic-valid-complex.dcm');
+  const good = await readDicomSeriesHeader(valid);
+  assert.deepEqual(good.imagePositionPatient, [-2,0,4.5]);
 });

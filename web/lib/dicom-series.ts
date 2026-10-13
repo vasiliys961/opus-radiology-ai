@@ -101,9 +101,22 @@ function ascii(bytes: Uint8Array, start: number, length: number): string {
   return result.replace(/\0/g, '').trim();
 }
 
+/** DICOM DS values are ASCII decimals. Empty components must never become 0:
+ * Number("") and Number(" ") both return zero and can invent image geometry.
+ */
 function numericVector(str: string, length: number): number[] | null {
-  const values = str.split('\\').map((s) => Number(s.trim()));
-  return values.length === length && values.every(Number.isFinite) ? values : null;
+  const parts = str.split('\\');
+  if (parts.length !== length) return null;
+  const decimal = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
+  const values: number[] = [];
+  for (const part of parts) {
+    const value = part.trim();
+    if (!decimal.test(value)) return null;
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return null;
+    values.push(parsed);
+  }
+  return values;
 }
 
 export function parseDicomSeriesHeader(buffer: ArrayBuffer): TechnicalDicomMetadata {
