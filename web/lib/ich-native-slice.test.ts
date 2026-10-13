@@ -17,6 +17,7 @@ function makeNii(kind:"ct"|"mask",badAffine=false,nonbinary=false):Blob{
  v.setFloat32(108,352,true);
  v.setFloat32(112,NaN,true);
  v.setFloat32(116,NaN,true);
+ v.setUint8(123,2);
  v.setInt16(254,2,true);
  for(let row=0;row<3;row++)for(let col=0;col<4;col++)
    v.setFloat32(280+(row*4+col)*4,badAffine&&row===0&&col===3?11:affine[row][col],true);
