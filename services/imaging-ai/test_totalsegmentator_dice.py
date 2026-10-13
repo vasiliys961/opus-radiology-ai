@@ -48,7 +48,8 @@ def test_dice_is_computed_per_lobe_without_inventing_absent_classes(tmp_path):
                             [10,0,11,12,0,0,0])
     result=benchmark(*inp)
     labels={x["labelId"]:x for x in result["lobeDice"]}
-    assert labels[10]["dice"]==0.5
+    # One true-positive voxel, two predicted voxels, one reference voxel: Dice = 2/(2+1).
+    assert labels[10]["dice"]==0.666667
     assert labels[11]["dice"]==1.0
     assert labels[12]["dice"]==0.0
     assert labels[13]["dice"] is None
