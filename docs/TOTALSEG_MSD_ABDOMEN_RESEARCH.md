@@ -69,3 +69,34 @@ prove full-organ anatomy. No real patient cloud API or Safari/M1 workflow
 has been enabled. Do **not** rerun inference to calculate physical label
 volumes: the native label count + validated NIfTI mm-grid determinant
 suffice; absence of validated units must return \`null\`, not a guessed mL.
+
+
+## Four-organ 32-slice MPR research review (new browser UI; not patient-approved)
+
+The **native full mask 512×512×90 is too large for the current 8,388,608
+voxel browser limit**. Use the extended source-bound
+\`scripts/extract-totalseg-mpr-slab.py --research-profile abdomen-four-organs\`
+to extract a **contiguous original-grid 32-slice** fragment, preserving
+mask voxel labels and shifting the NIfTI sform by the exact slice offset.
+The generated \`.nii\` and
+\`opus-totalseg-abdomen-native-mpr-slab/v1\` JSON passport can be selected
+together under **Маска TotalSegmentator + паспорт исследования** in MPR.
+The existing viewer validates 3D geometry of the mask against the **original
+matching DICOM slices**. If the mask does not match the source DICOM grid,
+it is rejected. Four fixed classes are shown in Russian and offer bounded
+occupied-voxel MPR navigation. A missing class is flagged, never called normal.
+
+Important: **MSD Task09 provides NIfTI CT, not DICOM**, and this release
+does not add NIfTI CT background rendering. Thus the official MSD test
+verifies the full 3D anatomy masks and independently scored spleen Dice;
+it **does not** demonstrate those masks displayed over MSD CT in the current
+DICOM-only browser viewer. For local review, retain a lawful compatible
+DICOM source or implement separately verified NIfTI CT viewing before
+claiming source-image overlay. This manifest cannot prove patient identity
+or the origin of the model even if its SHA matches the mask.
+
+For **future** manual workflow runs, the script produces an ephemeral
+32-slice mask with source range 25–56 and a four-organ proof before data
+cleanup. It does NOT upload masks or source images as CI artifacts. The
+already successful full model run does not need to be repeated to add
+this code; no new real browser observation is claimed.
