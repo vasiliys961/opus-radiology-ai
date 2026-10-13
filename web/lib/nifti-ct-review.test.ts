@@ -95,5 +95,5 @@ test("rejected unverified units, four-dimensional files and bad source SHA",asyn
   await assert.rejects(()=>readNiftiCtHeader(malformed(v=>v.setInt16(70,2,true))),/float32/);
   const h=await readNiftiCtHeader(f.file);
   await assert.rejects(()=>loadNativeCtSlab(f.file,h,{...f.proof,sourceSha256:"d".repeat(64)}),/SHA-256/);
-  await assert.rejects(()=>loadNativeCtSlab(f.file,h,{...f.proof,firstSlice:0,lastSlice:4}),/ограниченный/);
+  await assert.rejects(()=>loadNativeCtSlab(f.file,h,{...f.proof,firstSlice:0,lastSlice:40}),/ограниченный/);
 });
