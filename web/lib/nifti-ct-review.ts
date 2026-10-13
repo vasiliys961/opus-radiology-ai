@@ -57,7 +57,7 @@ export async function readNiftiCtHeader(file:Blob):Promise<NiftiCtSource>{
     throw Error("Размер файла не соответствует числу исходных CT-вокселей.");
   const ras=Array.from({length:12},(_,i)=>v.getFloat32(280+4*i,true));
   if(!finite(ras))throw Error("Некорректные исходные координаты.");
-  const affineLps=ras.map((x,i)=>i<8?-x:x) as Affine;
+  const affineLps=ras.map((x,i)=>i<8?(x===0?0:-x):x) as Affine;
   invertAffine(affineLps);
   const voxelVolume=Math.abs(
     affineLps[0]*(affineLps[5]*affineLps[10]-affineLps[6]*affineLps[9])
