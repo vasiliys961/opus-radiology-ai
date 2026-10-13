@@ -1,6 +1,7 @@
 "use client";
 import {useEffect,useRef,useState} from "react";
 import {sha256} from "@noble/hashes/sha2.js";
+import IchNativeOverlay from "./IchNativeOverlay";
 import {
   parseIchResearchReport,buildIchLocalReview,
   type IchResearchReport,type IchReviewDecision
@@ -34,6 +35,8 @@ export default function IchResearchResults(){
   const [report,setReport]=useState<IchResearchReport|null>(null);
   const [sourceOk,setSourceOk]=useState(false);
   const [maskOk,setMaskOk]=useState(false);
+  const [sourceFile,setSourceFile]=useState<File|null>(null);
+  const [maskFile,setMaskFile]=useState<File|null>(null);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
   const [decisions,setDecisions]=useState<Record<number,Decision>>({});
@@ -41,7 +44,8 @@ export default function IchResearchResults(){
   useEffect(()=>()=>abort.current?.abort(),[]);
   function clear(){
     abort.current?.abort();abort.current=null;setReport(null);
-    setMaskOk(false);setSourceOk(false);setDecisions({});setError("");
+    setMaskOk(false);setSourceOk(false);setSourceFile(null);setMaskFile(null);
+    setDecisions({});setError("");
   }
   async function loadReport(file:File){
     clear();
@@ -57,12 +61,14 @@ export default function IchResearchResults(){
     const controller=new AbortController();
     abort.current=controller;
     setBusy(true);setError("");
-    if(kind==="source")setSourceOk(false);else setMaskOk(false);
+    if(kind==="source"){setSourceOk(false);setSourceFile(null);}
+    else {setMaskOk(false);setMaskFile(null);}
     try{
       await matchFileSha(file,kind==="source"?report.source.sha256:report.prediction.maskSha256,
         controller.signal);
       if(!controller.signal.aborted){
-        if(kind==="source")setSourceOk(true);else setMaskOk(true);
+        if(kind==="source"){setSourceOk(true);setSourceFile(file);}
+        else {setMaskOk(true);setMaskFile(file);}
       }
     }catch(e){
       if(!controller.signal.aborted)setError(e instanceof Error?e.message:"Файл не совпадает.");
@@ -111,6 +117,8 @@ export default function IchResearchResults(){
         </label>
         <p role="status">Маска: {maskOk?"SHA-256 совпал":"не подтверждена по файлу"}</p>
       </div>
+      {sourceOk&&maskOk&&sourceFile&&maskFile&&
+        <IchNativeOverlay source={sourceFile} mask={maskFile} report={report}/>}
       <p><small>SHA подтверждает соответствие выбранным локальным файлам,
         а не клиническую точность, правильность анатомии или доверие к автору отчёта.</small></p>
       {report.prediction.largestComponents.length===0?
