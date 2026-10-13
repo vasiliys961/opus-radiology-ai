@@ -106,7 +106,21 @@ def fetch_bytes(url,max_bytes):
     return blob
 
 def fetch_listing():
-    return json.loads(fetch_bytes(TREE_URL,800000))
+    # Use the officially supported paginated API: hand-written ?limit/expand
+    # combinations can return 400 and cannot be trusted to enumerate all files.
+    from huggingface_hub import HfApi, RepoFile
+    api=HfApi(token=False)
+    entries=[]
+    for item in api.list_repo_tree(repo_id=DATASET,repo_type="dataset",
+                                   revision=REV,path_in_repo="subset0",
+                                   recursive=False,expand=False,token=False):
+        if not isinstance(item,RepoFile):
+            continue
+        entries.append({"path":item.path,"size":item.size,
+                        "lfs":item.lfs if item.lfs is not None else {}})
+        if len(entries)>1000:
+            raise ValueError("too_many_public_source_files")
+    return entries
 
 def validate_mhd(path,raw_path):
     # No path traversal, compressed payload, multiple channels, or unknown type.
