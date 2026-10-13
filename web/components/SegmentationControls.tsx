@@ -5,13 +5,13 @@ import LocalLungmaskPanel from "./LocalLungmaskPanel";
 import SegmentationEvidenceReview from "./SegmentationEvidenceReview";
 import { buildSegmentationEvidence, type SegmentationEvidence } from "../lib/segmentation-evidence";
 import type { AnalysisStream } from "../lib/analysis-stream";
-import {parseResearchLobes, type ResearchLobes} from "../lib/totalseg-research-import";
-import {buildResearchLobeRegions, type LobeRegion} from "../lib/totalseg-lobe-navigation";
+import {parseResearchAnatomy, type AnatomyProof} from "../lib/totalseg-abdomen-import";
+import {buildResearchAnatomyRegions, type LobeRegion} from "../lib/totalseg-lobe-navigation";
 import { maskColor, MAX_MASK_FILE_BYTES, readNiftiMaskFile, type LabelMask, type Point3 } from "../lib/segmentation-mask";
 import { assertResultBinding, MAX_RESULT_JSON_BYTES, parseSegmentationResult, sha256, type AnalysisPackage, type AnalysisRequest, type SegmentationResult } from "../lib/analysis-package";
 
 export type MaskDisplay = { visible: boolean; opacity: number; label: number | null };
-type Summary = { name: string; labels: LabelMask["labels"]; result?: SegmentationResult; evidence?: SegmentationEvidence; evidenceRevision?: number; fullCtDerived?:boolean; research?:ResearchLobes; researchRegions?:LobeRegion[] };
+type Summary = { name: string; labels: LabelMask["labels"]; result?: SegmentationResult; evidence?: SegmentationEvidence; evidenceRevision?: number; fullCtDerived?:boolean; research?:AnatomyProof; researchRegions?:LobeRegion[] };
 type DownloadPackage = { request: AnalysisRequest; volumeUrl: string; manifestUrl: string };
 
 export default function SegmentationControls({ ready, onPrepare, onPrepareStream, onImport, onDisplay, onClear, onNavigatePoint, onSampleMask,onFullCtLoad }: {
@@ -121,8 +121,8 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
         throw Error("Недопустимый размер файла исследовательской маски или паспорта.");
       const digest=await sha256(await masks[0].arrayBuffer());
       const mask=await readNiftiMaskFile(masks[0]);
-      const research=parseResearchLobes(await json[0].text(),mask,digest);
-      const researchRegions=await buildResearchLobeRegions(mask,research,{cancelled:()=>revision!==version.current});
+      const research=parseResearchAnatomy(await json[0].text(),mask,digest);
+      const researchRegions=await buildResearchAnatomyRegions(mask,research,{cancelled:()=>revision!==version.current});
       if(revision!==version.current)return;
       // The MPR runtime independently rejects mismatch with currently loaded DICOM geometry.
       const next={visible:true,opacity:0.4,label:null};
@@ -206,18 +206,18 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
       <small>Совпадение геометрии не подтверждает пациента или правильность сегментации. Проверьте принадлежность файла выбранной серии и границы на всех плоскостях.</small>
       <p className="ora-mask-coverage" role="note">Полнота анатомического охвата не подтверждена. Объём разметки относится только к загруженным срезам, а не ко всему органу.</p>
       {summary.research && <details className="ora-mask-provenance" open>
-        <summary>Исследовательская разметка TotalSegmentator · доли лёгких</summary>
+        <summary>Исследовательская разметка TotalSegmentator · {summary.research.anatomy==="abdomen"?"органы брюшной полости":"доли лёгких"}</summary>
         <p>Срезы исходной серии: {summary.research.firstSlice}–{summary.research.lastSlice} (индексы с нуля);
           полный объём: {summary.research.fullDimensions.join(" × ")}.</p>
         {summary.research.missingLabels.length ?
           <p role="alert">Требуют проверки отсутствующие метки: {summary.research.missingLabels.map(id=>summary.research!.labelNames[id]).join(", ")}.</p> :
-          <p>Все пять меток присутствуют, но правильность анатомических границ не подтверждена.</p>}
+          <p>Все {summary.research.anatomy==="abdomen"?"четыре":"пять"} меток присутствуют, но правильность анатомических границ не подтверждена.</p>}
         <small>SHA-256 маски и число вокселей совпадают с паспортом. JSON не подписан;
           источник модели, принадлежность DICOM и клиническая точность не удостоверены. Только исследовательский режим.</small>
       </details>}
-      {summary.research && summary.researchRegions && <section className="ora-mask-settings" aria-label="Навигация по долям лёгких">
+      {summary.research && summary.researchRegions && <section className="ora-mask-settings" aria-label="Навигация по анатомическим структурам">
         <h3>Найденные анатомические структуры · обзор на MPR</h3>
-        <p>Выберите долю, чтобы перейти к занятому ею вокселю на исходных срезах.
+        <p>Выберите структуру, чтобы перейти к занятому ею вокселю на исходных срезах.
           Точка выбрана по центру разметки, а не по подозрению на патологию.</p>
         <ul>{summary.researchRegions.map(region=><li key={region.id}>
           <strong>{region.name}</strong> · {region.voxels.toLocaleString("ru-RU")} вокселей
@@ -228,10 +228,10 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
               callbacks.current.onNavigatePoint(region.anchorLpsMm);
               change({...display,visible:true,label:region.id});
             } catch(cause) {setError(cause instanceof Error?cause.message:"Не удалось открыть долю в MPR.");}
-          }}>Перейти к доле на MPR</button>
+          }}>Показать структуру в MPR</button>
         </li>)}</ul>
         <small>Объёмы относятся только к выделенным срезам. Границы и патологию должен проверить врач;</small>
-        <small>навигация не подтверждает анатомическую точность или полный охват лёгких.</small>
+        <small>навигация не подтверждает анатомическую точность или полный охват органа. Для MSD Task09 доступен эталон только селезёнки; его Dice не относится к данному файлу автоматически.</small>
       </section>}
       {summary.result ? <details className="ora-mask-provenance">
         <summary>Суммы совпали · {summary.result.model.id} · сведения о модели</summary>
