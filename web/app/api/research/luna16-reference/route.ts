@@ -47,7 +47,13 @@ function headerGeometry(raw:string){
     fields.set(key,value);
   }
   if(fields.get("NDims")!=="3"||fields.get("ElementType")!=="MET_SHORT"||
-     fields.get("ElementDataFile")!==UID+".raw")throw Error("wrong_public_source");
+     fields.get("ElementDataFile")!==UID+".raw"||
+     (fields.get("CompressedData")??"False").toLowerCase()!=="false"||
+     (fields.get("BinaryData")??"True").toLowerCase()!=="true"||
+     (fields.get("ElementNumberOfChannels")??"1")!=="1"||
+     (fields.get("ElementByteOrderMSB")??"False").toLowerCase()!=="false"||
+     (fields.get("BinaryDataByteOrderMSB")??"False").toLowerCase()!=="false")
+     throw Error("wrong_public_source");
   const dims=vector(fields.get("DimSize")??"",3,"dimensions");
   const spacing=vector(fields.get("ElementSpacing")??"",3,"spacing");
   if(dims.some((n,i)=>n!==[512,512,109][i])||
