@@ -7,6 +7,8 @@ on:
       - "scripts/test-ich-public-mask.py"
       - "scripts/ich-native-slice-evidence.py"
       - "scripts/test-ich-native-slice-evidence.py"
+      - "scripts/ich-expert-component-contact.py"
+      - "scripts/test-ich-expert-component-contact.py"
       - ".github/workflows/ich-reference-comparison.yml"
   push:
     paths:
@@ -14,6 +16,8 @@ on:
       - "scripts/test-ich-public-mask.py"
       - "scripts/ich-native-slice-evidence.py"
       - "scripts/test-ich-native-slice-evidence.py"
+      - "scripts/ich-expert-component-contact.py"
+      - "scripts/test-ich-expert-component-contact.py"
       - ".github/workflows/ich-reference-comparison.yml"
 
 permissions:
@@ -34,3 +38,5 @@ jobs:
         run: python scripts/test-ich-public-mask.py
       - name: Check source-indexed hemorrhage slice evidence
         run: python scripts/test-ich-native-slice-evidence.py
+      - name: Score connected 3D expert mask fragments
+        run: python scripts/test-ich-expert-component-contact.py
