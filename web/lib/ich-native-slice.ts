@@ -44,11 +44,13 @@ function validateHeader(header:Uint8Array,dimensions:readonly number[],
       throw Error("Sform CT/маски не совпадает с исходным паспортом.");
   }
   const slope=v.getFloat32(112,true),intercept=v.getFloat32(116,true);
-  if(!Number.isFinite(slope)||!Number.isFinite(intercept)||
-     (kind==="mask"&&slope!==0&&slope!==1)||
-     (kind==="mask"&&intercept!==0))
+  const unscaled=(slope===0||Number.isNaN(slope))&&
+    (intercept===0||Number.isNaN(intercept));
+  const scaled=Number.isFinite(slope)&&Number.isFinite(intercept)&&slope>0;
+  if(!unscaled&&!scaled||
+     (kind==="mask"&&!unscaled&&!(slope===1&&intercept===0)))
     throw Error("Неоднозначный масштаб NIfTI-пикселей.");
-  return {datatype,bytes,voxOffset,slope:slope===0?1:slope,intercept};
+  return {datatype,bytes,voxOffset,slope:unscaled?1:slope,intercept:unscaled?0:intercept};
 }
 
 /** Can read gzip NIfTI because the streaming decompressor is stopped after
