@@ -5,8 +5,9 @@ import {parseIchSliceEvidence,type IchSliceEvidence} from "../lib/ich-slice-evid
 import type {IchReferenceComparison} from "../lib/ich-reference-comparison";
 import type {IchResearchReport} from "../lib/ich-research";
 
-export default function IchSliceEvidencePanel({comparison,model}:{
+export default function IchSliceEvidencePanel({comparison,model,onGoToSlice}:{
   comparison:IchReferenceComparison;model:IchResearchReport;
+  onGoToSlice?:(nativeSliceIndex:number)=>void;
 }){
   const [audit,setAudit]=useState<IchSliceEvidence|null>(null);
   const [error,setError]=useState("");
@@ -18,6 +19,7 @@ export default function IchSliceEvidencePanel({comparison,model}:{
     }catch(e){setError(e instanceof Error?e.message:"Срезовые данные не приняты.");}
   }
   const a=audit?.sliceAudit;
+  const canNavigate=a?.sourceBoundSliceAxis===2&&model.source.geometry.sliceAxis===2;
   const missed=a?.sliceEvidence.filter(x=>x.expertVoxels>0)
     .sort((x,y)=>y.falseNegativeVoxels-x.falseNegativeVoxels)
     .slice(0,12);
@@ -45,6 +47,9 @@ export default function IchSliceEvidencePanel({comparison,model}:{
         положительных срезов без совпавших вокселей.
         Дополнительные кандидаты вне экспертно положительных срезов:
         <strong> {a.modelOnlyCandidateSlices.length}</strong>.</p>
+      {!canNavigate&&<p role="alert">Прямой переход отключён:
+        индексный срез модели имеет ось {a.sourceBoundSliceAxis}, а просмотр
+        исходного NIfTI показывает только ось k (2). Это разные плоскости.</p>}
       <p><small>Наличие одного совпавшего вокселя не означает правильно распознанное
         кровоизлияние. Это не чувствительность модели к очагам или пациентам.</small></p>
       <div style={{overflowX:"auto"}}>
@@ -52,11 +57,14 @@ export default function IchSliceEvidencePanel({comparison,model}:{
           <caption style={{textAlign:"left",marginBottom:6}}>Наибольший объём пропущенной
             экспертной разметки — первые 12 срезов</caption>
           <thead><tr><th>Индекс среза</th><th>Эксперт, вокс.</th>
-            <th>Пропущено, вокс.</th><th>Dice среза</th></tr></thead>
+            <th>Пропущено, вокс.</th><th>Dice среза</th><th>Исходная КТ</th></tr></thead>
           <tbody>{missed?.map(x=><tr key={x.nativeSliceIndex}>
             <td>{x.nativeSliceIndex}</td><td>{x.expertVoxels}</td>
             <td>{x.falseNegativeVoxels}</td>
             <td>{x.sliceDice===null?"—":x.sliceDice.toFixed(3)}</td>
+            <td><button type="button" disabled={!canNavigate||!onGoToSlice}
+              aria-label={`Открыть исходный срез k ${x.nativeSliceIndex+1}`}
+              onClick={()=>onGoToSlice?.(x.nativeSliceIndex)}>КТ · срез</button></td>
           </tr>)}</tbody>
         </table>
       </div>
@@ -65,11 +73,14 @@ export default function IchSliceEvidencePanel({comparison,model}:{
           <caption style={{textAlign:"left",marginBottom:6}}>Наибольший объём лишней
             предсказанной маски — первые 12 срезов</caption>
           <thead><tr><th>Индекс среза</th><th>Предсказано, вокс.</th>
-            <th>Лишние, вокс.</th><th>Dice среза</th></tr></thead>
+            <th>Лишние, вокс.</th><th>Dice среза</th><th>Исходная КТ</th></tr></thead>
           <tbody>{extra?.map(x=><tr key={x.nativeSliceIndex}>
             <td>{x.nativeSliceIndex}</td><td>{x.predictedVoxels}</td>
             <td>{x.falsePositiveVoxels}</td>
             <td>{x.sliceDice===null?"—":x.sliceDice.toFixed(3)}</td>
+            <td><button type="button" disabled={!canNavigate||!onGoToSlice}
+              aria-label={`Открыть исходный срез k ${x.nativeSliceIndex+1}`}
+              onClick={()=>onGoToSlice?.(x.nativeSliceIndex)}>КТ · срез</button></td>
           </tr>)}</tbody>
         </table>
       </div>
