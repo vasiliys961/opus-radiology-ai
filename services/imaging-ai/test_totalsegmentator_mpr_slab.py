@@ -91,3 +91,42 @@ def test_reject_same_existing_output_and_manifest(tmp_path):
     with pytest.raises(ValueError,match="invalid_paths"):
         mod.extract(src,report,out,tmp_path/"slab.json",0,2,SOURCE)
     assert out.read_bytes()==b"existing"
+
+
+def test_emits_exact_raw_dicom_slice_hashes_only_for_valid_pinned_source(tmp_path):
+    src,report=source(tmp_path)
+    reference=tmp_path/"public-dicom-reference.json"
+    digests=[hashlib.sha256(bytes([i])).hexdigest() for i in range(5)]
+    reference.write_text(json.dumps({
+        "schema":"opus-r231-browser-reference/v1",
+        "originalFrames":5,"selectedFrames":5,
+        "selectedIndicesZeroBased":[0,4],"allSourceFrames":True,
+        "selectedFileSha256":digests
+    }))
+    result=mod.extract(src,report,tmp_path/"bound.nii",tmp_path/"bound.json",1,3,SOURCE,
+                       source_dicom_reference=reference)
+    assert result["sourceDicomSelectedFrameSha256"]==digests[1:4]
+    assert len(result["sourceDicomSelectedFrameSha256"])==3
+    assert result["slabMaskSha256"]==hashlib.sha256((tmp_path/"bound.nii").read_bytes()).hexdigest()
+
+
+def test_rejects_incomplete_or_wrong_source_dicom_reference_before_creating_slab(tmp_path):
+    src,report=source(tmp_path)
+    reference=tmp_path/"bad-reference.json"
+    bad={
+        "schema":"opus-r231-browser-reference/v1",
+        "originalFrames":5,"selectedFrames":3,
+        "selectedIndicesZeroBased":[0,4],"allSourceFrames":True,
+        "selectedFileSha256":["b"*64]*5,
+    }
+    reference.write_text(json.dumps(bad))
+    with pytest.raises(ValueError,match="invalid_source_dicom_reference"):
+        mod.extract(src,report,tmp_path/"invalid.nii",tmp_path/"invalid.json",1,3,SOURCE,
+                    source_dicom_reference=reference)
+    assert not (tmp_path/"invalid.nii").exists()
+    bad["selectedFrames"]=5
+    bad["selectedFileSha256"]=bad["selectedFileSha256"][:-1]
+    reference.write_text(json.dumps(bad))
+    with pytest.raises(ValueError,match="invalid_source_dicom_reference"):
+        mod.extract(src,report,tmp_path/"invalid.nii",tmp_path/"invalid.json",1,3,SOURCE,
+                    source_dicom_reference=reference)

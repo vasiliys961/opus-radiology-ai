@@ -11,10 +11,10 @@ import { maskColor, MAX_MASK_FILE_BYTES, readNiftiMaskFile, type LabelMask, type
 import { assertResultBinding, MAX_RESULT_JSON_BYTES, parseSegmentationResult, sha256, type AnalysisPackage, type AnalysisRequest, type SegmentationResult } from "../lib/analysis-package";
 
 export type MaskDisplay = { visible: boolean; opacity: number; label: number | null };
-type Summary = { name: string; labels: LabelMask["labels"]; result?: SegmentationResult; evidence?: SegmentationEvidence; evidenceRevision?: number; fullCtDerived?:boolean; research?:AnatomyProof; researchRegions?:LobeRegion[] };
+type Summary = { name: string; labels: LabelMask["labels"]; result?: SegmentationResult; evidence?: SegmentationEvidence; evidenceRevision?: number; fullCtDerived?:boolean; research?:AnatomyProof; researchRegions?:LobeRegion[]; researchSourceVerified?:boolean };
 type DownloadPackage = { request: AnalysisRequest; volumeUrl: string; manifestUrl: string };
 
-export default function SegmentationControls({ ready, onPrepare, onPrepareStream, onImport, onDisplay, onClear, onNavigatePoint, onSampleMask,onFullCtLoad }: {
+export default function SegmentationControls({ ready, onPrepare, onPrepareStream, onImport, onDisplay, onClear, onNavigatePoint, onSampleMask,onFullCtLoad,onVerifyResearchSource }: {
   ready: boolean;
   onPrepare: (signal: AbortSignal) => Promise<AnalysisPackage>;
   onPrepareStream: (signal: AbortSignal) => Promise<AnalysisStream>;
@@ -24,15 +24,17 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
   onNavigatePoint: (point: Point3) => void;
   onSampleMask: (point: Point3) => number | null;
   onFullCtLoad?: (signal:AbortSignal)=>Promise<LabelMask>;
+  onVerifyResearchSource?: (passportJson:string,proof:AnatomyProof,signal:AbortSignal)=>Promise<void>;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const researchInput = useRef<HTMLInputElement>(null);
   const resultInput = useRef<HTMLInputElement>(null);
   const version = useRef(0);
   const preparation = useRef<AbortController | null>(null);
+  const researchController=useRef<AbortController|null>(null);
   const packageRef = useRef<DownloadPackage | null>(null);
-  const callbacks = useRef({ onPrepare, onPrepareStream, onImport, onDisplay, onClear, onNavigatePoint });
-  callbacks.current = { onPrepare, onPrepareStream, onImport, onDisplay, onClear, onNavigatePoint };
+  const callbacks = useRef({ onPrepare, onPrepareStream, onImport, onDisplay, onClear, onNavigatePoint,onVerifyResearchSource });
+  callbacks.current = { onPrepare, onPrepareStream, onImport, onDisplay, onClear, onNavigatePoint,onVerifyResearchSource };
   const [summary, setSummary] = useState<Summary | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -43,7 +45,7 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
   const [localCommandCopied, setLocalCommandCopied] = useState(false);
   const [workerBusy, setWorkerBusy] = useState(false);
   useEffect(()=>{
-    if(!onFullCtLoad){version.current++;preparation.current?.abort();setBusy(false);
+    if(!onFullCtLoad){version.current++;preparation.current?.abort();researchController.current?.abort();setBusy(false);
       setSummary(current=>{if(current?.fullCtDerived){callbacks.current.onClear();return null;}return current;});}
   },[Boolean(onFullCtLoad)]);
   const localOnnxCommand = packet ? [
@@ -65,10 +67,10 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
     packageRef.current=null;
   };
 
-  useEffect(() => () => { version.current++;preparation.current?.abort();releasePackage(); }, []);
+  useEffect(() => () => { version.current++;preparation.current?.abort();researchController.current?.abort();releasePackage(); }, []);
   useEffect(() => {
     if (!ready) {
-      version.current++;preparation.current?.abort();releasePackage();
+      version.current++;preparation.current?.abort();researchController.current?.abort();releasePackage();
       setPacket(null);setExportBusy(false);setExportError("");setSummary(null);setBusy(false);setError("");
     }
   }, [ready]);
@@ -96,7 +98,7 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
   };
 
   const load = async (file: File) => {
-    const request = ++version.current;
+    const request = ++version.current;researchController.current?.abort();
     setBusy(true); setError("");
     try {
       const mask = await readNiftiMaskFile(file);
@@ -111,6 +113,8 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
   };
   const loadResearch = async (files: File[]) => {
     const revision=++version.current;
+    researchController.current?.abort();
+    const controller=new AbortController();researchController.current=controller;
     setBusy(true);setError("");
     try {
       const masks=files.filter(f=>f.name.toLowerCase().endsWith(".nii"));
@@ -121,20 +125,26 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
         throw Error("Недопустимый размер файла исследовательской маски или паспорта.");
       const digest=await sha256(await masks[0].arrayBuffer());
       const mask=await readNiftiMaskFile(masks[0]);
-      const research=parseResearchAnatomy(await json[0].text(),mask,digest);
-      const researchRegions=await buildResearchAnatomyRegions(mask,research,{cancelled:()=>revision!==version.current});
-      if(revision!==version.current)return;
-      // The MPR runtime independently rejects mismatch with currently loaded DICOM geometry.
+      const passport=await json[0].text();
+      const research=parseResearchAnatomy(passport,mask,digest);
+      if(!callbacks.current.onVerifyResearchSource)
+        throw Error("Проверка источника DICOM не подключена. Исследовательская маска заблокирована.");
+      await callbacks.current.onVerifyResearchSource(passport,research,controller.signal);
+      if(revision!==version.current||controller.signal.aborted)return;
+      const researchRegions=await buildResearchAnatomyRegions(mask,research,{cancelled:()=>revision!==version.current||controller.signal.aborted});
+      if(revision!==version.current||controller.signal.aborted)return;
+      // The exact selected DICOM byte hashes were compared to the research manifest.
+      // MPR also independently validates physical geometry.
       const next={visible:true,opacity:0.4,label:null};
       callbacks.current.onImport(mask,next);
-      setSummary({name:masks[0].name,labels:mask.labels,research,researchRegions});
+      setSummary({name:masks[0].name,labels:mask.labels,research,researchRegions,researchSourceVerified:true});
       setDisplay(next);
     } catch(cause){
       if(revision===version.current)setError(cause instanceof Error?cause.message:String(cause));
-    } finally {if(revision===version.current)setBusy(false);}
+    } finally {if(revision===version.current){setBusy(false);researchController.current=null;}}
   };
   const loadResult = async (files: File[]) => {
-    const request=++version.current;
+    const request=++version.current;researchController.current?.abort();
     setBusy(true);setError("");
     try {
       const active=packageRef.current;
@@ -163,7 +173,7 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
   };
   const selected = display.label===null ? null : summary?.labels.find(l=>l.id===display.label);
   const loadFull=async()=>{
-    if(!onFullCtLoad)return;const revision=++version.current,controller=new AbortController();
+    if(!onFullCtLoad)return;researchController.current?.abort();const revision=++version.current,controller=new AbortController();
     preparation.current?.abort();preparation.current=controller;setBusy(true);setError("");
     try{const mask=await onFullCtLoad(controller.signal);if(revision!==version.current||controller.signal.aborted)return;
       const next={visible:true,opacity:0.4,label:null};callbacks.current.onImport(mask,next);
@@ -193,7 +203,7 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
         if(files.length&&ready)void loadResearch(files);
       }}/>
       {summary && <button type="button" disabled={exportBusy||workerBusy} onClick={()=>{
-        version.current++; callbacks.current.onClear();setSummary(null);setBusy(false);setError("");
+        version.current++; researchController.current?.abort();callbacks.current.onClear();setSummary(null);setBusy(false);setError("");
       }}>Удалить маску</button>}
       <input ref={input} type="file" accept=".nii,.nii.gz" hidden onChange={event=>{
         const file=event.target.files?.[0];event.target.value="";
@@ -212,8 +222,9 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
         {summary.research.missingLabels.length ?
           <p role="alert">Требуют проверки отсутствующие метки: {summary.research.missingLabels.map(id=>summary.research!.labelNames[id]).join(", ")}.</p> :
           <p>Все {summary.research.anatomy==="abdomen"?"четыре":"пять"} меток присутствуют, но правильность анатомических границ не подтверждена.</p>}
+        {summary.researchSourceVerified&&<p role="status">SHA-256 загруженных исходных DICOM-срезов подтверждены по исследовательскому паспорту.</p>}
         <small>SHA-256 маски и число вокселей совпадают с паспортом. JSON не подписан;
-          источник модели, принадлежность DICOM и клиническая точность не удостоверены. Только исследовательский режим.</small>
+          SHA подтверждает совпадение текущих файлов с заявленным источником, но не удостоверяет автора, пациента, модель или клиническую точность. Только исследовательский режим.</small>
       </details>}
       {summary.research && summary.researchRegions && <section className="ora-mask-settings" aria-label="Навигация по анатомическим структурам">
         <h3>Найденные анатомические структуры · обзор на MPR</h3>

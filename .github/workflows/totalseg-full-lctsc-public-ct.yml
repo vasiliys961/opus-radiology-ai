@@ -72,6 +72,7 @@ jobs:
             --report "$RUNNER_TEMP/out/opus-full-model-report.json" \
             --output "$RUNNER_TEMP/out/lctsc-mpr-slab.nii" \
             --manifest "$RUNNER_TEMP/out/lctsc-mpr-slab.json" \
+            --source-dicom-reference "$RUNNER_TEMP/lctsc-public/reference.json" \
             --start 35 --count 32 \
             --expected-source-sha256 99615ddb66e09bd46c2ff70c352d73414285145b358e448682b7cffc41249738
       - uses: actions/setup-node@v4

@@ -13,6 +13,7 @@ import { prepareAnalysisPackage, type AnalysisPackage } from "../lib/analysis-pa
 import { prepareAnalysisStream, type AnalysisStream } from "../lib/analysis-stream";
 import type { DicomSeries } from "../lib/dicom-series";
 import {loadFullCtSlab,type FullCtTicket} from "../lib/full-ct-worker";
+import {verifyResearchCurrentDicom} from "../lib/totalseg-dicom-binding";
 import {assessMprDecodedMemory} from "../lib/mpr-eligibility";
 
 const PLANE_NAMES = ["axial", "coronal", "sagittal"] as const;
@@ -558,6 +559,11 @@ export default function CornerstoneMPR({ files, sourceSeries, fullCt, quality, s
       <small>{interpolation === "linear" ? "Линейная интерполяция сглаживает границы между вокселями." : "Ближайший сосед показывает ступенчатость дискретных данных, но не добавляет деталей."}</small>
     </div>
     <SegmentationControls ready={ready}
+      onVerifyResearchSource={async(passport,proof,signal)=>{
+        if(!runtime.current)throw Error("Выбранная серия MPR уже закрыта.");
+        await verifyResearchCurrentDicom(passport,proof,sourceSeries,files,signal);
+        if(signal.aborted||!runtime.current)throw Error("Выбранная КТ закрыта во время проверки.");
+      }}
       onFullCtLoad={fullCt&&(sourceSeries.selection||files.length<=32&&files.length===fullCt.request.frameCount)?
         signal=>loadFullCtSlab(fullCt,sourceSeries.selection?.startIndex??0,files.length,signal):undefined}
       onPrepare={signal=>{
