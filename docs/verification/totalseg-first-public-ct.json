@@ -1,0 +1,31 @@
+{
+  "schema": "opus-totalseg-public-ct-first-execution/v1",
+  "workflowRun": "https://github.com/vasiliys961/opus-radiology-ai/actions/runs/38345843854",
+  "executedAtUtc": "2026-10-13T04:21:08Z",
+  "source": {
+    "description": "Upstream TotalSegmentator example_ct_sm.nii.gz, intentionally small public sample",
+    "sha256Uncompressed": "ce509afe6871795bfcdbb121eee194993f06e40d87c77085d81332273af1205a",
+    "dimensions": [122, 101, 30]
+  },
+  "model": "TotalSegmentator 2.18.0",
+  "task": "total/fast CPU/lung-lobe ROI",
+  "environment": "GitHub Actions Ubuntu free-hosted runner, isolated Docker",
+  "elapsedSeconds": 26.52,
+  "exitCode": 0,
+  "maskSha256": "5e9c162d9fffb72b41fa52581cc22a16a99cfd5577dab05c9fb5da15597d6461",
+  "labelVoxels": [
+    {"id": 10, "name": "lung_upper_lobe_left", "voxels": 251},
+    {"id": 11, "name": "lung_lower_lobe_left", "voxels": 1094},
+    {"id": 12, "name": "lung_upper_lobe_right", "voxels": 0},
+    {"id": 13, "name": "lung_middle_lobe_right", "voxels": 0},
+    {"id": 14, "name": "lung_lower_lobe_right", "voxels": 2504}
+  ],
+  "technicalExecution": "completed",
+  "clinicalStatus": "not_validated",
+  "qualityStatus": "requires_review",
+  "missingLobeIds": [12, 13],
+  "referenceMaskAvailable": false,
+  "diceMeasured": false,
+  "readyForClinicalUse": false,
+  "note": "Observed values transcribed from GitHub Actions run log. The mask was deleted with ephemeral runner artifacts; no contour ground truth or full-chest coverage is established."
+}
