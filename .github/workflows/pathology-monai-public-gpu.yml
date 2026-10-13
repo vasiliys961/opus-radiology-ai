@@ -1,0 +1,68 @@
+name: MONAI real lung nodule inference on one public LUNA16 CT (external GPU ONLY)
+on:
+  workflow_dispatch:
+    inputs:
+      public_data_and_gpu_authorized:
+        description: "Type PUBLIC-LUNA16-GPU-OK: authorized public source, approved self-hosted GPU, no patients"
+        required: true
+        type: string
+permissions:
+  contents: read
+
+jobs:
+  genuine-public-nodule-inference:
+    if: \${{ github.ref == 'refs/heads/main' && inputs.public_data_and_gpu_authorized == 'PUBLIC-LUNA16-GPU-OK' }}
+    runs-on: [self-hosted, linux, x64, opus-approved-gpu]
+    timeout-minutes: 60
+    container:
+      image: pytorch/pytorch:2.4.0-cuda12.1-cudnn9-runtime
+      options: --gpus all --shm-size=2g
+    env:
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      TOKENIZERS_PARALLELISM: "false"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assert GPU has adequate VRAM BEFORE large downloads
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import torch
+          assert torch.cuda.is_available(), "approved CUDA GPU is required"
+          props=torch.cuda.get_device_properties(0)
+          print("GPU VRAM GiB:",round(props.total_memory/1024**3,2))
+          assert props.total_memory>=15*1024**3,"GPU needs >=15 GiB"
+          PY
+      - name: Install pinned MONAI compatibility packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --no-cache-dir \
+            "monai==1.4.0" "nibabel==5.2.1" "numpy==1.24.4" \
+            "pytorch-ignite==0.4.11" "SimpleITK==2.4.0" \
+            "huggingface_hub==0.34.4" "tensorboard==2.17.0"
+          python - <<'PY'
+          import torch,monai
+          assert torch.__version__.split("+")[0]=="2.4.0"
+          assert monai.__version__=="1.4.0"
+          PY
+      - name: Fetch ONE genuine annotated public CT with a verified raw byte manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/prepare-luna16-single-gpu-case.py \
+            --download --external-gpu-confirm "PUBLIC-LUNA16-GPU-OK" \
+            --output "$RUNNER_TEMP/public-nodule-ct"
+      - name: Run genuine trained MONAI model on complete public CT
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/run-monai-nodule-gpu-case.py \
+            --case-dir "$RUNNER_TEMP/public-nodule-ct" \
+            --work "$RUNNER_TEMP/monai-nodule-work" \
+            --external-gpu-confirm "PUBLIC-LUNA16-GPU-OK"
+      - name: Wipe source CT, checkpoints and predictions
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/public-nodule-ct" "$RUNNER_TEMP/monai-nodule-work"
