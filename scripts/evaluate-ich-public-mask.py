@@ -66,10 +66,6 @@ def load_geometry(path: Path, expected_shape=None):
     qcode = int(nii.header["qform_code"])
     if qcode > 0 and not np.allclose(nii.get_qform(), affine, atol=0.05, rtol=0):
         raise ValueError("conflicting_nifti_sform_qform")
-    if nii.header.get_data_dtype().kind not in ("i", "u"):
-        if path == Path(path):
-            # Original CT may be signed/float; caller checks mask dtype separately.
-            pass
     determinant = float(np.linalg.det(affine[:3, :3]))
     if not 0.000001 <= abs(determinant) <= 1000:
         raise ValueError("invalid_mm_voxel_volume")
@@ -95,9 +91,11 @@ def binary_mask(nii, label: int | None = None):
     datatype = nii.header.get_data_dtype()
     if datatype.kind not in ("i", "u"):
         raise ValueError("reference_and_model_masks_must_be_integer")
-    if float(nii.header["scl_slope"]) not in (0., 1.) and not math.isnan(float(nii.header["scl_slope"])):
-        raise ValueError("scaled_mask_not_allowed")
-    if np.isfinite(nii.header["scl_inter"]) and float(nii.header["scl_inter"]) != 0.:
+    # Nibabel moves valid NIfTI scaling into the ArrayProxy at load time.
+    # Header values alone may be NaN even when the file contains scaling.
+    if not math.isclose(float(nii.dataobj.slope), 1., abs_tol=1e-9) or not math.isclose(
+        float(nii.dataobj.inter), 0., abs_tol=1e-9
+    ):
         raise ValueError("scaled_mask_not_allowed")
     array = np.asanyarray(nii.dataobj)
     if label is None:
