@@ -42,7 +42,7 @@ export function buildLocalDiagnosticDraft(input:LocalDiagnosticDraftInput):Local
   const observations=input.findings.map(f=>{
     if(!f||seen.has(f.findingId))throw Error("Дублирующаяся AI-находка.");
     seen.add(f.findingId);
-    const decision=input.decisions[f.findingId]??"candidate";
+    const decision: "candidate"|"recheck"|"dismiss"=input.decisions[f.findingId]??"candidate";
     if(!["candidate","recheck","dismiss"].includes(decision))throw Error("Неверный статус наблюдения.");
     return {
       findingId:clean(f.findingId,160,"findingId",true),
