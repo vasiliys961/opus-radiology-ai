@@ -4,6 +4,7 @@ import { callAiGateway } from "../../../../lib/ai-gateway";
 import { runVisionOrchestra } from "../../../../lib/vision-orchestra";
 import { syntheticVisionFrames } from "../../../../lib/synthetic-vision-phantom";
 import { isAiProvider } from "../../../../lib/ai-gateway";
+import { HttpBodyTooLarge, readLimitedText } from "../../../../lib/limited-body";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -34,8 +35,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid request length" }, { status: 413, headers: noStore });
   }
   let body: unknown;
-  try { body = JSON.parse(await request.text()); }
-  catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400, headers: noStore }); }
+  try { body = JSON.parse(await readLimitedText(request, 2048)); }
+  catch (cause) {
+    return NextResponse.json(
+      { error: cause instanceof HttpBodyTooLarge ? "Request body too large" : "Invalid JSON" },
+      { status: cause instanceof HttpBodyTooLarge ? 413 : 400, headers: noStore },
+    );
+  }
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400, headers: noStore });
   }
