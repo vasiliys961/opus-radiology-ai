@@ -48,7 +48,8 @@ export default function AiEvidenceReview({
       url=URL.createObjectURL(new Blob([JSON.stringify(draft,null,2)],{type:"application/json"}));
       const a=document.createElement("a");a.href=url;a.download="opus-local-diagnostic-draft.json";
       document.body.appendChild(a);a.click();a.remove();
-      setTimeout(()=>URL.revokeObjectURL(url!),1000);url=null;setDraftError("");
+      const completedUrl=url;
+      setTimeout(()=>URL.revokeObjectURL(completedUrl),1000);url=null;setDraftError("");
     }catch(e){setDraftError(e instanceof Error?e.message:"Не удалось сформировать локальный черновик.");}
     finally{if(url)URL.revokeObjectURL(url);}
   };
