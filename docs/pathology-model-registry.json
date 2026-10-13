@@ -1,0 +1,69 @@
+{
+  "schema": "opus-pathology-model-registry/v1",
+  "models": [
+    {
+      "id": "monai-lung-nodule-ct-retinanet",
+      "version": "0.6.9",
+      "modality": ["CT"],
+      "anatomy": ["lung"],
+      "task": "lung-nodule-candidate-detection",
+      "compatibleProtocol": "LUNA16-compatible full volumetric chest CT; exact slice spacing, orientation, reconstruction kernel and intensity preprocessing must be checked per study",
+      "artifact": {
+        "origin": "MONAI/lung_nodule_ct_detection",
+        "revision": "7226a40a4c3713f7d5469559b7f2fc296fd54825",
+        "filename": "models/model.pt",
+        "url": "https://huggingface.co/MONAI/lung_nodule_ct_detection/resolve/7226a40a4c3713f7d5469559b7f2fc296fd54825/models/model.pt",
+        "sha256": "b5e79231466adae93a6fe8e8594029e9add142914e223b879aa0343bb2402d01",
+        "storage": "PyTorch checkpoint; untrusted pickle loading prohibited outside a pinned isolated worker",
+        "digestStatus": "published-unverified-locally"
+      },
+      "license": {
+        "published": "Apache-2.0 (MONAI bundle LICENSE)",
+        "weightsAndDependenciesClearedForClinicalUse": false,
+        "datasetReuseRequiresSeparateReview": true
+      },
+      "resources": {
+        "gpu": "MONAI publisher states at least 16 GiB GPU for training; inference hardware unverified",
+        "cpu": "not benchmarked",
+        "peakRamMiB": null,
+        "peakVramMiB": null,
+        "macM1EightGiBSupported": false
+      },
+      "input": {
+        "format": "3D chest CT volume",
+        "intensity": "HU; MONAI bundle preprocessing clips -1024 to 300 and rescales to [0,1]",
+        "resampleMm": [0.703125, 0.703125, 1.25],
+        "orientation": "RAS in MONAI; source LPS to RAS conversion must be demonstrated"
+      },
+      "output": {
+        "format": "3D detection candidates with score and box (native-world coordinates verified before export)",
+        "requireExactSourceVolumeSha256": true,
+        "requireVerifiedVoxelToWorldTransform": true
+      },
+      "publishedPerformance": {
+        "source": "MONAI bundle documentation (fold 0, not independently reproduced)",
+        "mAP": 0.852,
+        "mAR": 0.998,
+        "notAClinicalSensitivitySpecificityOrFroc": true
+      },
+      "referenceDatasets": [
+        {
+          "id": "LUNA16",
+          "role": "training-and-publisher-validation-overlap-possible",
+          "annotation": "official nodule centroids and diameters, not official voxel masks",
+          "heldOutIndependenceProven": false
+        }
+      ],
+      "milestones": {
+        "publisherModelAndDigestLocated": true,
+        "checkpointDownloadedAndHashVerifiedInCi": false,
+        "genuineInferenceOnPublicCtObserved": false,
+        "sourceBoundCandidatesReturned": false,
+        "externalIndependentFrocMeasured": false
+      },
+      "integrationStatus": "not_connected",
+      "clinicalValidationStatus": "not_validated",
+      "allowedForPatientUse": false
+    }
+  ]
+}
