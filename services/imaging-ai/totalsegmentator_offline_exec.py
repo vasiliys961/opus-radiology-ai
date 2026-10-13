@@ -6,6 +6,51 @@ from pathlib import Path
 import sys
 from totalsegmentator_input import inspect_input
 
+def normalize_model_mask(path, dimensions, affine_lps, allowed_labels):
+    """Canonicalize genuine, geometrically matching NIfTI to strict uint8 native NIfTI.
+
+    Does not interpolate, relabel, crop, or make a failed mask appear valid.
+    """
+    import os
+    import numpy as np
+    import nibabel as nib
+    path=Path(path)
+    if path.is_symlink() or not path.is_file() or path.stat().st_size>700*1024*1024:
+        raise ValueError("invalid_mask_file")
+    try:
+        image=nib.load(str(path),mmap=True)
+        if tuple(image.shape)!=tuple(dimensions):
+            raise ValueError("mask_geometry_mismatch")
+        expected=np.asarray(affine_lps,dtype=np.float64).reshape(3,4).copy()
+        expected[:2,:]*=-1
+        actual=np.asarray(image.affine[:3,:],dtype=np.float64)
+        corners=np.array([[x,y,z,1] for x in (0,dimensions[0]-1)
+                          for y in (0,dimensions[1]-1)
+                          for z in (0,dimensions[2]-1)],dtype=np.float64)
+        if not np.all(np.isfinite(actual)) or np.max(np.linalg.norm(
+                corners @ (actual-expected).T,axis=1))>0.05:
+            raise ValueError("mask_geometry_mismatch")
+        if image.get_data_dtype().kind not in "iu":
+            raise ValueError("invalid_mask_header")
+        # Validate the entire native voxel array, without any resampling.
+        array=np.asanyarray(image.dataobj)
+        if not np.isin(array,list(allowed_labels)+[0]).all():
+            raise ValueError("unexpected_mask_label")
+        canonical=np.asarray(array,dtype=np.uint8)
+        header=nib.Nifti1Header()
+        header.set_data_dtype(np.uint8)
+        result=nib.Nifti1Image(canonical,image.affine,header=header)
+        temp=path.with_name(path.name+".normalized.nii")
+        if temp.exists() or temp.is_symlink():
+            raise ValueError("invalid_mask_file")
+        try:
+            nib.save(result,str(temp))
+            os.replace(temp,path)
+        finally:
+            temp.unlink(missing_ok=True)
+    except (OSError,EOFError) as exc:
+        raise ValueError("invalid_mask_file") from exc
+
 def run(input_path, output_path, *, confirmed=False, expected_source_sha=None, stage=None):
     def reached(name):
         if stage is not None:
@@ -58,7 +103,13 @@ def run(input_path, output_path, *, confirmed=False, expected_source_sha=None, s
                          roi_subset=list(LUNG_LOBES.values()),ml=True,device="cpu",
                          quiet=True)
         reached("mask_validation")
-        report=validate_native_mask(output,dims,lps,source_sha,list(LUNG_LOBES))
+        try:
+            report=validate_native_mask(output,dims,lps,source_sha,list(LUNG_LOBES))
+        except ValueError as exc:
+            if str(exc)!="invalid_mask_file":
+                raise
+            normalize_model_mask(output,dims,lps,set(LUNG_LOBES))
+            report=validate_native_mask(output,dims,lps,source_sha,list(LUNG_LOBES))
         return {"schema":"opus-totalseg-offline-research-execution/v1",
                 "execution":"real-model-call","networkIsolation":"must-be-enforced-by-host",
                 "modelWeightProvenance":"not-independently-verified",
