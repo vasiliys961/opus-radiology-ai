@@ -158,8 +158,10 @@ def execute(args: argparse.Namespace) -> dict:
     if not source.name.endswith((".nii", ".nii.gz")):
         raise ValueError("3d_nifti_required")
     output_dir = Path(args.output_dir)
-    if output_dir.exists() and (output_dir.is_symlink() or any(output_dir.iterdir())):
-        raise ValueError("output_directory_not_empty")
+    if output_dir.exists() or output_dir.is_symlink():
+        raise ValueError("output_directory_must_not_exist")
+    if not output_dir.parent.is_dir() or output_dir.parent.is_symlink():
+        raise ValueError("output_parent_must_be_existing_regular_directory")
     if output_dir.resolve() == model_dir.resolve() or output_dir.resolve() == source.parent:
         raise ValueError("output_must_be_isolated")
     for file, expected, field in (
