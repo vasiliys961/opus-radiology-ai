@@ -69,7 +69,7 @@ test("series with same study UID group; different studies never mix to fake four
 test("localizer, unindexed frames, wrong anatomy and incorrect geometry always block preparation",()=>{
   const loc=study("CT","ABDOMEN",{imageRole:"LOCALIZER"},{ready:false});
   const r=planAnatomicalTasks([loc],2)[0];
-  for(const reason of ["protocol_role_unverified","geometry_unverified","source_incomplete_or_unknown"])
+  for(const reason of ["protocol_role_unverified","geometry_unverified","source_incomplete_or_unknown"] as const)
     assert.ok(r.reasons.includes(reason));
   assert.equal(r.preparation,"needs_series_and_protocol");
   assert.equal(planAnatomicalTasks([study("CT",null)]).length,0);
