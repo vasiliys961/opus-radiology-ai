@@ -26,6 +26,7 @@ export default function IchReferenceComparisonPanel({modelReport,source,mask}:{
  modelReport:IchResearchReport;source:File;mask:File;
 }){
  const [comparison,setComparison]=useState<IchReferenceComparison|null>(null);
+ const [jumpTo,setJumpTo]=useState<{sliceIndex:number;requestId:number}|null>(null);
  const [referenceVerified,setReferenceVerified]=useState(false);
  const [referenceFile,setReferenceFile]=useState<File|null>(null);
  const [busy,setBusy]=useState(false);
@@ -34,7 +35,7 @@ export default function IchReferenceComparisonPanel({modelReport,source,mask}:{
  useEffect(()=>()=>ctrl.current?.abort(),[]);
  function clear(){
    ctrl.current?.abort();ctrl.current=null;
-   setComparison(null);setReferenceVerified(false);setReferenceFile(null);
+   setComparison(null);setReferenceVerified(false);setReferenceFile(null);setJumpTo(null);
    setBusy(false);setError("");
  }
  async function open(file:File){
@@ -107,8 +108,12 @@ export default function IchReferenceComparisonPanel({modelReport,source,mask}:{
          Это не доказательство здоровой КТ, Dice не определён.</p>}
        {referenceFile&&<IchExpertErrorOverlay
          source={source} mask={mask} expert={referenceFile}
-         referenceLabel={comparison.referenceLabel} modelReport={modelReport}/>}
-       <IchSliceEvidencePanel comparison={comparison} model={modelReport}/>
+         referenceLabel={comparison.referenceLabel} modelReport={modelReport}
+         jumpTo={jumpTo}/>}
+       <IchSliceEvidencePanel comparison={comparison} model={modelReport}
+         onGoToSlice={sliceIndex=>setJumpTo(prev=>({
+           sliceIndex,requestId:(prev?.requestId??0)+1,
+         }))}/>
        <p><strong>Один исследовательский случай.</strong>
          Не доказано, что он не использовался при обучении модели.
          Не проверены независимость экспертной разметки,
