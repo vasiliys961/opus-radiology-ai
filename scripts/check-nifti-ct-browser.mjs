@@ -80,6 +80,7 @@ try{
   await page.goto(url+"/viewer",{waitUntil:"networkidle"});
   await page.getByRole("button",{name:"NIfTI · КТ брюшной полости"}).click();
   const pickers=page.locator(".cs-nifti-controls input[type=file]");
+  await pickers.first().waitFor({state:"attached",timeout:15000});
   assert.equal(await pickers.count(),2);
   await pickers.nth(0).setInputFiles(file("synthetic-ct.nii",ct));
   await pickers.nth(1).setInputFiles([
