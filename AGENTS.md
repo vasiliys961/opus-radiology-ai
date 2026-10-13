@@ -1,5 +1,25 @@
 # Opus Radiology AI — Instructions for Future Chats, Cursor and Coding Agents
 
+
+## Latest verified research boundary — 2026-10-13 (PR #72 proposed)
+
+The TotalSegmentator lung-lobe research *pipeline* has advanced beyond the
+initial offline preparation described below. Real trained weights/inference
+ran on a legally documented public 103-slice CT, with a 32-slice source-aligned
+5-lobe label mask observed in real Chromium/Cornerstone axial, coronal and
+sagittal MPR; [workflow #38353633892](https://github.com/vasiliys961/opus-radiology-ai/actions/runs/38353633892).
+Technical overlay success does **not** validate label accuracy, full anatomy,
+independent Dice, M1/Safari memory or clinical/patient-mode use.
+
+The new **anatomy task router** proposes CT abdomen/organ and MR brain tasks
+as **planning only** using strict allowlisted DICOM metadata. No matching
+checkpoint/task-specific license, independent metric, phase/sequence verification,
+full model connection or real-patient authorization is supplied. In particular,
+TR/TE/TI alone cannot confirm T1/T1c/T2/FLAIR; a missing anatomical mask never
+means "no pathology". No auto-download, extra API, remote egress or automatic
+PR merge. Always verify CI and user Mac observations before claims.
+
+
 ## TotalSegmentator offline preparation — 2026-10-12
 
 Separate read-only CT/fast/lung-lobe task and installed-asset audit now exists in
