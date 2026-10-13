@@ -113,3 +113,52 @@ def test_manual_workflow_does_not_run_in_default_ci_or_upload_patient_data():
     assert w.index("--research-profile abdomen-four-organs")<w.index("score-msd-spleen-abdomen.py")
     assert "Task09_Spleen.tar" in w
     assert "Remove all public image volumes" in w
+
+
+def test_four_real_anatomical_ids_are_counted_on_native_mask(tmp_path):
+    import struct
+    dims=(4,3,3)
+    lps=[1.,0.,0.,7.,0.,1.,0.,8.,0.,0.,2.,9.]
+    header=bytearray(352)
+    struct.pack_into("<i",header,0,348)
+    struct.pack_into("<4h",header,40,3,*dims)
+    struct.pack_into("<hh",header,70,2,8)
+    struct.pack_into("<f",header,108,352.)
+    struct.pack_into("<ff",header,112,1.,0.)
+    struct.pack_into("<h",header,254,1)
+    ras=lps.copy()
+    ras[:8]=[-x for x in ras[:8]]
+    struct.pack_into("<12f",header,280,*ras)
+    header[344:348]=b"n+1\x00"
+    path=tmp_path/"abdomen.nii"
+    path.write_bytes(header+bytes([1,2,3,5]*9))
+    result=validate_native_mask(path,dims,lps,"a"*64,[1,2,3,5])
+    assert [r["name"] for r in result["labelVoxels"]]==[
+        "spleen","kidney_right","kidney_left","liver"]
+    assert [r["voxels"] for r in result["labelVoxels"]]==[9]*4
+    assert result["qualityReview"]["missingLabelIds"]==[]
+    assert result["qualityReview"]["referenceDiceMeasured"] is False
+    path.write_bytes(header+bytes([1,5]*18))
+    result=validate_native_mask(path,dims,lps,"a"*64,[1,2,3,5])
+    assert result["qualityReview"]["missingLabelIds"]==[2,3]
+    assert result["qualityReview"]["status"]=="requires_review"
+
+
+def test_lung_labels_never_accepted_as_abdominal_organs(tmp_path):
+    import struct
+    header=bytearray(352)
+    struct.pack_into("<i",header,0,348)
+    struct.pack_into("<4h",header,40,3,3,2,2)
+    struct.pack_into("<hh",header,70,2,8)
+    struct.pack_into("<f",header,108,352.)
+    struct.pack_into("<ff",header,112,1.,0.)
+    struct.pack_into("<h",header,254,1)
+    ras=[-1.,0.,0.,0.,0.,-1.,0.,0.,0.,0.,1.,0.]
+    struct.pack_into("<12f",header,280,*ras)
+    header[344:348]=b"n+1\x00"
+    path=tmp_path/"wrong.nii"
+    path.write_bytes(header+bytes([10]*12))
+    with pytest.raises(ValueError,match="unexpected_mask_label"):
+        validate_native_mask(path,(3,2,2),
+                             [1.,0.,0.,0.,0.,1.,0.,0.,0.,0.,1.,0.],
+                             "a"*64,[1,2,3,5])
