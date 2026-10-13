@@ -33,7 +33,7 @@ def test_selects_smallest_REAL_annotated_public_case_from_fixed_revision_without
     assert p["modelInferencePerformed"] is False
     assert p["clinicalStatus"]=="public_research_only"
     assert p["sourceSeriesIdSha256"]==prep.sha256(UID1.encode("ascii"))
-    assert "105756" not in json.dumps({k:v for k,v in p.items() if k!="sourceUidForEphemeralDownload"})
+    assert UID1 not in json.dumps(prep.public_summary(p))
 
 def test_reference_positive_requirement_and_duplicate_bad_files_fail_closed():
     with pytest.raises(ValueError,match="no_pinned_positive"):
