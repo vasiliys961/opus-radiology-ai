@@ -71,6 +71,18 @@ jobs:
             --reference "$RUNNER_TEMP/msd-abdomen-public" \
             --mask "$RUNNER_TEMP/out/totalseg_abdomen.nii" \
             --report "$RUNNER_TEMP/out/opus-abdomen-model-report.json"
+      - name: Validate bounded 32-frame abdominal organ slab for future MPR review
+        run: |
+          set -euo pipefail
+          SOURCE_SHA="$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["inputSha256"])' "$RUNNER_TEMP/msd-abdomen-public/reference.json")"
+          python scripts/extract-totalseg-mpr-slab.py \
+            --mask "$RUNNER_TEMP/out/totalseg_abdomen.nii" \
+            --report "$RUNNER_TEMP/out/opus-abdomen-model-report.json" \
+            --output "$RUNNER_TEMP/out/abdomen-slab-32.nii" \
+            --manifest "$RUNNER_TEMP/out/abdomen-slab-32.json" \
+            --research-profile abdomen-four-organs \
+            --start 25 --count 32 \
+            --expected-source-sha256 "$SOURCE_SHA"
       - name: Remove all public image volumes weights masks and reference labels
         if: always()
         run: |
