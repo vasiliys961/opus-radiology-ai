@@ -2,7 +2,7 @@
  * Streams/decompresses to a single 2D slice; never copies the entire 3D CT.
  * NIfTI RAS affine is NOT a verified original DICOM SOP reference.
  */
-export type NiftiSliceKind="ct"|"mask";
+export type NiftiSliceKind="ct"|"mask"|"expert";
 export type NativeIchSlice={
   pixels:Float32Array|Uint8Array;
   dimensions:[number,number];
@@ -24,9 +24,10 @@ function validateHeader(header:Uint8Array,dimensions:readonly number[],
      !Number.isSafeInteger(slice)||slice<0||slice>=dimensions[2])
     throw Error("Срез вне допустимого диапазона.");
   const datatype=v.getInt16(70,true);
-  const bytes=datatype===2?1:datatype===4?2:datatype===16?4:0;
+  const bytes=datatype===2?1:datatype===4||datatype===512?2:datatype===16?4:0;
   if(!bytes||v.getInt16(72,true)!==bytes*8||
      (kind==="mask"&&datatype!==2)||
+     (kind==="expert"&&![2,4,512].includes(datatype))||
      (kind==="ct"&&datatype!==4&&datatype!==16))
     throw Error("Неподдерживаемый тип пикселей исходной КТ или маски.");
   const voxOffset=v.getFloat32(108,true);
@@ -50,7 +51,7 @@ function validateHeader(header:Uint8Array,dimensions:readonly number[],
     (intercept===0||Number.isNaN(intercept));
   const scaled=Number.isFinite(slope)&&Number.isFinite(intercept)&&slope>0;
   if(!unscaled&&!scaled||
-     (kind==="mask"&&!unscaled&&!(slope===1&&intercept===0)))
+     ((kind==="mask"||kind==="expert")&&!unscaled&&!(slope===1&&intercept===0)))
     throw Error("Неоднозначный масштаб NIfTI-пикселей.");
   return {datatype,bytes,voxOffset,slope:unscaled?1:slope,intercept:unscaled?0:intercept};
 }
@@ -62,8 +63,11 @@ function validateHeader(header:Uint8Array,dimensions:readonly number[],
 export async function readNativeIchKSlice(
   file:Blob,kind:NiftiSliceKind,index:number,
   dimensions:readonly number[],affine:readonly (readonly number[])[],
-  signal?:AbortSignal
+  signal?:AbortSignal,expertLabel?:number
 ):Promise<NativeIchSlice>{
+ if(kind==="expert"&&(!Number.isSafeInteger(expertLabel)||
+    expertLabel===undefined||expertLabel<1||expertLabel>65535))
+    throw Error("Неверная метка экспертной разметки.");
  if(!file.size||file.size>512*1024*1024)throw Error("Файл изображения превышает 512 МиБ.");
  const magic=new Uint8Array(await file.slice(0,2).arrayBuffer());
  const compressed=magic[0]===31&&magic[1]===139;
@@ -124,6 +128,17 @@ export async function readNativeIchKSlice(
      sliceIndex:index,nativeIndexOrder:true};
  }
  const v=new DataView(output.buffer,output.byteOffset,output.byteLength);
+ if(kind==="expert"){
+   const labels=new Uint8Array(count);
+   for(let i=0;i<count;i++){
+     const value=info.datatype===2?v.getUint8(i):
+       info.datatype===4?v.getInt16(i*2,true):v.getUint16(i*2,true);
+     if(value<0)throw Error("Отрицательная экспертная метка.");
+     labels[i]=value===expertLabel?1:0;
+   }
+   return {pixels:labels,dimensions:[dimensions[0],dimensions[1]],
+     sliceIndex:index,nativeIndexOrder:true};
+ }
  const pixels=new Float32Array(count);
  for(let i=0;i<count;i++){
    const raw=info.datatype===4?v.getInt16(i*2,true):v.getFloat32(i*4,true);
