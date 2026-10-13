@@ -128,7 +128,7 @@ export default function PublicLuna16SourceSlices({reference,rawSha256}:{
       <canvas ref={canvas} width={w} height={h} style={{width:"100%",maxWidth:512,aspectRatio:w+"/"+h,
         display:"block",margin:"10px 0",imageRendering:"auto",border:"1px solid #666"}}/>
       {displayError&&<p role="alert">{displayError}</p>}
-      <p><small>Оранжевый контур — опубликованная экспертная разметка, вычисленная в индексах исходной КТ;
+      <p><small>Оранжевый эллипс — условная сферическая визуализация по опубликованным экспертным центру и диаметру; это не нарисованный радиологом контур и не сегментация,
         это не подтверждённый контур MONAI. Ориентация — нативный порядок строк RAW, не радиологический стандарт.
         Сопоставление MONAI→исходная КТ и DICOM/SOP UID всё ещё не подтверждено.</small></p>
     </>}
