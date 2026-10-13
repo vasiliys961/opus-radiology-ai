@@ -68,7 +68,7 @@ function validateFragments(
       lo.some((v,i)=>v>hi[i]||hi[i]>=dimension[i])||
       n>lo.reduce((acc,v,i)=>acc*(hi[i]-v+1),1))
      throw Error("Несогласованная 3D-компонента "+kind+".");
-   ids.add(index);prev=n;volume+=n;fragments.push(r as IchMaskFragment);
+   ids.add(index);prev=n;volume+=n;fragments.push(r as unknown as IchMaskFragment);
  }
  if(total<=128&&volume!==volumeVoxels)
    throw Error("Сумма объёмов "+kind+" противоречит проверенной маске.");
