@@ -1,0 +1,47 @@
+name: Pathology nodule published example and checkpoint admission (no inference)
+on:
+  pull_request:
+    paths:
+      - "docs/pathology-model-registry.json"
+      - "scripts/check-luna16-nodule-reference.py"
+      - "services/imaging-ai/test_pathology_luna16_reference.py"
+      - ".github/workflows/pathology-nodule-reference.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-real-published-assets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run cheap contract regression tests (no model execution)
+        run: |
+          python -m pip install "pytest>=8,<10"
+          python -m pytest services/imaging-ai/test_pathology_luna16_reference.py -q
+      - name: Fetch already-published public expert reference and verify 0.6.9 checkpoint
+        env:
+          CHECKPOINT_URL: https://huggingface.co/MONAI/lung_nodule_ct_detection/resolve/7226a40a4c3713f7d5469559b7f2fc296fd54825/models/model.pt?download=true
+          REFERENCE_URL: https://huggingface.co/datasets/MedOtter/LUNA16/resolve/fb396557c4e23feaf9c432cea7fc8426214648fb/annotations.csv?download=true
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 2 --max-time 200 \
+            --max-filesize 512000 --output "$RUNNER_TEMP/luna16-annotations.csv" \
+            "$REFERENCE_URL"
+          curl --fail --location --retry 2 --max-time 350 \
+            --max-filesize 157286400 --output "$RUNNER_TEMP/model.pt" \
+            "$CHECKPOINT_URL"
+          printf "%s  %s\n" \
+            b5e79231466adae93a6fe8e8594029e9add142914e223b879aa0343bb2402d01 \
+            "$RUNNER_TEMP/model.pt" | sha256sum --check --status
+          python scripts/check-luna16-nodule-reference.py \
+            --annotations "$RUNNER_TEMP/luna16-annotations.csv" \
+            --checkpoint "$RUNNER_TEMP/model.pt" --official-reference
+      - name: Erase reference metadata and checkpoint
+        if: always()
+        run: rm -f "$RUNNER_TEMP/luna16-annotations.csv" "$RUNNER_TEMP/model.pt"
