@@ -2,6 +2,7 @@
 
 import {useEffect,useRef,useState} from "react";
 import {sha256} from "@noble/hashes/sha2.js";
+import IchExpertErrorOverlay from "./IchExpertErrorOverlay";
 import {
   parseIchReferenceComparison,type IchReferenceComparison,
 } from "../lib/ich-reference-comparison";
@@ -20,18 +21,20 @@ async function verifySha(file:File,expected:string,signal:AbortSignal){
   if(actual!==expected)throw Error("SHA-256 экспертной маски не совпадает.");
 }
 const num=(v:number|null,precision=3)=>v===null?"не рассчитан":v.toFixed(precision);
-export default function IchReferenceComparisonPanel({modelReport}:{
- modelReport:IchResearchReport;
+export default function IchReferenceComparisonPanel({modelReport,source,mask}:{
+ modelReport:IchResearchReport;source:File;mask:File;
 }){
  const [comparison,setComparison]=useState<IchReferenceComparison|null>(null);
  const [referenceVerified,setReferenceVerified]=useState(false);
+ const [referenceFile,setReferenceFile]=useState<File|null>(null);
  const [busy,setBusy]=useState(false);
  const [error,setError]=useState("");
  const ctrl=useRef<AbortController|null>(null);
  useEffect(()=>()=>ctrl.current?.abort(),[]);
  function clear(){
    ctrl.current?.abort();ctrl.current=null;
-   setComparison(null);setReferenceVerified(false);setBusy(false);setError("");
+   setComparison(null);setReferenceVerified(false);setReferenceFile(null);
+   setBusy(false);setError("");
  }
  async function open(file:File){
    clear();
@@ -45,10 +48,11 @@ export default function IchReferenceComparisonPanel({modelReport}:{
    if(!comparison)return;
    ctrl.current?.abort();
    const current=new AbortController();
-   ctrl.current=current;setReferenceVerified(false);setBusy(true);setError("");
+   ctrl.current=current;setReferenceVerified(false);setReferenceFile(null);
+   setBusy(true);setError("");
    try{
      await verifySha(file,comparison.evidenceHashes.expertMaskSha256,current.signal);
-     if(!current.signal.aborted)setReferenceVerified(true);
+     if(!current.signal.aborted){setReferenceFile(file);setReferenceVerified(true);}
    }catch(e){
      if(!current.signal.aborted)setError(e instanceof Error?e.message:"Неподходящая маска.");
    }finally{
@@ -100,6 +104,9 @@ export default function IchReferenceComparisonPanel({modelReport}:{
          {m.hd95UnavailableReason}</small></p>}
        {m.bothMasksEmpty&&<p role="alert">Обе маски пусты.
          Это не доказательство здоровой КТ, Dice не определён.</p>}
+       {referenceFile&&<IchExpertErrorOverlay
+         source={source} mask={mask} expert={referenceFile}
+         referenceLabel={comparison.referenceLabel} modelReport={modelReport}/>}
        <p><strong>Один исследовательский случай.</strong>
          Не доказано, что он не использовался при обучении модели.
          Не проверены независимость экспертной разметки,
