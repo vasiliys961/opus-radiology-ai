@@ -3,12 +3,12 @@ import hashlib
 import math
 import struct
 from pathlib import Path
-from totalsegmentator_audit import LUNG_LOBES
+from totalsegmentator_audit import LUNG_LOBES, ABDOMEN_ORGANS
 
-def lobe_completeness_review(counts):
+def lobe_completeness_review(counts, names=LUNG_LOBES):
     """Flag missing lobe labels; presence alone never proves anatomical coverage."""
     if not isinstance(counts,dict) or not counts or any(
-            type(k) is not int or k not in LUNG_LOBES or type(v) is not int or v<0
+            type(k) is not int or k not in names or type(v) is not int or v<0
             for k,v in counts.items()):
         raise ValueError("invalid_label_set")
     missing=sorted(label for label,voxels in counts.items() if voxels==0)
@@ -17,7 +17,7 @@ def lobe_completeness_review(counts):
         "presentLabelCount":len(counts)-len(missing),
         "expectedLabelCount":len(counts),
         "missingLabelIds":missing,
-        "missingLabelNames":[LUNG_LOBES[label] for label in missing],
+        "missingLabelNames":[names[label] for label in missing],
         "fullAnatomicCoverageVerified":False,
         "referenceDiceMeasured":False,
         "reason":"empty_lobe_labels" if missing else "presence_does_not_establish_accuracy",
@@ -40,7 +40,13 @@ def validate_native_mask(path, dimensions, affine_lps, source_identity_sha256, a
         raise ValueError("invalid_label_set")
     else:
         ids=set(allowed_labels)
-    if not ids or not ids.issubset(LUNG_LOBES):
+    if not ids:
+        raise ValueError("invalid_label_set")
+    if ids.issubset(LUNG_LOBES):
+        names=LUNG_LOBES
+    elif ids.issubset(ABDOMEN_ORGANS):
+        names=ABDOMEN_ORGANS
+    else:
         raise ValueError("invalid_label_set")
     count=math.prod(dimensions)
     path=Path(path)
@@ -86,7 +92,7 @@ def validate_native_mask(path, dimensions, affine_lps, source_identity_sha256, a
         raise ValueError("empty_mask_needs_review")
     return {"schema":"opus-totalsegmentator-validated-mask/v1",
         "sourceIdentitySha256":source_identity_sha256,"maskSha256":digest.hexdigest(),
-        "dimensions":list(dimensions),"qualityReview":lobe_completeness_review(counts),
-        "labelVoxels":[{"id":i,"name":LUNG_LOBES[i],
+        "dimensions":list(dimensions),"qualityReview":lobe_completeness_review(counts,names),
+        "labelVoxels":[{"id":i,"name":names[i],
         "voxels":counts[i]} for i in sorted(ids)],"clinicalStatus":"unverified_research_draft",
         "modelProvenance":"not_verified_by_mask_validation"}

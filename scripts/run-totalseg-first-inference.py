@@ -30,7 +30,9 @@ def host_memory_bytes(meminfo=Path("/proc/meminfo"), field="MemTotal"):
 def available_memory_bytes():
     return host_memory_bytes(field="MemAvailable")
 
-def prepare(input_file, model_dir, output_dir):
+def prepare(input_file, model_dir, output_dir, *, profile='lung-lobes'):
+    if profile not in ("lung-lobes","abdomen-four-organs"):
+        raise ValueError("unsupported_research_profile")
     if Path(input_file).is_symlink() or Path(model_dir).is_symlink() or Path(output_dir).is_symlink():
         raise ValueError("unsafe_symlink")
     source=Path(input_file).resolve(strict=True)
@@ -40,7 +42,7 @@ def prepare(input_file, model_dir, output_dir):
         raise ValueError("invalid_paths")
     if not os.access(output,os.W_OK):
         raise ValueError("output_not_writable")
-    target=output/"totalseg_lobes.nii"
+    target=output/("totalseg_lobes.nii" if profile=="lung-lobes" else "totalseg_abdomen.nii")
     if target.exists() or target.is_symlink():
         raise ValueError("refuse_to_overwrite_result")
     for folder in MODEL_FOLDERS:
@@ -95,24 +97,25 @@ def failure_category(process):
             return category
     return "unclassified"
 
-def run(input_file,model_dir,output_dir,*,confirmed=False,repo_root=None):
+def run(input_file,model_dir,output_dir,*,confirmed=False,repo_root=None,profile='lung-lobes'):
     if not confirmed:
         raise ValueError("explicit_research_confirmation_required")
-    source,models,output,identity=prepare(input_file,model_dir,output_dir)
+    source,models,output,identity=prepare(input_file,model_dir,output_dir,profile=profile)
     root=Path(repo_root) if repo_root else Path(__file__).resolve().parents[1]
     compose=root/"deploy/compose.totalseg-research.yaml"
     env=os.environ.copy()
     env.update(OPUS_PUBLIC_CT_NII=str(source),
                OPUS_TOTALSEG_MODEL_HOME=str(models),
                OPUS_RESEARCH_OUTPUT_DIR=str(output))
+    target_name="totalseg_lobes.nii" if profile=="lung-lobes" else "totalseg_abdomen.nii"
     cmd=["docker","compose","-f",str(compose),"run","--rm","--build","totalseg-research",
-         "--input","/data/input.nii","--output","/output/totalseg_lobes.nii",
-         "--research-confirmed","--source-sha256",identity]
+         "--input","/data/input.nii","--output","/output/"+target_name,
+         "--research-confirmed","--source-sha256",identity,"--research-profile",profile]
     start=time.monotonic()
     process=subprocess.run(cmd,env=env,capture_output=True,text=True,timeout=3600)
     elapsed=time.monotonic()-start
     report={"schema":"opus-totalseg-first-inference/v1",
-            "sourceSha256":identity,"elapsedSeconds":round(elapsed,2),
+            "sourceSha256":identity,"researchProfile":profile,"elapsedSeconds":round(elapsed,2),
             "exitCode":process.returncode,"clinicalStatus":"not_validated",
             "readyForClinicalUse":False}
     if process.returncode==0:
@@ -120,7 +123,9 @@ def run(input_file,model_dir,output_dir,*,confirmed=False,repo_root=None):
             payload=json.loads(process.stdout.strip().splitlines()[-1])
             if payload.get("execution")!="real-model-call" or payload.get("result",{}).get("sourceIdentitySha256")!=identity:
                 raise ValueError("invalid_executor_report")
-            mask=output/"totalseg_lobes.nii"
+            if payload.get("researchProfile")!=profile:
+                raise ValueError("research_profile_mismatch")
+            mask=output/target_name
             if mask.is_symlink() or not mask.is_file():
                 raise ValueError("missing_output_mask")
             report.update(status="completed_unvalidated",maskSha256=sha256(mask),
@@ -141,9 +146,10 @@ def main():
     p.add_argument("--models",required=True,type=Path)
     p.add_argument("--output",required=True,type=Path)
     p.add_argument("--research-confirmed",action="store_true")
+    p.add_argument("--research-profile",choices=("lung-lobes","abdomen-four-organs"),default="lung-lobes")
     a=p.parse_args()
     try:
-        result=run(a.input,a.models,a.output,confirmed=a.research_confirmed)
+        result=run(a.input,a.models,a.output,confirmed=a.research_confirmed,profile=a.research_profile)
     except (OSError,ValueError,subprocess.TimeoutExpired) as exc:
         print(json.dumps({"status":"failed","error":type(exc).__name__}),file=sys.stderr)
         return 2
