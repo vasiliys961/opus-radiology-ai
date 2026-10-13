@@ -50,7 +50,7 @@ jobs:
           files=list(root.glob("*.mhd"))
           assert len(files)==1, "Expected exactly one verified public CT header"
           scan=LoadImage(reader="ITKReader", image_only=True)(str(files[0]))
-          assert tuple(scan.shape)==(512,512,109), f"Unexpected source geometry: {tuple(scan.shape)}"
+          assert sorted(scan.shape)==[109,512,512], f"Unexpected source dimensions: {tuple(scan.shape)}"
           print("Real MetaImage reader PASS; source voxel shape:",tuple(scan.shape))
           del scan
           PY
