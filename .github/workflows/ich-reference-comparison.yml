@@ -1,0 +1,30 @@
+name: ICH expert-mask comparison checks
+
+on:
+  pull_request:
+    paths:
+      - "scripts/evaluate-ich-public-mask.py"
+      - "scripts/test-ich-public-mask.py"
+      - ".github/workflows/ich-reference-comparison.yml"
+  push:
+    paths:
+      - "scripts/evaluate-ich-public-mask.py"
+      - "scripts/test-ich-public-mask.py"
+      - ".github/workflows/ich-reference-comparison.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  expert-mask-comparison:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install minimal offline-evaluator math dependencies
+        run: python -m pip install --disable-pip-version-check --no-input numpy==2.2.6 scipy==1.15.3 nibabel==5.3.2
+      - name: Evaluate numeric mask comparison contracts
+        run: python scripts/test-ich-public-mask.py
