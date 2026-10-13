@@ -1,6 +1,7 @@
 "use client";
 import {useEffect, useRef, useState} from "react";
 import {sha256} from "@noble/hashes/sha2.js";
+import {sourceClickToMetaImagePoint,type SourceClickPoint} from "../lib/metaimage-physician-point";
 
 type Geometry={dimensions:number[];spacingMm:number[];origin:number[];directionMatrix:number[][]};
 type Reference={
@@ -34,13 +35,14 @@ export default function PublicLuna16SourceSlices({reference,rawSha256}:{
   const [preset,setPreset]=useState<Preset>("lung");
   const [error,setError]=useState("");
   const [displayError,setDisplayError]=useState("");
+  const [manualPoint,setManualPoint]=useState<SourceClickPoint|null>(null);
   const g=reference.sourceGeometry;
   const [w,h,depth]=g.dimensions;
   const nodule=reference.referenceNodules[0];
   const expectedBytes=w*h*depth*2;
 
   async function load(fileCandidate:File){
-    setFile(null);setValidating(true);setError("");setProgress(0);setDisplayError("");
+    setFile(null);setManualPoint(null);setValidating(true);setError("");setProgress(0);setDisplayError("");
     try{
       if(!Number.isSafeInteger(expectedBytes)||expectedBytes<2||
          fileCandidate.size!==expectedBytes)
@@ -95,10 +97,16 @@ export default function PublicLuna16SourceSlices({reference,rawSha256}:{
         context.stroke();
         context.restore();
       }
+      if(manualPoint&&manualPoint.index3d[2]===index){
+        const [x,y]=manualPoint.index3d;
+        context.save();context.strokeStyle="#17e4ce";context.lineWidth=2;
+        context.beginPath();context.moveTo(x-9,y);context.lineTo(x+9,y);
+        context.moveTo(x,y-9);context.lineTo(x,y+9);context.stroke();context.restore();
+      }
       setDisplayError("");
     }).catch(e=>{if(!cancelled)setDisplayError(e instanceof Error?e.message:"Срез не читается.");});
     return()=>{cancelled=true;};
-  },[file,slice,preset,w,h,depth,nodule.nativeVoxelIndex,nodule.diameterMm,g.spacingMm]);
+  },[file,slice,preset,w,h,depth,nodule.nativeVoxelIndex,nodule.diameterMm,g.spacingMm,manualPoint]);
 
   return <section aria-label="Исходные пиксели публичной КТ LUNA16"
     style={{border:"1px solid #778c86",padding:12,borderRadius:8,margin:"12px 0"}}>
@@ -125,8 +133,36 @@ export default function PublicLuna16SourceSlices({reference,rawSha256}:{
             <option key={key} value={key}>{item.label}</option>)}
         </select>
       </label>
-      <canvas ref={canvas} width={w} height={h} style={{width:"100%",maxWidth:512,aspectRatio:w+"/"+h,
-        display:"block",margin:"10px 0",imageRendering:"auto",border:"1px solid #666"}}/>
+      <p><strong>Ручная локализация на исходной КТ:</strong> нажмите на подозрительную область на срезе.
+        Бирюзовый крест обозначит точку, выбранную человеком, а не нейросетью.</p>
+      <canvas ref={canvas} width={w} height={h}
+        onClick={e=>{
+          const rect=e.currentTarget.getBoundingClientRect();
+          if(rect.width<=0||rect.height<=0)return;
+          const x=Math.floor((e.clientX-rect.left)*w/rect.width);
+          const y=Math.floor((e.clientY-rect.top)*h/rect.height);
+          try{
+            setManualPoint(sourceClickToMetaImagePoint(rawSha256,g,[x,y,slice]));
+            setDisplayError("");
+          }catch(err){setDisplayError(err instanceof Error?err.message:"Неверная ручная точка.");}
+        }}
+        style={{width:"100%",maxWidth:512,aspectRatio:w+"/"+h,
+        display:"block",margin:"10px 0",imageRendering:"auto",border:"1px solid #666",cursor:"crosshair"}}/>
+      {manualPoint&&<div>
+        <p><strong>Точка врача:</strong> воксель {manualPoint.index3d.join(" / ")};
+          координаты MetaImage {manualPoint.metaImagePhysicalMm.map(x=>x.toFixed(2)).join(" / ")} мм.</p>
+        <p role="note">Физические координаты MetaImage не удостоверены как DICOM LPS.
+          Совпадение с кандидатом MONAI не установлено; точка не означает подтверждения диагноза.</p>
+        <button type="button" onClick={()=>setSlice(manualPoint.index3d[2])}>Вернуться к отмеченному срезу</button>{" "}
+        <button type="button" onClick={()=>{
+          const payload=new Blob([JSON.stringify(manualPoint,null,2)],{type:"application/json"});
+          const url=URL.createObjectURL(payload);const a=document.createElement("a");
+          a.href=url;a.download="opus-luna16-manual-source-point.json";
+          document.body.appendChild(a);a.click();a.remove();
+          window.setTimeout(()=>URL.revokeObjectURL(url),1000);
+        }}>Скачать ручную точку с SHA-256 источника</button>{" "}
+        <button type="button" onClick={()=>setManualPoint(null)}>Удалить ручную точку</button>
+      </div>}
       {displayError&&<p role="alert">{displayError}</p>}
       <p><small>Оранжевый эллипс — условная сферическая визуализация по опубликованным экспертным центру и диаметру; это не нарисованный радиологом контур и не сегментация,
         это не подтверждённый контур MONAI. Ориентация — нативный порядок строк RAW, не радиологический стандарт.
