@@ -1,0 +1,26 @@
+name: MONAI public LUNA16 positive CT source plan (metadata only)
+on:
+  pull_request:
+    paths:
+      - "scripts/prepare-luna16-single-gpu-case.py"
+      - "services/imaging-ai/test_monai_nodule_gpu_contract.py"
+      - ".github/workflows/pathology-luna16-source-plan.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  choose-pinned-positive-public-ct-without-image-download:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Select one real positive LUNA16 CT using ONLY real public metadata
+        run: |
+          set -euo pipefail
+          python scripts/prepare-luna16-single-gpu-case.py
+          echo "Public positive LUNA16 case metadata/annotated count selected; no CT image or AI model downloaded."
