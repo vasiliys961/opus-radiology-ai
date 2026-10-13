@@ -6,6 +6,11 @@ import { groupDicomSeries, readDicomSeriesHeader, type DicomSeries } from "../..
 import { validateViewerFileSelection } from "../../lib/viewer-limits";
 import "./viewer.css";
 
+const NiftiCtResearchView = dynamic(() => import("../../components/NiftiCtResearchView"), {
+  ssr: false,
+  loading: () => <div className="cs-placeholder">Загрузка локального NIfTI CT review…</div>,
+});
+
 const CornerstoneStack = dynamic(() => import("../../components/CornerstoneStack"), {
   ssr: false,
   loading: () => <div className="cs-placeholder">Загрузка Cornerstone3D…</div>,
@@ -15,6 +20,7 @@ type Indexed = { id: string; file: File; header: Awaited<ReturnType<typeof readD
 
 export default function ViewerPage() {
   const folderPicker = useRef<HTMLInputElement>(null);
+  const [sourceMode,setSourceMode] = useState<"dicom"|"nifti">("dicom");
   const [indexed, setIndexed] = useState<Indexed[]>([]);
   const [currentSeriesKey, setCurrentSeriesKey] = useState("");
   const [message, setMessage] = useState("Выберите папку с DICOM-файлами или набор отдельных файлов.");
@@ -62,6 +68,13 @@ export default function ViewerPage() {
   return <main className="cs-page">
     <header className="cs-top"><a href="/" aria-label="Вернуться в рабочую станцию">← OPUS RADIOLOGY</a><span>Cornerstone3D · экспериментальный просмотр</span><span>LOCAL / M1</span></header>
     <div className="cs-container">
+      <div className="cs-source-mode" aria-label="Формат исходной серии">
+        <button type="button" className={sourceMode==="dicom"?"active":""}
+          onClick={()=>setSourceMode("dicom")}>DICOM · исходные серии</button>
+        <button type="button" className={sourceMode==="nifti"?"active":""}
+          onClick={()=>setSourceMode("nifti")}>NIfTI · КТ брюшной полости</button>
+      </div>
+      {sourceMode==="nifti" ? <NiftiCtResearchView/> : <>
       <div className="cs-intro"><div><div className="cs-kicker">IMAGING LAB / 2D STACK</div><h1>DICOM Viewer <em>β</em></h1><p>Просмотр локальных DICOM-серий с декодированием Cornerstone3D. Без облака, без анализа ИИ.</p></div><span className="cs-watermark">ИССЛЕДОВАТЕЛЬСКИЙ ПРОТОТИП · НЕ ДЛЯ ДИАГНОСТИКИ</span></div>
       <div className="cs-layout">
         <aside className="cs-sidebar">
@@ -88,6 +101,7 @@ export default function ViewerPage() {
           <div className="cs-bottom-note">Важное ограничение: 2D-просмотр не означает подтверждение точности измерений, реконструкции, правильной геометрии или отсутствия патологии. Сжатые кодеки проверяются отдельно на тестовых наборах.</div>
         </div>
       </div>
+      </>}
     </div>
   </main>;
 }
