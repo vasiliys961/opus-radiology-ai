@@ -108,13 +108,13 @@ def fetch_bytes(url,max_bytes):
 def fetch_listing():
     # Use the officially supported paginated API: hand-written ?limit/expand
     # combinations can return 400 and cannot be trusted to enumerate all files.
-    from huggingface_hub import HfApi, RepoFile
+    from huggingface_hub import HfApi
     api=HfApi(token=False)
     entries=[]
     for item in api.list_repo_tree(repo_id=DATASET,repo_type="dataset",
                                    revision=REV,path_in_repo="subset0",
                                    recursive=False,expand=False,token=False):
-        if not isinstance(item,RepoFile):
+        if not isinstance(getattr(item,"path",None),str) or not item.path.endswith((".mhd",".raw")):
             continue
         entries.append({"path":item.path,"size":item.size,
                         "lfs":item.lfs if item.lfs is not None else {}})
