@@ -16,6 +16,8 @@ import struct
 SOURCE_SHAPE_LIMITS=(512,512,300)
 BROWSER_MAX_VOXELS=8_388_608
 LOBE_IDS=(10,11,12,13,14)
+ABDOMEN_IDS=(1,2,3,5)
+PROFILES={"lung-lobes":LOBE_IDS,"abdomen-four-organs":ABDOMEN_IDS}
 
 
 def sha256(path):
@@ -27,7 +29,10 @@ def sha256(path):
 
 
 def extract(mask_path, report_path, output_path, manifest_path, start, count,
-            expected_source_sha):
+            expected_source_sha, research_profile="lung-lobes"):
+    if research_profile not in PROFILES:
+        raise ValueError("unsupported_research_profile")
+    labels=PROFILES[research_profile]
     mask=Path(mask_path)
     report=Path(report_path)
     output=Path(output_path)
@@ -56,6 +61,11 @@ def extract(mask_path, report_path, output_path, manifest_path, start, count,
             evidence.get("sourceSha256")!=expected_source_sha or
             not isinstance(evidence.get("maskSha256"),str) or
             len(evidence["maskSha256"])!=64):
+        raise ValueError("source_or_model_result_unverified")
+    if (research_profile=="abdomen-four-organs" and
+            evidence.get("researchProfile")!="abdomen-four-organs"):
+        raise ValueError("source_or_model_result_unverified")
+    if (evidence.get("researchProfile") not in (None,research_profile)):
         raise ValueError("source_or_model_result_unverified")
     if sha256(mask)!=evidence["maskSha256"]:
         raise ValueError("mask_sha_mismatch")
@@ -96,7 +106,7 @@ def extract(mask_path, report_path, output_path, manifest_path, start, count,
             struct.pack_into("<4f",out_header,280+16*row,*affine[row])
         slab_bytes=math.prod(dims[:2])*count
         os.lseek(descriptor,352+start*math.prod(dims[:2]),os.SEEK_SET)
-        counts={i:0 for i in LOBE_IDS}
+        counts={i:0 for i in labels}
         digest=hashlib.sha256()
         try:
             with output.open("xb") as target:
@@ -107,15 +117,17 @@ def extract(mask_path, report_path, output_path, manifest_path, start, count,
                     data=os.read(descriptor,min(left,131072))
                     if not data:
                         raise ValueError("truncated_native_mask")
-                    if any(x not in (0,*LOBE_IDS) for x in set(data)):
+                    if any(x not in (0,*labels) for x in set(data)):
                         raise ValueError("unexpected_mask_label")
-                    for label in LOBE_IDS:
+                    for label in labels:
                         counts[label]+=data.count(label)
                     target.write(data)
                     digest.update(data)
                     left-=len(data)
             summary={
-                "schema":"opus-totalseg-native-mpr-slab/v1",
+                "schema":"opus-totalseg-native-mpr-slab/v1" if research_profile=="lung-lobes"
+                    else "opus-totalseg-abdomen-native-mpr-slab/v1",
+                "researchProfile":research_profile,
                 "sourceFullCtSha256":expected_source_sha,
                 "sourceFullMaskSha256":evidence["maskSha256"],
                 "slabMaskSha256":digest.hexdigest(),
@@ -123,7 +135,7 @@ def extract(mask_path, report_path, output_path, manifest_path, start, count,
                 "slabDimensions":[dims[0],dims[1],count],
                 "firstOriginalSliceIndexZeroBased":start,
                 "lastOriginalSliceIndexZeroBased":start+count-1,
-                "labelVoxels":[{"id":i,"voxels":counts[i]} for i in LOBE_IDS],
+                "labelVoxels":[{"id":i,"voxels":counts[i]} for i in labels],
                 "sourceGridGeometry":"native_contiguous_unresampled",
                 "clinicalStatus":"not_validated",
                 "fullAnatomicCoverageVerified":False,
@@ -149,9 +161,10 @@ def main():
     p.add_argument("--start",required=True,type=int)
     p.add_argument("--count",required=True,type=int)
     p.add_argument("--expected-source-sha256",required=True)
+    p.add_argument("--research-profile",choices=tuple(PROFILES),default="lung-lobes")
     a=p.parse_args()
     result=extract(a.mask,a.report,a.output,a.manifest,a.start,a.count,
-                   a.expected_source_sha256)
+                   a.expected_source_sha256, a.research_profile)
     print(json.dumps(result,sort_keys=True))
 
 
