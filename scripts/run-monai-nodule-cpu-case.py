@@ -137,6 +137,20 @@ def run(case_dir,work,confirmed):
     config["dataloader"]["num_workers"]=0
     config["amp"]=False
     config["device"]="$torch.device('cpu')"
+    # The upstream inference window (512x512x192) exceeded the 10 GiB
+    # CPU process limit on an actual positive 512x512x109 LUNA16 scan.
+    # Use the upstream model's *training* patch shape (192x192x80),
+    # scanning the ENTIRE study with 25% overlap, never just one slab.
+    # Research configuration differs from upstream validation, so do not
+    # claim published model sensitivity or clinical performance.
+    cpu_patch=[192,192,80]
+    config["infer_patch_size"]=cpu_patch
+    config["force_sliding_window"]=True
+    expected_op="$@detector.set_sliding_window_inferer(roi_size=@infer_patch_size,overlap=0.25,sw_batch_size=1,mode='constant',device='cpu')"
+    if expected_op not in config.get("detector_ops",[]):
+        raise ValueError("upstream_sliding_window_contract_changed")
+    if config.get("inferer",{}).get("force_sliding_window")!="@force_sliding_window":
+        raise ValueError("upstream_inferer_contract_changed")
     # Official checkpoint was saved with CUDA storages. MONAI CheckpointLoader
     # supports map_location; preserve verified original checkpoint bytes.
     if config.get("checkpointloader",{}).get("_target_")!="CheckpointLoader":
@@ -154,9 +168,11 @@ def run(case_dir,work,confirmed):
     env={**os.environ,"HF_HUB_OFFLINE":"1","HF_HUB_DISABLE_TELEMETRY":"1",
          "PYTHONDONTWRITEBYTECODE":"1","OMP_NUM_THREADS":"2"}
     import psutil
+    print("CPU inference: sliding 3D windows 192x192x80, 25% overlap, full CT coverage, 10 GiB RSS limit",flush=True)
     process=subprocess.Popen([sys.executable,"-m","monai.bundle","run",
                     "--config_file",str(configfile)],cwd=bundle,env=env,
                     start_new_session=True)
+    peak_rss=0
     try:
         while process.poll() is None:
             if time.monotonic()-before>3300:
@@ -167,8 +183,14 @@ def run(case_dir,work,confirmed):
                 rss=sum(p.memory_info().rss for p in [root,*root.children(recursive=True)])
             except psutil.NoSuchProcess:
                 pass
-            if rss>CPU_RSS_LIMIT or psutil.virtual_memory().available<1024**3:
-                raise MemoryError("cpu_inference_memory_limit")
+            peak_rss=max(peak_rss,rss)
+            free_bytes=psutil.virtual_memory().available
+            if rss>CPU_RSS_LIMIT or free_bytes<1024**3:
+                raise MemoryError(
+                    f"cpu_inference_memory_limit rss_gib={rss/1024**3:.2f} "
+                    f"peak_rss_gib={peak_rss/1024**3:.2f} "
+                    f"available_gib={free_bytes/1024**3:.2f}"
+                )
             time.sleep(2)
         if process.returncode!=0:
             raise RuntimeError("cpu_inference_process_failed")
@@ -194,8 +216,12 @@ def run(case_dir,work,confirmed):
         "model":{"id":"monai-lung-nodule-ct-retinanet","version":"0.6.9",
                  "weightsSha256":MODEL_SHA,"revision":MODEL_REV,
                  "modelCheckpointActualSha256Verified":True},
-        "runtime":{"execution":"github-hosted-public-cpu","elapsedSeconds":seconds,"cpu":cpu},
+        "runtime":{"execution":"github-hosted-public-cpu","elapsedSeconds":seconds,"cpu":cpu,
+                   "peakObservedModelProcessRssBytes":peak_rss},
         "coverage":{"sourceFullCtProcessed":True,"onlyOnePublicStudy":True,
+                    "inferenceMode":"forced_sliding_window_full_study",
+                    "windowVoxels":cpu_patch,"windowOverlapFraction":0.25,
+                    "upstreamEvaluationPatchModified":True,
                     "sourceWorldCoordinateVerification":"not_yet_completed",
                     "negativeDiagnosticConclusionAllowed":False},
         "candidates":results,"candidateCount":len(results),
