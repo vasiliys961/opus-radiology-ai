@@ -1,5 +1,6 @@
 "use client";
 import {useState} from "react";
+import {buildPathologyResearchHtml} from "../lib/pathology-research-report";
 import {
   startPathologyReview, recordPathologyAssessment, setPathologySynthesis,
   type MonaiResearchReport, type PathologyAssessment, type PathologyFinding,
@@ -18,13 +19,13 @@ function changed(a:PathologyAssessment,b:PathologyAssessment):boolean{
   return a.decision!==b.decision||a.note!==b.note||
     a.reviewerMeasuredDiameterMm!==b.reviewerMeasuredDiameterMm;
 }
-function downloadDraft(draft:PathologyReviewDraft){
-  const data=JSON.stringify(draft,null,2);
-  const blob=new Blob([data],{type:"application/json"});
+function downloadDraft(draft:PathologyReviewDraft,format:"json"|"html"){
+  const data=format==="json"?JSON.stringify(draft,null,2):buildPathologyResearchHtml(draft,new Date().toISOString());
+  const blob=new Blob([data],{type:format==="json"?"application/json":"text/html;charset=utf-8"});
   const url=URL.createObjectURL(blob);
   const a=document.createElement("a");
   a.href=url;
-  a.download="opus-pathology-luna16-physician-research-draft.json";
+  a.download="opus-pathology-luna16-physician-research-draft."+format;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -92,13 +93,13 @@ export default function PathologyFindingsReview({report}:{report:MonaiResearchRe
       setError("");setExportMessage("");
     }catch(err){setError(err instanceof Error?err.message:"Не удалось сохранить оценку.");}
   }
-  function exportLocal(){
+  function exportLocal(format:"json"|"html"){
     setError("");setExportMessage("");
     if(dirty){setError("Сначала сохраните изменения в оценках каждого кандидата.");return;}
     try{
       const complete=setPathologySynthesis(draft,synthesis);
-      downloadDraft(complete);
-      setExportMessage("Исследовательский JSON-черновик сформирован локально. Он не подписан и не отправлен в облако.");
+      downloadDraft(complete,format);
+      setExportMessage("Исследовательский "+format.toUpperCase()+"-черновик сформирован локально. Он не подписан и не отправлен в облако.");
     }catch(err){setError(err instanceof Error?err.message:"Ошибка экспорта.");}
   }
   return <section aria-label="Врачебный разбор патологических находок"
@@ -120,8 +121,11 @@ export default function PathologyFindingsReview({report}:{report:MonaiResearchRe
     </label>
     {error&&<p role="alert">{error}</p>}
     {exportMessage&&<p role="status">{exportMessage}</p>}
-    <button type="button" disabled={dirty} onClick={exportLocal}>
-      Скачать структурированный врачебный черновик JSON
+    <button type="button" disabled={dirty} onClick={()=>exportLocal("json")}>
+      Скачать структурированный черновик JSON
+    </button>{" "}
+    <button type="button" disabled={dirty} onClick={()=>exportLocal("html")}>
+      Скачать читаемый врачебный отчёт HTML / печать
     </button>
     <p><small>Экспорт содержит SHA-256 исходного публичного исследования, идентификатор и версию модели, три исходных предложения, исправления и журнал решений. Отсутствие найденной патологии не устанавливается. Статус: исследовательский, без электронной подписи.</small></p>
   </section>;
