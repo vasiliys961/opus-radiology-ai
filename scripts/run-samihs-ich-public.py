@@ -94,6 +94,8 @@ def summarize_prediction(source: Path, mask_path: Path, geometry: dict) -> dict:
 
     mask_nii = nib.load(str(mask_path))
     source_nii = nib.load(str(source))
+    if mask_nii.header.get_xyzt_units()[0] != "mm":
+        raise ValueError("predicted_mask_spatial_units_not_mm")
     if mask_nii.ndim != 3 or list(mask_nii.shape) != geometry["dimensions"]:
         raise ValueError("mask_shape_not_bound_to_original_ct")
     if not np.allclose(mask_nii.affine, source_nii.affine, rtol=0, atol=1e-4):
