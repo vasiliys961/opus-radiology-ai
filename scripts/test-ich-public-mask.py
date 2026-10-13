@@ -123,6 +123,17 @@ class TestIchMaskComparison(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,"grids_do_not_match"):
                 module.run(args)
 
+    def test_empty_expert_mask_can_score_false_positive_predictions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            args=example(tmp)
+            saved_nifti(Path(args.reference), np.zeros((16,16,16), dtype=np.uint8))
+            args.reference_sha256=module.sha256(Path(args.reference))
+            result=module.run(args)
+            self.assertEqual(result["metrics"]["falsePositiveVoxels"], 8)
+            self.assertIsNone(result["metrics"]["voxelRecall"])
+            self.assertIsNone(result["metrics"]["hd95Mm"])
+            self.assertFalse(result["clinicalValidation"])
+
     def test_genuine_mask_array_is_not_interpreted_as_probabilities(self):
         with tempfile.TemporaryDirectory() as tmp:
             path=Path(tmp)/"mask.nii"
