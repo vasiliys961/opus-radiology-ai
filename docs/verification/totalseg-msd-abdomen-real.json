@@ -1,0 +1,62 @@
+{
+  "schema": "opus-totalseg-msd-abdomen-observed/v1",
+  "observedWorkflow": "https://github.com/vasiliys961/opus-radiology-ai/actions/runs/38358366427",
+  "result": "passed_research_unvalidated",
+  "input": {
+    "collection": "Medical Segmentation Decathlon Task09 Spleen",
+    "sample": "spleen_2",
+    "split": "training",
+    "dimensions": [
+      512,
+      512,
+      90
+    ],
+    "sourceSha256": "5328de77f5583b6c75199c36cc43081e0f5ed82985b1d9c7506c20f27f27ba7f",
+    "independentReferenceSha256": "5373b5f00f9ac687938e6bea82ce25b136f3e96244bea932b77ce094fb73599b"
+  },
+  "model": {
+    "name": "TotalSegmentator",
+    "task": "total",
+    "profile": "abdomen-four-organs",
+    "mode": "CPU",
+    "wallSeconds": 32.51,
+    "maskSha256": "3725816afb88838207db189efd2c43a900c705f458ba83edb116f69c90155238",
+    "presentLabels": [
+      {
+        "id": 1,
+        "name": "spleen",
+        "voxels": 94852
+      },
+      {
+        "id": 2,
+        "name": "kidney_right",
+        "voxels": 54253
+      },
+      {
+        "id": 3,
+        "name": "kidney_left",
+        "voxels": 59127
+      },
+      {
+        "id": 5,
+        "name": "liver",
+        "voxels": 591948
+      }
+    ]
+  },
+  "independentAnnotationEvaluation": {
+    "scope": "spleen_only",
+    "groundTruthVoxels": 96672,
+    "modelVoxels": 94852,
+    "intersectionVoxels": 90775,
+    "dice": 0.947923,
+    "kidneysAndLiverDice": null,
+    "type": "single_public_training_case_not_held_out"
+  },
+  "clinical": {
+    "readyForClinicalUse": false,
+    "independentClinicalValidation": false,
+    "fullOrganCoverageVerified": false,
+    "liverAndKidneyReferenceAvailable": false
+  }
+}
