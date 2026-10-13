@@ -115,7 +115,7 @@ def run(input_file,model_dir,output_dir,*,confirmed=False,repo_root=None,profile
     process=subprocess.run(cmd,env=env,capture_output=True,text=True,timeout=3600)
     elapsed=time.monotonic()-start
     report={"schema":"opus-totalseg-first-inference/v1",
-            "sourceSha256":identity,"elapsedSeconds":round(elapsed,2),
+            "sourceSha256":identity,"researchProfile":profile,"elapsedSeconds":round(elapsed,2),
             "exitCode":process.returncode,"clinicalStatus":"not_validated",
             "readyForClinicalUse":False}
     if process.returncode==0:
