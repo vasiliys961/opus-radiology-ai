@@ -104,7 +104,7 @@ def binary_mask(nii, label: int | None = None):
         return np.asarray(array == 1, dtype=np.bool_)
     if not isinstance(label, int) or label < 1 or label > 65535:
         raise ValueError("reference_label_must_be_positive")
-    if np.any(array < 0) or not np.any(array == label):
+    if np.any(array < 0) or (np.any(array != 0) and not np.any(array == label)):
         raise ValueError("reference_label_not_present")
     return np.asarray(array == label, dtype=np.bool_)
 
