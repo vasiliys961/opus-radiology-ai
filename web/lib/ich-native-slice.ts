@@ -34,6 +34,8 @@ function validateHeader(header:Uint8Array,dimensions:readonly number[],
     throw Error("Неоднозначное расположение исходных NIfTI-вокселей.");
   if(v.getInt16(254,true)<=0)
     throw Error("Нужна проверяемая sform-ориентация исходного NIfTI.");
+  if((v.getUint8(123)&7)!==2)
+    throw Error("Физические единицы NIfTI должны быть миллиметрами.");
   if(!Array.isArray(affine)||affine.length!==4||
      affine.some(row=>!Array.isArray(row)||row.length!==4))
     throw Error("Отсутствует физическая сетка исходной КТ.");
