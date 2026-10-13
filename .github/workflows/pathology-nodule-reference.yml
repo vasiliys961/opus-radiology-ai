@@ -41,7 +41,22 @@ jobs:
             "$RUNNER_TEMP/model.pt" | sha256sum --check --status
           python scripts/check-luna16-nodule-reference.py \
             --annotations "$RUNNER_TEMP/luna16-annotations.csv" \
-            --checkpoint "$RUNNER_TEMP/model.pt" --official-reference
+            --checkpoint "$RUNNER_TEMP/model.pt" --official-reference \
+            | tee "$RUNNER_TEMP/observed.json"
+          python - "$RUNNER_TEMP/observed.json" <<'PY'
+          import json,sys
+          observed=json.load(open(sys.argv[1]))
+          locked=json.load(open("docs/verification/monai-luna16-real-reference-admission.json"))
+          assert observed["annotationsSha256"]==locked["referenceAnnotationsSha256"]
+          assert observed["referenceNodules"]==locked["publicGroundTruth"]["referenceNodules"]
+          assert observed["positiveSeriesWithNoduleAnnotations"]==locked["publicGroundTruth"]["seriesWithPositiveAnnotations"]
+          assert observed["diameterGroups"]==locked["publicGroundTruth"]["sizeBucketsMm"]
+          assert observed["checkpointSha256Verified"] is True
+          assert observed["checkpointSha256Expected"]==locked["monaiModel"]["publishedCheckpointSha256"]
+          assert observed["genuineModelInferencePerformed"] is False
+          assert observed["modelCandidates"] is None and observed["froc"] is None
+          print("PASSED: real published 1186 LUNA16 nodule annotations, 601 positive series, genuine MONAI checkpoint SHA verified; NO MODEL INFERENCE")
+          PY
       - name: Erase reference metadata and checkpoint
         if: always()
         run: rm -f "$RUNNER_TEMP/luna16-annotations.csv" "$RUNNER_TEMP/model.pt"
