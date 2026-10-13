@@ -27,7 +27,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --no-cache-dir torch==2.4.0 torchvision==0.19.0 --index-url https://download.pytorch.org/whl/cpu
-          python -m pip install --no-cache-dir "monai==1.4.0" "nibabel==5.2.1" "numpy==1.24.4" "pytorch-ignite==0.4.11" "SimpleITK==2.4.0" "huggingface_hub==0.34.4" "tensorboard==2.17.0" "psutil==6.1.1" "fire==0.7.1"
+          python -m pip install --no-cache-dir "monai==1.4.0" "nibabel==5.2.1" "numpy==1.24.4" "pytorch-ignite==0.4.11" "SimpleITK==2.4.0" "huggingface_hub==0.34.4" "tensorboard==2.17.0" "psutil==6.1.1" "itk==5.4.3" "fire==0.7.1"
       - name: CPU RAM admission before public CT download
         run: |
           python - <<'PY'
@@ -39,6 +39,21 @@ jobs:
       - name: Download one smallest positive annotated public LUNA16 source CT
         run: |
           python scripts/prepare-luna16-single-gpu-case.py --download --external-gpu-confirm PUBLIC-LUNA16-GPU-OK --output "$RUNNER_TEMP/public-nodule-ct"
+      - name: Verify MetaImage .mhd source is readable using MONAI ITKReader
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import os
+          import itk
+          from monai.transforms import LoadImage
+          root=Path(os.environ["RUNNER_TEMP"])/"public-nodule-ct"/"subset0"
+          files=list(root.glob("*.mhd"))
+          assert len(files)==1, "Expected exactly one verified public CT header"
+          scan=LoadImage(reader="ITKReader", image_only=True)(str(files[0]))
+          assert tuple(scan.shape)==(512,512,109), f"Unexpected source geometry: {tuple(scan.shape)}"
+          print("Real MetaImage reader PASS; source voxel shape:",tuple(scan.shape))
+          del scan
+          PY
       - name: Run genuine pretrained MONAI detection bounded by process RAM and time
         run: |
           python scripts/run-monai-nodule-cpu-case.py --case-dir "$RUNNER_TEMP/public-nodule-ct" --work "$RUNNER_TEMP/monai-nodule-work" --external-gpu-confirm PUBLIC-LUNA16-GPU-OK
