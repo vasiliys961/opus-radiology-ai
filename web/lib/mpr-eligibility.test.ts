@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { checkMprEligibility, MAX_MPR_FILES } from './mpr-eligibility.ts';
+import { checkMprEligibility, MAX_MPR_FILES, assessMprDecodedMemory } from './mpr-eligibility.ts';
 import type { DicomSeries, SeriesMember, TechnicalDicomMetadata } from './dicom-series.ts';
 
 function series(count: number, rows = 512, columns = 512, valid = true): DicomSeries {
@@ -44,4 +44,34 @@ test('rejects incompatible dimensions and multi-frame series', () => {
   const t = series(10);
   t.members[2].metadata.numberOfFrames = 9;
   assert.equal(checkMprEligibility(t, Array(10).fill(1000)).eligible,false);
+});
+
+test('32 native 512px CT slices preserve existing research MPR admission',()=>{
+  const plan=checkMprEligibility(series(32),Array(32).fill(524288));
+  assert.equal(plan.eligible,true);
+  assert.equal(plan.estimatedRawMiB,16);
+  assert.equal(plan.estimatedDecodedMiB,32);
+  assert.equal(plan.estimatedWorkingMiB,160);
+});
+test('preflight rejects buffer amplification despite passing the old 48 MiB raw ceiling',()=>{
+  const before=series(72);
+  const result=checkMprEligibility(before,Array(72).fill(1000));
+  assert.ok(512*512*72*2<48*1024*1024);
+  assert.equal(result.eligible,false);
+  assert.match(result.reason,/бюджет/);
+});
+test('runtime guard rejects unexpectedly expanded image decoding before volume creation',()=>{
+  const voxels=512*512*32;
+  assert.equal(assessMprDecodedMemory(16*1048576,voxels).eligible,true);
+  const expanded=assessMprDecodedMemory(96*1048576,voxels);
+  assert.equal(expanded.eligible,false);
+  assert.match(expanded.reason,/бюджет/);
+  assert.equal(assessMprDecodedMemory(Number.NaN,voxels).eligible,false);
+  assert.equal(assessMprDecodedMemory(-1,voxels).eligible,false);
+  assert.equal(assessMprDecodedMemory(0,0).eligible,false);
+});
+test('preflight still refuses malformed dimensions before any allocation',()=>{
+  const invalid=series(32);
+  invalid.members[0].metadata.columns=NaN;
+  assert.equal(checkMprEligibility(invalid,Array(32).fill(1000)).eligible,false);
 });
