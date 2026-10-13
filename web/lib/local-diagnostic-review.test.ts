@@ -35,5 +35,5 @@ test("no AI findings never means confirmed absence of pathology",()=>{
 test("duplicate observations, unsourced IDs, oversized or missing clinician summary fail",()=>{
  assert.throws(()=>buildLocalDiagnosticDraft({...make(),findings:[finding,finding]}),/Дублирующаяся/);
  assert.throws(()=>buildLocalDiagnosticDraft({...make(),clinicianSynthesis:" "}),/clinicianSynthesis/);
- assert.throws(()=>buildLocalDiagnosticDraft({...make(),differentiaIs:{},differentials:{"synthetic-finding":"x".repeat(1201)}}),/differential/);
+ assert.throws(()=>buildLocalDiagnosticDraft({...make(),differentials:{"synthetic-finding":"x".repeat(1201)}}),/differential/);
 });
