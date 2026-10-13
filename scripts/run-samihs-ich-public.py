@@ -58,6 +58,10 @@ def source_header(path: Path, slice_axis: int) -> dict:
     import numpy as np
 
     image = nib.load(str(path))
+    if image.header.get_xyzt_units()[0] != "mm":
+        raise ValueError("nifti_spatial_units_must_be_mm_for_volume_measurement")
+    if int(image.header["sform_code"]) <= 0:
+        raise ValueError("sform_required_for_source_grid_verification")
     shape = image.shape
     if len(shape) != 3 or any(
         type(x) not in (int, np.int64, np.int32) or x < 16 or x > 512 for x in shape
@@ -90,6 +94,8 @@ def summarize_prediction(source: Path, mask_path: Path, geometry: dict) -> dict:
 
     mask_nii = nib.load(str(mask_path))
     source_nii = nib.load(str(source))
+    if mask_nii.header.get_xyzt_units()[0] != "mm":
+        raise ValueError("predicted_mask_spatial_units_not_mm")
     if mask_nii.ndim != 3 or list(mask_nii.shape) != geometry["dimensions"]:
         raise ValueError("mask_shape_not_bound_to_original_ct")
     if not np.allclose(mask_nii.affine, source_nii.affine, rtol=0, atol=1e-4):
