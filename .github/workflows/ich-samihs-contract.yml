@@ -5,11 +5,15 @@ on:
     paths:
       - "scripts/run-samihs-ich-public.py"
       - "scripts/test-samihs-ich-public.py"
+      - "scripts/run-ich-first-real-case.py"
+      - "scripts/test-ich-first-real-case.py"
       - ".github/workflows/ich-samihs-contract.yml"
   push:
     paths:
       - "scripts/run-samihs-ich-public.py"
       - "scripts/test-samihs-ich-public.py"
+      - "scripts/run-ich-first-real-case.py"
+      - "scripts/test-ich-first-real-case.py"
       - ".github/workflows/ich-samihs-contract.yml"
 
 permissions:
@@ -25,3 +29,7 @@ jobs:
         run: python3 -m py_compile scripts/run-samihs-ich-public.py scripts/test-samihs-ich-public.py
       - name: Focused safety-contract test (no model inference)
         run: python3 scripts/test-samihs-ich-public.py
+      - name: First REAL case execution admission only (no model run)
+        run: |
+          python3 -m py_compile scripts/run-ich-first-real-case.py
+          python3 scripts/test-ich-first-real-case.py
