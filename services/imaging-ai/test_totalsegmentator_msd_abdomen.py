@@ -61,6 +61,7 @@ def verified(tmp_path):
         "sourceSha256":manifest["inputSha256"],
         "maskSha256":score.sha(prediction),
         "status":"completed_unvalidated",
+        "researchProfile":"abdomen-four-organs",
     }))
     return out,prediction,report
 
