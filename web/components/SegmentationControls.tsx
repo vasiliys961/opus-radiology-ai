@@ -5,11 +5,12 @@ import LocalLungmaskPanel from "./LocalLungmaskPanel";
 import SegmentationEvidenceReview from "./SegmentationEvidenceReview";
 import { buildSegmentationEvidence, type SegmentationEvidence } from "../lib/segmentation-evidence";
 import type { AnalysisStream } from "../lib/analysis-stream";
+import {parseResearchLobes, type ResearchLobes} from "../lib/totalseg-research-import";
 import { maskColor, MAX_MASK_FILE_BYTES, readNiftiMaskFile, type LabelMask, type Point3 } from "../lib/segmentation-mask";
 import { assertResultBinding, MAX_RESULT_JSON_BYTES, parseSegmentationResult, sha256, type AnalysisPackage, type AnalysisRequest, type SegmentationResult } from "../lib/analysis-package";
 
 export type MaskDisplay = { visible: boolean; opacity: number; label: number | null };
-type Summary = { name: string; labels: LabelMask["labels"]; result?: SegmentationResult; evidence?: SegmentationEvidence; evidenceRevision?: number; fullCtDerived?:boolean };
+type Summary = { name: string; labels: LabelMask["labels"]; result?: SegmentationResult; evidence?: SegmentationEvidence; evidenceRevision?: number; fullCtDerived?:boolean; research?:ResearchLobes };
 type DownloadPackage = { request: AnalysisRequest; volumeUrl: string; manifestUrl: string };
 
 export default function SegmentationControls({ ready, onPrepare, onPrepareStream, onImport, onDisplay, onClear, onNavigatePoint, onSampleMask,onFullCtLoad }: {
@@ -24,6 +25,7 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
   onFullCtLoad?: (signal:AbortSignal)=>Promise<LabelMask>;
 }) {
   const input = useRef<HTMLInputElement>(null);
+  const researchInput = useRef<HTMLInputElement>(null);
   const resultInput = useRef<HTMLInputElement>(null);
   const version = useRef(0);
   const preparation = useRef<AbortController | null>(null);
@@ -106,6 +108,29 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
       if (request === version.current) setError(cause instanceof Error ? cause.message : String(cause));
     } finally { if (request === version.current) setBusy(false); }
   };
+  const loadResearch = async (files: File[]) => {
+    const revision=++version.current;
+    setBusy(true);setError("");
+    try {
+      const masks=files.filter(f=>f.name.toLowerCase().endsWith(".nii"));
+      const json=files.filter(f=>f.name.toLowerCase().endsWith(".json"));
+      if(files.length!==2||masks.length!==1||json.length!==1)
+        throw Error("Выберите одну исследовательскую маску .nii и один паспорт .json.");
+      if(!masks[0].size||masks[0].size>MAX_MASK_FILE_BYTES||!json[0].size||json[0].size>65536)
+        throw Error("Недопустимый размер файла исследовательской маски или паспорта.");
+      const digest=await sha256(await masks[0].arrayBuffer());
+      const mask=await readNiftiMaskFile(masks[0]);
+      const research=parseResearchLobes(await json[0].text(),mask,digest);
+      if(revision!==version.current)return;
+      // The MPR runtime independently rejects mismatch with currently loaded DICOM geometry.
+      const next={visible:true,opacity:0.4,label:null};
+      callbacks.current.onImport(mask,next);
+      setSummary({name:masks[0].name,labels:mask.labels,research});
+      setDisplay(next);
+    } catch(cause){
+      if(revision===version.current)setError(cause instanceof Error?cause.message:String(cause));
+    } finally {if(revision===version.current)setBusy(false);}
+  };
   const loadResult = async (files: File[]) => {
     const request=++version.current;
     setBusy(true);setError("");
@@ -159,6 +184,12 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
       }}/>
     <div className="ora-mask-actions">
       <button type="button" disabled={!ready||busy||exportBusy||workerBusy} onClick={()=>input.current?.click()}>{busy ? "Проверка маски…" : summary ? "Заменить маску .nii / .nii.gz" : "Загрузить маску .nii / .nii.gz"}</button>
+      <button type="button" disabled={!ready||busy||exportBusy||workerBusy} onClick={()=>researchInput.current?.click()}>Маска TotalSegmentator + паспорт исследования</button>
+      <input type="file" ref={researchInput} hidden multiple accept=".nii,.json" onChange={event=>{
+        const files=Array.from(event.target.files??[]);
+        event.target.value="";
+        if(files.length&&ready)void loadResearch(files);
+      }}/>
       {summary && <button type="button" disabled={exportBusy||workerBusy} onClick={()=>{
         version.current++; callbacks.current.onClear();setSummary(null);setBusy(false);setError("");
       }}>Удалить маску</button>}
@@ -172,23 +203,33 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
       <p className="ora-mask-success" role="status">Сетка совмещена · {summary.name} · меток: {summary.labels.length}</p>
       <small>Совпадение геометрии не подтверждает пациента или правильность сегментации. Проверьте принадлежность файла выбранной серии и границы на всех плоскостях.</small>
       <p className="ora-mask-coverage" role="note">Полнота анатомического охвата не подтверждена. Объём разметки относится только к загруженным срезам, а не ко всему органу.</p>
+      {summary.research && <details className="ora-mask-provenance" open>
+        <summary>Исследовательская разметка TotalSegmentator · доли лёгких</summary>
+        <p>Срезы исходной серии: {summary.research.firstSlice}–{summary.research.lastSlice} (индексы с нуля);
+          полный объём: {summary.research.fullDimensions.join(" × ")}.</p>
+        {summary.research.missingLabels.length ?
+          <p role="alert">Требуют проверки отсутствующие метки: {summary.research.missingLabels.map(id=>summary.research!.labelNames[id]).join(", ")}.</p> :
+          <p>Все пять меток присутствуют, но правильность анатомических границ не подтверждена.</p>}
+        <small>SHA-256 маски и число вокселей совпадают с паспортом. JSON не подписан;
+          источник модели, принадлежность DICOM и клиническая точность не удостоверены. Только исследовательский режим.</small>
+      </details>}
       {summary.result ? <details className="ora-mask-provenance">
         <summary>Суммы совпали · {summary.result.model.id} · сведения о модели</summary>
         <p>Заявленная модель: {summary.result.model.id} · {summary.result.model.version}. Задача: {summary.result.model.task}.</p>
         <small>Запрос: {summary.result.requestId}<br/>SHA-256 весов: {summary.result.model.weightsSha256}</small>
         {summary.result.limitations.length>0 && <ul>{summary.result.limitations.map((s,i)=><li key={i}>{s}</li>)}</ul>}
         <small>Паспорт не подписан. Контрольные суммы не удостоверяют автора модели, клиническую точность или применимость к последовательности.</small>
-      </details> : <p className="ora-mask-binding-note">Проверена только геометрия. Связь с пакетом серии и сведения о модели не проверены.</p>}
+      </details> : !summary.research && <p className="ora-mask-binding-note">Проверена только геометрия. Связь с пакетом серии и сведения о модели не проверены.</p>}
       {summary.labels.length ? <>
         <div className="ora-mask-settings">
           <label className="ora-mask-visible"><input type="checkbox" checked={display.visible} onChange={event=>change({...display,visible:event.target.checked})}/> Показать на MPR</label>
           <label>Метка<select value={display.label??"all"} onChange={event=>change({...display,label:event.target.value==="all" ? null : Number(event.target.value)})}>
             <option value="all">Все метки</option>
-            {summary.labels.map(l=><option value={l.id} key={l.id}>Метка {l.id}{summary.result ? ` · ${summary.result.labels.find(item=>item.id===l.id)?.name}` : ""} · {l.voxels.toLocaleString("ru-RU")} вокселей</option>)}
+            {summary.labels.map(l=><option value={l.id} key={l.id}>Метка {l.id}{summary.result ? ` · ${summary.result.labels.find(item=>item.id===l.id)?.name}` : summary.research ? ` · ${summary.research.labelNames[l.id]}` : ""} · {l.voxels.toLocaleString("ru-RU")} вокселей</option>)}
           </select></label>
           <label>Непрозрачность: {Math.round(display.opacity*100)}%<input type="range" min="0" max="80" value={Math.round(display.opacity*100)} onChange={event=>change({...display,opacity:Number(event.target.value)/100})}/></label>
         </div>
-        <p className="ora-mask-quantification">{selected && <i aria-hidden="true" style={{background:`rgb(${maskColor(selected.id).join(",")})`}}/>}{selected ? `Метка ${selected.id}` : "Все метки"}: {voxels.toLocaleString("ru-RU")} вокселей · объём разметки ≈ {volumeMl.toFixed(3)} мл.</p>
+        <p className="ora-mask-quantification">{selected && <i aria-hidden="true" style={{background:`rgb(${maskColor(selected.id).join(",")})`}}/>}{selected ? (summary?.research?.labelNames[selected.id]??`Метка ${selected.id}`) : "Все метки"}: {voxels.toLocaleString("ru-RU")} вокселей · объём разметки ≈ {volumeMl.toFixed(3)} мл.</p>
         <small>Объём рассчитан по меткам и геометрии маски; это не оценка точности модели. Названия из паспорта заявлены поставщиком результата. Маска отображается поверх MPR, без 3D-поверхностей.</small>
       </> : <p>Маска не содержит ненулевых меток. Это не подтверждает отсутствие патологических изменений.</p>}
     </>}
