@@ -37,12 +37,23 @@ function readReport(raw:string):Report{
 export default function LungNoduleResearchResults({isChestCT}:{isChestCT:boolean}){
  const [report,setReport]=useState<Report|null>(null),[error,setError]=useState("");
  const [minScore,setMinScore]=useState(0.5);
+ const [loadingExample,setLoadingExample]=useState(false);
  const visible=report?.candidates.filter(c=>c.rawClassificationScore>=minScore)
    .sort((a,b)=>b.rawClassificationScore-a.rawClassificationScore)??[];
  return <section className="cs-geometry" aria-label="Детекция лёгочных узлов · результаты MONAI">
   <h3>Лёгочные узлы · MONAI</h3>
-  <p>Импорт результатов настоящего публичного GPU-запуска модели. Не запускает детектор на этом Mac.</p>
+  <p>Публичный пример настоящего CPU-инференса MONAI на КТ LUNA16. Модель не запускается на этом Mac; координаты ещё не сопоставлены с DICOM.</p>
   {!isChestCT?<p role="status">Выберите серию КТ грудной клетки для исследовательского контекста.</p>:null}
+  <button type="button" disabled={loadingExample} onClick={async()=>{
+   setLoadingExample(true);setReport(null);setError("");
+   try{
+     const response=await fetch("/examples/luna16-monai-cpu-run-38436406805.json",{cache:"no-store"});
+     if(!response.ok)throw Error("Не удалось загрузить публичный пример.");
+     setReport(readReport(await response.text()));
+   }catch(err){setError(err instanceof Error?err.message:"Ошибка загрузки примера.");}
+   finally{setLoadingExample(false);}
+  }}>{loadingExample?"Загрузка публичного результата…":"Показать реальный пример LUNA16 (3 кандидата)"}</button>
+  <p><a href="https://github.com/vasiliys961/opus-radiology-ai/actions/runs/38436406805" target="_blank" rel="noopener noreferrer">Доказательство выполнения: GitHub Actions #38436406805</a>. Это результат другой публичной КТ, а не анализ загруженного пациентского исследования.</p>
   <label>Импорт JSON результата <input type="file" accept=".json,application/json" onChange={async e=>{
    const file=e.target.files?.[0];e.currentTarget.value="";setReport(null);setError("");
    if(!file)return;
