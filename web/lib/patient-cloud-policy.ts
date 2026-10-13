@@ -53,3 +53,28 @@ export function evaluatePatientCloudRelease(
     ],
   };
 }
+
+
+/** Local clinical *review* is independent of remote patient-data transfer.
+ * This enables an unsigned physician differential, NOT automatic diagnosis.
+ */
+export const LOCAL_DIAGNOSTIC_REVIEW_ENABLED=true as boolean;
+export type LocalDiagnosticReviewAccess={
+  mode:"local-only";
+  permitted:boolean;
+  cloudAllowed:false;
+  automaticDiagnosis:false;
+  signedConclusion:false;
+  reason:string;
+};
+export function evaluateLocalDiagnosticReview(
+  context:{modality:"CT"|"MR";sourceBound:boolean;sourceChanged:boolean}
+):LocalDiagnosticReviewAccess{
+  const ok=LOCAL_DIAGNOSTIC_REVIEW_ENABLED&&
+    (context.modality==="CT"||context.modality==="MR")&&
+    context.sourceBound===true&&context.sourceChanged===false;
+  return {mode:"local-only",permitted:ok,cloudAllowed:false,
+    automaticDiagnosis:false,signedConclusion:false,
+    reason:ok?"Можно подготовить локальный врачебный черновик по привязанным к DICOM данным.":
+      "Невозможно готовить диагностический разбор без актуальной привязки находок к DICOM."};
+}
