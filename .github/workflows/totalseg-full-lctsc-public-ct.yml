@@ -1,0 +1,75 @@
+name: TotalSegmentator full public LCTSC ZIP CT (manual, experimental)
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-ct-inference:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Check memory before downloads
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          mem={}
+          for line in Path("/proc/meminfo").read_text().splitlines():
+              if line.startswith(("MemTotal:","MemAvailable:")):
+                  k,v,*_=line.split()
+                  mem[k[:-1]]=int(v)*1024
+          print("GiB:", {k:round(v/1024**3,2) for k,v in mem.items()})
+          assert mem["MemTotal"]>=14*1024**3
+          assert mem["MemAvailable"]>=12*1024**3
+          PY
+      - name: Acquire verified public LCTSC ZIP and build native NIfTI from all 103 DICOM slices
+        run: |
+          python -m pip install "numpy==1.26.4" "pydicom==3.0.1"
+          python scripts/download-r231-browser-reference.py \
+            --download-public-reference --full-series \
+            --output "$RUNNER_TEMP/lctsc-public"
+          python scripts/package-totalseg-lctsc-reference.py \
+            --reference "$RUNNER_TEMP/lctsc-public" \
+            --output "$RUNNER_TEMP/public_ct.nii"
+          python - "$RUNNER_TEMP/public_ct.nii" <<'PY'
+          import sys
+          sys.path.insert(0,"services/imaging-ai")
+          from totalsegmentator_input import inspect_input
+          assert inspect_input(sys.argv[1])["dimensions"] == (512,512,103)
+          print("Pinned complete 103-slice public NIfTI preflight passed")
+          PY
+          rm -rf "$RUNNER_TEMP/lctsc-public"
+      - name: Obtain and provision official model checkpoints
+        run: |
+          python scripts/fetch-totalsegmentator-weights.py \
+            --research-download --output "$RUNNER_TEMP/archives"
+          python scripts/provision-totalsegmentator-weights.py \
+            --archives "$RUNNER_TEMP/archives" \
+            --destination "$RUNNER_TEMP/models" --research-provision
+          python scripts/verify-totalsegmentator-provision.py \
+            --weights-root "$RUNNER_TEMP/models"
+          find "$RUNNER_TEMP/models" -type d -exec chmod 755 {} +
+          find "$RUNNER_TEMP/models" -type f -exec chmod 644 {} +
+          rm -rf "$RUNNER_TEMP/archives"
+      - name: Build CPU-only offline Docker model
+        run: docker build -f deploy/Dockerfile.totalseg-research -t opus-totalseg-lctsc .
+      - name: Run real 3D model and inspect lobe completeness (research only)
+        run: |
+          mkdir -p "$RUNNER_TEMP/out"
+          chmod 777 "$RUNNER_TEMP/out"
+          timeout --signal=TERM --kill-after=20s 38m \
+            python scripts/run-totalseg-first-inference.py \
+              --input "$RUNNER_TEMP/public_ct.nii" \
+              --models "$RUNNER_TEMP/models" \
+              --output "$RUNNER_TEMP/out" --research-confirmed
+      - name: Remove reference DICOM/CT/checkpoints/masks
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/lctsc-public" "$RUNNER_TEMP/archives" \
+            "$RUNNER_TEMP/models" "$RUNNER_TEMP/public_ct.nii" \
+            "$RUNNER_TEMP/out"
