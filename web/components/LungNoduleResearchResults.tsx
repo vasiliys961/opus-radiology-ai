@@ -1,8 +1,9 @@
 "use client";
 import {useState} from "react";
+import PathologyFindingsReview from "./PathologyFindingsReview";
+import type {MonaiResearchReport} from "../lib/pathology-findings";
 
-type Candidate={candidateIndex:number;centerMonaiWorldMm:number[];extentMm:number[];rawClassificationScore:number;coordinateFrameVerifiedAgainstSource:false};
-type Report={schema:string;status:string;candidateCount:number;model:{id:string;version:string;weightsSha256:string;modelCheckpointActualSha256Verified:boolean};coverage:{sourceFullCtProcessed:boolean;sourceWorldCoordinateVerification:string};candidates:Candidate[];publicStudy:{dimensions:number[];luna16GroundTruthNoduleCount:number;sourceSeriesIdSha256?:string;sourceMhdSha256?:string};readyForClinicalUse:false};
+type Report=MonaiResearchReport & {status:string;candidateCount:number};
 type PublicReference={schema:string;sourceSeriesIdSha256:string;sourceMhdSha256:string;annotationsSha256:string;referenceNodules:Array<{centerMm:number[];diameterMm:number;nativeVoxelIndex:number[];sliceIndex0Based:number}>;coordinateMappingStatus:string;independentHoldout:false;clinicalValidation:false};
 const PUBLIC_MONAI_SHA="b5e79231466adae93a6fe8e8594029e9add142914e223b879aa0343bb2402d01";
 function validatePublicReference(value:unknown, report:Report):PublicReference {
@@ -41,6 +42,10 @@ function readReport(raw:string):Report{
     r.model?.modelCheckpointActualSha256Verified!==true||
     !/^[a-f0-9]{64}$/.test(r.model.weightsSha256)||
     r.coverage?.sourceFullCtProcessed!==true||
+    r.coverage?.sourceWorldCoordinateVerification!=="not_yet_completed"||
+    !/^[a-f0-9]{64}$/.test(r.publicStudy?.sourceSeriesIdSha256??"")||
+    !/^[a-f0-9]{64}$/.test(r.publicStudy?.sourceMhdSha256??"")||
+    !/^[a-f0-9]{64}$/.test(r.publicStudy?.sourceRawSha256??"")||
     !Array.isArray(r.candidates)||r.candidates.length>300||
     r.candidateCount!==r.candidates.length||
     !Array.isArray(r.publicStudy?.dimensions)||r.publicStudy.dimensions.length!==3||
@@ -134,6 +139,7 @@ export default function LungNoduleResearchResults({isChestCT}:{isChestCT:boolean
       <div>Размер бокса: {c.extentMm.map(x=>x.toFixed(1)).join(" × ")} мм</div>
     </div>)}
    </div>
+   <PathologyFindingsReview key={report.publicStudy.sourceSeriesIdSha256+report.model.weightsSha256} report={report}/>
    <button type="button" onClick={()=>{setReport(null);setReference(null);setReferenceError("");}}>Закрыть результат</button>
   </div>}
  </section>;
