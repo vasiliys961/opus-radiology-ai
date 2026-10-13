@@ -16,7 +16,15 @@ import subprocess
 import sys
 import time
 
-from prepare_luna16_single_gpu_case import DATASET,REV,sha256
+# Model runner and source selector intentionally share only pinned dataset revision.
+# Do not import a filename with hyphens as a Python module.
+REV="af8fdf04c27dcaa97ccfd755043d8096299d6a40"
+def sha256(file):
+    h=hashlib.sha256()
+    with Path(file).open("rb") as source:
+        for part in iter(lambda:source.read(1024*1024),b""):
+            h.update(part)
+    return h.hexdigest()
 
 MODEL_REPO="MONAI/lung_nodule_ct_detection"
 MODEL_REV="7226a40a4c3713f7d5469559b7f2fc296fd54825"
