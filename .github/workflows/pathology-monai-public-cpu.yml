@@ -1,0 +1,47 @@
+name: MONAI public LUNA16 nodule inference - bounded CPU
+on:
+  workflow_dispatch:
+    inputs:
+      public_ct_cpu_authorized:
+        description: "Type PUBLIC-LUNA16-CPU-OK (open public CT only)"
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  public-ct-cpu-inference:
+    if: ${{ github.ref == 'refs/heads/main' && inputs.public_ct_cpu_authorized == 'PUBLIC-LUNA16-CPU-OK' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    env:
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      TOKENIZERS_PARALLELISM: "false"
+      PYTHONUNBUFFERED: "1"
+      OMP_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install real pinned CPU model dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --no-cache-dir torch==2.4.0 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --no-cache-dir "monai==1.4.0" "nibabel==5.2.1" "numpy==1.24.4" "pytorch-ignite==0.4.11" "SimpleITK==2.4.0" "huggingface_hub==0.34.4" "tensorboard==2.17.0" "psutil==6.1.1"
+      - name: CPU RAM admission before public CT download
+        run: |
+          python - <<'PY'
+          import psutil
+          available=psutil.virtual_memory().available
+          print("CPU runner available GiB:",round(available/1024**3,2))
+          assert available >= 9*1024**3, "CPU admission refused: insufficient RAM"
+          PY
+      - name: Download one smallest positive annotated public LUNA16 source CT
+        run: |
+          python scripts/prepare-luna16-single-gpu-case.py --download --external-gpu-confirm PUBLIC-LUNA16-GPU-OK --output "$RUNNER_TEMP/public-nodule-ct"
+      - name: Run genuine pretrained MONAI detection bounded by process RAM and time
+        run: |
+          python scripts/run-monai-nodule-cpu-case.py --case-dir "$RUNNER_TEMP/public-nodule-ct" --work "$RUNNER_TEMP/monai-nodule-work" --external-gpu-confirm PUBLIC-LUNA16-GPU-OK
+      - name: Clean CT and checkpoint even after failure
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/public-nodule-ct" "$RUNNER_TEMP/monai-nodule-work"
