@@ -37,6 +37,7 @@ def score(input_folder, mask_file, report_file):
             manifest.get("liverKidneysReferenceAvailable") is not False or
             report.get("schema")!="opus-totalseg-first-inference/v1" or
             report.get("status")!="completed_unvalidated" or
+            report.get("researchProfile")!="abdomen-four-organs" or
             report.get("sourceSha256")!=manifest.get("inputSha256") or
             sha(source)!=manifest["inputSha256"] or
             sha(mask_file)!=report.get("maskSha256") or
