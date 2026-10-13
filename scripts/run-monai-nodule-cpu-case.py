@@ -137,6 +137,11 @@ def run(case_dir,work,confirmed):
     config["dataloader"]["num_workers"]=0
     config["amp"]=False
     config["device"]="$torch.device('cpu')"
+    # Official checkpoint was saved with CUDA storages. MONAI CheckpointLoader
+    # supports map_location; preserve verified original checkpoint bytes.
+    if config.get("checkpointloader",{}).get("_target_")!="CheckpointLoader":
+        raise ValueError("unexpected_checkpoint_loader")
+    config["checkpointloader"]["map_location"]="$torch.device('cpu')"
     (out/"prediction").mkdir()
     (out/"single-public-case.json").write_text(json.dumps(
         {"validation":[{"image":paired[".mhd"].name}]}))
