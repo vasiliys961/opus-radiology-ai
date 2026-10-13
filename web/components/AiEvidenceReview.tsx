@@ -2,6 +2,9 @@
 
 import { useMemo, useRef, useState } from "react";
 import type { DicomSeries } from "../lib/dicom-series";
+import {sha256} from "../lib/analysis-package";
+import {evaluateLocalDiagnosticReview} from "../lib/patient-cloud-policy";
+import {buildLocalDiagnosticDraft} from "../lib/local-diagnostic-review";
 import { bindFindingsToLocalDicom, parseReviewableOrchestraResult,
   type ReviewableOrchestraResult } from "../lib/ai-review";
 
@@ -18,18 +21,48 @@ export default function AiEvidenceReview({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [decisions, setDecisions] = useState<Record<string, "recheck" | "dismiss">>({});
+  const [aiSha,setAiSha]=useState("");
+  const [clinicalQuestion,setClinicalQuestion]=useState("");
+  const [clinicianSynthesis,setClinicianSynthesis]=useState("");
+  const [differentials,setDifferentials]=useState<Record<string,string>>({});
+  const [draftError,setDraftError]=useState("");
   const binding = useMemo(() => {
     if (!result) return { links: [], warning: "" };
     try { return { links: bindFindingsToLocalDicom(result, series), warning: "" }; }
     catch (err) { return { links: [], warning: err instanceof Error ? err.message : "Привязка DICOM не подтверждена." }; }
   }, [result, series]);
+  const localAccess=evaluateLocalDiagnosticReview({
+    modality:result?.modality??"CT",
+    sourceBound:!!result&&!binding.warning&&!!aiSha,
+    sourceChanged:!!binding.warning,
+  });
+  const exportLocalDraft=()=>{
+    if(!result||!localAccess.permitted){setDraftError("Сначала подтвердите актуальные DICOM-срезы.");return;}
+    let url:string|null=null;
+    try{
+      const draft=buildLocalDiagnosticDraft({
+        modality:result.modality,sourceBound:localAccess.permitted,
+        sourceChanged:!!binding.warning,aiResultSha256:aiSha,
+        findings:binding.links,decisions,differentials,clinicalQuestion,clinicianSynthesis,
+      });
+      url=URL.createObjectURL(new Blob([JSON.stringify(draft,null,2)],{type:"application/json"}));
+      const a=document.createElement("a");a.href=url;a.download="opus-local-diagnostic-draft.json";
+      document.body.appendChild(a);a.click();a.remove();
+      const completedUrl=url;
+      setTimeout(()=>URL.revokeObjectURL(completedUrl),1000);url=null;setDraftError("");
+    }catch(e){setDraftError(e instanceof Error?e.message:"Не удалось сформировать локальный черновик.");}
+    finally{if(url)URL.revokeObjectURL(url);}
+  };
   const importJson = async (file: File) => {
     setBusy(true); setError("");
     try {
       if (file.size > 512_000) throw new Error("Файл AI превышает лимит 512 КБ.");
-      const parsed = parseReviewableOrchestraResult(await file.text());
+      const bytes=await file.arrayBuffer();
+      const parsed = parseReviewableOrchestraResult(new TextDecoder("utf-8",{fatal:true}).decode(bytes));
       bindFindingsToLocalDicom(parsed, series);
-      setResult(parsed); setFilename(file.name); setDecisions({});
+      const digest=await sha256(bytes);
+      setResult(parsed); setFilename(file.name);setAiSha(digest); setDecisions({});
+      setClinicalQuestion("");setClinicianSynthesis("");setDifferentials({});setDraftError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось прочитать результат.");
       // A failed replacement does not silently clear a previously verified import.
@@ -48,7 +81,7 @@ export default function AiEvidenceReview({
         {busy ? "Проверка JSON…" : result ? "Заменить результат .json" : "Импортировать результат AI .json"}
       </button>
       {result && <button type="button" onClick={() => {
-        setResult(null); setFilename(""); setDecisions({}); setError("");
+        setResult(null); setFilename("");setAiSha(""); setDecisions({});setDifferentials({});setClinicianSynthesis("");setClinicalQuestion("");setDraftError(""); setError("");
       }}>Очистить AI-находки</button>}
       <input ref={fileRef} type="file" accept=".json,application/json" hidden onChange={e => {
         const f = e.target.files?.[0]; e.target.value = "";
@@ -90,7 +123,34 @@ export default function AiEvidenceReview({
         <p>{result.clinicalDraft.summary}</p>
         {result.clinicalDraft.limitations.map((w, i) => <p key={i} className="ora-evidence-limit">{w}</p>)}
       </details>
-      <p className="ora-evidence-subtle">Заметки о перепроверке/отклонении существуют только в памяти страницы; медицинского подтверждения, электронной подписи и сохранённого заключения нет.</p>
+      <section className="ora-reviewer-note" aria-label="Локальный диагностический разбор">
+        <h3>Диагностический разбор · локально</h3>
+        <p>Врач может сформулировать предварительный дифференциальный ряд и клинический вопрос по исходным срезам.
+          Это работа с находками, а не автоматическая постановка диагноза. Файлы не отправляются в облако.</p>
+        <p role="status">{localAccess.reason}</p>
+        <label>Клинический вопрос
+          <textarea rows={2} maxLength={1000} value={clinicalQuestion}
+            onChange={e=>setClinicalQuestion(e.target.value)} disabled={!localAccess.permitted}/>
+        </label>
+        {binding.links.map(link=><label key={link.findingId}>
+          Возможные объяснения / что перепроверить: {link.anatomy} · {link.findingId}
+          <textarea rows={2} maxLength={1200} value={differentials[link.findingId]??""}
+            onChange={e=>setDifferentials(prev=>({...prev,[link.findingId]:e.target.value}))}
+            disabled={!localAccess.permitted}/>
+        </label>)}
+        <label>Рабочий врачебный синтез (обязательно для черновика)
+          <textarea rows={5} maxLength={4000} value={clinicianSynthesis}
+            onChange={e=>setClinicianSynthesis(e.target.value)} disabled={!localAccess.permitted}/>
+        </label>
+        <div className="ora-evidence-actions">
+          <button type="button" disabled={!localAccess.permitted||!clinicianSynthesis.trim()}
+            onClick={exportLocalDraft}>Скачать локальный диагностический черновик JSON</button>
+        </div>
+        {draftError&&<p role="alert" className="ora-evidence-error">{draftError}</p>}
+        <small>Нет автоматической диагностики, отрицательного заключения, электронной подписи или внешней передачи. Автор текста не удостоверен.</small>
+      </section>
+      <p className="ora-evidence-subtle">Отметки перепроверки/отклонения и текст черновика живут только в памяти страницы.
+        Экспортируйте их локально, если требуется сохранить. Не публикуйте файлы, содержащие сведения о пациентах.</p>
     </>}
   </section>;
 }
