@@ -4,6 +4,7 @@
  */
 import {transformPoint,type LabelMask,type Point3} from "./segmentation-mask.ts";
 import type {ResearchLobes} from "./totalseg-research-import.ts";
+import type {AnatomyProof} from "./totalseg-abdomen-import.ts";
 
 export type LobeRegion={
   id:number;
@@ -23,7 +24,8 @@ type MutableRegion={
   closest:Point3;
   closestDistance:number;
 };
-const IDS=[10,11,12,13,14] as const;
+const LOBE_IDS=[10,11,12,13,14] as const;
+const ABDOMEN_IDS=[1,2,3,5] as const;
 const CHUNK=65536;
 const yieldToUi=()=>new Promise<void>(resolve=>setTimeout(resolve,0));
 
@@ -34,6 +36,21 @@ export async function buildResearchLobeRegions(
   mask:LabelMask,proof:ResearchLobes,
   options:{cancelled?:()=>boolean;yieldControl?:()=>Promise<void>}={}
 ):Promise<LobeRegion[]>{
+  return scanResearchRegions(mask,proof,LOBE_IDS,options);
+}
+
+/** Same bounded occupied-voxel navigator for four organs or five lung lobes. */
+export async function buildResearchAnatomyRegions(
+  mask:LabelMask,proof:AnatomyProof,
+  options:{cancelled?:()=>boolean;yieldControl?:()=>Promise<void>}={}
+):Promise<LobeRegion[]>{
+  return scanResearchRegions(mask,proof,proof.anatomy==="abdomen"?ABDOMEN_IDS:LOBE_IDS,options);
+}
+
+async function scanResearchRegions(
+  mask:LabelMask,proof:ResearchLobes,ids:readonly number[],
+  options:{cancelled?:()=>boolean;yieldControl?:()=>Promise<void>}
+):Promise<LobeRegion[]>{
   const [nx,ny,nz]=mask.dimensions;
   const size=nx*ny*nz;
   if(!Number.isSafeInteger(size)||size<1||size>8388608||size!==mask.data.length||
@@ -43,7 +60,7 @@ export async function buildResearchLobeRegions(
   const check=()=>{if(options.cancelled?.())throw Error("Подготовка навигации отменена.");};
   const yieldControl=options.yieldControl??yieldToUi;
   const entries=new Map<number,MutableRegion>();
-  for(const id of IDS)entries.set(id,{
+  for(const id of ids)entries.set(id,{
     count:0,min:[nx,ny,nz],max:[-1,-1,-1],sums:[0,0,0],
     closest:[0,0,0],closestDistance:Infinity,
   });
@@ -63,7 +80,7 @@ export async function buildResearchLobeRegions(
   }
   check();
   const declared=new Map(mask.labels.map(label=>[label.id,label.voxels]));
-  for(const id of IDS)if(entries.get(id)!.count!==(declared.get(id)??0))
+  for(const id of ids)if(entries.get(id)!.count!==(declared.get(id)??0))
     throw Error("Данные маски изменились после проверки паспорта.");
   for(let start=0;start<size;start+=CHUNK){
     check();
@@ -81,7 +98,7 @@ export async function buildResearchLobeRegions(
     await yieldControl();
   }
   check();
-  return IDS.flatMap(id=>{
+  return ids.flatMap(id=>{
     const r=entries.get(id)!;
     if(!r.count)return [];
     const anchor=transformPoint(mask.affineLps,r.closest);
