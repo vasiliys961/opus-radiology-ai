@@ -2,6 +2,7 @@
 import {useEffect,useRef,useState} from "react";
 import {sha256} from "@noble/hashes/sha2.js";
 import IchNativeOverlay from "./IchNativeOverlay";
+import IchReferenceComparisonPanel from "./IchReferenceComparisonPanel";
 import {
   parseIchResearchReport,buildIchLocalReview,
   type IchResearchReport,type IchReviewDecision
@@ -117,8 +118,10 @@ export default function IchResearchResults(){
         </label>
         <p role="status">Маска: {maskOk?"SHA-256 совпал":"не подтверждена по файлу"}</p>
       </div>
-      {sourceOk&&maskOk&&sourceFile&&maskFile&&
-        <IchNativeOverlay source={sourceFile} mask={maskFile} report={report}/>}
+      {sourceOk&&maskOk&&sourceFile&&maskFile&&<>
+        <IchNativeOverlay source={sourceFile} mask={maskFile} report={report}/>
+        <IchReferenceComparisonPanel modelReport={report}/>
+      </>}
       <p><small>SHA подтверждает соответствие выбранным локальным файлам,
         а не клиническую точность, правильность анатомии или доверие к автору отчёта.</small></p>
       {report.prediction.largestComponents.length===0?
