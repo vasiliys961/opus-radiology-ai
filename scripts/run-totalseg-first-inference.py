@@ -124,7 +124,8 @@ def run(input_file,model_dir,output_dir,*,confirmed=False,repo_root=None):
             if mask.is_symlink() or not mask.is_file():
                 raise ValueError("missing_output_mask")
             report.update(status="completed_unvalidated",maskSha256=sha256(mask),
-                          labelVoxels=payload["result"]["labelVoxels"])
+                          labelVoxels=payload["result"]["labelVoxels"],
+                          qualityReview=payload["result"]["qualityReview"])
         except (ValueError,KeyError,IndexError,TypeError):
             report["status"]="invalid_output"
     else:
