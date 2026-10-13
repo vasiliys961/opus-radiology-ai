@@ -84,7 +84,8 @@ export default function PathologyFindingsReview({report}:{report:MonaiResearchRe
     try{
       const proposal=pending[f.findingId];
       if(!proposal)return;
-      setDraft(current=>recordPathologyAssessment(current,f.findingId,proposal,new Date().toISOString()));
+      const recorded=recordPathologyAssessment(draft,f.findingId,proposal,new Date().toISOString());
+      setDraft(recorded);
       setPending(current=>{
         const next={...current};delete next[f.findingId];return next;
       });
