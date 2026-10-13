@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   genuine-public-nodule-inference:
-    if: \${{ github.ref == 'refs/heads/main' && inputs.public_data_and_gpu_authorized == 'PUBLIC-LUNA16-GPU-OK' }}
+    if: ${{ github.ref == 'refs/heads/main' && inputs.public_data_and_gpu_authorized == 'PUBLIC-LUNA16-GPU-OK' }}
     runs-on: [self-hosted, linux, x64, opus-approved-gpu]
     timeout-minutes: 60
     container:
