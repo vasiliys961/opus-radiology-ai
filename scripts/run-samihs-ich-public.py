@@ -58,6 +58,10 @@ def source_header(path: Path, slice_axis: int) -> dict:
     import numpy as np
 
     image = nib.load(str(path))
+    if image.header.get_xyzt_units()[0] != "mm":
+        raise ValueError("nifti_spatial_units_must_be_mm_for_volume_measurement")
+    if int(image.header["sform_code"]) <= 0:
+        raise ValueError("sform_required_for_source_grid_verification")
     shape = image.shape
     if len(shape) != 3 or any(
         type(x) not in (int, np.int64, np.int32) or x < 16 or x > 512 for x in shape
