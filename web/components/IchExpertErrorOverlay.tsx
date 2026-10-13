@@ -14,14 +14,22 @@ type W=keyof typeof windows;
  * Source/algorithm/expert files must all have been SHA verified by parents.
  * TP/FP/FN are pixel-wise overlap classes, not a diagnosis or clinical FP rate.
  */
-export default function IchExpertErrorOverlay({source,mask,expert,referenceLabel,modelReport}:{
+export default function IchExpertErrorOverlay({source,mask,expert,referenceLabel,modelReport,jumpTo}:{
  source:File;mask:File;expert:File;referenceLabel:number;modelReport:IchResearchReport;
+ jumpTo?:{sliceIndex:number;requestId:number}|null;
 }){
  const {dimensions,affineRas}=modelReport.source.geometry;
  const largest=modelReport.prediction.largestComponents[0];
  const initial=largest?Math.floor((largest.boundsVoxelMin[2]+largest.boundsVoxelMax[2])/2):
    Math.floor(dimensions[2]/2);
  const [slice,setSlice]=useState(initial);
+ // A new requestId makes repeat visits work after the radiologist has moved the slider.
+ // This viewer decodes ONLY the native third array dimension (k).
+ useEffect(()=>{
+   if(jumpTo && Number.isSafeInteger(jumpTo.sliceIndex) &&
+      jumpTo.sliceIndex>=0 && jumpTo.sliceIndex<dimensions[2])
+     setSlice(jumpTo.sliceIndex);
+ },[jumpTo?.requestId,jumpTo?.sliceIndex,dimensions]);
  const [window,setWindow]=useState<W>("brain");
  const [error,setError]=useState("");
  const [loading,setLoading]=useState(false);
