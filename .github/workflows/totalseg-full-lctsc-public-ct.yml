@@ -43,7 +43,6 @@ jobs:
           assert inspect_input(sys.argv[1])["dimensions"] == (512,512,103)
           print("Pinned complete 103-slice public NIfTI preflight passed")
           PY
-          rm -rf "$RUNNER_TEMP/lctsc-public"
       - name: Obtain and provision official model checkpoints
         run: |
           python scripts/fetch-totalsegmentator-weights.py \
@@ -75,6 +74,22 @@ jobs:
             --manifest "$RUNNER_TEMP/out/lctsc-mpr-slab.json" \
             --start 35 --count 32 \
             --expected-source-sha256 99615ddb66e09bd46c2ff70c352d73414285145b358e448682b7cffc41249738
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Build actual MPR app and prepare Playwright Chromium
+        working-directory: web
+        run: |
+          npm ci --no-audit --no-fund
+          NEXT_TELEMETRY_DISABLED=1 npm run build
+          npx playwright install --with-deps chromium
+      - name: Verify real lung lobe mask over public DICOM in three browser MPR planes
+        run: |
+          node scripts/check-totalseg-browser-mpr.mjs \
+            --reference "$RUNNER_TEMP/lctsc-public" \
+            --mask "$RUNNER_TEMP/out/lctsc-mpr-slab.nii" \
+            --slab-manifest "$RUNNER_TEMP/out/lctsc-mpr-slab.json" \
+            --report "$RUNNER_TEMP/out/browser-mpr-verification.json"
       - name: Remove reference DICOM/CT/checkpoints/masks
         if: always()
         run: |
