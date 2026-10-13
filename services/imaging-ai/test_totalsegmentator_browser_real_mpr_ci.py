@@ -13,7 +13,7 @@ def test_source_bound_browser_overlay_not_a_mock():
     script=(ROOT/"scripts/check-totalseg-browser-mpr.mjs").read_text()
     for expected in ('slabMaskSha256','sourceFullCtSha256','setInputFiles(files)',
                      'setInputFiles(mask)','.ora-mpr-mask-overlay','threePlanesPassed:true',
-                     'url.origin', 'externalBrowserNetwork:false'):
+                     'new URL(route.request().url()).origin!==origin', 'externalBrowserNetwork:false'):
         assert expected in script
     for forbidden in ('screenshot(', 'canvas.toDataURL(', 'upload-artifact'):
         assert forbidden not in script
