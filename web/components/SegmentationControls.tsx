@@ -45,7 +45,7 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
   const [localCommandCopied, setLocalCommandCopied] = useState(false);
   const [workerBusy, setWorkerBusy] = useState(false);
   useEffect(()=>{
-    if(!onFullCtLoad){version.current++;preparation.current?.abort();setBusy(false);
+    if(!onFullCtLoad){version.current++;preparation.current?.abort();researchController.current?.abort();setBusy(false);
       setSummary(current=>{if(current?.fullCtDerived){callbacks.current.onClear();return null;}return current;});}
   },[Boolean(onFullCtLoad)]);
   const localOnnxCommand = packet ? [
@@ -70,7 +70,7 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
   useEffect(() => () => { version.current++;preparation.current?.abort();researchController.current?.abort();releasePackage(); }, []);
   useEffect(() => {
     if (!ready) {
-      version.current++;preparation.current?.abort();releasePackage();
+      version.current++;preparation.current?.abort();researchController.current?.abort();releasePackage();
       setPacket(null);setExportBusy(false);setExportError("");setSummary(null);setBusy(false);setError("");
     }
   }, [ready]);
@@ -98,7 +98,7 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
   };
 
   const load = async (file: File) => {
-    const request = ++version.current;
+    const request = ++version.current;researchController.current?.abort();
     setBusy(true); setError("");
     try {
       const mask = await readNiftiMaskFile(file);
@@ -144,7 +144,7 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
     } finally {if(revision===version.current){setBusy(false);researchController.current=null;}}
   };
   const loadResult = async (files: File[]) => {
-    const request=++version.current;
+    const request=++version.current;researchController.current?.abort();
     setBusy(true);setError("");
     try {
       const active=packageRef.current;
@@ -173,7 +173,7 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
   };
   const selected = display.label===null ? null : summary?.labels.find(l=>l.id===display.label);
   const loadFull=async()=>{
-    if(!onFullCtLoad)return;const revision=++version.current,controller=new AbortController();
+    if(!onFullCtLoad)return;researchController.current?.abort();const revision=++version.current,controller=new AbortController();
     preparation.current?.abort();preparation.current=controller;setBusy(true);setError("");
     try{const mask=await onFullCtLoad(controller.signal);if(revision!==version.current||controller.signal.aborted)return;
       const next={visible:true,opacity:0.4,label:null};callbacks.current.onImport(mask,next);
