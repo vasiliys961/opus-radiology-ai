@@ -3,6 +3,7 @@
 import {useEffect,useRef,useState} from "react";
 import {sha256} from "@noble/hashes/sha2.js";
 import IchExpertErrorOverlay from "./IchExpertErrorOverlay";
+import IchSliceEvidencePanel from "./IchSliceEvidencePanel";
 import {
   parseIchReferenceComparison,type IchReferenceComparison,
 } from "../lib/ich-reference-comparison";
@@ -107,6 +108,7 @@ export default function IchReferenceComparisonPanel({modelReport,source,mask}:{
        {referenceFile&&<IchExpertErrorOverlay
          source={source} mask={mask} expert={referenceFile}
          referenceLabel={comparison.referenceLabel} modelReport={modelReport}/>}
+       <IchSliceEvidencePanel comparison={comparison} model={modelReport}/>
        <p><strong>Один исследовательский случай.</strong>
          Не доказано, что он не использовался при обучении модели.
          Не проверены независимость экспертной разметки,

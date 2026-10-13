@@ -5,11 +5,15 @@ on:
     paths:
       - "scripts/evaluate-ich-public-mask.py"
       - "scripts/test-ich-public-mask.py"
+      - "scripts/ich-native-slice-evidence.py"
+      - "scripts/test-ich-native-slice-evidence.py"
       - ".github/workflows/ich-reference-comparison.yml"
   push:
     paths:
       - "scripts/evaluate-ich-public-mask.py"
       - "scripts/test-ich-public-mask.py"
+      - "scripts/ich-native-slice-evidence.py"
+      - "scripts/test-ich-native-slice-evidence.py"
       - ".github/workflows/ich-reference-comparison.yml"
 
 permissions:
@@ -28,3 +32,5 @@ jobs:
         run: python -m pip install --disable-pip-version-check --no-input numpy==2.2.6 scipy==1.15.3 nibabel==5.3.2
       - name: Evaluate numeric mask comparison contracts
         run: python scripts/test-ich-public-mask.py
+      - name: Check source-indexed hemorrhage slice evidence
+        run: python scripts/test-ich-native-slice-evidence.py
