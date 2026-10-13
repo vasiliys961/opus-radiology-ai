@@ -10,6 +10,8 @@ VERSION = '2.18.0'
 SOURCE_COMMIT = '3b9b7a1b2df13bacd1de41a8da2e8cdb6f13df5b'
 LUNG_LOBES = {10:'lung_upper_lobe_left',11:'lung_lower_lobe_left',12:'lung_upper_lobe_right',
               13:'lung_middle_lobe_right',14:'lung_lower_lobe_right'}
+ABDOMEN_ORGANS = {1:'spleen',2:'kidney_right',3:'kidney_left',5:'liver'}
+RESEARCH_CT_PROFILES = {'lung-lobes':LUNG_LOBES,'abdomen-four-organs':ABDOMEN_ORGANS}
 DATASETS = {297:'Dataset297_TotalSegmentator_total_3mm_1559subj',
             298:'Dataset298_TotalSegmentator_total_6mm_1559subj'}
 TRAINER = 'nnUNetTrainer_4000epochs_NoMirroring__nnUNetPlans__3d_fullres'

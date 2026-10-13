@@ -52,12 +52,15 @@ def normalize_model_mask(path, dimensions, affine_lps, allowed_labels):
     except (OSError,EOFError) as exc:
         raise ValueError("invalid_mask_file") from exc
 
-def run(input_path, output_path, *, confirmed=False, expected_source_sha=None, stage=None):
+def run(input_path, output_path, *, confirmed=False, expected_source_sha=None, stage=None,
+        profile='lung-lobes'):
     def reached(name):
         if stage is not None:
             stage[0] = name
     if not confirmed:
         raise ValueError("explicit_research_confirmation_required")
+    if profile not in ("lung-lobes","abdomen-four-organs"):
+        raise ValueError("unsupported_research_profile")
     source, output = Path(input_path), Path(output_path)
     if (source.is_symlink() or not source.is_file() or output.exists() or
             output.is_symlink() or source.resolve() == output.resolve() or
@@ -94,26 +97,28 @@ def run(input_path, output_path, *, confirmed=False, expected_source_sha=None, s
         with probe.open("xb") as handle:
             handle.write(b"ok")
         probe.unlink()
-    from totalsegmentator_audit import LUNG_LOBES
+    from totalsegmentator_audit import RESEARCH_CT_PROFILES
+    labels=RESEARCH_CT_PROFILES[profile]
     from totalsegmentator_result import validate_native_mask
     reached("model_import")
     from totalsegmentator.python_api import totalsegmentator
     try:
         reached("model_inference")
         totalsegmentator(input=source,output=output,task="total",fast=True,
-                         roi_subset=list(LUNG_LOBES.values()),ml=True,device="cpu",
+                         roi_subset=list(labels.values()),ml=True,device="cpu",
                          quiet=True)
         reached("mask_validation")
         try:
-            report=validate_native_mask(output,dims,lps,source_sha,list(LUNG_LOBES))
+            report=validate_native_mask(output,dims,lps,source_sha,list(labels))
         except ValueError as exc:
             if str(exc)!="invalid_mask_file":
                 raise
-            normalize_model_mask(output,dims,lps,set(LUNG_LOBES))
-            report=validate_native_mask(output,dims,lps,source_sha,list(LUNG_LOBES))
+            normalize_model_mask(output,dims,lps,set(labels))
+            report=validate_native_mask(output,dims,lps,source_sha,list(labels))
         return {"schema":"opus-totalseg-offline-research-execution/v1",
                 "execution":"real-model-call","networkIsolation":"must-be-enforced-by-host",
                 "modelWeightProvenance":"not-independently-verified",
+                "researchProfile":profile,
                 "clinicalStatus":"not_validated","readyForClinicalUse":False,
                 "result":report}
     except BaseException:
@@ -140,11 +145,12 @@ def main(argv=None):
     p.add_argument("--output",required=True,type=Path)
     p.add_argument("--research-confirmed",action="store_true")
     p.add_argument("--source-sha256")
+    p.add_argument("--research-profile",choices=("lung-lobes","abdomen-four-organs"),default="lung-lobes")
     args=p.parse_args(argv)
     stage=["arguments"]
     try:
         report=run(args.input,args.output,confirmed=args.research_confirmed,stage=stage,
-                   expected_source_sha=args.source_sha256)
+                   expected_source_sha=args.source_sha256, profile=args.research_profile)
     except Exception as exc:
         payload={"status":"failed","error":type(exc).__name__,"stage":stage[0]}
         mask_code=safe_mask_rejection(exc,stage[0])
