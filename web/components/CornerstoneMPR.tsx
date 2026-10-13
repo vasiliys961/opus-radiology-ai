@@ -13,6 +13,7 @@ import { prepareAnalysisPackage, type AnalysisPackage } from "../lib/analysis-pa
 import { prepareAnalysisStream, type AnalysisStream } from "../lib/analysis-stream";
 import type { DicomSeries } from "../lib/dicom-series";
 import {loadFullCtSlab,type FullCtTicket} from "../lib/full-ct-worker";
+import {assessMprDecodedMemory} from "../lib/mpr-eligibility";
 
 const PLANE_NAMES = ["axial", "coronal", "sagittal"] as const;
 type Plane = typeof PLANE_NAMES[number];
@@ -162,7 +163,14 @@ export default function CornerstoneMPR({ files, sourceSeries, fullCt, quality, s
           // Composite VoxelManager.sizeInBytes is NaN in Cornerstone 4.18.3:
           // bytePerVoxel reads BYTES_PER_ELEMENT from a numeric voxel value.
           // DICOM loader image.sizeInBytes is the decoded pixel buffer length.
-          decodedBytes += Number.isFinite(image.sizeInBytes) && image.sizeInBytes > 0 ? image.sizeInBytes : NaN;
+          const decodedImageSize=image.sizeInBytes;
+          if(!Number.isSafeInteger(decodedImageSize)||decodedImageSize<=0)
+            throw new Error("Декодер не сообщил достоверный размер пиксельного буфера; MPR остановлен.");
+          decodedBytes+=decodedImageSize;
+          const first=sourceSeries.members[0]?.metadata;
+          const decodedMemory=assessMprDecodedMemory(decodedBytes,
+            (first?.rows??0)*(first?.columns??0)*imageIds.length);
+          if(!decodedMemory.eligible)throw new Error(decodedMemory.reason);
         }
         if (cancelled) return;
         setStatus("Проверка геометрии и сборка объёма…");
