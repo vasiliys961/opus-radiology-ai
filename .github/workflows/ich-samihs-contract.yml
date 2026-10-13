@@ -1,0 +1,27 @@
+name: ICH SAMIHS adapter contract
+
+on:
+  pull_request:
+    paths:
+      - "scripts/run-samihs-ich-public.py"
+      - "scripts/test-samihs-ich-public.py"
+      - ".github/workflows/ich-samihs-contract.yml"
+  push:
+    paths:
+      - "scripts/run-samihs-ich-public.py"
+      - "scripts/test-samihs-ich-public.py"
+      - ".github/workflows/ich-samihs-contract.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  adapter-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python syntax check
+        run: python3 -m py_compile scripts/run-samihs-ich-public.py scripts/test-samihs-ich-public.py
+      - name: Focused safety-contract test (no model inference)
+        run: python3 scripts/test-samihs-ich-public.py
