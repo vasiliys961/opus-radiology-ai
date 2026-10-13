@@ -4,6 +4,7 @@ import {useEffect,useRef,useState} from "react";
 import {sha256} from "@noble/hashes/sha2.js";
 import IchExpertErrorOverlay from "./IchExpertErrorOverlay";
 import IchSliceEvidencePanel from "./IchSliceEvidencePanel";
+import IchComponentEvidencePanel from "./IchComponentEvidencePanel";
 import {
   parseIchReferenceComparison,type IchReferenceComparison,
 } from "../lib/ich-reference-comparison";
@@ -111,6 +112,10 @@ export default function IchReferenceComparisonPanel({modelReport,source,mask}:{
          referenceLabel={comparison.referenceLabel} modelReport={modelReport}
          jumpTo={jumpTo}/>}
        <IchSliceEvidencePanel comparison={comparison} model={modelReport}
+         onGoToSlice={sliceIndex=>setJumpTo(prev=>({
+           sliceIndex,requestId:(prev?.requestId??0)+1,
+         }))}/>
+       <IchComponentEvidencePanel comparison={comparison} model={modelReport}
          onGoToSlice={sliceIndex=>setJumpTo(prev=>({
            sliceIndex,requestId:(prev?.requestId??0)+1,
          }))}/>
