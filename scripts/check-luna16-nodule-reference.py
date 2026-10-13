@@ -60,7 +60,7 @@ def read_annotations(path):
     if file.is_symlink() or not file.is_file() or not 0<file.stat().st_size<=MAX_CSV_BYTES:
         raise ValueError("unsafe_or_oversize_public_reference")
     raw=file.read_bytes()
-    if b"\x00" in raw or b"\r" in raw:
+    if b"\x00" in raw:
         raise ValueError("unsupported_public_csv_encoding")
     source_sha=hashlib.sha256(raw).hexdigest()
     try:
