@@ -29,7 +29,7 @@ def sha256(path):
 
 
 def extract(mask_path, report_path, output_path, manifest_path, start, count,
-            expected_source_sha, research_profile="lung-lobes"):
+            expected_source_sha, research_profile="lung-lobes", source_dicom_reference=None):
     if research_profile not in PROFILES:
         raise ValueError("unsupported_research_profile")
     labels=PROFILES[research_profile]
@@ -53,6 +53,27 @@ def extract(mask_path, report_path, output_path, manifest_path, start, count,
         raise ValueError("invalid_source_binding")
     if report.stat().st_size>65536:
         raise ValueError("invalid_inference_report")
+    selected_dicom_sha = None
+    if source_dicom_reference is not None:
+        reference = Path(source_dicom_reference)
+        if (reference.is_symlink() or not reference.is_file() or
+                reference.stat().st_size > 65536):
+            raise ValueError("invalid_source_dicom_reference")
+        ref = json.loads(reference.read_text(encoding="utf-8"))
+        if (not isinstance(ref, dict) or
+                ref.get("schema") != "opus-r231-browser-reference/v1" or
+                ref.get("allSourceFrames") is not True or
+                (type(ref.get("originalFrames")) is not int or ref["originalFrames"] < 3) or
+                ref.get("selectedIndicesZeroBased") != [0, ref["originalFrames"]-1] or
+                ref.get("selectedFrames") != ref.get("originalFrames") or
+                not isinstance(ref.get("selectedFileSha256"), list)):
+            raise ValueError("invalid_source_dicom_reference")
+        all_digests = ref["selectedFileSha256"]
+        if (len(all_digests) != ref["originalFrames"] or
+                any(not isinstance(x, str) or len(x) != 64 or
+                    any(ch not in "0123456789abcdef" for ch in x) for x in all_digests)):
+            raise ValueError("invalid_source_dicom_reference")
+        selected_dicom_sha = all_digests
     evidence=json.loads(report.read_text(encoding="utf-8"))
     if (not isinstance(evidence,dict) or
             evidence.get("schema")!="opus-totalseg-first-inference/v1" or
@@ -88,6 +109,8 @@ def extract(mask_path, report_path, output_path, manifest_path, start, count,
                 or not 1<=struct.unpack_from("<h",header,254)[0]<=2
                 or info.st_size!=352+math.prod(dims)):
             raise ValueError("invalid_native_mask_format")
+        if selected_dicom_sha is not None and len(selected_dicom_sha) != dims[2]:
+            raise ValueError("source_dicom_frame_count_mismatch")
         if (start+count>dims[2] or math.prod(dims[:2])*count>BROWSER_MAX_VOXELS):
             raise ValueError("slab_exceeds_browser_limits")
         affine=[list(struct.unpack_from("<4f",header,280+16*row)) for row in range(3)]
@@ -137,6 +160,8 @@ def extract(mask_path, report_path, output_path, manifest_path, start, count,
                 "lastOriginalSliceIndexZeroBased":start+count-1,
                 "labelVoxels":[{"id":i,"voxels":counts[i]} for i in labels],
                 "sourceGridGeometry":"native_contiguous_unresampled",
+                **({"sourceDicomSelectedFrameSha256":selected_dicom_sha[start:start+count]}
+                   if selected_dicom_sha is not None else {}),
                 "clinicalStatus":"not_validated",
                 "fullAnatomicCoverageVerified":False,
                 "readyForClinicalUse":False,
@@ -162,9 +187,10 @@ def main():
     p.add_argument("--count",required=True,type=int)
     p.add_argument("--expected-source-sha256",required=True)
     p.add_argument("--research-profile",choices=tuple(PROFILES),default="lung-lobes")
+    p.add_argument("--source-dicom-reference",type=Path,default=None)
     a=p.parse_args()
     result=extract(a.mask,a.report,a.output,a.manifest,a.start,a.count,
-                   a.expected_source_sha256, a.research_profile)
+                   a.expected_source_sha256, a.research_profile, a.source_dicom_reference)
     print(json.dumps(result,sort_keys=True))
 
 
