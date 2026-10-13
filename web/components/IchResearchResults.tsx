@@ -120,7 +120,7 @@ export default function IchResearchResults(){
       </div>
       {sourceOk&&maskOk&&sourceFile&&maskFile&&<>
         <IchNativeOverlay source={sourceFile} mask={maskFile} report={report}/>
-        <IchReferenceComparisonPanel modelReport={report}/>
+        <IchReferenceComparisonPanel modelReport={report} source={sourceFile} mask={maskFile}/>
       </>}
       <p><small>SHA подтверждает соответствие выбранным локальным файлам,
         а не клиническую точность, правильность анатомии или доверие к автору отчёта.</small></p>
