@@ -53,3 +53,37 @@ def test_symlink(tmp_path):
     path=mask(tmp_path); link=tmp_path/"link.nii";link.symlink_to(path)
     with pytest.raises(ValueError,match="file"):
         validate_native_mask(link,DIMS,AFFINE,SOURCE)
+
+
+def test_native_mm_units_produce_calibrated_partial_mask_volumes(tmp_path):
+    path=mask(tmp_path)
+    data=bytearray(path.read_bytes())
+    data[123]=2 # xyzt_units: mm
+    path.write_bytes(data)
+    result=validate_native_mask(path,DIMS,AFFINE,SOURCE)
+    assert result["nativeSpatialUnitsVerified"] is True
+    assert result["voxelVolumeMm3"]==2.0
+    assert all(row["labelMaskVolumeMl"]==0.012 for row in result["labelVoxels"])
+    assert result["maskVolumeSemantics"]=="native_grid_label_volume_only_not_full_organ_volume"
+    assert result["qualityReview"]["fullAnatomicCoverageVerified"] is False
+
+def test_unspecified_spatial_units_do_not_manufacture_ml(tmp_path):
+    result=validate_native_mask(mask(tmp_path),DIMS,AFFINE,SOURCE)
+    assert result["nativeSpatialUnitsVerified"] is False
+    assert result["voxelVolumeMm3"] is None
+    assert all(row["labelMaskVolumeMl"] is None for row in result["labelVoxels"])
+
+def test_sheared_native_mm_affine_uses_true_determinant(tmp_path):
+    path=mask(tmp_path)
+    data=bytearray(path.read_bytes())
+    data[123]=2
+    # preserve mask world geometry by supplying the same sheared affine LPS
+    skew=AFFINE.copy()
+    skew[1]=0.25 # linear LPS x-row y-column
+    ras=skew.copy()
+    ras[:8]=[-x for x in ras[:8]]
+    struct.pack_into("<12f",data,280,*ras)
+    path.write_bytes(data)
+    result=validate_native_mask(path,DIMS,skew,SOURCE)
+    assert result["nativeSpatialUnitsVerified"] is True
+    assert result["voxelVolumeMm3"]==2.0

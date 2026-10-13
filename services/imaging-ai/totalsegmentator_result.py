@@ -65,6 +65,11 @@ def validate_native_mask(path, dimensions, affine_lps, source_identity_sha256, a
             struct.unpack_from("<ff",header,112)!=(1.,0.) or
             not 1 <= struct.unpack_from("<h",header,254)[0] <= 4):
             raise ValueError("invalid_mask_header")
+
+        # Native NIfTI spatial units must explicitly be millimetres before
+        # a voxel count can be expressed in mL. Unspecified units => null,
+        # never silently assume mm.
+        spatial_units_mm=(header[123]&7)==2
         actual=list(struct.unpack_from("<12f",header,280))
         actual=[-v if i<8 else v for i,v in enumerate(actual)]
         for x in (0,dimensions[0]-1):
@@ -90,9 +95,25 @@ def validate_native_mask(path, dimensions, affine_lps, source_identity_sha256, a
             raise ValueError("oversized_mask")
     if not any(counts.values()):
         raise ValueError("empty_mask_needs_review")
+    # Affine determinant is valid for oblique/sheared native grids; multiplying
+    # pixel spacing alone would be wrong. A volume is NOT complete-organ coverage.
+    a=affine_lps
+    voxel_mm3=abs(
+        a[0]*(a[5]*a[10]-a[6]*a[9])
+        -a[1]*(a[4]*a[10]-a[6]*a[8])
+        +a[2]*(a[4]*a[9]-a[5]*a[8]))
+    calibrated=(spatial_units_mm and math.isfinite(voxel_mm3)
+                and 0.00001 <= voxel_mm3 <= 1000)
+    if not calibrated:
+        voxel_mm3=None
     return {"schema":"opus-totalsegmentator-validated-mask/v1",
         "sourceIdentitySha256":source_identity_sha256,"maskSha256":digest.hexdigest(),
         "dimensions":list(dimensions),"qualityReview":lobe_completeness_review(counts,names),
+        "maskVolumeSemantics":"native_grid_label_volume_only_not_full_organ_volume",
+        "nativeSpatialUnitsVerified":calibrated,
+        "voxelVolumeMm3":round(voxel_mm3,6) if calibrated else None,
         "labelVoxels":[{"id":i,"name":names[i],
-        "voxels":counts[i]} for i in sorted(ids)],"clinicalStatus":"unverified_research_draft",
+        "voxels":counts[i],
+        "labelMaskVolumeMl":round(counts[i]*voxel_mm3/1000,6) if calibrated else None}
+        for i in sorted(ids)],"clinicalStatus":"unverified_research_draft",
         "modelProvenance":"not_verified_by_mask_validation"}

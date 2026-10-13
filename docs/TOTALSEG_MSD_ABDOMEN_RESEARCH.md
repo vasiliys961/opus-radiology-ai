@@ -38,3 +38,34 @@ This workflow does not authorize arbitrary patient data, local M1 RAM,
 licence approval, GPU inference or clinical diagnosis. The first real
 inference has **not** happened merely by merging the PR; it must be
 manually started and audited after full CI.
+
+
+
+## Actually observed manual public-CT inference (2026-10-13)
+
+**PASSED:** [Actions run #38358366427](https://github.com/vasiliys961/opus-radiology-ai/actions/runs/38358366427).
+Public MSD **training** case \`spleen_2\`, exactly 512×512×90 source voxels.
+The trained TotalSegmentator CPU \`total --fast --roi_subset\` inference
+completed in **32.51 s**, exit code 0, independent annotation scorer passed.
+
+| Label | Organ | Voxels | Independent Dice |
+|---|---|---:|---:|
+| 1 | Spleen | 94,852 | **0.947923** |
+| 2 | Right kidney | 54,253 | Not available |
+| 3 | Left kidney | 59,127 | Not available |
+| 5 | Liver | 591,948 | Not available |
+
+Spleen ground truth: **96,672** voxels; intersection **90,775**.
+\`Dice = 2 × 90,775 / (94,852 + 96,672) = 0.947923\`.
+The original source SHA, actual trained-model mask SHA and independent
+reference SHA, and the exact aggregate observations, are now captured at
+\`docs/verification/totalseg-msd-abdomen-real.json\`; no images or
+reference masks were published.
+
+**Limits:** one training example, not a clinical validation cohort or
+population-level performance estimate. Predicted kidney and liver voxels
+are not independently verified. Neither model labels nor occupied region
+prove full-organ anatomy. No real patient cloud API or Safari/M1 workflow
+has been enabled. Do **not** rerun inference to calculate physical label
+volumes: the native label count + validated NIfTI mm-grid determinant
+suffice; absence of validated units must return \`null\`, not a guessed mL.
