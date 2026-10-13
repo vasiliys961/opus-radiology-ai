@@ -1,4 +1,26 @@
 # OPUS RADIOLOGY AI — PRODUCT REQUIREMENTS (PRD)
+
+
+## Live implementation addendum — 2026-10-13 (PR #72 proposed)
+
+- **MODEL-03 / CT lung-lobe ROI:** PARTIAL **research-only implementation**
+  verified end-to-end on permitted public TCIA LCTSC CT (103 source frames,
+  genuine TotalSegmentator, native 32-frame ROI, all three browser MPR
+  overlays, Actions #38353633892). No independent contour Dice, no
+  anatomical-coverage verification, no patient-facing model connection,
+  no cleared production weight rights/M1-Safari acceptance.
+- **VIEW-04 / MODEL-04:** new local-only fail-closed route planner is proposed
+  for CT chest, CT abdomen and brain MR. CT abdomen organ checkpoint
+  applicability, liver/kidney/spleen labels, HU/contrast phases,
+  MR T1/T1c/T2/FLAIR confirmation and registered brain checkpoint are
+  **NOT IMPLEMENTED** as runnable tasks. All plans return
+  \`execution:not_connected\` and \`canRun:false\`.
+- **PRIV-01 / REVIEW:** unchanged. Patient cloud remains blocked; no route
+  may produce a normal/negative diagnostic conclusion from absent input.
+
+The older dated status rows below are historical; use live main and this
+addendum instead of interpreting MODEL-03 as never tested.
+
 **Version 2.0 · 2026-10-11 · binding checklist for future coding sessions.**
 
 ## TotalSegmentator offline preparation — 2026-10-12
