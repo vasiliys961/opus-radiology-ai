@@ -20,7 +20,9 @@ ANNOTATIONS_URL=("https://huggingface.co/datasets/MedOtter/LUNA16/resolve/"
 ANNOTATIONS_SHA="db9adb75b381f3e95b1f601d9b63f2e42bd6536ab5a06dc539c5ec8a4005cec7"
 DATASET="Yousra0x0/LUNA16_RAW"
 REV="af8fdf04c27dcaa97ccfd755043d8096299d6a40"
-TREE_URL=f"https://huggingface.co/api/datasets/{DATASET}/tree/{REV}/subset0?limit=1000&expand=true"
+# Plain tree includes size/LFS metadata; expand=true restricts page size to 50 and
+# can reject limit=1000 with HTTP 400 before any CT is selected.
+TREE_URL=f"https://huggingface.co/api/datasets/{DATASET}/tree/{REV}/subset0?limit=1000"
 UID=re.compile(r"^1\.3\.6\.1\.4\.1\.14519\.5\.2\.1\.6279\.6001\.[0-9]{12,30}$")
 MAX_RAW=450*1024*1024
 MIN_RAW=8*1024*1024
