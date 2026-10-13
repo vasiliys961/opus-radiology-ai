@@ -1,10 +1,11 @@
 "use client";
 import {useState} from "react";
 import PathologyFindingsReview from "./PathologyFindingsReview";
+import PublicLuna16SourceSlices from "./PublicLuna16SourceSlices";
 import type {MonaiResearchReport} from "../lib/pathology-findings";
 
 type Report=MonaiResearchReport & {status:string;candidateCount:number};
-type PublicReference={schema:string;sourceSeriesIdSha256:string;sourceMhdSha256:string;annotationsSha256:string;referenceNodules:Array<{centerMm:number[];diameterMm:number;nativeVoxelIndex:number[];sliceIndex0Based:number}>;coordinateMappingStatus:string;independentHoldout:false;clinicalValidation:false};
+type PublicReference={schema:string;sourceSeriesIdSha256:string;sourceMhdSha256:string;annotationsSha256:string;referenceNodules:Array<{centerMm:number[];diameterMm:number;nativeVoxelIndex:number[];sliceIndex0Based:number}>;coordinateMappingStatus:string;independentHoldout:false;clinicalValidation:false;sourceGeometry:{dimensions:number[];spacingMm:number[];origin:number[];directionMatrix:number[][]}};
 const PUBLIC_MONAI_SHA="b5e79231466adae93a6fe8e8594029e9add142914e223b879aa0343bb2402d01";
 function validatePublicReference(value:unknown, report:Report):PublicReference {
  if(!value||typeof value!=="object")throw Error("Неверный формат экспертной разметки.");
@@ -17,7 +18,12 @@ function validatePublicReference(value:unknown, report:Report):PublicReference {
     r.coordinateMappingStatus!=="model_to_source_not_independently_validated"||
     !Array.isArray(r.referenceNodules)||
     r.referenceNodules.length!==report.publicStudy.luna16GroundTruthNoduleCount||
-    r.referenceNodules.length!==1)
+    r.referenceNodules.length!==1||
+    !Array.isArray(r.sourceGeometry?.dimensions)||
+    r.sourceGeometry.dimensions.join(",")!==report.publicStudy.dimensions.join(",")||
+    !Array.isArray(r.sourceGeometry.spacingMm)||
+    r.sourceGeometry.spacingMm.length!==3||
+    !r.sourceGeometry.spacingMm.every(n=>finite(n)&&n>0))
     throw Error("Разметка относится к другому исследованию или не прошла проверку.");
  for(const item of r.referenceNodules){
    if(!Array.isArray(item.centerMm)||item.centerMm.length!==3||
@@ -123,6 +129,7 @@ export default function LungNoduleResearchResults({isChestCT}:{isChestCT:boolean
     {reference&&<>
       <p><strong>Экспертный узел:</strong> {reference.referenceNodules[0].diameterMm.toFixed(1)} мм · центр {reference.referenceNodules[0].centerMm.map(x=>x.toFixed(2)).join(" / ")} мм.</p>
       <p>Исходный MetaImage: срез {reference.referenceNodules[0].sliceIndex0Based+1} из {report.publicStudy.dimensions[2]} (рассчитано по заголовку и эталонной координате).</p>
+      <PublicLuna16SourceSlices reference={reference} rawSha256={report.publicStudy.sourceRawSha256}/>
       <p role="alert"><strong>Предварительная пространственная проверка:</strong> числа координат MONAI сопоставлены с опубликованными координатами LUNA16, но трансформация модели к исходной системе не подтверждена независимым визуальным контролем. Близость не является доказанным true positive; чувствительность и ложноположительные находки пока не рассчитываются.</p>
       {report.candidates.map(c=>{
         const d=Math.hypot(...c.centerMonaiWorldMm.map((v,i)=>v-reference.referenceNodules[0].centerMm[i]));
