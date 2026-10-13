@@ -2,6 +2,8 @@
 """Lightweight admission-only contract; NEVER calls Torch or simulates inference."""
 import importlib.util
 from pathlib import Path
+import json
+import tempfile
 from types import SimpleNamespace
 from unittest import TestCase, main
 from unittest.mock import patch
@@ -54,6 +56,67 @@ class ICHFirstCaseOnly(TestCase):
    args.dataset_citation_url="https://example.org/public/ich-research"
    with self.assertRaisesRegex(ValueError,"regular_bounded_nifti_required"):
     module.validate_requested_case(args)
+
+
+class ExpertOriginEvidence(TestCase):
+ def test_original_expert_to_binary_reference_traceability(self):
+  with tempfile.TemporaryDirectory() as td:
+   root=Path(td)
+   ct=root/"ct.nii.gz";original=root/"original.nii.gz"
+   binary=root/"expert-binary.nii.gz";ontology=root/"ontology.json"
+   manifest=root/"union.json"
+   ct.write_bytes(b"synthetic-ct-metadata-test")
+   original.write_bytes(b"synthetic-multiclass-mask-test")
+   binary.write_bytes(b"synthetic-derived-mask-test")
+   ontology.write_text(json.dumps({
+    "sourceUrl":"https://example.org/original-ich-dataset-labels",
+    "labelMeaning":{"1":"IPH","3":"SAH"}
+   }))
+   a=dummy()
+   a.source_sha256=module.sha256_file(ct)
+   a.reference_sha256=module.sha256_file(binary)
+   a.reference_label=1
+   a.derived_expert_manifest=str(manifest)
+   a.original_expert_mask=str(original)
+   a.label_ontology_json=str(ontology)
+   manifest.write_text(json.dumps({
+    "schema":"opus-ich-expert-binary-union/v1",
+    "status":"derived_binary_union_from_operator_reviewed_expert_labelmap",
+    "sourceCtSha256":a.source_sha256,
+    "derivedBinaryMaskSha256":a.reference_sha256,
+    "originalExpertMaskSha256":module.sha256_file(original),
+    "ontologySha256":module.sha256_file(ontology),
+    "ontologySourceUrl":"https://example.org/original-ich-dataset-labels",
+    "hemorrhageLabelMeaning":{"1":"IPH","3":"SAH"},
+    "hemorrhageLabelVoxelCounts":{"1":4,"3":5},
+    "binaryPositiveVoxelCount":9,
+    "nativeGeometryMatched":True,"resamplingPerformed":False,
+    "sourceDicomSopMapped":False,
+    "independentOntologyAuthenticityVerified":False,
+    "operatorAttestedSourceAndAnnotationRights":True,
+    "clinicalValidation":False
+   }))
+   details=module.verify_original_expert_provenance(a,ct.resolve(),binary.resolve())
+   self.assertEqual(details["originalExpertMaskSha256"],module.sha256_file(original))
+   self.assertEqual(details["perHemorrhageClassVoxels"],{"1":4,"3":5})
+   self.assertFalse(details["independentOntologyAuthenticityVerified"])
+   # An altered original mask cannot inherit approval from a derived mask.
+   original.write_bytes(b"tampered-original-expert")
+   with self.assertRaisesRegex(ValueError,"provenance_mismatch"):
+    module.verify_original_expert_provenance(a,ct.resolve(),binary.resolve())
+   original.write_bytes(b"synthetic-multiclass-mask-test")
+   a.reference_label=3
+   with self.assertRaisesRegex(ValueError,"label_one"):
+    module.verify_original_expert_provenance(a,ct.resolve(),binary.resolve())
+
+ def test_partial_original_provenance_is_rejected(self):
+  a=dummy()
+  a.derived_expert_manifest="/research/manifest.json"
+  a.original_expert_mask=None
+  a.label_ontology_json=None
+  with self.assertRaisesRegex(ValueError,"requires_all_original_files"):
+   module.verify_original_expert_provenance(a,Path("/public/ct.nii.gz"),
+                                             Path("/public/reference.nii.gz"))
 
 
 if __name__=="__main__":
