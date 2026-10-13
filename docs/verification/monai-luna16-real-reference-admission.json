@@ -1,0 +1,32 @@
+{
+  "schema": "opus-monai-luna16-reference-observed/v1",
+  "observedFrom": "https://github.com/vasiliys961/opus-radiology-ai/actions/runs/38383454013",
+  "source": "public MedOtter/LUNA16 annotations.csv, pinned fb396557c4e23feaf9c432cea7fc8426214648fb",
+  "referenceAnnotationsSha256": "db9adb75b381f3e95b1f601d9b63f2e42bd6536ab5a06dc539c5ec8a4005cec7",
+  "publicGroundTruth": {
+    "referenceNodules": 1186,
+    "seriesWithPositiveAnnotations": 601,
+    "sizeBucketsMm": {
+      "3_to_under_6_mm": 502,
+      "6_to_under_10_mm": 403,
+      "10_mm_or_larger": 281
+    }
+  },
+  "monaiModel": {
+    "id": "monai-lung-nodule-ct-retinanet",
+    "version": "0.6.9",
+    "publishedCheckpointSha256": "b5e79231466adae93a6fe8e8594029e9add142914e223b879aa0343bb2402d01",
+    "actualDownloadedCheckpointSha256Verified": true
+  },
+  "scope": {
+    "containsModelPredictions": false,
+    "genuineModelInferencePerformed": false,
+    "detectionSensitivity": null,
+    "froc": null,
+    "falsePositivesPerScan": null,
+    "specificity": null,
+    "independentClinicalValidation": false,
+    "readyForClinicalUse": false
+  },
+  "privacy": "public-deidentified-annotation-metadata-aggregates-only-no-images-no-series-uids"
+}
