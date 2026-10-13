@@ -11,6 +11,8 @@ const NiftiCtResearchView = dynamic(() => import("../../components/NiftiCtResear
   loading: () => <div className="cs-placeholder">Загрузка локального NIfTI CT review…</div>,
 });
 
+const LungNoduleResearchResults = dynamic(() => import("../../components/LungNoduleResearchResults"), {ssr:false});
+
 const CornerstoneStack = dynamic(() => import("../../components/CornerstoneStack"), {
   ssr: false,
   loading: () => <div className="cs-placeholder">Загрузка Cornerstone3D…</div>,
@@ -94,6 +96,7 @@ export default function ViewerPage() {
             <div className="cs-series-list">{series.map((s) => <button type="button" className={selected?.key === s.key ? "cs-series active" : "cs-series"} key={s.key} onClick={() => setCurrentSeriesKey(s.key)}>{s.label}</button>)}</div>
           </>}
           {selected && <div className="cs-geometry"><h3>Контроль геометрии</h3><p>{selected.spatiallySorted ? "✓ Пространственный порядок подтверждён" : "⚠ Порядок условный"}</p><p>{selected.volumeReady ? `✓ Предварительная геометрия для будущего 3D · ${selected.sliceSpacingMm?.toFixed(2)} мм` : "3D/MPR НЕ РАЗРЕШЕНЫ"}</p>{selected.warning && <p>{selected.warning}</p>}</div>}
+          <LungNoduleResearchResults key={selected?.key ?? "empty"} isChestCT={!!selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="CHEST")}/>
           <button type="button" className="cs-clear" disabled={reading || indexed.length === 0} onClick={() => { setIndexed([]); setCurrentSeriesKey(""); setMessage("Список очищен, файлы на диске не изменены."); }}>Очистить загруженное</button>
         </aside>
         <div className="cs-stage">
