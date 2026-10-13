@@ -1,0 +1,63 @@
+{
+  "schema": "opus-totalseg-public-lctsc-103-slices-first-execution/v1",
+  "workflowRun": "https://github.com/vasiliys961/opus-radiology-ai/actions/runs/38349118315",
+  "executedAtUtc": "2026-10-13T05:02:07Z",
+  "source": {
+    "description": "Public TCIA LCTSC CC BY 3.0, 103 unmodified source DICOM slices reassembled as native HU NIfTI",
+    "dimensions": [
+      512,
+      512,
+      103
+    ],
+    "niftiBytes": 108003680,
+    "sourceSha256": "99615ddb66e09bd46c2ff70c352d73414285145b358e448682b7cffc41249738"
+  },
+  "execution": {
+    "trainedModel": "TotalSegmentator 2.18.0",
+    "task": "total fast CPU lung lobes",
+    "host": "GitHub Actions Ubuntu CPU",
+    "modelStepElapsedSeconds": 33.49,
+    "exitCode": 0,
+    "technicalStatus": "completed_unvalidated"
+  },
+  "maskSha256": "06488129a2eb871ac4969abefb4581b0456880a8a2a20945568d91ba42652218",
+  "labelVoxels": [
+    {
+      "id": 10,
+      "name": "lung_upper_lobe_left",
+      "voxels": 309977
+    },
+    {
+      "id": 11,
+      "name": "lung_lower_lobe_left",
+      "voxels": 337404
+    },
+    {
+      "id": 12,
+      "name": "lung_upper_lobe_right",
+      "voxels": 308177
+    },
+    {
+      "id": 13,
+      "name": "lung_middle_lobe_right",
+      "voxels": 50758
+    },
+    {
+      "id": 14,
+      "name": "lung_lower_lobe_right",
+      "voxels": 178933
+    }
+  ],
+  "qualityReview": {
+    "status": "not_clinically_verified",
+    "missingLabelIds": [],
+    "presentLabelCount": 5,
+    "expectedLabelCount": 5,
+    "fullAnatomicCoverageVerified": false,
+    "referenceDiceMeasured": false
+  },
+  "referenceAnnotationAvailable": false,
+  "diceMeasured": false,
+  "readyForClinicalUse": false,
+  "note": "Observed values from real successful GitHub Actions run; ephemeral input/mask deleted. Native series includes all available slices, not proof of complete anatomical coverage or clinical validity."
+}
