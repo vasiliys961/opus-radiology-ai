@@ -91,6 +91,11 @@ def plan_case(positive,tree):
             "modelInferencePerformed":False,"clinicalStatus":"public_research_only",
             "sourceUidForEphemeralDownload":uid}
 
+def public_summary(plan):
+    """Only aggregate metadata and a SHA pseudonym are emitted in CI logs."""
+    return {key:value for key,value in plan.items()
+            if key not in ("sourceUidForEphemeralDownload","files")}
+
 def fetch_bytes(url,max_bytes):
     with urlopen(url,timeout=35) as response:
         length=response.headers.get("Content-Length")
@@ -139,7 +144,7 @@ def run(args):
     plan=plan_case(positive,tree)
     uid=plan.pop("sourceUidForEphemeralDownload")
     if not args.download:
-        print(json.dumps(plan,sort_keys=True))
+        print(json.dumps(public_summary(plan),sort_keys=True))
         return
     if args.external_gpu_confirm!="PUBLIC-LUNA16-GPU-OK":
         raise ValueError("external_gpu_explicit_confirmation_required")
