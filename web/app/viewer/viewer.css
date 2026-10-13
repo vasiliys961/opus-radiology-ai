@@ -193,3 +193,44 @@
 .ora-analysis-package small{overflow-wrap:anywhere}
 .ora-analysis-package>summary,.ora-mask-provenance>summary{cursor:pointer;font-weight:600;color:#b9e9d4}
 .ora-analysis-package[open]>summary,.ora-mask-provenance[open]>summary{margin-bottom:9px}
+
+
+/* Same /viewer workspace: bounded NIfTI source adapter (no invented DICOM). */
+.cs-source-mode{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 22px}
+.cs-source-mode button{border:1px solid #b7d9d4;background:#fff;color:#24645f;
+  border-radius:8px;padding:12px 16px;font-weight:700;cursor:pointer}
+.cs-source-mode button.active{background:#117e77;color:#fff;border-color:#117e77}
+.cs-nifti-controls{display:flex;flex-wrap:wrap;gap:16px;align-items:center;padding:18px;
+  background:#fff;border:1px solid #d7e5e7;border-radius:12px;margin-bottom:18px}
+.cs-nifti-controls label{display:grid;gap:7px;font-size:12px;font-weight:700;min-width:230px;max-width:100%}
+.cs-nifti-controls input{font-size:11px;max-width:100%}
+.cs-nifti-controls button{padding:11px 14px;border-radius:7px;border:1px solid #9ecdc5;
+  background:#137e70;color:#fff;font-size:12px;cursor:pointer}
+.cs-nifti-controls button:disabled{opacity:.45;cursor:not-allowed}
+.cs-nifti-controls p,.cs-nifti-controls small{flex-basis:100%;margin:0;color:#647b80;font-size:12px}
+.cs-nifti-controls .cs-nifti-error{color:#9e2f40;font-weight:700}
+.cs-nifti-review{border:1px solid #d9e7e8;border-radius:12px;padding:18px;background:#fff}
+.cs-nifti-review h2{font-size:20px;margin:0 0 8px}
+.cs-nifti-review h3{font-size:14px}
+.cs-nifti-review>p{font-size:12px;color:#58747e}
+.cs-nifti-sliders{display:flex;flex-wrap:wrap;gap:13px;padding:15px;background:#eff6f5;
+  border-radius:9px;margin:16px 0}
+.cs-nifti-sliders label{display:flex;align-items:center;flex-wrap:wrap;gap:8px;font-size:12px}
+.cs-nifti-sliders input[type=number]{max-width:95px;padding:7px;border:1px solid #9fb7bb;border-radius:6px}
+.cs-nifti-sliders select{padding:7px;border:1px solid #9fb7bb;border-radius:6px;max-width:190px}
+.cs-nifti-planes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.cs-nifti-plane{background:#142e3b;border-radius:9px;padding:12px;color:#ecf4f5;min-width:0}
+.cs-nifti-plane h3{font-size:12px;font-weight:700;margin:0 0 12px}
+.cs-nifti-plane label{display:grid;gap:6px;font-size:11px;color:#c4d7dc;margin-top:12px}
+.cs-nifti-plane input{width:100%;accent-color:#3dd5bc}
+.cs-nifti-image{background:#060d14;min-height:160px;display:flex;align-items:center;
+  justify-content:center;border:1px solid #34434d;overflow:hidden}
+.cs-nifti-organs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.cs-nifti-organs button{border:1px solid #bfd6d6;border-radius:8px;background:#f7faf9;
+  display:grid;gap:5px;padding:12px;text-align:left;cursor:pointer}
+.cs-nifti-organs button.active{border-color:#0b998c;background:#dff4ec}
+.cs-nifti-organs strong{font-size:13px;color:#12665f}
+.cs-nifti-organs span{font-size:11px;color:#6c8587}
+.cs-nifti-review .cs-nifti-caution{border-top:1px solid #d9e6e5;
+  padding-top:14px;margin-top:18px;color:#995a42}
+@media(max-width:1000px){.cs-nifti-planes{grid-template-columns:1fr}.cs-nifti-organs{grid-template-columns:1fr}}
