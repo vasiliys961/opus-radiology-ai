@@ -77,6 +77,77 @@ def sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
+
+def verify_original_expert_provenance(args, source: Path, derived_expert: Path):
+    """Bind the derived binary expert mask to its ORIGINAL expert file/ontology.
+
+    Called BEFORE expensive CUDA inference. All three optional paths are
+    required together; unsupported or inconsistent manifests fail closed.
+    Does not claim the author's ontology/clinical rights have been audited.
+    """
+    names = ("derived_expert_manifest", "original_expert_mask", "label_ontology_json")
+    values = [getattr(args, name, None) for name in names]
+    if not any(values):
+        return None
+    if not all(values):
+        raise ValueError("derived_expert_provenance_requires_all_original_files")
+    derived_manifest = Path(values[0])
+    original = Path(values[1])
+    ontology = Path(values[2])
+    for file, limit in ((derived_manifest, 128 * 1024),
+                        (original, 512 * 1024 * 1024), (ontology, 64 * 1024)):
+        if (file.is_symlink() or not file.is_file()
+                or not 0 < file.stat().st_size <= limit):
+            raise ValueError("invalid_original_expert_provenance_file")
+    if (not original.name.endswith((".nii", ".nii.gz"))
+            or len({source, derived_expert, original.resolve()}) != 3
+            or args.reference_label != 1):
+        raise ValueError("derived_binary_expert_requires_original_and_label_one")
+    m = json.loads(derived_manifest.read_text(encoding="utf-8"))
+    o = json.loads(ontology.read_text(encoding="utf-8"))
+    if not isinstance(m, dict) or not isinstance(o, dict):
+        raise ValueError("invalid_original_expert_metadata")
+    if (m.get("schema") != "opus-ich-expert-binary-union/v1"
+            or m.get("status") != "derived_binary_union_from_operator_reviewed_expert_labelmap"
+            or m.get("sourceCtSha256") != args.source_sha256
+            or m.get("derivedBinaryMaskSha256") != args.reference_sha256
+            or m.get("originalExpertMaskSha256") != sha256_file(original)
+            or m.get("ontologySha256") != sha256_file(ontology)
+            or m.get("ontologySourceUrl") != o.get("sourceUrl")
+            or m.get("nativeGeometryMatched") is not True
+            or m.get("resamplingPerformed") is not False
+            or m.get("sourceDicomSopMapped") is not False
+            or m.get("independentOntologyAuthenticityVerified") is not False
+            or m.get("operatorAttestedSourceAndAnnotationRights") is not True
+            or m.get("clinicalValidation") is not False):
+        raise ValueError("derived_expert_and_original_mask_provenance_mismatch")
+    from importlib.util import module_from_spec, spec_from_file_location
+    label_script = Path(__file__).with_name("build-ich-expert-binary-union.py")
+    if label_script.is_symlink() or not label_script.is_file():
+        raise ValueError("missing_original_ontology_verifier")
+    spec = spec_from_file_location("ich_union_ontology", label_script)
+    verifier = module_from_spec(spec)
+    spec.loader.exec_module(verifier)
+    meaning = verifier.check_ontology(o)
+    canonical = {str(k): meaning[k] for k in sorted(meaning)}
+    counts = m.get("hemorrhageLabelVoxelCounts")
+    if (m.get("hemorrhageLabelMeaning") != canonical
+            or not isinstance(counts, dict) or set(counts) != set(canonical)
+            or any(type(v) is not int or v < 0 for v in counts.values())
+            or m.get("binaryPositiveVoxelCount") != sum(counts.values())
+            or m["binaryPositiveVoxelCount"] < 0):
+        raise ValueError("derived_expert_ontology_or_counts_inconsistent")
+    return {
+        "derivedFromMulticlassExpert": True,
+        "originalExpertMaskSha256": m["originalExpertMaskSha256"],
+        "originalOntologySha256": m["ontologySha256"],
+        "originalOntologySourceUrl": m["ontologySourceUrl"],
+        "derivedUnionManifestSha256": sha256_file(derived_manifest),
+        "perHemorrhageClassVoxels": counts,
+        "independentOntologyAuthenticityVerified": False,
+    }
+
+
 def executable(script: str) -> str:
     target = Path(__file__).resolve().with_name(script)
     if target.is_symlink() or not target.is_file():
@@ -102,6 +173,7 @@ def run(args):
     if (sha256_file(source) != args.source_sha256
             or sha256_file(expert) != args.reference_sha256):
         raise ValueError("unverified_public_source_or_expert_annotation_sha256")
+    original_expert = verify_original_expert_provenance(args, source, expert)
 
     real_command(args, "run-samihs-ich-public.py", [
         "--model-dir", str(Path(args.model_dir).resolve()),
@@ -179,6 +251,11 @@ def run(args):
         "upstreamModelAuditAttested": True,
         "sourceNativeIndexGridMatch": True,
         "evidenceHashes": hashes,
+        "expertMaskProvenance": original_expert if original_expert is not None else {
+            "derivedFromMulticlassExpert": False,
+            "originalExpertMaskSha256": args.reference_sha256,
+            "sourceExpertMaskAuthenticityIndependentlyVerified": False,
+        },
         "checkpointSha256": args.checkpoint_sha256,
         "wrapperSha256": args.wrapper_sha256,
         "modelExecutionSeconds": model["execution"]["seconds"],
@@ -221,6 +298,12 @@ def main():
                   "reference-sha256", "checkpoint-sha256", "wrapper-sha256",
                   "dataset-citation-url", "public-research-authorization"):
         parser.add_argument("--" + field, required=True)
+    parser.add_argument("--derived-expert-manifest", default=None,
+                        help="Binary expert union provenance JSON, with original mask and ontology")
+    parser.add_argument("--original-expert-mask", default=None,
+                        help="Unchanged original multiclass expert NIfTI")
+    parser.add_argument("--label-ontology-json", default=None,
+                        help="Original label dictionary used to construct the binary expert union")
     parser.add_argument("--slice-axis", type=int, choices=(0, 1, 2), required=True)
     parser.add_argument("--reference-label", type=int, default=1)
     parser.add_argument("--threshold", type=float, default=0.5)
