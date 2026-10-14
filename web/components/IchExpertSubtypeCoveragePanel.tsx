@@ -20,21 +20,27 @@ async function matchSha(file:File,expected:string,limit:number,signal:AbortSigna
  if(digest!==expected)throw Error("SHA-256 оригинального файла не соответствует паспорту классов.");
 }
 
-export default function IchExpertSubtypeCoveragePanel({comparison,model,onGoToSlice}:{
+export default function IchExpertSubtypeCoveragePanel({comparison,model,onGoToSlice,onClearFocus}:{
  comparison:IchReferenceComparison;model:IchResearchReport;
- onGoToSlice?:(sliceIndex:number)=>void;
+ onGoToSlice?:(sliceIndex:number,verifiedExpert?:{
+   file:File;label:number;subtype:string;
+ })=>void;
+ onClearFocus?:()=>void;
 }){
  const [report,setReport]=useState<IchExpertSubtypeCoverage|null>(null);
  const [originalOk,setOriginalOk]=useState(false);
+ const [originalFile,setOriginalFile]=useState<File|null>(null);
  const [ontologyOk,setOntologyOk]=useState(false);
  const [busy,setBusy]=useState(false);
  const [error,setError]=useState("");
  const abort=useRef<AbortController|null>(null);
  useEffect(()=>()=>abort.current?.abort(),[]);
  function reset(){
+   onClearFocus?.();
    abort.current?.abort();
    abort.current=null;
-   setReport(null);setOriginalOk(false);setOntologyOk(false);setBusy(false);setError("");
+   setReport(null);setOriginalOk(false);setOriginalFile(null);
+   setOntologyOk(false);setBusy(false);setError("");
  }
  async function readReport(file:File){
    reset();
@@ -49,13 +55,16 @@ export default function IchExpertSubtypeCoveragePanel({comparison,model,onGoToSl
    const controller=new AbortController();
    abort.current=controller;
    setBusy(true);setError("");
-   if(kind==="original")setOriginalOk(false);else setOntologyOk(false);
+   onClearFocus?.();
+   if(kind==="original"){setOriginalOk(false);setOriginalFile(null);}
+   else setOntologyOk(false);
    try{
      await matchSha(file,kind==="original"?report.evidenceHashes.originalExpertMaskSha256:
        report.evidenceHashes.ontologySha256,
        kind==="original"?512*1024*1024:64*1024,controller.signal);
      if(!controller.signal.aborted){
-       if(kind==="original")setOriginalOk(true);else setOntologyOk(true);
+       if(kind==="original"){setOriginalOk(true);setOriginalFile(file);}
+       else setOntologyOk(true);
      }
    }catch(e){
      if(!controller.signal.aborted)setError(e instanceof Error?e.message:"SHA не совпал.");
@@ -114,12 +123,16 @@ export default function IchExpertSubtypeCoveragePanel({comparison,model,onGoToSl
              <td>{typeof x.peakMissedSliceIndexK==="number"&&onGoToSlice?
                <button type="button"
                  aria-label={`Перейти к КТ k ${x.peakMissedSliceIndexK+1} с максимумом пропусков ${x.expertSubtype}`}
-                 onClick={()=>onGoToSlice(x.peakMissedSliceIndexK!)}>
+                 onClick={()=>onGoToSlice(x.peakMissedSliceIndexK!,
+                   originalFile?{file:originalFile,label:x.sourceLabel,subtype:x.expertSubtype}:undefined)}>
                  КТ k {x.peakMissedSliceIndexK+1} · FN {x.peakMissedSliceVoxels}
                </button>:"—"}</td>
            </tr>)}</tbody>
          </table>
        </div>
+       <p><small>При нажатии на класс передаётся только локальный, сверенный
+         по SHA файл оригинальной экспертной разметки в исходный просмотрщик,
+         чтобы показать FN выбранного класса, а не смешанную общую маску.</small></p>
        <p>Всего экспертных вокселей: {report.totalExpertVoxels}.
          Совпавших с бинарной маской: {report.totalOverlappingExpertVoxels}.
          Пропущено: {report.totalMissedExpertVoxels}.</p>
