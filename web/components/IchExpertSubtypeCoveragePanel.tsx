@@ -116,8 +116,12 @@ export default function IchExpertSubtypeCoveragePanel({comparison,model,onGoToSl
            <tbody>{rows.map(x=><tr key={x.sourceLabel}>
              <td>{x.expertSubtype} (метка {x.sourceLabel})</td>
              <td>{x.expertVolumeMl.toFixed(3)} мл</td>
-             <td>{x.modelOverlappingExpertVoxels} вокс.</td>
-             <td><strong>{x.modelMissedExpertVoxels}</strong> вокс.</td>
+             <td>{x.modelOverlappingExpertVoxels} вокс.
+               {x.modelOverlappingExpertVolumeMl!==undefined?
+                 <small> · {x.modelOverlappingExpertVolumeMl.toFixed(3)} мл</small>:null}</td>
+             <td><strong>{x.modelMissedExpertVoxels}</strong> вокс.
+               {x.modelMissedExpertVolumeMl!==undefined?
+                 <strong> · {x.modelMissedExpertVolumeMl.toFixed(3)} мл</strong>:null}</td>
              <td>{x.voxelCoverageFraction===null?"Нет эталонных вокселей":
                  (100*x.voxelCoverageFraction).toFixed(1)+"%"}</td>
              <td>{typeof x.peakMissedSliceIndexK==="number"&&onGoToSlice?

@@ -32,7 +32,16 @@ function passport(){
  };
 }
 test("accepts source-bound IPH/SAH coverage without claiming model subtype",()=>{
- const a=parseIchExpertSubtypeCoverage(JSON.stringify(passport()),comparison,model);
+ const document=passport();
+ const first=document.expertVoxelClasses[0] as typeof document.expertVoxelClasses[0] & {
+  modelOverlappingExpertVolumeMl?:number;modelMissedExpertVolumeMl?:number
+ };
+ first.modelOverlappingExpertVolumeMl=.008;
+ first.modelMissedExpertVolumeMl=.008;
+ const a=parseIchExpertSubtypeCoverage(JSON.stringify(document),comparison,model);
+ assert.equal(a.expertVoxelClasses[0].modelMissedExpertVolumeMl,.008);
+ first.modelMissedExpertVolumeMl=9;
+ assert.throws(()=>parseIchExpertSubtypeCoverage(JSON.stringify(document),comparison,model));
  assert.equal(a.expertVoxelClasses[0].voxelCoverageFraction,.5);
  assert.equal(a.expertVoxelClasses[1].modelMissedExpertVoxels,8);
  assert.equal(a.modelSubtypeClassifierExecuted,false);
