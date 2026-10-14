@@ -214,7 +214,7 @@ export function parseIchComponentEvidence(
      }))throw Error("Группы объёмов расходятся с исходными экспертными компонентами.");
    }
    if(priorityPresent){
-     const all=experts.filter(f=>f.volumeMl<1&&f.voxelCount>f.overlapVoxels)
+     const all=experts.filter(f=>f.voxelCount*voxelMl<1&&f.voxelCount>f.overlapVoxels)
        .sort((a,b)=>
          Number(a.hasAnyVoxelOverlap)-Number(b.hasAnyVoxelOverlap)||
          (b.voxelCount-b.overlapVoxels)-(a.voxelCount-a.overlapVoxels)||
