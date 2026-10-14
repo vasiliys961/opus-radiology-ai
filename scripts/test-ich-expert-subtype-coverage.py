@@ -3,6 +3,9 @@
 import importlib.util
 from pathlib import Path
 import unittest
+import tempfile
+import json
+import nibabel as nib
 import numpy as np
 
 p=Path(__file__).with_name("ich-expert-subtype-coverage.py")
@@ -53,6 +56,36 @@ class ExpertSubtypeCoverage(unittest.TestCase):
                                    {"1":8,"2":8,"3":0},metrics,.002)
         self.assertIsNone(result["expertVoxelClasses"][2]["voxelCoverageFraction"])
         self.assertFalse(result["modelSubtypeClassifierExecuted"])
+
+    def test_source_grid_bound_file_evidence_preserves_original_sha(self):
+        original,binary,pred,metrics=self.example()
+        with tempfile.TemporaryDirectory() as td:
+            folder=Path(td)
+            affine=np.diag([.7,.7,2.5,1])
+            def save(name,array):
+                image=nib.Nifti1Image(array,affine)
+                image.header.set_xyzt_units("mm")
+                image.set_sform(affine,code=2)
+                file=folder/name
+                nib.save(image,str(file))
+                return file
+            source=save("source.nii.gz",np.zeros(original.shape,dtype=np.int16))
+            prediction=save("prediction.nii.gz",pred.astype(np.uint8))
+            derived=save("derived.nii.gz",binary.astype(np.uint8))
+            expert=save("original.nii.gz",original)
+            ontology=folder/"ontology.json"
+            ontology.write_text(json.dumps({
+                "sourceUrl":"https://example.org/authoritative-labels",
+                "labelMeaning":{"1":"IPH","2":"SAH"}
+            }))
+            result=mod.score_source_bound_case(
+                source,prediction,derived,expert,ontology,
+                {"1":8,"2":8},metrics)
+            self.assertEqual(result["totalOverlappingExpertVoxels"],4)
+            self.assertEqual(result["evidenceHashes"]["originalExpertMaskSha256"],
+                             __import__("hashlib").sha256(expert.read_bytes()).hexdigest())
+            self.assertEqual(result["ontologySourceUrl"],
+                             "https://example.org/authoritative-labels")
 
     def test_malformed_metrics_cannot_report_coverages(self):
         original,binary,pred,metrics=self.example()
