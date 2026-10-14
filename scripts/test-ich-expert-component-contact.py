@@ -33,6 +33,9 @@ class ComponentContactTest(unittest.TestCase):
         self.assertEqual(out["predictedFragmentsTotal"], 2)
         self.assertEqual(out["expertFragmentsWithAnyVoxelOverlap"], 2)
         self.assertEqual(out["expertFragmentsWithZeroOverlap"], 0)
+        self.assertEqual(out["submilliliterReviewCandidatesTotal"], 2)
+        self.assertEqual(len(out["submilliliterReviewCandidates"]), 2)
+        self.assertEqual(out["submilliliterReviewCandidates"][0]["reviewSliceIndexK"], 2)
         strata = out["expertFragmentVolumeStrata"]
         self.assertEqual([(r["minVolumeMl"], r["maxVolumeMl"]) for r in strata],
                          [(0., .1), (.1, 1.), (1., None)])
@@ -73,6 +76,9 @@ class ComponentContactTest(unittest.TestCase):
         self.assertEqual(high["expertFragments"], 1)
         self.assertEqual(high["withAnyOverlap"], 1)
         self.assertEqual(high["missedVoxels"], 500)
+        self.assertEqual(out["submilliliterReviewCandidatesTotal"], 1)
+        self.assertEqual(out["submilliliterReviewCandidates"][0]["voxelCount"], 1)
+        self.assertEqual(out["submilliliterReviewCandidates"][0]["reviewSliceIndexK"], 1)
         self.assertEqual(sum(x["missedVoxels"] for x in (low, middle, high)), 501)
         self.assertIsNone(out["clinicalLesionSensitivity"])
 
