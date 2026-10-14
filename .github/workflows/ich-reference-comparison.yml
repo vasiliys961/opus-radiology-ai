@@ -11,6 +11,8 @@ on:
       - "scripts/test-ich-expert-component-contact.py"
       - "scripts/build-ich-expert-binary-union.py"
       - "scripts/test-ich-expert-binary-union.py"
+      - "scripts/ich-expert-subtype-coverage.py"
+      - "scripts/test-ich-expert-subtype-coverage.py"
       - ".github/workflows/ich-reference-comparison.yml"
   push:
     paths:
@@ -22,6 +24,8 @@ on:
       - "scripts/test-ich-expert-component-contact.py"
       - "scripts/build-ich-expert-binary-union.py"
       - "scripts/test-ich-expert-binary-union.py"
+      - "scripts/ich-expert-subtype-coverage.py"
+      - "scripts/test-ich-expert-subtype-coverage.py"
       - ".github/workflows/ich-reference-comparison.yml"
 
 permissions:
@@ -46,3 +50,5 @@ jobs:
         run: python scripts/test-ich-expert-component-contact.py
       - name: Preserve only source-documented hemorrhage labels in binary expert union
         run: python scripts/test-ich-expert-binary-union.py
+      - name: Assess true per-subtype expert-mask voxel coverage (no clinical sensitivity)
+        run: python scripts/test-ich-expert-subtype-coverage.py

@@ -19,7 +19,7 @@ from urllib.parse import urlparse
 
 CATEGORIES = frozenset(("IPH", "IVH", "SAH", "SDH", "EDH"))
 SCHEMA = "opus-ich-expert-binary-union/v1"
-MAX_VOXELS = 30_000_000
+MAX_VOXELS = 512 * 512 * 400  # Same source-grid admission as pretrained SAMIHS.
 
 
 def evaluator_module():
