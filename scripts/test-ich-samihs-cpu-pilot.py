@@ -95,7 +95,7 @@ class NativeCpuPilotContracts(unittest.TestCase):
                 pilot.admission(cfg)
             cfg.source_sha256=pilot.sha256_file(ct)
             cfg.mode="infer"
-            with self.assertRaisesRegex(ValueError,"audited_upstream"):
+            with self.assertRaisesRegex(ValueError,"upstream_model_requires_express_approval_or_audit"):
                 pilot.admission(cfg)
             cfg.upstream_model_audited=True
             cfg.model_dir=str(root)
