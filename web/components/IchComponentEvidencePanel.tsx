@@ -106,6 +106,15 @@ export default function IchComponentEvidencePanel({comparison,model,onGoToSlice}
       с максимальным количеством несовпадающих вокселей данного фрагмента,
       в старых — к середине его границ. Это нативный индекс NIfTI, не
       клинически подтверждённая координата.</small></p>
+    {c.submilliliterReviewCandidates&&<>
+      <p><strong>Приоритет локальной проверки малых пропусков:</strong>
+        {" "}{c.submilliliterReviewCandidatesTotal} экспертных фрагментов менее 1 мл
+        с непокрытыми вокселями. В первую очередь показаны полностью
+        пропущенные фрагменты, затем частично пропущенные с наибольшим FN.
+        Кнопки открывают нативный срез с максимальным FN.</p>
+      <FragmentList heading="Малые экспертные фрагменты для прицельной проверки по КТ"
+        fragments={c.submilliliterReviewCandidates} onGoToSlice={onGoToSlice}/>
+    </>}
     <FragmentList heading="Экспертные фрагменты с пропущенными вокселями (FN)"
       fragments={missed} onGoToSlice={onGoToSlice}/>
     <FragmentList heading="Кандидаты SAMIHS с лишними вокселями (FP)"

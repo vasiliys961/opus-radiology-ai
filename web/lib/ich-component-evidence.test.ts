@@ -31,6 +31,11 @@ function document(){
   expertFragmentsWithAnyVoxelOverlap:2,expertFragmentsWithZeroOverlap:0,
   predictedFragmentsWithZeroOverlap:1,expertFragmentsContactingMultiplePredictions:0,
   predictedFragmentsContactingMultipleExpertFragments:1,
+  submilliliterReviewCandidatesTotal:2,
+  submilliliterReviewCandidates:[
+   frag(0,8,[1,1,1],[2,2,2],1,[0]),
+   frag(1,8,[6,1,1],[7,2,2],1,[0])
+  ],
   expertFragmentVolumeStrata:[
    {minVolumeMl:0,maxVolumeMl:.1,expertFragments:2,withAnyOverlap:2,withZeroOverlap:0,
     expertVoxels:16,overlapVoxels:2,missedVoxels:14,missedVolumeMl:.028},
@@ -120,4 +125,21 @@ test("rejects manipulated small-fragment statistics and retains historic imports
  delete (historic.componentEvidence as {expertFragmentVolumeStrata?:unknown}).expertFragmentVolumeStrata;
  assert.equal(parseIchComponentEvidence(JSON.stringify(historic),comparison,model)
    .componentEvidence.expertFragmentsTotal,2);
+});
+
+test("source-bound shortlist rejects wrong small-miss order and false review cases",()=>{
+ const base=document();
+ const value=parseIchComponentEvidence(JSON.stringify(base),comparison,model);
+ assert.equal(value.componentEvidence.submilliliterReviewCandidatesTotal,2);
+ assert.deepEqual(value.componentEvidence.submilliliterReviewCandidates?.map(x=>x.componentIndex),[0,1]);
+ const wrong=structuredClone(base);
+ wrong.componentEvidence.submilliliterReviewCandidates.reverse();
+ assert.throws(()=>parseIchComponentEvidence(JSON.stringify(wrong),comparison,model),
+   /отсортированы|противоречит/);
+ const invented=structuredClone(base);
+ invented.componentEvidence.submilliliterReviewCandidates[0].overlapVoxels=8;
+ assert.throws(()=>parseIchComponentEvidence(JSON.stringify(invented),comparison,model));
+ const omitted=structuredClone(base);
+ delete (omitted.componentEvidence as {submilliliterReviewCandidates?:unknown}).submilliliterReviewCandidates;
+ assert.throws(()=>parseIchComponentEvidence(JSON.stringify(omitted),comparison,model));
 });

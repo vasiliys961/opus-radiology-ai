@@ -19,6 +19,7 @@ MAX_COMPONENT_VOXELS = 512 * 512 * 400  # Same full-volume admission as SAMIHS a
 MAX_COMPONENTS = 4096
 MAX_OVERLAP_VOXELS = 1_000_000
 MAX_REPORTED_COMPONENTS = 128
+MAX_SMALL_MISS_REVIEW = 24
 
 
 def evaluator_module():
@@ -67,10 +68,12 @@ def component_overlap_evidence(prediction, reference, voxel_ml, voxel_metrics):
             contact_p[model_id].append((expert_id - 1, count))
     del overlapping
 
-    def rows(counts, boxes, contacts, labeled_mask, other_mask):
-        ordered = sorted(range(1, len(counts)), key=lambda n: (-int(counts[n]), n))
+    def rows(counts, boxes, contacts, labeled_mask, other_mask,
+             selected=None, limit=MAX_REPORTED_COMPONENTS):
+        ordered = selected if selected is not None else sorted(
+            range(1, len(counts)), key=lambda n: (-int(counts[n]), n))
         results = []
-        for index in ordered[:MAX_REPORTED_COMPONENTS]:
+        for index in ordered[:limit]:
             box = boxes[index - 1]
             if box is None:
                 raise ValueError("inconsistent_connected_component_box")
@@ -138,12 +141,28 @@ def component_overlap_evidence(prediction, reference, voxel_ml, voxel_metrics):
             "missedVolumeMl": round(missed * voxel_ml, 6),
         })
 
+    # Additional native-k navigation for small FN-containing fragments, even if
+    # they fall outside the 128 largest expert components in the main table.
+    # Fully unseen fragments come first, then larger unmatched volumes.
+    small_misses = [i for i in range(1, nexpert + 1)
+                    if int(e_counts[i]) * voxel_ml < 1.0
+                    and int(e_counts[i]) > sum(n for _, n in contact_e[i])]
+    small_misses.sort(key=lambda i: (
+        bool(contact_e[i]),
+        -(int(e_counts[i]) - sum(n for _, n in contact_e[i])),
+        i,
+    ))
+
     result = {
         "connectivity": "6_neighbor_index_space",
         "allComponentsCounted": True,
         "reportedLargestPerMaskLimit": MAX_REPORTED_COMPONENTS,
         "expertFragmentsTotal": nexpert,
         "expertFragmentVolumeStrata": expert_strata,
+        "submilliliterReviewCandidatesTotal": len(small_misses),
+        "submilliliterReviewCandidates": rows(
+            e_counts, e_boxes, contact_e, e_labels, prediction,
+            small_misses, MAX_SMALL_MISS_REVIEW),
         "predictedFragmentsTotal": npred,
         "expertFragmentsWithAnyVoxelOverlap": sum(bool(x) for x in contact_e[1:]),
         "expertFragmentsWithZeroOverlap": sum(not x for x in contact_e[1:]),
