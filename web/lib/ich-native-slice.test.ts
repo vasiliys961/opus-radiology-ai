@@ -50,7 +50,7 @@ function makeTypedCt(datatype:number,value:number):Blob{
  for(let row=0;row<3;row++)for(let col=0;col<4;col++)
   v.setFloat32(280+(row*4+col)*4,affine[row][col],true);
  [110,43,49,0].forEach((x,i)=>v.setUint8(344+i,x));
- const at=352+2*count*bytes;
+ const at=352+2*dims[0]*dims[1]*bytes;
  if(datatype===2)v.setUint8(at,value);
  else if(datatype===256)v.setInt8(at,value);
  else if(datatype===4)v.setInt16(at,value,true);
