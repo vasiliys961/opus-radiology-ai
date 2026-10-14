@@ -207,14 +207,27 @@ def classify_upstream_failure(raw: bytes, returncode: int) -> str:
             + "; diagnosticSha256Prefix=" + fingerprint)
 
 
-def invoke_verified_upstream(command: list[str], model_dir: Path, timeout_seconds: int):
-    """Execute genuine upstream wrapper; never echo untrusted model output."""
+def invoke_verified_upstream(command: list[str], model_dir: Path, timeout_seconds: int,
+                            operator_authorized_legacy_pickle: bool = False):
+    """Invoke verified vendor code; optional older pickle loader is child-only.
+
+    PyTorch >=2.6 defaults to weights_only=True. The exact pinned older SAMIHS
+    checkpoint cannot be loaded in that mode in real Zenodo run #38605206599.
+    Restrict TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1 to this verified model child,
+    *only* under explicit operator consent for unreviewed pickle execution.
+    """
+    child_env = {**os.environ, "OMP_NUM_THREADS": "2", "MKL_NUM_THREADS": "2",
+                 "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"}
+    child_env.pop("TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD", None)
+    if operator_authorized_legacy_pickle:
+        if child_env.get("TORCH_FORCE_WEIGHTS_ONLY_LOAD", "").strip().lower() in ("1", "yes", "y", "true"):
+            raise ValueError("system_forces_restricted_pytorch_checkpoint_loader")
+        child_env["TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD"] = "1"
     with tempfile.TemporaryFile(mode="w+b") as private_log:
         result = subprocess.run(
             command, cwd=str(model_dir.resolve()), check=False,
             timeout=timeout_seconds,
-            env={**os.environ, "OMP_NUM_THREADS": "2", "MKL_NUM_THREADS": "2",
-                 "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"},
+            env=child_env,
             stdout=private_log, stderr=subprocess.STDOUT,
         )
         if result.returncode != 0:
@@ -280,7 +293,11 @@ def run(args):
         ]
         start_time = time.monotonic()
         try:
-            invoke_verified_upstream(command, Path(args.model_dir), args.timeout_seconds)
+            invoke_verified_upstream(
+                command, Path(args.model_dir), args.timeout_seconds,
+                operator_authorized_legacy_pickle=bool(
+                    getattr(args, "operator_authorized_upstream_execution", False)),
+            )
             predicted = nib.load(str(required_file(str(mask_path))))
             if (predicted.shape != slab_ct.shape or predicted.header.get_data_dtype().kind not in "iu"
                     or not np.allclose(predicted.affine, slab_ct.affine, atol=0.05, rtol=0)):

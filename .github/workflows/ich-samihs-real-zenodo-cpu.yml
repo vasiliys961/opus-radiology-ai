@@ -164,6 +164,48 @@ jobs:
           print("Official pinned SAMIHS CLI imports successfully on GitHub CPU. Model inference NOT tested by preflight.")
           PY
 
+      - name: Check actual pinned SAMIHS checkpoint deserialization on CPU before downloading CT
+        shell: bash
+        run: |
+          # Explicit workflow_dispatch operator authorization was verified at
+          # job entry. Only the SHA-verified immutable official pickle is used.
+          # No CT has been downloaded and no patient files are present.
+          python - <<'PY'
+          import importlib.util,os,subprocess,sys,tempfile
+          from pathlib import Path
+          model=Path(os.environ["RUNNER_TEMP"])/"samihs-fixed-upstream"
+          checkpoint=model/"weights/SAMIHS_09170527_2_0.483.pth"
+          module=importlib.util.spec_from_file_location("opus_cpu_diagnostic","scripts/run-ich-samihs-cpu-pilot.py")
+          diagnostic=importlib.util.module_from_spec(module)
+          module.loader.exec_module(diagnostic)
+          if os.environ.get("ALLOW_UPSTREAM_PICKLE")!="true":
+              raise SystemExit("Explicit consent for pinned upstream pickle not granted")
+          if os.environ.get("TORCH_FORCE_WEIGHTS_ONLY_LOAD","").strip().lower() in ("1","yes","y","true"):
+              raise SystemExit("System forces restricted checkpoint loader; cannot override")
+          # This preflight actually DESERIALIZES original trained checkpoint,
+          # but does not process CT, create a prediction or calculate Dice.
+          code="import torch,sys; obj=torch.load(sys.argv[1],map_location='cpu'); print('Genuine pinned checkpoint loaded on CPU.')"
+          env={**os.environ,
+               "TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD":"1",
+               "HF_HUB_OFFLINE":"1",
+               "TRANSFORMERS_OFFLINE":"1"}
+          with tempfile.TemporaryFile(mode="w+b") as private_log:
+              try:
+                  p=subprocess.run(
+                      [sys.executable,"-c",code,str(checkpoint)],
+                      cwd=str(model),stdin=subprocess.DEVNULL,
+                      stdout=private_log,stderr=subprocess.STDOUT,
+                      timeout=120,env=env)
+              except subprocess.TimeoutExpired:
+                  raise SystemExit("SAMIHS pretrained checkpoint CPU deserialization preflight timed out before CT download")
+              if p.returncode!=0:
+                  private_log.seek(0,os.SEEK_END)
+                  private_log.seek(max(0,private_log.tell()-32768))
+                  category=diagnostic.classify_upstream_failure(private_log.read(),p.returncode)
+                  raise SystemExit("Genuine SAMIHS checkpoint CPU preflight failed BEFORE Zenodo download: "+category)
+          print("Genuine pretrained checkpoint deserialized on CPU in authorized research subprocess; no CT was processed.")
+          PY
+
       - name: Download published Zenodo SAH CT and original expert masks (dataset NOT uploaded)
         shell: bash
         run: |
