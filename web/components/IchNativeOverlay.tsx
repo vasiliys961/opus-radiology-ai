@@ -21,7 +21,7 @@ export default function IchNativeOverlay({source,mask,report}:{
  const {dimensions,affineRas}=report.source.geometry;
  const largest=report.prediction.largestComponents[0];
  const initial=largest?
-   Math.floor((largest.boundsVoxelMin[2]+largest.boundsVoxelMax[2])/2):
+   (largest.peakSliceIndexK??Math.floor((largest.boundsVoxelMin[2]+largest.boundsVoxelMax[2])/2)):
    Math.floor(dimensions[2]/2);
  const [slice,setSlice]=useState(initial);
  const [windowKey,setWindowKey]=useState<WindowKey>("auto");
@@ -92,8 +92,8 @@ export default function IchNativeOverlay({source,mask,report}:{
    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
      {report.prediction.largestComponents.slice(0,8).map(c=>
        <button type="button" key={c.componentIndex}
-         onClick={()=>setSlice(Math.floor((c.boundsVoxelMin[2]+c.boundsVoxelMax[2])/2))}>
-         Кандидат {c.componentIndex+1} · {c.volumeMl.toFixed(1)} мл
+         onClick={()=>setSlice(c.peakSliceIndexK??Math.floor((c.boundsVoxelMin[2]+c.boundsVoxelMax[2])/2))}>
+         Кандидат {c.componentIndex+1} · {c.volumeMl.toFixed(1)} мл · k {(c.peakSliceIndexK??Math.floor((c.boundsVoxelMin[2]+c.boundsVoxelMax[2])/2))+1}
        </button>)}
    </div>
    {reading&&<p role="status">Чтение одного исходного среза и маски…</p>}

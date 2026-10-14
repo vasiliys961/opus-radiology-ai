@@ -6,6 +6,8 @@ export type IchComponent={
   componentIndex:number;
   voxelCount:number;
   volumeMl:number;
+  peakSliceIndexK?:number;
+  peakSliceComponentVoxels?:number;
   boundsVoxelMin:[number,number,number];
   boundsVoxelMax:[number,number,number];
   modelProbabilityCalibrated:false;
@@ -98,6 +100,13 @@ export function parseIchResearchReport(raw:string):IchResearchReport{
       lo.some((x,i)=>x<0||x>hi[i]||hi[i]>=dimensions[i])||
       c.modelProbabilityCalibrated!==false||c.clinicianVerified!==false)
      throw Error("Некорректная пространственная находка SAMIHS.");
+   const hasPeak=c.peakSliceIndexK!==undefined||c.peakSliceComponentVoxels!==undefined;
+   if(hasPeak&&(!integer(c.peakSliceIndexK)||
+      c.peakSliceIndexK<lo[2]||c.peakSliceIndexK>hi[2]||
+      !integer(c.peakSliceComponentVoxels)||
+      c.peakSliceComponentVoxels<1||c.peakSliceComponentVoxels>c.voxelCount||
+      c.peakSliceComponentVoxels>(hi[0]-lo[0]+1)*(hi[1]-lo[1]+1)))
+     throw Error("Некорректный срез локализации SAMIHS.");
    ids.add(c.componentIndex);countSum+=c.voxelCount;
  }
  if(countSum>positives||(positives>0&&prediction.connectedComponentsTotal===0)||

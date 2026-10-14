@@ -40,6 +40,21 @@ test("accepts bounded trained-model candidate and keeps clinical claims separate
  assert.equal(review.sourceToDicomSopBound,false);
  assert.match(review.decisions[0].note,/native CT/);
 });
+test("genuine component peak-k remains bound to native NIfTI box",()=>{
+ const raw=specimen();
+ const component=raw.prediction.largestComponents[0] as typeof raw.prediction.largestComponents[0] & {
+   peakSliceIndexK?:number;peakSliceComponentVoxels?:number
+ };
+ component.peakSliceIndexK=6;
+ component.peakSliceComponentVoxels=12;
+ assert.equal(parseIchResearchReport(JSON.stringify(raw))
+   .prediction.largestComponents[0].peakSliceIndexK,6);
+ component.peakSliceIndexK=15;
+ assert.throws(()=>parseIchResearchReport(JSON.stringify(raw)),/срез локализации/);
+ component.peakSliceIndexK=6;
+ component.peakSliceComponentVoxels=101;
+ assert.throws(()=>parseIchResearchReport(JSON.stringify(raw)),/срез локализации/);
+});
 test("zero-mask prediction is a model non-detection, NEVER a negative diagnosis",()=>{
  const raw=specimen();
  raw.prediction.predictedPositiveVoxelCount=0;
