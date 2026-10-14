@@ -5,6 +5,7 @@ import {sha256} from "@noble/hashes/sha2.js";
 import IchExpertErrorOverlay from "./IchExpertErrorOverlay";
 import IchSliceEvidencePanel from "./IchSliceEvidencePanel";
 import IchComponentEvidencePanel from "./IchComponentEvidencePanel";
+import IchExpertSubtypeCoveragePanel from "./IchExpertSubtypeCoveragePanel";
 import {
   parseIchReferenceComparison,type IchReferenceComparison,
 } from "../lib/ich-reference-comparison";
@@ -119,6 +120,7 @@ export default function IchReferenceComparisonPanel({modelReport,source,mask}:{
          onGoToSlice={sliceIndex=>setJumpTo(prev=>({
            sliceIndex,requestId:(prev?.requestId??0)+1,
          }))}/>
+       <IchExpertSubtypeCoveragePanel comparison={comparison} model={modelReport}/>
        <p><strong>Один исследовательский случай.</strong>
          Не доказано, что он не использовался при обучении модели.
          Не проверены независимость экспертной разметки,
