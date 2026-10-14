@@ -33,6 +33,13 @@ class ComponentContactTest(unittest.TestCase):
         self.assertEqual(out["predictedFragmentsTotal"], 2)
         self.assertEqual(out["expertFragmentsWithAnyVoxelOverlap"], 2)
         self.assertEqual(out["expertFragmentsWithZeroOverlap"], 0)
+        strata = out["expertFragmentVolumeStrata"]
+        self.assertEqual([(r["minVolumeMl"], r["maxVolumeMl"]) for r in strata],
+                         [(0., .1), (.1, 1.), (1., None)])
+        self.assertEqual([r["expertFragments"] for r in strata], [2, 0, 0])
+        self.assertEqual(strata[0]["missedVoxels"], 14)
+        self.assertEqual(strata[0]["overlapVoxels"], 2)
+        self.assertEqual(strata[0]["missedVolumeMl"], .028)
         self.assertEqual(out["predictedFragmentsWithZeroOverlap"], 1)
         self.assertEqual(out["predictedFragmentsContactingMultipleExpertFragments"], 1)
         self.assertEqual(out["clinicalLesionSensitivity"], None)
@@ -56,6 +63,8 @@ class ComponentContactTest(unittest.TestCase):
         })
         self.assertEqual(out["expertFragmentsTotal"], 0)
         self.assertIsNone(out["clinicalLesionSensitivity"])
+        self.assertEqual(sum(r["expertFragments"] for r in
+                             out["expertFragmentVolumeStrata"]), 0)
 
     def test_bad_voxel_totals_and_nonbinary_inputs_are_refused(self):
         p = np.zeros((12, 12, 6), dtype=bool)
