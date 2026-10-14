@@ -34,6 +34,9 @@ class ExpertSubtypeCoverage(unittest.TestCase):
         self.assertEqual(result["totalMissedExpertVoxels"],12)
         ip,sa=result["expertVoxelClasses"]
         self.assertEqual(ip["voxelCoverageFraction"],.5)
+        self.assertEqual(ip["modelMissedExpertVolumeMl"],.008)
+        self.assertEqual(ip["modelOverlappingExpertVolumeMl"],.008)
+        self.assertEqual(sa["modelMissedExpertVolumeMl"],.016)
         self.assertEqual(sa["voxelCoverageFraction"],0)
         self.assertEqual(ip["peakMissedSliceIndexK"],1)
         self.assertEqual(ip["peakMissedSliceVoxels"],2)
