@@ -291,9 +291,9 @@ class NativeCpuPilotContracts(unittest.TestCase):
             other.write_bytes(b"other model checkpoint")
             wrapper=root/"segment_ich.py"
             wrapper.write_text(
-                "import torch\\n"
-                "torch.load('weights/SAMIHS_09170527_2_0.483.pth', weights_only=True)\\n"
-                "torch.load('weights/other.bin', weights_only=True)\\n",
+                "import torch\n"
+                "torch.load('weights/SAMIHS_09170527_2_0.483.pth', weights_only=True)\n"
+                "torch.load('weights/other.bin', weights_only=True)\n",
                 encoding="utf-8")
             fake_torch=types.ModuleType("torch")
             calls=[]
