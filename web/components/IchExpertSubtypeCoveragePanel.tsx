@@ -20,8 +20,9 @@ async function matchSha(file:File,expected:string,limit:number,signal:AbortSigna
  if(digest!==expected)throw Error("SHA-256 оригинального файла не соответствует паспорту классов.");
 }
 
-export default function IchExpertSubtypeCoveragePanel({comparison,model}:{
+export default function IchExpertSubtypeCoveragePanel({comparison,model,onGoToSlice}:{
  comparison:IchReferenceComparison;model:IchResearchReport;
+ onGoToSlice?:(sliceIndex:number)=>void;
 }){
  const [report,setReport]=useState<IchExpertSubtypeCoverage|null>(null);
  const [originalOk,setOriginalOk]=useState(false);
@@ -102,7 +103,7 @@ export default function IchExpertSubtypeCoveragePanel({comparison,model}:{
        <div style={{overflowX:"auto"}}>
          <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
            <thead><tr><th>Тип по эксперту</th><th>Объём эксперта</th>
-             <th>Покрыто SAMIHS</th><th>Пропущено (FN)</th><th>Воксельное покрытие</th></tr></thead>
+             <th>Покрыто SAMIHS</th><th>Пропущено (FN)</th><th>Воксельное покрытие</th><th>Исходная КТ</th></tr></thead>
            <tbody>{rows.map(x=><tr key={x.sourceLabel}>
              <td>{x.expertSubtype} (метка {x.sourceLabel})</td>
              <td>{x.expertVolumeMl.toFixed(3)} мл</td>
@@ -110,6 +111,12 @@ export default function IchExpertSubtypeCoveragePanel({comparison,model}:{
              <td><strong>{x.modelMissedExpertVoxels}</strong> вокс.</td>
              <td>{x.voxelCoverageFraction===null?"Нет эталонных вокселей":
                  (100*x.voxelCoverageFraction).toFixed(1)+"%"}</td>
+             <td>{typeof x.peakMissedSliceIndexK==="number"&&onGoToSlice?
+               <button type="button"
+                 aria-label={`Перейти к КТ k ${x.peakMissedSliceIndexK+1} с максимумом пропусков ${x.expertSubtype}`}
+                 onClick={()=>onGoToSlice(x.peakMissedSliceIndexK!)}>
+                 КТ k {x.peakMissedSliceIndexK+1} · FN {x.peakMissedSliceVoxels}
+               </button>:"—"}</td>
            </tr>)}</tbody>
          </table>
        </div>
@@ -120,6 +127,9 @@ export default function IchExpertSubtypeCoveragePanel({comparison,model}:{
          {report.ontologySourceUrl}. SHA совпадает, однако это не независимый
          юридический аудит лицензии или подлинности экспертной аннотации.</small></p>
      </>}
+     <p><small>Переход к k-срезу показывает максимум пропущенных вокселей данного
+       экспертного типа по исходной оси NIfTI. Это не подтверждённый DICOM-срез,
+       а старые отчёты без локализации не предлагают переход.</small></p>
      <p><small>Классы взяты исключительно из оригинальной разметки, не предсказаны
        SAMIHS. Воксельное покрытие не равно чувствительности к очагам или диагнозу.
        Отсутствие кандидата не исключает кровоизлияние.</small></p>

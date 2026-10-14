@@ -49,6 +49,15 @@ def measure_coverage(predicted, derived_union, original_labels, meanings,
             raise ValueError("original_expert_label_count_mismatch")
         overlap = int(np.count_nonzero(predicted & class_voxels))
         missed = n - overlap
+        # Native third NIfTI dimension used by physician CT overlay, never a
+        # claimed DICOM SOP or guaranteed radiological axial orientation.
+        if missed:
+            unmatched_on_k = np.count_nonzero(class_voxels & ~predicted, axis=(0, 1))
+            most_missed_k = int(np.argmax(unmatched_on_k))
+            most_missed_on_k = int(unmatched_on_k[most_missed_k])
+        else:
+            most_missed_k = None
+            most_missed_on_k = None
         total_overlap += overlap
         total_missed += missed
         total_expert += n
@@ -59,6 +68,8 @@ def measure_coverage(predicted, derived_union, original_labels, meanings,
             "expertVolumeMl": round(n * voxel_ml, 6),
             "modelOverlappingExpertVoxels": overlap,
             "modelMissedExpertVoxels": missed,
+            "peakMissedSliceIndexK": most_missed_k,
+            "peakMissedSliceVoxels": most_missed_on_k,
             "voxelCoverageFraction": overlap / n if n else None,
             "modelPredictedSubtype": False,
         })

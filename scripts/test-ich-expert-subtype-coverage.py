@@ -35,6 +35,10 @@ class ExpertSubtypeCoverage(unittest.TestCase):
         ip,sa=result["expertVoxelClasses"]
         self.assertEqual(ip["voxelCoverageFraction"],.5)
         self.assertEqual(sa["voxelCoverageFraction"],0)
+        self.assertEqual(ip["peakMissedSliceIndexK"],1)
+        self.assertEqual(ip["peakMissedSliceVoxels"],2)
+        self.assertEqual(sa["peakMissedSliceIndexK"],1)
+        self.assertEqual(sa["peakMissedSliceVoxels"],4)
         self.assertFalse(ip["modelPredictedSubtype"])
         self.assertIsNone(result["clinicalSubtypeSensitivity"])
 
@@ -55,6 +59,8 @@ class ExpertSubtypeCoverage(unittest.TestCase):
         result=mod.measure_coverage(pred,binary,original,{1:"IPH",2:"SAH",3:"SDH"},
                                    {"1":8,"2":8,"3":0},metrics,.002)
         self.assertIsNone(result["expertVoxelClasses"][2]["voxelCoverageFraction"])
+        self.assertIsNone(result["expertVoxelClasses"][2]["peakMissedSliceIndexK"])
+        self.assertIsNone(result["expertVoxelClasses"][2]["peakMissedSliceVoxels"])
         self.assertFalse(result["modelSubtypeClassifierExecuted"])
 
     def test_source_grid_bound_file_evidence_preserves_original_sha(self):
@@ -86,6 +92,16 @@ class ExpertSubtypeCoverage(unittest.TestCase):
                              __import__("hashlib").sha256(expert.read_bytes()).hexdigest())
             self.assertEqual(result["ontologySourceUrl"],
                              "https://example.org/authoritative-labels")
+
+    def test_no_missing_pixels_produces_no_invented_ct_target(self):
+        original,binary,_,_=self.example()
+        predicted=binary.copy()
+        metrics={"truePositiveVoxels":16,"falseNegativeVoxels":0,"falsePositiveVoxels":0}
+        out=mod.measure_coverage(predicted,binary,original,{1:"IPH",2:"SAH"},
+                                 {"1":8,"2":8},metrics,.002)
+        for row in out["expertVoxelClasses"]:
+            self.assertIsNone(row["peakMissedSliceIndexK"])
+            self.assertIsNone(row["peakMissedSliceVoxels"])
 
     def test_malformed_metrics_cannot_report_coverages(self):
         original,binary,pred,metrics=self.example()
