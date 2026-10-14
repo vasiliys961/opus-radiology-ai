@@ -2,6 +2,7 @@
 import {useState} from "react";
 import type {IchResearchReport} from "../lib/ich-research";
 import type {IchReferenceComparison} from "../lib/ich-reference-comparison";
+import {buildSmallMissLocalReview,type SmallMissDecision} from "../lib/ich-small-miss-review";
 import {
  parseIchComponentEvidence,type IchComponentEvidence,type IchMaskFragment
 } from "../lib/ich-component-evidence";
@@ -41,8 +42,25 @@ export default function IchComponentEvidencePanel({comparison,model,onGoToSlice}
 }){
  const [report,setReport]=useState<IchComponentEvidence|null>(null);
  const [error,setError]=useState("");
+ const [smallReviews,setSmallReviews]=useState<Record<number,SmallMissDecision>>({});
+ function saveSmallReviews(){
+   if(!report)return;
+   let url:string|null=null;
+   try{
+     const document=buildSmallMissLocalReview(report,smallReviews);
+     url=URL.createObjectURL(new Blob([JSON.stringify(document,null,2)],
+       {type:"application/json"}));
+     const a=document.createElement("a");
+     a.href=url;a.download="opus-ich-small-miss-local-physician-review.json";
+     document.body.appendChild(a);a.click();a.remove();
+     const usedUrl=url;
+     setTimeout(()=>URL.revokeObjectURL(usedUrl),1000);
+     url=null;setError("");
+   }catch(e){setError(e instanceof Error?e.message:"Экспорт пометок не выполнен.");}
+   finally{if(url)URL.revokeObjectURL(url);}
+ }
  async function read(file:File){
-   setError("");setReport(null);
+   setError("");setReport(null);setSmallReviews({});
    try{
      if(!file.size||file.size>2*1024*1024)throw Error("Некорректный размер файла.");
      setReport(parseIchComponentEvidence(await file.text(),comparison,model));
@@ -114,6 +132,48 @@ export default function IchComponentEvidencePanel({comparison,model,onGoToSlice}
         Кнопки открывают нативный срез с максимальным FN.</p>
       <FragmentList heading="Малые экспертные фрагменты для прицельной проверки по КТ"
         fragments={c.submilliliterReviewCandidates} onGoToSlice={onGoToSlice}/>
+      <details style={{margin:"12px 0"}}>
+        <summary>Локальная врачебная оценка небольших пропусков · без цифровой подписи</summary>
+        {c.submilliliterReviewCandidates.map(f=>{
+          const review=smallReviews[f.componentIndex];
+          return <fieldset key={f.componentIndex} style={{margin:"10px 0",padding:10}}>
+            <legend>Экспертный фрагмент {f.componentIndex+1} ·
+              {" "}{f.volumeMl.toFixed(3)} мл · FN {f.voxelCount-f.overlapVoxels}</legend>
+            <label>Сопоставление с экспертной разметкой
+              <select value={review?.status??""} onChange={e=>{
+                const status=e.target.value as SmallMissDecision["status"];
+                setSmallReviews(prev=>{
+                  if(!status){const next={...prev};delete next[f.componentIndex];return next;}
+                  return {...prev,[f.componentIndex]:{
+                    status,note:prev[f.componentIndex]?.note??""
+                  }};
+                });
+              }}>
+                <option value="">Не оценён</option>
+                <option value="recheck">Нужна повторная проверка</option>
+                <option value="supports_expert_mark">Согласен с экспертной разметкой</option>
+                <option value="disputes_expert_mark">Экспертную разметку оспариваю</option>
+              </select>
+            </label>
+            <label style={{display:"block"}}>Пояснение (без персональных данных)
+              <textarea rows={2} maxLength={1000} style={{width:"100%",display:"block"}}
+                value={review?.note??""} onChange={e=>setSmallReviews(prev=>{
+                  const entry=prev[f.componentIndex];
+                  return entry?{...prev,[f.componentIndex]:{...entry,note:e.target.value}}:prev;
+                })}/>
+            </label>
+            <button type="button" onClick={()=>onGoToSlice(
+              f.reviewSliceIndexK??Math.floor((f.boundsVoxelMin[2]+f.boundsVoxelMax[2])/2)
+            )}>Открыть источник для проверки</button>
+          </fieldset>;
+        })}
+        <button type="button" disabled={!Object.keys(smallReviews).length}
+          onClick={saveSmallReviews}>Скачать локальные врачебные пометки с SHA-256</button>
+        <p><small>Экспорт содержит только решения, комментарии, исходный индекс k,
+          объём фрагмента и SHA-256 трёх файлов. Это неподписанные локальные
+          заметки, а не удостоверенная клиническая валидация.
+          Никакие изображения не отправляются наружу.</small></p>
+      </details>
     </>}
     <FragmentList heading="Экспертные фрагменты с пропущенными вокселями (FN)"
       fragments={missed} onGoToSlice={onGoToSlice}/>
@@ -125,7 +185,7 @@ export default function IchComponentEvidencePanel({comparison,model,onGoToSlice}
       не обязательно отдельные гематомы. Одно совпадение вокселя не доказывает
       обнаружение очага; не рассчитана клиническая чувствительность или
       специфичность. Нет определения типа кровоизлияния и DICOM SOP-связи.</p>
-    <button type="button" onClick={()=>setReport(null)}>Закрыть 3D-оценку</button>
+    <button type="button" onClick={()=>{setReport(null);setSmallReviews({});}}>Закрыть 3D-оценку</button>
   </>}
  </section>;
 }
