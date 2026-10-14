@@ -143,17 +143,24 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-          import os,subprocess,sys
+          import importlib.util,os,subprocess,sys,tempfile
           wrapper=Path(os.environ["RUNNER_TEMP"])/"samihs-fixed-upstream"/"segment_ich.py"
+          spec=importlib.util.spec_from_file_location("opus_cpu_diagnostic","scripts/run-ich-samihs-cpu-pilot.py")
+          diagnostic=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(diagnostic)
           # --help loads the real pinned vendor CLI and imports without reading
-          # any CT or deserializing the checkpoint. No untrusted traceback in CI.
-          proc=subprocess.run(
-              [sys.executable,str(wrapper),"--help"],
-              cwd=str(wrapper.parent),stdin=subprocess.DEVNULL,
-              stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
-              timeout=90,env={**os.environ,"HF_HUB_OFFLINE":"1","TRANSFORMERS_OFFLINE":"1"})
-          if proc.returncode!=0:
-              raise SystemExit("Pinned SAMIHS wrapper fails CPU startup/CLI import preflight; no public dataset download")
+          # any CT or deserializing checkpoint data. Suppress untrusted traceback.
+          with tempfile.TemporaryFile(mode="w+b") as private_log:
+              proc=subprocess.run(
+                  [sys.executable,str(wrapper),"--help"],
+                  cwd=str(wrapper.parent),stdin=subprocess.DEVNULL,
+                  stdout=private_log,stderr=subprocess.STDOUT,
+                  timeout=90,env={**os.environ,"HF_HUB_OFFLINE":"1","TRANSFORMERS_OFFLINE":"1"})
+              if proc.returncode!=0:
+                  private_log.seek(0,os.SEEK_END)
+                  private_log.seek(max(0,private_log.tell()-32768))
+                  summary=diagnostic.classify_upstream_failure(private_log.read(),proc.returncode)
+                  raise SystemExit("Pinned SAMIHS CPU CLI preflight failed before public CT download: "+summary)
           print("Official pinned SAMIHS CLI imports successfully on GitHub CPU. Model inference NOT tested by preflight.")
           PY
 
