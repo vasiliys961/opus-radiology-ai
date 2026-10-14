@@ -20,6 +20,10 @@ import sys
 from urllib.parse import urlparse
 
 COMPLETE_SCHEMA = "opus-ich-first-trained-public-case/v1"
+OFFICIAL_SAMIHS_CHECKPOINT_SHA256 = (
+    "b4c5ff729b906605555f83359120341a72035d1b6a784a9fef7dd61ee09a639e"
+)
+OFFICIAL_SAMIHS_REVISION = "29aaa1287ca35b19e40495bd4966fa2923871cb9"
 SHA = re.compile(r"^[a-f0-9]{64}$")
 MODEL_MASK = "samihs-public-ich-mask.nii.gz"
 MODEL_REPORT = "opus-ich-samihs-public-report.json"
@@ -43,6 +47,8 @@ def validate_requested_case(args) -> None:
                   args.checkpoint_sha256, args.wrapper_sha256):
         if not SHA.fullmatch(value):
             raise ValueError("all_four_immutable_source_and_model_sha256_required")
+    if args.checkpoint_sha256 != OFFICIAL_SAMIHS_CHECKPOINT_SHA256:
+        raise ValueError("official_samihs_trained_checkpoint_sha256_required")
     if args.slice_axis not in (0, 1, 2) or args.batch_size not in (1, 2, 4, 8):
         raise ValueError("explicit_bounded_source_axis_and_batch_required")
     if not 0.05 <= args.threshold <= 0.95:
@@ -222,6 +228,8 @@ def run(args):
     if (model.get("researchStatus") != "trained_upstream_adapter_executed_public_only"
             or model["model"]["modelWeightsUsed"] is not True
             or model["model"]["checkpointSha256"] != args.checkpoint_sha256
+            or model["model"].get("officialCheckpointFileVerified") is not True
+            or model["model"].get("upstreamRevision") != OFFICIAL_SAMIHS_REVISION
             or model["model"]["wrapperSha256"] != args.wrapper_sha256
             or model["source"]["sha256"] != args.source_sha256
             or hashes["sourceSha256"] != args.source_sha256
@@ -285,6 +293,7 @@ def run(args):
         },
         "expertSubtypeCoverage": subtype_coverage,
         "checkpointSha256": args.checkpoint_sha256,
+        "officialSamihsSourceRevision": OFFICIAL_SAMIHS_REVISION,
         "wrapperSha256": args.wrapper_sha256,
         "modelExecutionSeconds": model["execution"]["seconds"],
         "device": model["execution"]["device"],

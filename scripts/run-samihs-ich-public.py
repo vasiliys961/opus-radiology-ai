@@ -22,6 +22,12 @@ import sys
 import time
 
 CHECKPOINT_REL = Path("weights/SAMIHS_09170527_2_0.483.pth")
+OFFICIAL_SAMIHS_REVISION = "29aaa1287ca35b19e40495bd4966fa2923871cb9"
+# Published weight-file SHA-256 in Hugging Face's Xet pointer for this exact
+# source revision. Its hash is NOT a safety audit of Python or pickle execution.
+OFFICIAL_SAMIHS_CHECKPOINT_SHA256 = (
+    "b4c5ff729b906605555f83359120341a72035d1b6a784a9fef7dd61ee09a639e"
+)
 WRAPPER_REL = Path("segment_ich.py")
 REPORT_SCHEMA = "opus-ich-samihs-public-research/v1"
 MAX_SOURCE_BYTES = 512 * 1024 * 1024
@@ -163,6 +169,8 @@ def execute(args: argparse.Namespace) -> dict:
         raise ValueError("explicit_slice_axis_and_bounded_batch_required")
     if not 0.05 <= args.threshold <= 0.95:
         raise ValueError("invalid_threshold")
+    if args.checkpoint_sha256 != OFFICIAL_SAMIHS_CHECKPOINT_SHA256:
+        raise ValueError("noncanonical_samihs_checkpoint_cannot_claim_official_model")
     model_dir = Path(args.model_dir)
     if model_dir.is_symlink() or not model_dir.is_dir():
         raise ValueError("invalid_model_directory")
@@ -218,9 +226,12 @@ def execute(args: argparse.Namespace) -> dict:
                 "origin": "MooreMuaMu/samihs-ich-segmentation",
                 "version": "user-audited-local-checkpoint",
                 "checkpointSha256": sha256_file(checkpoint),
+                "officialCheckpointSha256": OFFICIAL_SAMIHS_CHECKPOINT_SHA256,
+                "upstreamRevision": OFFICIAL_SAMIHS_REVISION,
+                "officialCheckpointFileVerified": True,
                 "wrapperSha256": sha256_file(wrapper),
                 "modelWeightsUsed": True,
-                "licenseClaim": "MIT model card; dependencies and weight provenance require independent review",
+                "licenseClaim": "MIT model card; dependency licenses, wrapper and pickle safety still require independent audit",
             },
             "source": {
                 "format": "3d-nifti",
