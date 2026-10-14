@@ -1,0 +1,234 @@
+name: ICH SAMIHS REAL public Zenodo CT on GitHub CPU
+
+on:
+  workflow_dispatch:
+    inputs:
+      public_research_rights_confirmed:
+        description: "I confirm this Zenodo dataset may be used for my noncommercial public-data research"
+        type: boolean
+        required: true
+        default: false
+      authorize_unreviewed_checkpoint:
+        description: "I authorize executing the fixed-revision upstream PyTorch checkpoint/code in disposable GitHub CPU runner (not independently audited)"
+        type: boolean
+        required: true
+        default: false
+      source_slices:
+        description: "Number of consecutive REAL original CT slices containing expert hemorrhage"
+        type: choice
+        required: true
+        default: "16"
+        options: ["16", "32"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ich-first-real-samihs-zenodo-public-cpu
+  cancel-in-progress: false
+
+jobs:
+  genuine-public-ich-on-cpu:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    env:
+      PUBLIC_RIGHTS: ${{ inputs.public_research_rights_confirmed }}
+      ALLOW_UPSTREAM_PICKLE: ${{ inputs.authorize_unreviewed_checkpoint }}
+      SOURCE_SLICES: ${{ inputs.source_slices }}
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "2"
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PIP_NO_INPUT: "1"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - name: Confirm noncommercial public-data rights and upstream checkpoint risk
+        shell: bash
+        run: |
+          if [[ "$PUBLIC_RIGHTS" != "true" || "$ALLOW_UPSTREAM_PICKLE" != "true" ]]; then
+            echo "Explicit rights confirmation and upstream-code authorization required." >&2
+            exit 2
+          fi
+          if [[ "$SOURCE_SLICES" != "16" && "$SOURCE_SLICES" != "32" ]]; then
+            echo "Unexpected source slab count." >&2
+            exit 2
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install bounded numerical and verified archive tools
+        shell: bash
+        run: |
+          python -m pip install --disable-pip-version-check --no-cache-dir numpy==2.2.6 scipy==1.15.3 nibabel==5.3.2
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq p7zip-full >/dev/null
+
+      - name: Download published Zenodo SAH CT and original expert masks (dataset NOT uploaded)
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --retry 3 --max-time 2100 \
+            "https://zenodo.org/records/8228847/files/subarachnoid_hemorrhage_rhuh.rar?download=1" \
+            --output "$RUNNER_TEMP/zenodo-sah-original-ct-and-experts.rar"
+          bytes=$(stat -c %s "$RUNNER_TEMP/zenodo-sah-original-ct-and-experts.rar")
+          if (( bytes < 1000000 || bytes > 750000000 )); then
+            echo "Zenodo archive unexpectedly sized; rejecting." >&2
+            exit 2
+          fi
+          echo "a67bf358ebb326f156071864c318ab42  $RUNNER_TEMP/zenodo-sah-original-ct-and-experts.rar" | md5sum --status -c -
+          7z l -slt "$RUNNER_TEMP/zenodo-sah-original-ct-and-experts.rar" > "$RUNNER_TEMP/archive-list-private.txt"
+          python - <<'PY'
+          import os,re
+          from pathlib import Path
+          listing=Path(os.environ["RUNNER_TEMP"])/"archive-list-private.txt"
+          txt=listing.read_text(errors="replace")
+          values=[int(x) for x in re.findall(r"(?m)^Size = (\d+)\s*$",txt)]
+          if not values or sum(values)>7*1024**3:
+              raise SystemExit("Public dataset extraction exceeds 7 GiB safety budget")
+          PY
+          mkdir -p "$RUNNER_TEMP/zenodo-sah-unpacked"
+          7z x -y -bso0 -bse0 -bb0 "-o$RUNNER_TEMP/zenodo-sah-unpacked" \
+            "$RUNNER_TEMP/zenodo-sah-original-ct-and-experts.rar" >/dev/null
+          rm -f "$RUNNER_TEMP/zenodo-sah-original-ct-and-experts.rar" "$RUNNER_TEMP/archive-list-private.txt"
+          echo "Published CT/expert archive integrity verified and unpacked privately."
+
+      - name: Select one genuine, geometry-matched original CT/expert NIfTI and native positive slab
+        id: selected
+        shell: bash
+        run: |
+          python scripts/select-ich-zenodo-sah-case.py \
+            --extracted-dir "$RUNNER_TEMP/zenodo-sah-unpacked" \
+            --slice-count "$SOURCE_SLICES" --github-output "$GITHUB_OUTPUT"
+
+      - name: Install pretrained PyTorch CPU runtime (never GPU)
+        shell: bash
+        run: |
+          python -m pip install --disable-pip-version-check --no-cache-dir \
+            torch==2.8.0 torchvision==0.23.0 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --disable-pip-version-check --no-cache-dir \
+            huggingface_hub==0.35.3 timm==1.0.20 einops==0.8.1 \
+            safetensors==0.6.2 transformers==4.57.0 \
+            opencv-python-headless==4.12.0.88
+
+      - name: Fetch immutable official SAMIHS source and REAL pretrained checkpoint from Hugging Face
+        id: model
+        shell: bash
+        run: |
+          python - <<'PY'
+          from huggingface_hub import snapshot_download
+          from pathlib import Path
+          import hashlib,os
+          revision="29aaa1287ca35b19e40495bd4966fa2923871cb9"
+          model=Path(os.environ["RUNNER_TEMP"])/"samihs-fixed-upstream"
+          snapshot_download(
+              repo_id="MooreMuaMu/samihs-ich-segmentation",
+              repo_type="model",revision=revision,local_dir=str(model),
+          )
+          checkpoint=model/"weights/SAMIHS_09170527_2_0.483.pth"
+          wrapper=model/"segment_ich.py"
+          def sha(path):
+              h=hashlib.sha256()
+              with path.open("rb") as f:
+                  for block in iter(lambda:f.read(1024*1024),b""):
+                      h.update(block)
+              return h.hexdigest()
+          if checkpoint.is_symlink() or wrapper.is_symlink() or (
+              sha(checkpoint)!="b4c5ff729b906605555f83359120341a72035d1b6a784a9fef7dd61ee09a639e"):
+              raise SystemExit("Official SAMIHS checkpoint digest mismatch; no execution")
+          wrapper_sha=sha(wrapper)
+          with open(os.environ["GITHUB_OUTPUT"],"a") as out:
+              out.write(f"directory={model}\n")
+              out.write(f"wrapper_sha={wrapper_sha}\n")
+          print("Exact upstream commit and original pretrained SAMIHS checkpoint SHA-256 verified.")
+          PY
+
+      - name: Install only Python package requirements declared by pinned model
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import os,re
+          src=Path(os.environ["RUNNER_TEMP"])/"samihs-fixed-upstream"/"requirements.txt"
+          if not src.is_file() or src.stat().st_size>4096:
+              raise SystemExit("Pinned upstream dependency list is unavailable or too large")
+          lines=[]
+          for raw in src.read_text().splitlines():
+              item=raw.strip()
+              if not item or item.startswith("#"):
+                  continue
+              if not re.fullmatch(r"[A-Za-z0-9_.-]+(?:\[[A-Za-z0-9_,.-]+\])?(?:[=!<>~][A-Za-z0-9_.,!<>~=+*-]+)?",item):
+                  raise SystemExit("Non-index/unexpected dependency in pinned model; refusing to install")
+              base=re.split(r"[<=>!~\[]",item.lower(),1)[0].replace("_","-")
+              if base in ("torch","torchvision","torchaudio","numpy","nibabel","scipy"):
+                  continue
+              lines.append(item)
+          safe=Path(os.environ["RUNNER_TEMP"])/"safe-model-requirements.txt"
+          safe.write_text("\n".join(lines)+"\n")
+          print("Pinned upstream dependencies validated; no source URLs or custom package indexes permitted.")
+          PY
+          python -m pip install --disable-pip-version-check --no-cache-dir \
+            -r "$RUNNER_TEMP/safe-model-requirements.txt"
+          python -m pip check
+
+      - name: Execute trained SAMIHS on original consecutive CT source voxels and compare ORIGINAL expert mask
+        id: inference
+        shell: bash
+        env:
+          CT_SOURCE: ${{ steps.selected.outputs.ct }}
+          EXPERT_SOURCE: ${{ steps.selected.outputs.expert }}
+          CT_SOURCE_SHA: ${{ steps.selected.outputs.ct_sha }}
+          EXPERT_SOURCE_SHA: ${{ steps.selected.outputs.expert_sha }}
+          CT_NATIVE_K: ${{ steps.selected.outputs.start }}
+          MODEL_DIR: ${{ steps.model.outputs.directory }}
+          MODEL_WRAPPER_SHA: ${{ steps.model.outputs.wrapper_sha }}
+        run: |
+          set -euo pipefail
+          export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
+          python scripts/run-ich-samihs-cpu-pilot.py \
+            --mode infer --input "$CT_SOURCE" --expert-mask "$EXPERT_SOURCE" \
+            --source-sha256 "$CT_SOURCE_SHA" --reference-sha256 "$EXPERT_SOURCE_SHA" \
+            --dataset-citation-url https://zenodo.org/records/8228847 \
+            --model-dir "$MODEL_DIR" \
+            --checkpoint-sha256 b4c5ff729b906605555f83359120341a72035d1b6a784a9fef7dd61ee09a639e \
+            --wrapper-sha256 "$MODEL_WRAPPER_SHA" \
+            --start-slice "$CT_NATIVE_K" --slice-count "$SOURCE_SLICES" --slice-axis 2 \
+            --output-dir "$RUNNER_TEMP/samihs-real-case" \
+            --reference-label 1 --timeout-seconds 1200 \
+            --rights-attested --deidentified-public-data \
+            --operator-authorized-upstream-execution \
+            --authorization AUTHORIZED-PUBLIC-ICH-CPU-SLAB
+
+      - name: Keep only nonimage, no-PHI reproducible measurement report
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/opus-ich-public-metrics-only"
+          python - <<'PY'
+          from pathlib import Path
+          import json,os
+          file=Path(os.environ["RUNNER_TEMP"])/"samihs-real-case"/"opus-ich-samihs-cpu-slab.json"
+          result=json.loads(file.read_text())
+          if (result.get("status")!="trained_samihs_cpu_slab_executed_and_expert_compared"
+              or result.get("model",{}).get("executed") is not True
+              or result.get("fullOriginalStudyProcessed") is not False
+              or not isinstance(result.get("metrics"),dict)):
+              raise SystemExit("No actual trained inference; refuse to publish fake metrics")
+          dest=Path(os.environ["RUNNER_TEMP"])/"opus-ich-public-metrics-only"/"samihs-zenodo-sah-reproducible-measurements.json"
+          dest.write_text(json.dumps(result,indent=2,ensure_ascii=False))
+          print("Real CPU SAMIHS model completed; numeric provenance/measurements ready (no CT or expert image).")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: genuine-samihs-public-ct-expert-comparison
+          path: ${{ runner.temp }}/opus-ich-public-metrics-only/samihs-zenodo-sah-reproducible-measurements.json
+          retention-days: 7
+          if-no-files-found: error
