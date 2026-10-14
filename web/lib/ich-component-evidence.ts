@@ -27,6 +27,8 @@ export type IchComponentEvidence={
    reportedLargestPerMaskLimit:128;
    expertFragmentsTotal:number;predictedFragmentsTotal:number;
    expertFragmentVolumeStrata?:IchExpertFragmentVolumeStratum[];
+   submilliliterReviewCandidatesTotal?:number;
+   submilliliterReviewCandidates?:IchMaskFragment[];
    expertFragmentsWithAnyVoxelOverlap:number;expertFragmentsWithZeroOverlap:number;
    predictedFragmentsWithZeroOverlap:number;
    expertFragmentsContactingMultiplePredictions:number;
@@ -52,9 +54,9 @@ const vec=(v:unknown):number[]=>{
 };
 function validateFragments(
  raw:unknown,total:number,otherTotal:number,dimension:number[],voxelMl:number,
- volumeVoxels:number,kind:string
+ volumeVoxels:number,kind:string,priority?:{candidateTotal:number}
 ):IchMaskFragment[]{
- if(!Array.isArray(raw)||raw.length!==Math.min(total,128))
+ if(!Array.isArray(raw)||raw.length!==Math.min(priority?.candidateTotal??total,priority?24:128))
    throw Error("Список "+kind+" не соответствует количеству 3D-компонент.");
  const ids=new Set<number>();let prev=Infinity,volume=0;
  const fragments:IchMaskFragment[]=[];
@@ -63,7 +65,8 @@ function validateFragments(
    const n=r.voxelCount,index=r.componentIndex,overlap=r.overlapVoxels;
    const peers=r.otherMaskComponentIndices;
    if(!int(index)||index>=total||ids.has(index)||
-      !int(n)||n<1||n>prev||!int(overlap)||overlap>n||
+      !int(n)||n<1||(!priority&&n>prev)||!int(overlap)||overlap>n||
+      (priority&&(n*voxelMl>=1||n===overlap))||
       !num(r.volumeMl)||Math.abs(r.volumeMl-n*voxelMl)>0.0000011||
       !num(r.componentOverlapFraction)||
       Math.abs(r.componentOverlapFraction-overlap/n)>1e-9||
@@ -91,9 +94,9 @@ function validateFragments(
    ))throw Error("Срез локализации ошибки не согласован с масками.");
    ids.add(index);prev=n;volume+=n;fragments.push(r as unknown as IchMaskFragment);
  }
- if(total<=128&&volume!==volumeVoxels)
+ if(!priority&&total<=128&&volume!==volumeVoxels)
    throw Error("Сумма объёмов "+kind+" противоречит проверенной маске.");
- if(total>128&&volume>volumeVoxels)
+ if(!priority&&total>128&&volume>volumeVoxels)
    throw Error("Неверный частичный объём "+kind+".");
  return fragments;
 }
@@ -165,6 +168,31 @@ export function parseIchComponentEvidence(
  }
  const experts=validateFragments(c.largestExpertFragments,ep,pr,dimensions,voxelMl,expertTotal,"эксперта");
  const predicts=validateFragments(c.largestPredictedFragments,pr,ep,dimensions,voxelMl,predTotal,"SAMIHS");
+ const priorityPresent=c.submilliliterReviewCandidatesTotal!==undefined||
+   c.submilliliterReviewCandidates!==undefined;
+ let small:IchMaskFragment[]=[];
+ if(priorityPresent){
+   const count=c.submilliliterReviewCandidatesTotal;
+   if(!int(count)||count>ep)
+     throw Error("Количество пропущенных малых экспертных компонентов неверно.");
+   small=validateFragments(c.submilliliterReviewCandidates,ep,pr,dimensions,
+     voxelMl,expertTotal,"малых пропусков",{candidateTotal:count});
+   const ids=new Set(small.map(f=>f.componentIndex));
+   if(ids.size!==small.length)
+     throw Error("Повторяющиеся малые экспертные компоненты.");
+   // Prioritize fully unseen expert fragments, then descending FN.
+   for(let i=1;i<small.length;i++){
+     const before=small[i-1],next=small[i];
+     const missedBefore=before.voxelCount-before.overlapVoxels;
+     const missedNext=next.voxelCount-next.overlapVoxels;
+     if(Number(before.hasAnyVoxelOverlap)>Number(next.hasAnyVoxelOverlap)||
+       (before.hasAnyVoxelOverlap===next.hasAnyVoxelOverlap&&
+        (missedBefore<missedNext||(missedBefore===missedNext&&
+         before.componentIndex>next.componentIndex))))
+       throw Error("Малые экспертные пропуски отсортированы неверно.");
+   }
+ }
+
  if(ep<=128&&pr<=128){
    if(c.expertFragmentVolumeStrata!==undefined){
      const validatedStrata=c.expertFragmentVolumeStrata as IchExpertFragmentVolumeStratum[];
@@ -184,6 +212,18 @@ export function parseIchComponentEvidence(
          x.no!==y.withZeroOverlap||x.voxels!==y.expertVoxels||
          x.covered!==y.overlapVoxels||x.missed!==y.missedVoxels;
      }))throw Error("Группы объёмов расходятся с исходными экспертными компонентами.");
+   }
+   if(priorityPresent){
+     const all=experts.filter(f=>f.volumeMl<1&&f.voxelCount>f.overlapVoxels)
+       .sort((a,b)=>
+         Number(a.hasAnyVoxelOverlap)-Number(b.hasAnyVoxelOverlap)||
+         (b.voxelCount-b.overlapVoxels)-(a.voxelCount-a.overlapVoxels)||
+         a.componentIndex-b.componentIndex);
+     if(c.submilliliterReviewCandidatesTotal!==all.length||
+       small.length!==Math.min(all.length,24)||
+       small.some((f,i)=>f.componentIndex!==all[i].componentIndex||
+         f.voxelCount!==all[i].voxelCount||f.overlapVoxels!==all[i].overlapVoxels))
+       throw Error("Список малых пропусков противоречит экспертной маске.");
    }
    const es=new Map(experts.map(x=>[x.componentIndex,x]));
    const ps=new Map(predicts.map(x=>[x.componentIndex,x]));
