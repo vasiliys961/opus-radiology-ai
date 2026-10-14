@@ -3,7 +3,7 @@
 **Status:** executable bounded-source preparation + optional real pretrained CPU attempt.
 **This CI is synthetic numerical contract testing, NOT model inference.** No actual SAMIHS
 CPU result, accuracy estimate or real CT comparison is claimed until a trusted
-operator has run the \`--mode infer\` command with public source pixels, matching
+operator has run the `--mode infer` command with public source pixels, matching
 original expert mask and audited official weights.
 
 The baseline full-case CUDA runner and its official checkpoint admission remain unchanged.
@@ -14,7 +14,7 @@ The official SAMIHS package is a per-2D-slice ICH network, allowing a bounded
 consecutive subset of a genuine source CT to be used as an **engineering
 feasibility pilot**. The published upstream example uses CUDA; upstream CPU
 compatibility, runtime and memory have **not** been demonstrated. We may try
-\`segment_ich.py --device cpu --batch-size 1\`, with a 120–1800-second timeout
+`segment_ich.py --device cpu --batch-size 1`, with a 120–1800-second timeout
 on an isolated Linux 4-core/16-GiB machine. Never imply that this makes a
 full source volume processed, or that selecting the bleed-positive slab estimates
 full-study diagnostic sensitivity.
@@ -26,7 +26,7 @@ in the selected expert ROI. This is a *derived* expert mask, not a new or
 re-authored expert annotation. Both original full-size CT and expert SHA-256
 are retained along with derived slab SHA-256. No original DICOM SOP mapping.
 
-**No paid GPU or paid API.** GitHub standard \`ubuntu-latest\` CPU runners
+**No paid GPU or paid API.** GitHub standard `ubuntu-latest` CPU runners
 may have sufficient host RAM but normal CI NEVER downloads weights or medical
 data: the workflow tests only synthetic coordinate/contract fixtures. For a
 *real* run use an authorized separately provisioned, isolated Linux host or
@@ -45,9 +45,9 @@ weights or original expert masks in the GitHub repository/artifacts.
   masks for 51 CQ500 CTs; source CQ500 has its **own terms/EULA**, and
   publicly published labels alone do not clear copying the original CT.
 - Trained source: https://huggingface.co/MooreMuaMu/samihs-ich-segmentation
-  official revision \`29aaa1287ca35b19e40495bd4966fa2923871cb9\`,
-  checkpoint SHA-256 \`b4c5ff729b906605555f83359120341a72035d1b6a784a9fef7dd61ee09a639e\`.
-  Audit \`segment_ich.py\` and PyTorch pickle before deserializing.
+  official revision `29aaa1287ca35b19e40495bd4966fa2923871cb9`,
+  checkpoint SHA-256 `b4c5ff729b906605555f83359120341a72035d1b6a784a9fef7dd61ee09a639e`.
+  Audit `segment_ich.py` and PyTorch pickle before deserializing.
   A model-card MIT label is not proof of all weights, data and dependency rights.
 
 ## Actual execution on an approved Linux CPU host
@@ -57,7 +57,7 @@ NIfTI and audited wrapper independently, then specify a native source K-slab
 containing reference hemorrhage. Never use a resized 2D PNG as quantitative
 input. Output path must not exist.
 
-\`\`\`bash
+```bash
 python scripts/run-ich-samihs-cpu-pilot.py \
   --mode infer \
   --input /research/authorized-original-head-ct.nii.gz \
@@ -73,28 +73,28 @@ python scripts/run-ich-samihs-cpu-pilot.py \
   --reference-label 1 --timeout-seconds 1200 \
   --rights-attested --deidentified-public-data --upstream-model-audited \
   --authorization AUTHORIZED-PUBLIC-ICH-CPU-SLAB
-\`\`\`
+```
 
 **Start-slice 40 is only CLI syntax demonstration, NOT a verified suitable
 slice from the published dataset.** Determine the actual range and ontology
 from its real CT and original labels before invocation.
 
 To prepare and verify native slab files *without* invoking the model, use
-\`--mode prepare\` and omit \`--model-dir\`, checkpoint/wrapper SHA and
-\`--upstream-model-audited\`. It produces a manifest with
-\`status=prepared_real_public_slab_no_model_execution\`, \`metrics=null\` and
-\`model.executed=false\`. NEVER call that a successful medical AI run.
+`--mode prepare` and omit `--model-dir`, checkpoint/wrapper SHA and
+`--upstream-model-audited`. It produces a manifest with
+`status=prepared_real_public_slab_no_model_execution`, `metrics=null` and
+`model.executed=false`. NEVER call that a successful medical AI run.
 
-On actual successful \`--mode infer\`, the vendor wrapper is run on *those*
-native source pixels with \`--device cpu\`. Only after it returns a geometry-
+On actual successful `--mode infer`, the vendor wrapper is run on *those*
+native source pixels with `--device cpu`. Only after it returns a geometry-
 consistent **binary NIfTI** does the script score the true expert ROI, with
 Dice, IoU, HD95 (or reason missing), TP/FP/FN, volume and SHA-256. Manifest:
-\`opus-ich-samihs-cpu-slab.json\` with
-\`status=trained_samihs_cpu_slab_executed_and_expert_compared\`,
-\`fullOriginalStudyProcessed=false\`, model time and hashes.
+`opus-ich-samihs-cpu-slab.json` with
+`status=trained_samihs_cpu_slab_executed_and_expert_compared`,
+`fullOriginalStudyProcessed=false`, model time and hashes.
 
 **Important:** This new pilot manifest does not imitate
-\`opus-ich-first-public-case-complete.json\`. The latter is reserved for the
+`opus-ich-first-public-case-complete.json`. The latter is reserved for the
 full authorized external CUDA workflow. Pilot results are NOT yet available
 for the existing full-case physician import without an explicit separate
 bounded-slab reviewer implementation. They must be interpreted independently
