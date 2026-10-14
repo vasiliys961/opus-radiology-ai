@@ -166,7 +166,7 @@ export default function IchExpertErrorOverlay({source,mask,expert,referenceLabel
        пропущено {subtypeCounts[1]} вокс. на этом k-срезе.
        Другие положительные воксели модели не считаются FP этого типа.</p>}
    {reviewLayer!=="subtype"&&counts&&<p role="status">На текущем срезе: TP {counts[0]}, FP {counts[1]},
-     FN {counts[2]} вокселей. Это оценка совпадения меток, не диагностическая чувствительность.</p>}}
+     FN {counts[2]} вокселей. Это оценка совпадения меток, не диагностическая чувствительность.</p>}
    {loading&&<p role="status">Чтение и сравнение исходного среза…</p>}
    {error&&<p role="alert">{error}</p>}
    <canvas ref={canvas} width={dimensions[0]} height={dimensions[1]}
