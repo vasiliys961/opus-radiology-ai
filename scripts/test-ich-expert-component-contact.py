@@ -55,6 +55,27 @@ class ComponentContactTest(unittest.TestCase):
         self.assertEqual(out["largestPredictedFragments"][0]["reviewSliceIndexK"], 1)
         self.assertEqual(out["largestPredictedFragments"][0]["reviewSliceUnmatchedVoxels"], 3)
 
+    def test_size_strata_include_small_fully_missed_and_larger_partially_covered(self):
+        expert = np.zeros((24, 24, 12), dtype=bool)
+        pred = np.zeros_like(expert)
+        expert[1, 1, 1] = True  # 0.002 mL fully missed.
+        expert[8:18, 8:18, 1:11] = True  # 2 mL component.
+        pred[8:13, 8:18, 1:11] = True  # 1 mL overlap; 1 mL missed.
+        out = module.component_overlap_evidence(pred, expert, .002, {
+            "truePositiveVoxels": 500, "falsePositiveVoxels": 0,
+            "falseNegativeVoxels": 501
+        })
+        low, middle, high = out["expertFragmentVolumeStrata"]
+        self.assertEqual(low["expertFragments"], 1)
+        self.assertEqual(low["withZeroOverlap"], 1)
+        self.assertEqual(low["missedVoxels"], 1)
+        self.assertEqual(middle["expertFragments"], 0)
+        self.assertEqual(high["expertFragments"], 1)
+        self.assertEqual(high["withAnyOverlap"], 1)
+        self.assertEqual(high["missedVoxels"], 500)
+        self.assertEqual(sum(x["missedVoxels"] for x in (low, middle, high)), 501)
+        self.assertIsNone(out["clinicalLesionSensitivity"])
+
     def test_empty_masks_are_not_perfect_detection(self):
         empty = np.zeros((12, 12, 6), dtype=bool)
         out = module.component_overlap_evidence(empty, empty, .001, {
