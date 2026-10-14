@@ -193,5 +193,44 @@ class NativeCpuPilotContracts(unittest.TestCase):
                 pilot.run(cfg)
 
 
+    def test_upstream_failure_classification_never_exposes_identifiers_or_paths(self):
+        sensitive=(b'Traceback (most recent call last):\n'
+                   b' File "/private/sah_rhuh_002/person_138/segment_ich.py", line 111\n'
+                   b'ModuleNotFoundError: No module named ' + b"'einops'")
+        diagnostic=pilot.classify_upstream_failure(sensitive,1)
+        self.assertIn("category=missing_python_module; module=einops",diagnostic)
+        for forbidden in ("sah_rhuh", "/private/", "person_138", "segment_ich.py"):
+            self.assertNotIn(forbidden,diagnostic)
+
+    def test_known_upstream_cpu_failures_produce_actionable_anonymous_categories(self):
+        examples={
+            b"RuntimeError: Torch not compiled with CUDA enabled":"upstream_requires_cuda",
+            b"RuntimeError: Weights only load failed.":"upstream_pytorch_checkpoint_loader",
+            b"segment_ich.py: error: unrecognized arguments: --slice-axis 2":"incompatible_upstream_cli",
+            b"RuntimeError: size mismatch for model.encoder.weight in state_dict":"checkpoint_architecture_mismatch",
+            b"ValueError: patient_039 /secret/path":"upstream_valueerror",
+            b"an unrecognized exception /secret/path":"unclassified_vendor_failure",
+        }
+        for raw,category in examples.items():
+            with self.subTest(category=category):
+                result=pilot.classify_upstream_failure(raw,1)
+                self.assertIn("category="+category,result)
+                self.assertNotIn("/secret/",result)
+                self.assertIn("diagnosticSha256Prefix=",result)
+
+    def test_real_child_process_exit_diagnostic_is_private(self):
+        import sys
+        with tempfile.TemporaryDirectory() as td:
+            with self.assertRaisesRegex(RuntimeError,"missing_python_module") as caught:
+                pilot.invoke_verified_upstream(
+                    [sys.executable,"-c",
+                     "import sys; print('PHI 123 secret/identifier',file=sys.stderr); "
+                     "raise ModuleNotFoundError(\"No module named 'fictional_dependency'\")"],
+                    Path(td),120)
+            self.assertNotIn("secret/identifier",str(caught.exception))
+            self.assertIn("module=fictional_dependency",str(caught.exception))
+
+
+
 if __name__=="__main__":
     unittest.main()
