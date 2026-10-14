@@ -31,6 +31,14 @@ function document(){
   expertFragmentsWithAnyVoxelOverlap:2,expertFragmentsWithZeroOverlap:0,
   predictedFragmentsWithZeroOverlap:1,expertFragmentsContactingMultiplePredictions:0,
   predictedFragmentsContactingMultipleExpertFragments:1,
+  expertFragmentVolumeStrata:[
+   {minVolumeMl:0,maxVolumeMl:.1,expertFragments:2,withAnyOverlap:2,withZeroOverlap:0,
+    expertVoxels:16,overlapVoxels:2,missedVoxels:14,missedVolumeMl:.028},
+   {minVolumeMl:.1,maxVolumeMl:1,expertFragments:0,withAnyOverlap:0,withZeroOverlap:0,
+    expertVoxels:0,overlapVoxels:0,missedVoxels:0,missedVolumeMl:0},
+   {minVolumeMl:1,maxVolumeMl:null,expertFragments:0,withAnyOverlap:0,withZeroOverlap:0,
+    expertVoxels:0,overlapVoxels:0,missedVoxels:0,missedVolumeMl:0}
+  ],
   largestExpertFragments:[
    frag(0,8,[1,1,1],[2,2,2],1,[0]),
    frag(1,8,[6,1,1],[7,2,2],1,[0])
@@ -85,4 +93,31 @@ test("refuses wrong model/ref SHA, false lesion claims, altered 3D voxel counts"
  ];
  for(const bad of edits)
   assert.throws(()=>parseIchComponentEvidence(JSON.stringify(bad),comparison,model));
+});
+
+test("rejects manipulated small-fragment statistics and retains historic imports",()=>{
+ const base=document();
+ const changed=structuredClone(base);
+ changed.componentEvidence.expertFragmentVolumeStrata[0].missedVoxels=13;
+ assert.throws(()=>parseIchComponentEvidence(JSON.stringify(changed),comparison,model),
+   /Стратификация|Объёмы/);
+ const shifted=structuredClone(base);
+ shifted.componentEvidence.expertFragmentVolumeStrata[0].expertFragments=1;
+ shifted.componentEvidence.expertFragmentVolumeStrata[1].expertFragments=1;
+ shifted.componentEvidence.expertFragmentVolumeStrata[0].withAnyOverlap=1;
+ shifted.componentEvidence.expertFragmentVolumeStrata[1].withAnyOverlap=1;
+ shifted.componentEvidence.expertFragmentVolumeStrata[0].expertVoxels=8;
+ shifted.componentEvidence.expertFragmentVolumeStrata[1].expertVoxels=8;
+ shifted.componentEvidence.expertFragmentVolumeStrata[0].overlapVoxels=1;
+ shifted.componentEvidence.expertFragmentVolumeStrata[1].overlapVoxels=1;
+ shifted.componentEvidence.expertFragmentVolumeStrata[0].missedVoxels=7;
+ shifted.componentEvidence.expertFragmentVolumeStrata[1].missedVoxels=7;
+ shifted.componentEvidence.expertFragmentVolumeStrata[0].missedVolumeMl=.014;
+ shifted.componentEvidence.expertFragmentVolumeStrata[1].missedVolumeMl=.014;
+ assert.throws(()=>parseIchComponentEvidence(JSON.stringify(shifted),comparison,model),
+   /Группы объёмов/);
+ const historic=document();
+ delete (historic.componentEvidence as {expertFragmentVolumeStrata?:unknown}).expertFragmentVolumeStrata;
+ assert.equal(parseIchComponentEvidence(JSON.stringify(historic),comparison,model)
+   .componentEvidence.expertFragmentsTotal,2);
 });
