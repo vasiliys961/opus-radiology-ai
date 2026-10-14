@@ -17,7 +17,7 @@ export function buildSmallMissLocalReview(
   const candidates=source.componentEvidence.submilliliterReviewCandidates;
   if(!candidates||source.clinicalValidation!==false)
     throw Error("Нет проверенного источника экспертных пропусков.");
-  if(!/^\\d{4}-\\d{2}-\\d{2}T/.test(createdAt)||
+  if(!/^\d{4}-\d{2}-\d{2}T/.test(createdAt)||
      !Number.isFinite(Date.parse(createdAt)))
     throw Error("Время локальной записи некорректно.");
   const allowed=new Set(candidates.map(f=>f.componentIndex));
