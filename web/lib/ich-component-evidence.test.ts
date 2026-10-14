@@ -50,6 +50,24 @@ test("accepts real-compatible source-bound 3D component contacts",()=>{
  assert.equal(v.componentEvidence.predictedFragmentsContactingMultipleExpertFragments,1);
  assert.equal(v.clinicalValidation,false);
 });
+test("accepts and checks peak-error CT slice coordinates",()=>{
+ const data=document();
+ const fragment=data.componentEvidence.largestExpertFragments[0] as ReturnType<typeof frag> & {
+   unmatchedVoxels?:number;reviewSliceIndexK?:number;reviewSliceUnmatchedVoxels?:number
+ };
+ fragment.unmatchedVoxels=7;
+ fragment.reviewSliceIndexK=2;
+ fragment.reviewSliceUnmatchedVoxels=4;
+ assert.equal(parseIchComponentEvidence(JSON.stringify(data),comparison,model)
+   .componentEvidence.largestExpertFragments[0].reviewSliceIndexK,2);
+ fragment.reviewSliceIndexK=5;
+ assert.throws(()=>parseIchComponentEvidence(JSON.stringify(data),comparison,model),
+   /Срез локализации/);
+ fragment.reviewSliceIndexK=2;
+ fragment.unmatchedVoxels=6;
+ assert.throws(()=>parseIchComponentEvidence(JSON.stringify(data),comparison,model),
+   /Срез локализации/);
+});
 test("refuses wrong model/ref SHA, false lesion claims, altered 3D voxel counts",()=>{
  const base=document();
  const edits=[
