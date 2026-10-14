@@ -39,6 +39,16 @@ class SamihsPublicContract(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "no_mac_m1"):
             runner.execute(args)
 
+    def test_foreign_checkpoint_refused_before_model_directory_or_torch(self):
+        args = types.SimpleNamespace(
+            public_research_authorization="PUBLIC-ICH-RESEARCH-ONLY",
+            device="cuda:0", slice_axis=2, batch_size=1, threshold=0.5,
+            checkpoint_sha256="c" * 64,
+        )
+        with self.assertRaisesRegex(ValueError,"noncanonical_samihs_checkpoint"):
+            runner.execute(args)
+        self.assertEqual(len(runner.OFFICIAL_SAMIHS_CHECKPOINT_SHA256),64)
+
     def test_bounds_fail_before_loading_model_or_source(self):
         args = types.SimpleNamespace(
             public_research_authorization="PUBLIC-ICH-RESEARCH-ONLY",
