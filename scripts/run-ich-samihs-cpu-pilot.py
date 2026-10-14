@@ -67,9 +67,11 @@ def admission(args) -> tuple[Path, Path, Path]:
     if not (source.name.endswith((".nii", ".nii.gz"))
             and reference.name.endswith((".nii", ".nii.gz"))):
         raise ValueError("original_nifti_volume_and_expert_mask_required")
-    if source == reference or sha256_file(source) != args.source_sha256 \
-            or sha256_file(reference) != args.reference_sha256 \
-            or not all(SHA.fullmatch(x) for x in (args.source_sha256, args.reference_sha256)):
+    if (source == reference
+            or not all(isinstance(x, str) and SHA.fullmatch(x)
+                       for x in (args.source_sha256, args.reference_sha256))
+            or sha256_file(source) != args.source_sha256
+            or sha256_file(reference) != args.reference_sha256):
         raise ValueError("original_source_and_expert_sha256_required")
     out = Path(args.output_dir)
     if out.exists() or out.is_symlink() or not out.parent.is_dir() or out.parent.is_symlink():
@@ -135,6 +137,7 @@ def source_aligned_slab(source: Path, reference: Path, axis: int, start: int,
 
     def slab(array, original):
         header = original.header.copy()
+        header.set_data_dtype(array.dtype)
         nii = nib.Nifti1Image(np.ascontiguousarray(array), affine, header=header)
         nii.set_sform(affine, code=int(original.header["sform_code"]))
         qcode = int(original.header["qform_code"])
@@ -154,7 +157,7 @@ def source_aligned_slab(source: Path, reference: Path, axis: int, start: int,
         "sliceAxis": axis,
         "selectedSlices": count,
         "expertPositiveVoxelsInSlab": int(np.count_nonzero(expert_binary)),
-        "originalExpertIsBinary": bool(np.all((raw_labels == 0) | (raw_labels == 1))),
+        "selectedSlabExpertIsBinary": bool(np.all((raw_labels == 0) | (raw_labels == 1))),
         "voxelVolumeMl": abs(float(np.linalg.det(affine[:3, :3]))) / 1000,
     }
 
@@ -172,6 +175,14 @@ def run(args):
     expert_path = output / "expert-native-binary-slab.nii.gz"
     nib.save(slab_ct, str(ct_path))
     nib.save(slab_expert, str(expert_path))
+    # Native-value promise must survive NIfTI serialization, including slope.
+    for expected, saved in ((slab_ct, ct_path), (slab_expert, expert_path)):
+        loaded = nib.load(str(saved))
+        if (loaded.shape != expected.shape
+                or not np.allclose(loaded.affine, expected.affine, rtol=0, atol=1e-4)
+                or not np.array_equal(np.asarray(loaded.dataobj),
+                                      np.asarray(expected.dataobj))):
+            raise ValueError("serialized_native_ct_slab_is_not_lossless")
     result = {
         "schema": SCHEMA,
         "status": "prepared_real_public_slab_no_model_execution",
