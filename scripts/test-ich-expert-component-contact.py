@@ -38,6 +38,15 @@ class ComponentContactTest(unittest.TestCase):
         self.assertEqual(out["clinicalLesionSensitivity"], None)
         self.assertFalse(out["hemorrhageSubtypesDetermined"])
         self.assertEqual(out["largestExpertFragments"][0]["volumeMl"], .016)
+        # Both expert fragments retain 7 unmatched voxels despite a one-voxel
+        # contact. A target picked by FN count lands on k=2, not box midpoint.
+        for fragment in out["largestExpertFragments"]:
+            self.assertEqual(fragment["unmatchedVoxels"], 7)
+            self.assertEqual(fragment["reviewSliceIndexK"], 2)
+            self.assertEqual(fragment["reviewSliceUnmatchedVoxels"], 4)
+        self.assertEqual(out["largestPredictedFragments"][0]["unmatchedVoxels"], 3)
+        self.assertEqual(out["largestPredictedFragments"][0]["reviewSliceIndexK"], 1)
+        self.assertEqual(out["largestPredictedFragments"][0]["reviewSliceUnmatchedVoxels"], 3)
 
     def test_empty_masks_are_not_perfect_detection(self):
         empty = np.zeros((12, 12, 6), dtype=bool)

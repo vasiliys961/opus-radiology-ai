@@ -15,13 +15,17 @@ function FragmentList({heading,fragments,onGoToSlice}:{
   {!fragments.length?<p>Среди показанных крупных компонент таких областей нет.</p>:
    <table style={{width:"100%",fontSize:13,borderCollapse:"collapse"}}>
     <thead><tr><th>Компонента</th><th>Объём</th>
-      <th>Границы [i, j, k]</th><th>Перекрытие</th><th>Исходная КТ</th></tr></thead>
+      <th>Границы [i, j, k]</th><th>Не совпало</th><th>Перекрытие</th><th>Исходная КТ</th></tr></thead>
     <tbody>{fragments.slice(0,24).map(f=>{
-      const k=Math.floor((f.boundsVoxelMin[2]+f.boundsVoxelMax[2])/2);
+      const k=f.reviewSliceIndexK??Math.floor((f.boundsVoxelMin[2]+f.boundsVoxelMax[2])/2);
+      const missing=f.voxelCount-f.overlapVoxels;
       return <tr key={f.componentIndex}>
         <td>{f.componentIndex+1}</td>
         <td>{f.volumeMl.toFixed(3)} мл</td>
         <td>{f.boundsVoxelMin.join(", ")} — {f.boundsVoxelMax.join(", ")}</td>
+        <td><strong>{missing}</strong> вокс.
+          {f.reviewSliceUnmatchedVoxels!==undefined?
+            <small> · на выбранном k: {f.reviewSliceUnmatchedVoxels}</small>:null}</td>
         <td>{f.overlapVoxels} вокс.</td>
         <td><button type="button"
           aria-label={`Открыть исходный КТ-срез k ${k+1} для компоненты ${f.componentIndex+1}`}
@@ -45,8 +49,12 @@ export default function IchComponentEvidencePanel({comparison,model,onGoToSlice}
    }catch(e){setError(e instanceof Error?e.message:"3D-паспорт не принят.");}
  }
  const c=report?.componentEvidence;
- const missed=c?.largestExpertFragments.filter(x=>!x.hasAnyVoxelOverlap)??[];
- const extra=c?.largestPredictedFragments.filter(x=>!x.hasAnyVoxelOverlap)??[];
+ const missed=(c?.largestExpertFragments??[])
+   .filter(x=>x.voxelCount>x.overlapVoxels)
+   .sort((a,b)=>(b.voxelCount-b.overlapVoxels)-(a.voxelCount-a.overlapVoxels));
+ const extra=(c?.largestPredictedFragments??[])
+   .filter(x=>x.voxelCount>x.overlapVoxels)
+   .sort((a,b)=>(b.voxelCount-b.overlapVoxels)-(a.voxelCount-a.overlapVoxels));
  const ambiguous=c?.largestPredictedFragments.filter(x=>x.ambiguousMultiComponentContact)??[];
  return <section aria-label="Экспертная проверка 3D-компонент кровоизлияния"
   style={{border:"1px solid #9ab6a8",borderRadius:8,padding:12,margin:"14px 0"}}>
@@ -71,13 +79,16 @@ export default function IchComponentEvidencePanel({comparison,model,onGoToSlice}
       <strong> {c.predictedFragmentsContactingMultipleExpertFragments}</strong>.
       Один экспертный фрагмент касается нескольких предсказанных:
       <strong> {c.expertFragmentsContactingMultiplePredictions}</strong>.</p>
-    <p><small>Все фрагменты учтены в суммарных числах, но ниже показаны
-      только {c.reportedLargestPerMaskLimit} наиболее объёмных на маску.
-      Переход открывает средний индекс k внутри границ фрагмента, а не
-      анатомически подтверждённую координату кровоизлияния.</small></p>
-    <FragmentList heading="Экспертные фрагменты без пересечения"
+    <p><small>В суммах учтены все фрагменты; таблицы содержат только
+      {c.reportedLargestPerMaskLimit} самых крупных на маску.
+      Показаны и частичные ошибки: даже один воксель перекрытия не скрывает
+      оставшуюся непокрытую область. В новых отчётах кнопка ведёт к k-срезу
+      с максимальным количеством несовпадающих вокселей данного фрагмента,
+      в старых — к середине его границ. Это нативный индекс NIfTI, не
+      клинически подтверждённая координата.</small></p>
+    <FragmentList heading="Экспертные фрагменты с пропущенными вокселями (FN)"
       fragments={missed} onGoToSlice={onGoToSlice}/>
-    <FragmentList heading="Кандидаты SAMIHS без экспертного пересечения"
+    <FragmentList heading="Кандидаты SAMIHS с лишними вокселями (FP)"
       fragments={extra} onGoToSlice={onGoToSlice}/>
     <FragmentList heading="Неоднозначные объединения предсказанной маски"
       fragments={ambiguous} onGoToSlice={onGoToSlice}/>
