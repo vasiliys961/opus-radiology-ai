@@ -10,6 +10,11 @@ export type IchMaskFragment={
  componentOverlapFraction:number;hasAnyVoxelOverlap:boolean;
  ambiguousMultiComponentContact:boolean;
 };
+export type IchExpertFragmentVolumeStratum={
+ minVolumeMl:number;maxVolumeMl:number|null;
+ expertFragments:number;withAnyOverlap:number;withZeroOverlap:number;
+ expertVoxels:number;overlapVoxels:number;missedVoxels:number;missedVolumeMl:number;
+};
 export type IchComponentEvidence={
  schema:"opus-ich-expert-component-contact/v1";
  status:"single_authorized_mask_pair_component_overlap_not_lesion_detection_validation";
@@ -21,6 +26,7 @@ export type IchComponentEvidence={
    connectivity:"6_neighbor_index_space";allComponentsCounted:true;
    reportedLargestPerMaskLimit:128;
    expertFragmentsTotal:number;predictedFragmentsTotal:number;
+   expertFragmentVolumeStrata?:IchExpertFragmentVolumeStratum[];
    expertFragmentsWithAnyVoxelOverlap:number;expertFragmentsWithZeroOverlap:number;
    predictedFragmentsWithZeroOverlap:number;
    expertFragmentsContactingMultiplePredictions:number;
@@ -128,9 +134,57 @@ export function parseIchComponentEvidence(
   expertTotal=tp+comparison.metrics.falseNegativeVoxels;
  const dimensions=model.source.geometry.dimensions;
  const voxelMl=model.source.geometry.voxelVolumeMl;
+ // New passports may group *all* expert fragments by physical volume,
+ // including the fragments outside the largest 128 shown by the UI.
+ if(c.expertFragmentVolumeStrata!==undefined){
+   const strata=c.expertFragmentVolumeStrata;
+   const bands:[[number,number|null],[number,number|null],[number,number|null]]=
+      [[0,0.1],[0.1,1],[1,null]];
+   if(!Array.isArray(strata)||strata.length!==3)
+     throw Error("Неверные интервалы объёмов экспертных фрагментов.");
+   let fragments=0,overlapped=0,uncovered=0,voxels=0,coveredVoxels=0,missedVoxels=0;
+   for(let i=0;i<3;i++){
+     const row=obj(strata[i]);
+     const [lo,hi]=bands[i];
+     const n=row.expertFragments,yes=row.withAnyOverlap,no=row.withZeroOverlap;
+     const total=row.expertVoxels,tpRow=row.overlapVoxels,fnRow=row.missedVoxels;
+     if(row.minVolumeMl!==lo||row.maxVolumeMl!==hi||
+        !int(n)||!int(yes)||!int(no)||yes+no!==n||
+        !int(total)||!int(tpRow)||!int(fnRow)||tpRow+fnRow!==total||
+        (!n&&total!==0)||(n&&total<n)||
+        !num(row.missedVolumeMl)||
+        Math.abs(row.missedVolumeMl-fnRow*voxelMl)>0.0000011)
+       throw Error("Объёмы и пропуски экспертных фрагментов противоречивы.");
+     fragments+=n;overlapped+=yes;uncovered+=no;
+     voxels+=total;coveredVoxels+=tpRow;missedVoxels+=fnRow;
+   }
+   if(fragments!==ep||overlapped!==overlap||uncovered!==miss||
+      voxels!==expertTotal||coveredVoxels!==tp||
+      missedVoxels!==comparison.metrics.falseNegativeVoxels)
+     throw Error("Стратификация экспертных фрагментов не совпадает с 3D Dice.");
+ }
  const experts=validateFragments(c.largestExpertFragments,ep,pr,dimensions,voxelMl,expertTotal,"эксперта");
  const predicts=validateFragments(c.largestPredictedFragments,pr,ep,dimensions,voxelMl,predTotal,"SAMIHS");
  if(ep<=128&&pr<=128){
+   if(c.expertFragmentVolumeStrata!==undefined){
+     const validatedStrata=c.expertFragmentVolumeStrata as IchExpertFragmentVolumeStratum[];
+     const computed=[{count:0,yes:0,no:0,voxels:0,covered:0,missed:0},
+                     {count:0,yes:0,no:0,voxels:0,covered:0,missed:0},
+                     {count:0,yes:0,no:0,voxels:0,covered:0,missed:0}];
+     for(const f of experts){
+       const i=f.voxelCount*voxelMl<0.1?0:f.voxelCount*voxelMl<1?1:2;
+       const x=computed[i];
+       x.count++;x.yes+=Number(f.hasAnyVoxelOverlap);x.no+=Number(!f.hasAnyVoxelOverlap);
+       x.voxels+=f.voxelCount;x.covered+=f.overlapVoxels;
+       x.missed+=f.voxelCount-f.overlapVoxels;
+     }
+     if(computed.some((x,i)=>{
+       const y=validatedStrata[i];
+       return x.count!==y.expertFragments||x.yes!==y.withAnyOverlap||
+         x.no!==y.withZeroOverlap||x.voxels!==y.expertVoxels||
+         x.covered!==y.overlapVoxels||x.missed!==y.missedVoxels;
+     }))throw Error("Группы объёмов расходятся с исходными экспертными компонентами.");
+   }
    const es=new Map(experts.map(x=>[x.componentIndex,x]));
    const ps=new Map(predicts.map(x=>[x.componentIndex,x]));
    const eOverlap=experts.reduce((sum,x)=>sum+x.overlapVoxels,0);

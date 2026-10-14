@@ -79,6 +79,26 @@ export default function IchComponentEvidencePanel({comparison,model,onGoToSlice}
       <strong> {c.predictedFragmentsContactingMultipleExpertFragments}</strong>.
       Один экспертный фрагмент касается нескольких предсказанных:
       <strong> {c.expertFragmentsContactingMultiplePredictions}</strong>.</p>
+    {c.expertFragmentVolumeStrata&&<div style={{overflowX:"auto",margin:"12px 0"}}>
+      <h5>Пропуски по физическому объёму экспертных фрагментов</h5>
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+        <thead><tr><th>Размер фрагмента</th><th>Всего</th>
+          <th>Без пересечения</th><th>Пропущенный объём</th>
+          <th>Непокрытые воксели</th></tr></thead>
+        <tbody>{c.expertFragmentVolumeStrata.map((b,i)=><tr key={i}>
+          <td>{b.maxVolumeMl===null?"≥ 1 мл":
+            i===0?"менее 0,1 мл":"0,1–<1 мл"}</td>
+          <td>{b.expertFragments}</td>
+          <td><strong>{b.withZeroOverlap}</strong></td>
+          <td>{b.missedVolumeMl.toFixed(3)} мл</td>
+          <td>{b.missedVoxels}</td>
+        </tr>)}</tbody>
+      </table>
+      <p><small>Учтены все компоненты экспертной бинарной разметки, включая
+        не показанные в таблицах. Частично непокрытые объёмы включены.
+        Это не чувствительность к отдельным очагам: один воксель совпадения
+        классифицирует фрагмент как имеющий пересечение.</small></p>
+    </div>}
     <p><small>В суммах учтены все фрагменты; таблицы содержат только
       {c.reportedLargestPerMaskLimit} самых крупных на маску.
       Показаны и частичные ошибки: даже один воксель перекрытия не скрывает

@@ -114,11 +114,36 @@ def component_overlap_evidence(prediction, reference, voxel_ml, voxel_metrics):
         e_all - tp != voxel_metrics["falseNegativeVoxels"]):
         raise ValueError("components_disagree_with_verified_voxel_metrics")
 
+    # An expert-mask connected fragment is NOT a clinician-confirmed lesion.
+    # Preserve counts for every fragment (not just the largest 128 displayed)
+    # so global Dice cannot conceal small fully missed expert structures.
+    volume_bins = ((0.0, 0.1), (0.1, 1.0), (1.0, None))
+    expert_strata = []
+    for low_ml, high_ml in volume_bins:
+        members = [i for i in range(1, nexpert + 1)
+                   if int(e_counts[i]) * voxel_ml >= low_ml
+                   and (high_ml is None or int(e_counts[i]) * voxel_ml < high_ml)]
+        voxels = sum(int(e_counts[i]) for i in members)
+        covered = sum(sum(n for _, n in contact_e[i]) for i in members)
+        missed = voxels - covered
+        expert_strata.append({
+            "minVolumeMl": low_ml,
+            "maxVolumeMl": high_ml,
+            "expertFragments": len(members),
+            "withAnyOverlap": sum(bool(contact_e[i]) for i in members),
+            "withZeroOverlap": sum(not contact_e[i] for i in members),
+            "expertVoxels": voxels,
+            "overlapVoxels": covered,
+            "missedVoxels": missed,
+            "missedVolumeMl": round(missed * voxel_ml, 6),
+        })
+
     result = {
         "connectivity": "6_neighbor_index_space",
         "allComponentsCounted": True,
         "reportedLargestPerMaskLimit": MAX_REPORTED_COMPONENTS,
         "expertFragmentsTotal": nexpert,
+        "expertFragmentVolumeStrata": expert_strata,
         "predictedFragmentsTotal": npred,
         "expertFragmentsWithAnyVoxelOverlap": sum(bool(x) for x in contact_e[1:]),
         "expertFragmentsWithZeroOverlap": sum(not x for x in contact_e[1:]),
