@@ -187,6 +187,15 @@ def classify_upstream_failure(raw: bytes, returncode: int) -> str:
         category = "incompatible_upstream_cli"
     elif "Weights only load failed" in message or "weights_only" in message:
         category = "upstream_pytorch_checkpoint_loader"
+    elif "verified_samihs_checkpoint_was_never_loaded" in message:
+        category = "official_checkpoint_not_loaded_by_vendor"
+    elif "Attempting to deserialize object on a CUDA device" in message:
+        category = "checkpoint_gpu_tensors_require_cpu_mapping"
+    elif "Error(s) in loading state_dict" in message:
+        category = "checkpoint_architecture_mismatch"
+    elif ("PytorchStreamReader failed" in message or
+          "failed finding central directory" in message):
+        category = "unreadable_checkpoint_container"
     elif ("not compiled with CUDA" in message or "Torch not compiled with CUDA" in message
           or "CUDA is not available" in message or "Found no NVIDIA driver" in message):
         category = "upstream_requires_cuda"

@@ -70,6 +70,14 @@ def execute_verified_vendor(model_dir: Path, wrapper_sha256: str,
         if is_original:
             approved_loads += 1
             kwargs["weights_only"] = False
+            # The official checkpoint may contain tensors originally saved
+            # from CUDA. On this explicitly CPU-only task, map ONLY this
+            # verified checkpoint to CPU, even if upstream omits map_location.
+            if args:
+                args = ("cpu", *args[1:])
+                kwargs.pop("map_location", None)
+            else:
+                kwargs["map_location"] = "cpu"
         return original_load(file, *args, **kwargs)
 
     import os as _os

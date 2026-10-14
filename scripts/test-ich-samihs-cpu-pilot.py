@@ -310,7 +310,9 @@ class NativeCpuPilotContracts(unittest.TestCase):
                 self.assertEqual(n,1)
                 self.assertEqual(len(calls),2)
                 self.assertFalse(calls[0][1]["weights_only"])
+                self.assertEqual(calls[0][1]["map_location"],"cpu")
                 self.assertTrue(calls[1][1]["weights_only"])
+                self.assertNotIn("map_location",calls[1][1])
                 self.assertIs(fake_torch.load,fake_load)
                 checkpoint.write_bytes(b"corrupted")
                 with self.assertRaisesRegex(ValueError,"sha256_mismatch"):
@@ -329,6 +331,28 @@ class NativeCpuPilotContracts(unittest.TestCase):
               patch.dict(os.environ,{"OPUS_AUTHORIZED_SAMIHS_BOOTSTRAP":""},clear=True)):
             with self.assertRaisesRegex(ValueError,"authorized_cpu"):
                 bootstrap.execute_verified_vendor(Path(td),"0"*64,["--device","cpu"])
+
+
+
+    def test_synthetic_real_model_preflight_requires_explicit_operator_consent(self):
+        import os
+        from unittest.mock import patch
+        spec=importlib.util.spec_from_file_location(
+            "opus_private_cpu_smoke",
+            Path(__file__).with_name("preflight-samihs-real-cpu.py"))
+        preflight=importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(preflight)
+        with (tempfile.TemporaryDirectory() as td,
+              patch.dict(os.environ,{"ALLOW_UPSTREAM_PICKLE":"false"},clear=True)):
+            with self.assertRaisesRegex(ValueError,"explicit_authorized_bounded"):
+                preflight.run_smoke(Path(td),"0"*64,420)
+
+    def test_cuda_serialized_checkpoint_failure_is_classified_without_paths(self):
+        msg=(b'RuntimeError: Attempting to deserialize object on a CUDA device '
+             b'but torch.cuda.is_available() is False /private/case009')
+        result=pilot.classify_upstream_failure(msg,1)
+        self.assertIn("category=checkpoint_gpu_tensors_require_cpu_mapping",result)
+        self.assertNotIn("case009",result)
 
 
 if __name__=="__main__":
