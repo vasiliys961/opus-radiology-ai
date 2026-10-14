@@ -65,9 +65,9 @@ def component_overlap_evidence(prediction, reference, voxel_ml, voxel_metrics):
             count = int(count)
             contact_e[expert_id].append((model_id - 1, count))
             contact_p[model_id].append((expert_id - 1, count))
-    del p_labels, e_labels, overlapping
+    del overlapping
 
-    def rows(counts, boxes, contacts, kind):
+    def rows(counts, boxes, contacts, labeled_mask, other_mask):
         ordered = sorted(range(1, len(counts)), key=lambda n: (-int(counts[n]), n))
         results = []
         for index in ordered[:MAX_REPORTED_COMPONENTS]:
@@ -77,6 +77,18 @@ def component_overlap_evidence(prediction, reference, voxel_ml, voxel_metrics):
             n = int(counts[index])
             linked = sorted(contacts[index], key=lambda a: (-a[1], a[0]))
             contact_voxels = sum(v for _, v in linked)
+            # Aim a clinician at the ACTUAL native-k slice with the greatest
+            # number of unmatched mask voxels, not the midpoint of a bounding
+            # box (which may contain no component pixels at all).
+            component = labeled_mask[box] == index
+            missing = component & ~other_mask[box]
+            per_k = np.count_nonzero(missing, axis=(0, 1))
+            if not np.any(per_k):
+                per_k = np.count_nonzero(component, axis=(0, 1))
+                worst_error = 0
+            else:
+                worst_error = int(np.max(per_k))
+            review_k = int(box[2].start + np.argmax(per_k))
             results.append({
                 "componentIndex": index - 1,
                 "voxelCount": n,
@@ -85,6 +97,9 @@ def component_overlap_evidence(prediction, reference, voxel_ml, voxel_metrics):
                 "boundsVoxelMax": [int(s.stop - 1) for s in box],
                 "otherMaskComponentIndices": [i for i, _ in linked],
                 "overlapVoxels": contact_voxels,
+                "unmatchedVoxels": n - contact_voxels,
+                "reviewSliceIndexK": review_k,
+                "reviewSliceUnmatchedVoxels": worst_error,
                 "componentOverlapFraction": contact_voxels / n,
                 "hasAnyVoxelOverlap": contact_voxels > 0,
                 "ambiguousMultiComponentContact": len(linked) > 1,
@@ -99,7 +114,7 @@ def component_overlap_evidence(prediction, reference, voxel_ml, voxel_metrics):
         e_all - tp != voxel_metrics["falseNegativeVoxels"]):
         raise ValueError("components_disagree_with_verified_voxel_metrics")
 
-    return {
+    result = {
         "connectivity": "6_neighbor_index_space",
         "allComponentsCounted": True,
         "reportedLargestPerMaskLimit": MAX_REPORTED_COMPONENTS,
@@ -110,12 +125,14 @@ def component_overlap_evidence(prediction, reference, voxel_ml, voxel_metrics):
         "predictedFragmentsWithZeroOverlap": sum(not x for x in contact_p[1:]),
         "expertFragmentsContactingMultiplePredictions": sum(len(x) > 1 for x in contact_e[1:]),
         "predictedFragmentsContactingMultipleExpertFragments": sum(len(x) > 1 for x in contact_p[1:]),
-        "largestExpertFragments": rows(e_counts, e_boxes, contact_e, "expert"),
-        "largestPredictedFragments": rows(p_counts, p_boxes, contact_p, "prediction"),
+        "largestExpertFragments": rows(e_counts, e_boxes, contact_e, e_labels, prediction),
+        "largestPredictedFragments": rows(p_counts, p_boxes, contact_p, p_labels, reference),
         "clinicalLesionSensitivity": None,
         "clinicalFalsePositivesPerScan": None,
         "hemorrhageSubtypesDetermined": False,
     }
+    del p_labels, e_labels
+    return result
 
 
 def run(args):
