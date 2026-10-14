@@ -1,9 +1,11 @@
 "use client";
 import {useEffect,useRef,useState} from "react";
 import {readNativeIchKSlice} from "../lib/ich-native-slice";
+import {automaticCtWindow,grayscaleCt} from "../lib/ich-ct-window";
 import type {IchResearchReport} from "../lib/ich-research";
 
 const WINDOWS={
+ auto:{center:0,width:1,label:"Авто · любой масштаб NIfTI"},
  brain:{center:40,width:80,label:"Мозговое (предполагаемые HU)"},
  subdural:{center:80,width:200,label:"Широкое"},
  bone:{center:400,width:1800,label:"Костное"},
@@ -22,7 +24,7 @@ export default function IchNativeOverlay({source,mask,report}:{
    Math.floor((largest.boundsVoxelMin[2]+largest.boundsVoxelMax[2])/2):
    Math.floor(dimensions[2]/2);
  const [slice,setSlice]=useState(initial);
- const [windowKey,setWindowKey]=useState<WindowKey>("brain");
+ const [windowKey,setWindowKey]=useState<WindowKey>("auto");
  const [showMask,setShowMask]=useState(true);
  const [error,setError]=useState("");
  const [reading,setReading]=useState(false);
@@ -41,10 +43,10 @@ export default function IchNativeOverlay({source,mask,report}:{
      const w=dimensions[0],h=dimensions[1];
      target!.width=w;target!.height=h;
      const rgba=ctx.createImageData(w,h);
-     const win=WINDOWS[windowKey],low=win.center-win.width/2;
+     const win=windowKey==="auto"?automaticCtWindow(ct.pixels as Float32Array):WINDOWS[windowKey];
      for(let i=0;i<w*h;i++){
        const value=(ct.pixels as Float32Array)[i];
-       const grey=Math.round(Math.max(0,Math.min(255,255*(value-low)/win.width)));
+       const grey=grayscaleCt(value,win);
        const lesion=showMask&&(seg.pixels as Uint8Array)[i]===1;
        const at=i*4;
        rgba.data[at]=lesion?Math.round(0.65*245+0.35*grey):grey;
@@ -84,6 +86,7 @@ export default function IchNativeOverlay({source,mask,report}:{
          <option value={key} key={key}>{item.label}</option>)}
      </select>
    </label>
+   <p><small>Автоокно использует контраст исходных пикселей данного среза, в том числе при нормализации; не восстанавливает HU.</small></p>
    <label><input type="checkbox" checked={showMask} onChange={e=>setShowMask(e.target.checked)}/>
      Отображать бинарную маску</label>
    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
