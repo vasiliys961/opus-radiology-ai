@@ -91,7 +91,7 @@ class TestIchMaskComparison(unittest.TestCase):
         e = np.zeros_like(p)
         p[2:5, 2:5, 2:5] = 1
         e[2:5, 2:5, 2:5] = 1
-        p[26, 26, 26] = 1
+        p[25:28, 25:28, 25:28] = 1
         with patch.object(module, "HD95_MAX_CROP_VOXELS", 100):
             sparse, problem = module.estimate_hd95_mm(p, e, np.diag([.7, .7, 2.5, 1]))
         with patch.object(module, "HD95_MAX_CROP_VOXELS", 100000):
