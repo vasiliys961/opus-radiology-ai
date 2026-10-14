@@ -232,5 +232,43 @@ class NativeCpuPilotContracts(unittest.TestCase):
 
 
 
+    def test_legacy_pickle_override_restricted_to_authorized_vendor_child(self):
+        from unittest.mock import patch
+        import subprocess
+        import os
+        with tempfile.TemporaryDirectory() as td:
+            with patch.object(pilot.subprocess,"run") as called:
+                called.return_value.returncode=0
+                with patch.dict(os.environ, {"TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD":"1"}):
+                    pilot.invoke_verified_upstream(
+                        ["python","official_vendor_wrapper.py"],Path(td),120,
+                        operator_authorized_legacy_pickle=False)
+                env=called.call_args.kwargs["env"]
+                self.assertNotIn("TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD",env)
+                self.assertNotIn("TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD",os.environ)
+                self.assertEqual(env["HF_HUB_OFFLINE"],"1")
+            with patch.object(pilot.subprocess,"run") as called:
+                called.return_value.returncode=0
+                pilot.invoke_verified_upstream(
+                    ["python","official_vendor_wrapper.py"],Path(td),120,
+                    operator_authorized_legacy_pickle=True)
+                self.assertEqual(
+                    called.call_args.kwargs["env"]["TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD"],"1")
+                self.assertNotIn("TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD",os.environ)
+
+    def test_system_force_restricted_checkpoint_loader_is_not_overridden(self):
+        from unittest.mock import patch
+        import os
+        with tempfile.TemporaryDirectory() as td:
+            with patch.dict(os.environ,{"TORCH_FORCE_WEIGHTS_ONLY_LOAD":"1"}):
+                with patch.object(pilot.subprocess,"run") as called:
+                    with self.assertRaisesRegex(ValueError,"system_forces_restricted"):
+                        pilot.invoke_verified_upstream(
+                            ["python","vendor.py"],Path(td),120,
+                            operator_authorized_legacy_pickle=True)
+                    called.assert_not_called()
+
+
+
 if __name__=="__main__":
     unittest.main()
