@@ -47,8 +47,8 @@ export default function IchComponentEvidencePanel({comparison,model,onGoToSlice}
    if(!report)return;
    let url:string|null=null;
    try{
-     const document=buildSmallMissLocalReview(report,smallReviews);
-     url=URL.createObjectURL(new Blob([JSON.stringify(document,null,2)],
+     const reviewData=buildSmallMissLocalReview(report,smallReviews);
+     url=URL.createObjectURL(new Blob([JSON.stringify(reviewData,null,2)],
        {type:"application/json"}));
      const a=document.createElement("a");
      a.href=url;a.download="opus-ich-small-miss-local-physician-review.json";
