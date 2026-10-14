@@ -29,6 +29,9 @@ export default function IchReferenceComparisonPanel({modelReport,source,mask}:{
 }){
  const [comparison,setComparison]=useState<IchReferenceComparison|null>(null);
  const [jumpTo,setJumpTo]=useState<{sliceIndex:number;requestId:number}|null>(null);
+ const [subtypeFocus,setSubtypeFocus]=useState<{
+  file:File;label:number;subtype:string;requestId:number;
+ }|null>(null);
  const [referenceVerified,setReferenceVerified]=useState(false);
  const [referenceFile,setReferenceFile]=useState<File|null>(null);
  const [busy,setBusy]=useState(false);
@@ -37,7 +40,8 @@ export default function IchReferenceComparisonPanel({modelReport,source,mask}:{
  useEffect(()=>()=>ctrl.current?.abort(),[]);
  function clear(){
    ctrl.current?.abort();ctrl.current=null;
-   setComparison(null);setReferenceVerified(false);setReferenceFile(null);setJumpTo(null);
+   setComparison(null);setReferenceVerified(false);setReferenceFile(null);
+   setJumpTo(null);setSubtypeFocus(null);
    setBusy(false);setError("");
  }
  async function open(file:File){
@@ -111,7 +115,7 @@ export default function IchReferenceComparisonPanel({modelReport,source,mask}:{
        {referenceFile&&<IchExpertErrorOverlay
          source={source} mask={mask} expert={referenceFile}
          referenceLabel={comparison.referenceLabel} modelReport={modelReport}
-         jumpTo={jumpTo}/>}
+         jumpTo={jumpTo} subtypeFocus={subtypeFocus}/>}
        <IchSliceEvidencePanel comparison={comparison} model={modelReport}
          onGoToSlice={sliceIndex=>setJumpTo(prev=>({
            sliceIndex,requestId:(prev?.requestId??0)+1,
@@ -121,9 +125,15 @@ export default function IchReferenceComparisonPanel({modelReport,source,mask}:{
            sliceIndex,requestId:(prev?.requestId??0)+1,
          }))}/>
        <IchExpertSubtypeCoveragePanel comparison={comparison} model={modelReport}
-         onGoToSlice={sliceIndex=>setJumpTo(prev=>({
-           sliceIndex,requestId:(prev?.requestId??0)+1,
-         }))}/>
+         onClearFocus={()=>setSubtypeFocus(null)}
+         onGoToSlice={(sliceIndex,verifiedExpert)=>{
+           setSubtypeFocus(verifiedExpert?{
+             ...verifiedExpert,requestId:(subtypeFocus?.requestId??0)+1
+           }:null);
+           setJumpTo(prev=>({
+             sliceIndex,requestId:(prev?.requestId??0)+1,
+           }));
+         }}/>
        <p><strong>Один исследовательский случай.</strong>
          Не доказано, что он не использовался при обучении модели.
          Не проверены независимость экспертной разметки,
