@@ -229,6 +229,15 @@ def main():
     for p in (ct, expert):
         if p.is_symlink() or not p.resolve().is_relative_to(root.resolve()):
             raise ValueError("untrusted_extracted_source_file")
+    # GitHub prints step environment values in public job logs. Mask the
+    # individual original CT/GT file paths *before* publishing step outputs.
+    # Do not emit untrusted workflow commands containing CR/LF or terminal
+    # controls from an archive filename.
+    for p in (ct.resolve(), expert.resolve()):
+        name = str(p)
+        if any(ord(char) < 32 or ord(char) == 127 for char in name):
+            raise ValueError("unsafe_original_archive_path")
+        print("::add-mask::" + name, flush=True)
     with open(args.github_output, "a", encoding="utf-8") as out:
         for key, val in (
                 ("ct", ct.resolve()), ("expert", expert.resolve()),
