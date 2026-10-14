@@ -255,6 +255,15 @@ def run(args):
             source, mask, expert, Path(args.original_expert_mask),
             Path(args.label_ontology_json),
             original_expert["perHemorrhageClassVoxels"], compare["metrics"])
+        coverage_hashes = subtype_coverage["evidenceHashes"]
+        if (coverage_hashes["sourceSha256"] != args.source_sha256 or
+                coverage_hashes["predictionSha256"] != hashes["predictionSha256"] or
+                coverage_hashes["expertMaskSha256"] != args.reference_sha256 or
+                coverage_hashes["originalExpertMaskSha256"] !=
+                    original_expert["originalExpertMaskSha256"] or
+                coverage_hashes["ontologySha256"] !=
+                    original_expert["originalOntologySha256"]):
+            raise ValueError("subtype_coverage_source_hash_chain_mismatch")
         subtype_file.write_text(
             json.dumps(subtype_coverage, ensure_ascii=False, indent=2), encoding="utf-8")
 
