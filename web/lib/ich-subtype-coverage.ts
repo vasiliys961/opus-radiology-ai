@@ -17,6 +17,7 @@ export type IchExpertSubtypeCoverage={
   sourceLabel:number;expertSubtype:"IPH"|"IVH"|"SAH"|"SDH"|"EDH";
   expertVoxels:number;expertVolumeMl:number;
   modelOverlappingExpertVoxels:number;modelMissedExpertVoxels:number;
+  modelOverlappingExpertVolumeMl?:number;modelMissedExpertVolumeMl?:number;
   peakMissedSliceIndexK?:number|null;peakMissedSliceVoxels?:number|null;
   voxelCoverageFraction:number|null;modelPredictedSubtype:false;
  }[];
@@ -82,6 +83,14 @@ export function parseIchExpertSubtypeCoverage(raw:string,
       c.modelOverlappingExpertVoxels+c.modelMissedExpertVoxels!==c.expertVoxels||
       !finite(c.expertVolumeMl)||
       Math.abs(c.expertVolumeMl-c.expertVoxels*model.source.geometry.voxelVolumeMl)>0.0000011||
+      (c.modelOverlappingExpertVolumeMl!==undefined&&(
+        !finite(c.modelOverlappingExpertVolumeMl)||
+        Math.abs(c.modelOverlappingExpertVolumeMl-
+          c.modelOverlappingExpertVoxels*model.source.geometry.voxelVolumeMl)>0.0000011))||
+      (c.modelMissedExpertVolumeMl!==undefined&&(
+        !finite(c.modelMissedExpertVolumeMl)||
+        Math.abs(c.modelMissedExpertVolumeMl-
+          c.modelMissedExpertVoxels*model.source.geometry.voxelVolumeMl)>0.0000011))||
       c.modelPredictedSubtype!==false)
      throw Error("Несогласованная исходная экспертная метка.");
    const fraction=c.expertVoxels>0?
