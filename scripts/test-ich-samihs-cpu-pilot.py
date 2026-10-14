@@ -253,8 +253,10 @@ class NativeCpuPilotContracts(unittest.TestCase):
                     ["python","official_vendor_wrapper.py"],Path(td),120,
                     operator_authorized_legacy_pickle=True)
                 self.assertEqual(
-                    called.call_args.kwargs["env"]["TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD"],"1")
-                self.assertNotIn("TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD",os.environ)
+                    called.call_args.kwargs["env"]["OPUS_AUTHORIZED_SAMIHS_BOOTSTRAP"],
+                    "authorized-v1")
+                self.assertNotIn("TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD",called.call_args.kwargs["env"])
+                self.assertNotIn("OPUS_AUTHORIZED_SAMIHS_BOOTSTRAP",os.environ)
 
     def test_system_force_restricted_checkpoint_loader_is_not_overridden(self):
         from unittest.mock import patch
@@ -268,6 +270,65 @@ class NativeCpuPilotContracts(unittest.TestCase):
                             operator_authorized_legacy_pickle=True)
                     called.assert_not_called()
 
+
+
+    def test_scoped_bootstrap_overrides_only_authentic_verified_checkpoint(self):
+        """The actual vendor may explicitly pass weights_only=True."""
+        import os
+        import sys
+        import types
+        from unittest.mock import patch
+        bootstrap_path=Path(__file__).with_name("samihs-verified-cpu-bootstrap.py")
+        spec=importlib.util.spec_from_file_location("samihs_bootstrap",bootstrap_path)
+        bootstrap=importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(bootstrap)
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td)
+            (root/"weights").mkdir()
+            checkpoint=root/"weights"/"SAMIHS_09170527_2_0.483.pth"
+            checkpoint.write_bytes(b"unit test bytes, not a real clinical model")
+            other=root/"weights"/"other.bin"
+            other.write_bytes(b"other model checkpoint")
+            wrapper=root/"segment_ich.py"
+            wrapper.write_text(
+                "import torch\\n"
+                "torch.load('weights/SAMIHS_09170527_2_0.483.pth', weights_only=True)\\n"
+                "torch.load('weights/other.bin', weights_only=True)\\n",
+                encoding="utf-8")
+            fake_torch=types.ModuleType("torch")
+            calls=[]
+            def fake_load(file,*args,**kwargs):
+                calls.append((str(file),dict(kwargs)))
+                return {}
+            fake_torch.load=fake_load
+            with (patch.dict(sys.modules,{"torch":fake_torch}),
+                  patch.dict(os.environ,{"OPUS_AUTHORIZED_SAMIHS_BOOTSTRAP":"authorized-v1",
+                                       "HF_HUB_OFFLINE":"1"},clear=True),
+                  patch.object(bootstrap,"SAMIHS_SHA256",bootstrap.sha256_file(checkpoint))):
+                n=bootstrap.execute_verified_vendor(
+                    root,bootstrap.sha256_file(wrapper),["--device","cpu"])
+                self.assertEqual(n,1)
+                self.assertEqual(len(calls),2)
+                self.assertFalse(calls[0][1]["weights_only"])
+                self.assertTrue(calls[1][1]["weights_only"])
+                self.assertIs(fake_torch.load,fake_load)
+                checkpoint.write_bytes(b"corrupted")
+                with self.assertRaisesRegex(ValueError,"sha256_mismatch"):
+                    bootstrap.execute_verified_vendor(
+                        root,bootstrap.sha256_file(wrapper),["--device","cpu"])
+                self.assertEqual(len(calls),2)
+
+    def test_legacy_bootstrap_refuses_absent_specific_authorization(self):
+        import os
+        from unittest.mock import patch
+        bootstrap_path=Path(__file__).with_name("samihs-verified-cpu-bootstrap.py")
+        spec=importlib.util.spec_from_file_location("samihs_bootstrap_guard",bootstrap_path)
+        bootstrap=importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(bootstrap)
+        with (tempfile.TemporaryDirectory() as td,
+              patch.dict(os.environ,{"OPUS_AUTHORIZED_SAMIHS_BOOTSTRAP":""},clear=True)):
+            with self.assertRaisesRegex(ValueError,"authorized_cpu"):
+                bootstrap.execute_verified_vendor(Path(td),"0"*64,["--device","cpu"])
 
 
 if __name__=="__main__":
