@@ -46,3 +46,7 @@ No patient CT may be placed in GitHub Actions, exported as CI artifacts, or pass
 5. Additional models for subtype classification (IPH/IVH/SAH/SDH/EDH) if justified with appropriate labeled data, licensing and accuracy.
 
 Lightweight development checks: `python scripts/test-samihs-ich-public.py` (preflight only). Not a model accuracy test.
+
+## Врачебный переход к реальному срезу компоненты (PATH-ICH-06)
+
+Для каждой сохраняемой компоненты SAMIHS теперь указываются `peakSliceIndexK` и `peakSliceComponentVoxels`: исходный индекс k, где находится максимальное количество вокселей *данного модельного* фрагмента. Это измерение готовой бинарной маски, а не дополнительная диагностика. Просмотрщик автоматически выбирает этот срез и показывает число положительных вокселей компоненты. Старые отчёты читаются без новых полей и используют среднюю плоскость bbox. Клиническая точность, патологический тип и DICOM SOP-привязка остаются неподтверждёнными.
