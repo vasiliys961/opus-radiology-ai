@@ -121,9 +121,17 @@ def summarize_prediction(source: Path, mask_path: Path, geometry: dict) -> dict:
             continue
         low = [int(x.start) for x in box]
         high = [int(x.stop - 1) for x in box]
+        # A box midpoint may contain zero positive pixels. Select the REAL
+        # native-k plane with most voxels of this predicted fragment.
+        component_pixels = cropped == idx + 1
+        per_k = np.count_nonzero(component_pixels, axis=(0, 1))
+        peak_k = int(box[2].start + np.argmax(per_k))
+        peak_count = int(np.max(per_k))
         components.append({
             "componentIndex": idx,
             "voxelCount": voxels,
+            "peakSliceIndexK": peak_k,
+            "peakSliceComponentVoxels": peak_count,
             "volumeMl": round(voxels * geometry["voxelVolumeMl"], 5),
             "boundsVoxelMin": low,
             "boundsVoxelMax": high,
