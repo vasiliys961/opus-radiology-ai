@@ -17,6 +17,7 @@ export type IchExpertSubtypeCoverage={
   sourceLabel:number;expertSubtype:"IPH"|"IVH"|"SAH"|"SDH"|"EDH";
   expertVoxels:number;expertVolumeMl:number;
   modelOverlappingExpertVoxels:number;modelMissedExpertVoxels:number;
+  peakMissedSliceIndexK?:number|null;peakMissedSliceVoxels?:number|null;
   voxelCoverageFraction:number|null;modelPredictedSubtype:false;
  }[];
  totalExpertVoxels:number;totalOverlappingExpertVoxels:number;
@@ -89,6 +90,20 @@ export function parseIchExpertSubtypeCoverage(raw:string,
      !finite(c.voxelCoverageFraction)||
      Math.abs(c.voxelCoverageFraction-fraction)>1e-9)
      throw Error("Некорректное воксельное покрытие класса.");
+   // Legacy reports without these optional coordinates remain readable.
+   // A verified native k target must refer to actual missed expert voxels.
+   const hasPeak=c.peakMissedSliceIndexK!==undefined||
+      c.peakMissedSliceVoxels!==undefined;
+   if(hasPeak){
+     if(c.modelMissedExpertVoxels===0){
+       if(c.peakMissedSliceIndexK!==null||c.peakMissedSliceVoxels!==null)
+         throw Error("Неверный срез при отсутствии пропусков.");
+     }else if(!integer(c.peakMissedSliceIndexK)||
+       c.peakMissedSliceIndexK>=model.source.geometry.dimensions[2]||
+       !integer(c.peakMissedSliceVoxels)||c.peakMissedSliceVoxels<1||
+       c.peakMissedSliceVoxels>c.modelMissedExpertVoxels)
+       throw Error("Неверный k-срез пропущенного экспертного типа.");
+   }
    previous=c.sourceLabel;seen.add(c.sourceLabel);
    all+=c.expertVoxels;overlap+=c.modelOverlappingExpertVoxels;
    missed+=c.modelMissedExpertVoxels;
