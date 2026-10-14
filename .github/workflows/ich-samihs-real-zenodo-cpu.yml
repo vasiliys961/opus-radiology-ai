@@ -90,6 +90,17 @@ jobs:
           values=[int(x) for x in re.findall(r"(?m)^Size = (\d+)\s*$",txt)]
           if not values or sum(values)>7*1024**3:
               raise SystemExit("Public dataset extraction exceeds 7 GiB safety budget")
+          # Only anonymous file-type totals: NEVER log original study/case IDs.
+          # RAR listings can contain volume or expert files under arbitrary
+          # directories, and some archives contain nested archives instead.
+          paths=re.findall(r"(?m)^Path = (.+)$",txt)
+          file_types={
+              "nifti":sum(x.lower().endswith((".nii",".nii.gz")) for x in paths),
+              "nested_archive":sum(x.lower().endswith((".rar",".zip",".7z",".tar",".tar.gz")) for x in paths),
+              "nrrd":sum(x.lower().endswith((".nrrd",".mha",".mhd")) for x in paths),
+              "other":sum(not x.lower().endswith((".nii",".nii.gz",".rar",".zip",".7z",".tar",".tar.gz",".nrrd",".mha",".mhd")) for x in paths),
+          }
+          print("Original Zenodo archive anonymous file-format counts: "+str(file_types))
           PY
           mkdir -p "$RUNNER_TEMP/zenodo-sah-unpacked"
           7z x -y -bso0 -bse0 -bb0 "-o$RUNNER_TEMP/zenodo-sah-unpacked" \
