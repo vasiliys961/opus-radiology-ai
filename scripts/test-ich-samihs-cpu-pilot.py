@@ -310,7 +310,9 @@ class NativeCpuPilotContracts(unittest.TestCase):
                 self.assertEqual(n,1)
                 self.assertEqual(len(calls),2)
                 self.assertFalse(calls[0][1]["weights_only"])
+                self.assertEqual(calls[0][1]["map_location"],"cpu")
                 self.assertTrue(calls[1][1]["weights_only"])
+                self.assertNotIn("map_location",calls[1][1])
                 self.assertIs(fake_torch.load,fake_load)
                 checkpoint.write_bytes(b"corrupted")
                 with self.assertRaisesRegex(ValueError,"sha256_mismatch"):
