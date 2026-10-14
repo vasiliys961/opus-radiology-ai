@@ -141,5 +141,24 @@ class NativeCpuPilotContracts(unittest.TestCase):
                 pilot.admission(cfg)
 
 
+    def test_original_float_binary_expert_mask_is_losslessly_projected(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td)
+            ct,ref=make_files(root)
+            original=nib.load(str(ref))
+            expert_float=np.asarray(original.dataobj,dtype=np.float32)
+            nii=nib.Nifti1Image(expert_float,original.affine)
+            nii.set_sform(original.affine,code=1)
+            nii.set_qform(original.affine,code=1)
+            nii.header.set_xyzt_units(xyz="mm")
+            nib.save(nii,str(ref))
+            result=pilot.run(args(root,ct,ref))
+            self.assertFalse(result["model"]["executed"])
+            self.assertEqual(result["source"]["expertPositiveVoxelsInSlab"],1)
+            generated=nib.load(str(root/"results"/"expert-native-binary-slab.nii.gz"))
+            self.assertEqual(int(np.asarray(generated.dataobj).sum()),1)
+            self.assertEqual(generated.header.get_data_dtype().kind,"u")
+
+
 if __name__=="__main__":
     unittest.main()
