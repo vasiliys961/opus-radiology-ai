@@ -240,6 +240,24 @@ def run(args):
             or slices["clinicalValidation"] is not False):
         raise ValueError("model_source_and_independent_evidence_chain_mismatch")
 
+    # Restore per-class expert information lost by binary union ONLY if the
+    # original source ontology and original expert NIfTI are already verified.
+    # This never assigns a hemorrhage subtype to a SAMIHS prediction.
+    subtype_coverage = None
+    subtype_file = out / "ich-original-expert-subtype-coverage.json"
+    if original_expert is not None:
+        import importlib.util
+        module_file = Path(__file__).with_name("ich-expert-subtype-coverage.py")
+        spec = importlib.util.spec_from_file_location("ich_subtype_coverage", module_file)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        subtype_coverage = mod.score_source_bound_case(
+            source, mask, expert, Path(args.original_expert_mask),
+            Path(args.label_ontology_json),
+            original_expert["perHemorrhageClassVoxels"], compare["metrics"])
+        subtype_file.write_text(
+            json.dumps(subtype_coverage, ensure_ascii=False, indent=2), encoding="utf-8")
+
     # This file, unlike incomplete intermediate files, means all executables ran.
     complete = {
         "schema": COMPLETE_SCHEMA,
@@ -256,6 +274,7 @@ def run(args):
             "originalExpertMaskSha256": args.reference_sha256,
             "sourceExpertMaskAuthenticityIndependentlyVerified": False,
         },
+        "expertSubtypeCoverage": subtype_coverage,
         "checkpointSha256": args.checkpoint_sha256,
         "wrapperSha256": args.wrapper_sha256,
         "modelExecutionSeconds": model["execution"]["seconds"],
@@ -280,6 +299,7 @@ def run(args):
             "componentContact": component_file.name,
             "sliceComparison": slice_comparison.name,
             "nativeSliceAudit": slice_file.name,
+            "originalExpertSubtypeCoverage": subtype_file.name if subtype_coverage is not None else None,
         },
         "clinicalValidation": False,
         "heldOutFromTrainingProven": False,
