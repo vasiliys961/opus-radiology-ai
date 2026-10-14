@@ -15,7 +15,7 @@ import math
 from pathlib import Path
 import sys
 
-MAX_COMPONENT_VOXELS = 30_000_000
+MAX_COMPONENT_VOXELS = 512 * 512 * 400  # Same full-volume admission as SAMIHS and expert evaluator.
 MAX_COMPONENTS = 4096
 MAX_OVERLAP_VOXELS = 1_000_000
 MAX_REPORTED_COMPONENTS = 128

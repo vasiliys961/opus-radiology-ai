@@ -22,6 +22,9 @@ import sys
 MAX_BYTES = 512 * 1024 * 1024
 MAX_VOXELS = 512 * 512 * 400
 HD95_MAX_CROP_VOXELS = 8_000_000
+HD95_MAX_UNION_VOXELS = 3_000_000
+HD95_MAX_SURFACE_POINTS = 250_000
+HD95_QUERY_BATCH = 8192
 SCHEMA = "opus-ich-public-expert-mask-comparison/v1"
 
 
@@ -124,23 +127,51 @@ def estimate_hd95_mm(predicted, expert, affine):
     cosines = axes / lengths[None, :]
     if np.max(np.abs(cosines.T @ cosines - np.eye(3))) > 1e-4:
         return None, "sheared_affine_hd95_not_supported"
+    # Bound nonzero-coordinate allocation before using np.where on large volumes.
+    if (int(np.count_nonzero(predicted)) + int(np.count_nonzero(expert))
+            > HD95_MAX_UNION_VOXELS):
+        return None, "hd95_positive_voxel_memory_limit_exceeded"
     where = np.array(np.where(predicted | expert))
     low = np.maximum(where.min(axis=1) - 2, 0)
     high = np.minimum(where.max(axis=1) + 3, predicted.shape)
     crop_shape = high - low
-    if int(np.prod(crop_shape)) > HD95_MAX_CROP_VOXELS:
-        return None, "hd95_roi_memory_limit_exceeded"
     slices = tuple(slice(int(a), int(b)) for a, b in zip(low, high))
     p = predicted[slices]
     e = expert[slices]
     structure = ndimage.generate_binary_structure(3, 1)
     p_surface = p & ~ndimage.binary_erosion(p, structure=structure, border_value=0)
     e_surface = e & ~ndimage.binary_erosion(e, structure=structure, border_value=0)
-    d_to_e = ndimage.distance_transform_edt(~e_surface, sampling=lengths)
-    e_distances = d_to_e[p_surface]
-    del d_to_e
-    d_to_p = ndimage.distance_transform_edt(~p_surface, sampling=lengths)
-    p_distances = d_to_p[e_surface]
+    if int(np.prod(crop_shape)) <= HD95_MAX_CROP_VOXELS:
+        # Exact EDT path for compact localized hemorrhage masks.
+        d_to_e = ndimage.distance_transform_edt(~e_surface, sampling=lengths)
+        e_distances = d_to_e[p_surface]
+        del d_to_e
+        d_to_p = ndimage.distance_transform_edt(~p_surface, sampling=lengths)
+        p_distances = d_to_p[e_surface]
+    else:
+        # Sparse, EXACT surface nearest-neighbour path. A remote false-positive
+        # voxel can make the bounding cuboid enormous although the actual
+        # hemorrhage surfaces are tiny. Never allocate two full-volume EDTs.
+        from scipy.spatial import cKDTree
+        np_count = int(np.count_nonzero(p_surface))
+        ne_count = int(np.count_nonzero(e_surface))
+        if max(np_count, ne_count) > HD95_MAX_SURFACE_POINTS:
+            return None, "hd95_surface_point_memory_limit_exceeded"
+        p_points = np.column_stack(np.nonzero(p_surface)).astype(np.float64)
+        e_points = np.column_stack(np.nonzero(e_surface)).astype(np.float64)
+        if not len(p_points) or not len(e_points):
+            return None, "empty_surface"
+        p_points *= lengths
+        e_points *= lengths
+        def distances(points, reference):
+            tree = cKDTree(reference)
+            result = np.empty(len(points), dtype=np.float64)
+            for start in range(0, len(points), HD95_QUERY_BATCH):
+                stop = min(start + HD95_QUERY_BATCH, len(points))
+                result[start:stop] = tree.query(points[start:stop], k=1, workers=1)[0]
+            return result
+        e_distances = distances(p_points, e_points)
+        p_distances = distances(e_points, p_points)
     if e_distances.size == 0 or p_distances.size == 0:
         return None, "empty_surface"
     return float(np.percentile(np.concatenate((e_distances, p_distances)), 95)), None

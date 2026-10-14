@@ -85,6 +85,34 @@ class TestIchMaskComparison(unittest.TestCase):
         self.assertIsNone(out["clinicalSensitivity"])
         self.assertIsNone(out["frocFalsePositivesPerScan"])
 
+    def test_sparse_hd95_matches_exact_edt_when_roi_spans_many_slices(self):
+        from unittest.mock import patch
+        p = np.zeros((30, 30, 30), dtype=bool)
+        e = np.zeros_like(p)
+        p[2:5, 2:5, 2:5] = 1
+        e[2:5, 2:5, 2:5] = 1
+        p[25:28, 25:28, 25:28] = 1
+        with patch.object(module, "HD95_MAX_CROP_VOXELS", 100):
+            sparse, problem = module.estimate_hd95_mm(p, e, np.diag([.7, .7, 2.5, 1]))
+        with patch.object(module, "HD95_MAX_CROP_VOXELS", 100000):
+            exact, exact_problem = module.estimate_hd95_mm(p, e, np.diag([.7, .7, 2.5, 1]))
+        self.assertIsNone(problem)
+        self.assertIsNone(exact_problem)
+        self.assertAlmostEqual(sparse, exact, places=6)
+        self.assertGreater(sparse, 0)
+
+    def test_sparse_hd95_explicit_memory_limit_is_not_fabricated_score(self):
+        from unittest.mock import patch
+        p = np.zeros((18, 18, 18), dtype=bool)
+        e = np.zeros_like(p)
+        p[1:3, 1:3, 1:3] = True
+        e[15:17, 15:17, 15:17] = True
+        with patch.object(module, "HD95_MAX_CROP_VOXELS", 10), \
+             patch.object(module, "HD95_MAX_SURFACE_POINTS", 1):
+            hd, reason = module.estimate_hd95_mm(p, e, np.eye(4))
+        self.assertIsNone(hd)
+        self.assertEqual(reason, "hd95_surface_point_memory_limit_exceeded")
+
     def test_empty_masks_are_not_perfect_diagnostic_agreement(self):
         empty = np.zeros((8,8,8), dtype=bool)
         out = module.segmentation_metrics(empty, empty, 0.002, np.eye(4))

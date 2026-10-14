@@ -12,6 +12,11 @@ spec.loader.exec_module(module)
 
 
 class ComponentContactTest(unittest.TestCase):
+    def test_full_size_source_ct_is_not_refused_by_component_admission(self):
+        self.assertGreaterEqual(module.MAX_COMPONENT_VOXELS, 512 * 512 * 400)
+        self.assertGreater(module.MAX_COMPONENT_VOXELS, 512 * 512 * 130)
+
+
     def test_two_separate_expert_fragments_contact_one_model_fragment(self):
         expert = np.zeros((12, 12, 6), dtype=bool)
         predicted = np.zeros_like(expert)
