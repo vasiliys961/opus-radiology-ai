@@ -209,20 +209,21 @@ def classify_upstream_failure(raw: bytes, returncode: int) -> str:
 
 def invoke_verified_upstream(command: list[str], model_dir: Path, timeout_seconds: int,
                             operator_authorized_legacy_pickle: bool = False):
-    """Invoke verified vendor code; optional older pickle loader is child-only.
+    """Run the verified model privately; grant a SHA-scoped child token only.
 
-    PyTorch >=2.6 defaults to weights_only=True. The exact pinned older SAMIHS
-    checkpoint cannot be loaded in that mode in real Zenodo run #38605206599.
-    Restrict TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1 to this verified model child,
-    *only* under explicit operator consent for unreviewed pickle execution.
+    The isolated bootstrap preserves PyTorch's safe defaults for other files,
+    including checkpoint loads explicitly requesting weights_only=True.
     """
     child_env = {**os.environ, "OMP_NUM_THREADS": "2", "MKL_NUM_THREADS": "2",
                  "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"}
     child_env.pop("TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD", None)
+    child_env.pop("OPUS_AUTHORIZED_SAMIHS_BOOTSTRAP", None)
     if operator_authorized_legacy_pickle:
         if child_env.get("TORCH_FORCE_WEIGHTS_ONLY_LOAD", "").strip().lower() in ("1", "yes", "y", "true"):
             raise ValueError("system_forces_restricted_pytorch_checkpoint_loader")
-        child_env["TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD"] = "1"
+        # Unlike TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD, this token permits only
+        # the SHA-scoped loader in our isolated SAMIHS bootstrap subprocess.
+        child_env["OPUS_AUTHORIZED_SAMIHS_BOOTSTRAP"] = "authorized-v1"
     with tempfile.TemporaryFile(mode="w+b") as private_log:
         result = subprocess.run(
             command, cwd=str(model_dir.resolve()), check=False,
@@ -291,6 +292,16 @@ def run(args):
             "--device", "cpu", "--batch-size", "1", "--threshold", "0.5",
             "--slice-axis", "2",
         ]
+        if getattr(args, "operator_authorized_upstream_execution", False):
+            # The official wrapper may pass explicit weights_only=True, which
+            # PyTorch's global environment override cannot change. Preserve
+            # vendor source and allow legacy loading ONLY for the verified
+            # SAMIHS checkpoint inside this authorized CPU process.
+            bootstrap = Path(__file__).with_name("samihs-verified-cpu-bootstrap.py").resolve()
+            command = [
+                sys.executable, str(bootstrap), str(Path(args.model_dir).resolve()),
+                args.wrapper_sha256, *command[2:],
+            ]
         start_time = time.monotonic()
         try:
             invoke_verified_upstream(

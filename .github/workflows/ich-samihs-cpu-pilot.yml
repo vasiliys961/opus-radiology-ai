@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "scripts/run-ich-samihs-cpu-pilot.py"
+      - "scripts/samihs-verified-cpu-bootstrap.py"
       - "scripts/test-ich-samihs-cpu-pilot.py"
       - "scripts/select-ich-zenodo-sah-case.py"
       - "scripts/test-select-ich-zenodo-sah-case.py"
@@ -12,6 +13,7 @@ on:
   push:
     paths:
       - "scripts/run-ich-samihs-cpu-pilot.py"
+      - "scripts/samihs-verified-cpu-bootstrap.py"
       - "scripts/test-ich-samihs-cpu-pilot.py"
       - "scripts/select-ich-zenodo-sah-case.py"
       - "scripts/test-select-ich-zenodo-sah-case.py"
@@ -34,7 +36,7 @@ jobs:
       - name: Install limited geometry and numerical dependencies
         run: python -m pip install --disable-pip-version-check --no-input numpy==2.2.6 scipy==1.15.3 nibabel==5.3.2
       - name: Compile real-data CPU pilot and safety contracts
-        run: python -m py_compile scripts/run-ich-samihs-cpu-pilot.py scripts/test-ich-samihs-cpu-pilot.py scripts/select-ich-zenodo-sah-case.py scripts/test-select-ich-zenodo-sah-case.py
+        run: python -m py_compile scripts/run-ich-samihs-cpu-pilot.py scripts/samihs-verified-cpu-bootstrap.py scripts/test-ich-samihs-cpu-pilot.py scripts/select-ich-zenodo-sah-case.py scripts/test-select-ich-zenodo-sah-case.py
       - name: Verify source-preserving crop and nonpatient admission (NO pretrained inference)
         run: |
           python scripts/test-ich-samihs-cpu-pilot.py
