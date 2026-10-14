@@ -48,7 +48,7 @@ def subject_keys(p: Path) -> set[str]:
         "seg", "segmentation", "bleeding", "blood", "hemorrhage",
         "sah", "brain", "skullstrip", "skull", "normalized",
         "normalised", "final", "post", "pre", "resampled", "resample",
-        "nii", "nii.gz",
+        "nii", "nii.gz", "patient", "subject", "case", "study", "series",
     }
     return {v for v in tokens if v not in removed and len(v) >= 3}
 
@@ -57,7 +57,12 @@ def same_subject(a: Path, b: Path) -> bool:
     stem_a, stem_b = cleaned_stem(a), cleaned_stem(b)
     if stem_a == stem_b:
         return True
-    return bool(subject_keys(a) & subject_keys(b))
+    keys_a, keys_b = subject_keys(a), subject_keys(b)
+    digits_a = {x for x in keys_a if x.isdigit()}
+    digits_b = {x for x in keys_b if x.isdigit()}
+    if digits_a or digits_b:
+        return bool(digits_a & digits_b)
+    return any(len(x) >= 6 and x.isalpha() for x in keys_a & keys_b)
 
 
 def describe(p: Path):
