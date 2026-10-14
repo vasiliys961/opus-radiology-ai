@@ -123,8 +123,8 @@ def source_aligned_slab(source: Path, reference: Path, axis: int, start: int,
             raise ValueError("source_sform_qform_conflict")
     if ct.header.get_data_dtype().kind not in "iuf":
         raise ValueError("unsupported_original_ct_pixel_type")
-    if expert.header.get_data_dtype().kind not in "iu":
-        raise ValueError("expert_mask_must_have_integer_labels")
+    if expert.header.get_data_dtype().kind not in "iuf":
+        raise ValueError("expert_mask_must_have_integer_valued_labels")
     index = [slice(None)] * 3
     index[axis] = slice(start, start + count)
     raw_ct = np.asarray(ct.dataobj[tuple(index)])
