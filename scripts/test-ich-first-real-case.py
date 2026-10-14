@@ -20,7 +20,7 @@ def dummy():
   rights_attested=True,upstream_model_audited=True,
   dataset_citation_url="https://example.org/public/ich-research",
   source_sha256="a"*64,reference_sha256="b"*64,
-  checkpoint_sha256="c"*64,wrapper_sha256="d"*64,
+  checkpoint_sha256=module.OFFICIAL_SAMIHS_CHECKPOINT_SHA256,wrapper_sha256="d"*64,
   slice_axis=2,batch_size=1,threshold=.5,
   max_model_seconds=300,reference_label=1,
   input="/does-not-exist/source.nii.gz",
@@ -35,6 +35,13 @@ class ICHFirstCaseOnly(TestCase):
   with patch.object(module.sys,"platform","darwin"):
    with self.assertRaisesRegex(ValueError,"not_mac"):
     module.validate_requested_case(dummy())
+
+ def test_nonofficial_checkpoint_rejected_before_access_to_public_ct(self):
+  args=dummy()
+  args.checkpoint_sha256="a"*64
+  with patch.object(module.sys,"platform","linux"):
+   with self.assertRaisesRegex(ValueError,"official_samihs_trained_checkpoint"):
+    module.validate_requested_case(args)
 
  def test_rights_and_model_audit_are_mandatory(self):
   args=dummy()
