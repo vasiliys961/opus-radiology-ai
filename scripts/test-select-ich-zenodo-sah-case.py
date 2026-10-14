@@ -79,5 +79,67 @@ class Pairing(unittest.TestCase):
         self.assertTrue(mod.same_subject(Path("subject_013_ct.nii.gz"),Path("subject_013_expert.nii.gz")))
 
 
+    def test_short_numeric_case_id_separate_folders_and_float_expert(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td)
+            a=np.linspace(0,100,32*32*40,dtype=np.float32).reshape(32,32,40)
+            b=np.zeros(a.shape,dtype=np.float32)
+            b[7,7,24]=1.0
+            source=save(root/"images"/"CT_7.nii.gz",a)
+            expert=save(root/"labels"/"mask_007.nii.gz",b)
+            ct,ref,start=mod.select_public_case(root,16)
+            self.assertEqual(ct,source)
+            self.assertEqual(ref,expert)
+            self.assertTrue(start <= 24 < start+16)
+
+    def test_short_numerical_identifiers_cannot_cross_match(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td)
+            a=np.linspace(0,100,32*32*40,dtype=np.float32).reshape(32,32,40)
+            b=np.zeros(a.shape,dtype=np.uint8)
+            b[7,7,24]=1
+            save(root/"images"/"ct1.nii.gz",a)
+            save(root/"labels"/"mask2.nii.gz",b)
+            with self.assertRaisesRegex(ValueError,"no_unambiguously"):
+                mod.select_public_case(root,16)
+
+    def test_multiple_expert_masks_same_study_refused_without_guessing(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td)
+            a=np.linspace(0,100,32*32*40,dtype=np.float32).reshape(32,32,40)
+            b=np.zeros(a.shape,dtype=np.uint8)
+            b[7,7,24]=1
+            save(root/"images"/"ct_012.nii.gz",a)
+            save(root/"labels"/"expert_012.nii.gz",b)
+            save(root/"masks"/"label_012.nii.gz",b)
+            with self.assertRaisesRegex(ValueError,"no_unambiguously"):
+                mod.select_public_case(root,16)
+
+    def test_case_id_can_be_parent_directory_not_generic_name(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td)
+            a=np.linspace(0,100,32*32*40,dtype=np.float32).reshape(32,32,40)
+            b=np.zeros(a.shape,dtype=np.uint8)
+            b[7,7,24]=1
+            # Case ID can be encoded by immediate parent directory.
+            image=save(root/"cases"/"subject021"/"scan.nii.gz",a)
+            expert=save(root/"experts"/"case021"/"mask.nii.gz",b)
+            chosen,ref,start=mod.select_public_case(root,16)
+            self.assertEqual(chosen,image)
+            self.assertEqual(ref,expert)
+            self.assertTrue(start <= 24 < start+16)
+
+    def test_nonbinary_float_expert_rejected_not_silently_thresholded(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td)
+            a=np.linspace(0,100,32*32*40,dtype=np.float32).reshape(32,32,40)
+            b=np.zeros(a.shape,dtype=np.float32)
+            b[7,7,24]=.6
+            save(root/"images"/"ct_014.nii.gz",a)
+            save(root/"experts"/"mask_014.nii.gz",b)
+            with self.assertRaisesRegex(ValueError,"no_unambiguously"):
+                mod.select_public_case(root,16)
+
+
 if __name__=="__main__":
     unittest.main()
