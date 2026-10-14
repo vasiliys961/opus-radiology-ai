@@ -167,6 +167,7 @@ export function parseIchComponentEvidence(
  const predicts=validateFragments(c.largestPredictedFragments,pr,ep,dimensions,voxelMl,predTotal,"SAMIHS");
  if(ep<=128&&pr<=128){
    if(c.expertFragmentVolumeStrata!==undefined){
+     const validatedStrata=c.expertFragmentVolumeStrata as IchExpertFragmentVolumeStratum[];
      const computed=[{count:0,yes:0,no:0,voxels:0,covered:0,missed:0},
                      {count:0,yes:0,no:0,voxels:0,covered:0,missed:0},
                      {count:0,yes:0,no:0,voxels:0,covered:0,missed:0}];
@@ -178,7 +179,7 @@ export function parseIchComponentEvidence(
        x.missed+=f.voxelCount-f.overlapVoxels;
      }
      if(computed.some((x,i)=>{
-       const y=c.expertFragmentVolumeStrata![i];
+       const y=validatedStrata[i];
        return x.count!==y.expertFragments||x.yes!==y.withAnyOverlap||
          x.no!==y.withZeroOverlap||x.voxels!==y.expertVoxels||
          x.covered!==y.overlapVoxels||x.missed!==y.missedVoxels;
