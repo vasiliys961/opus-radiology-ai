@@ -24,11 +24,17 @@ function validateHeader(header:Uint8Array,dimensions:readonly number[],
      !Number.isSafeInteger(slice)||slice<0||slice>=dimensions[2])
     throw Error("Срез вне допустимого диапазона.");
   const datatype=v.getInt16(70,true);
-  const bytes=datatype===2?1:datatype===4||datatype===512?2:datatype===16?4:0;
+  // Raw source NIfTI may be normalized float64, 32-bit integer, unsigned
+  // 16-bit CT or other scalar pixel types. SAMIHS permits i/u/f arrays;
+  // decode a bounded native slice without modifying the voxel grid.
+  const sizes:Record<number,number>={
+    2:1,256:1,4:2,512:2,8:4,768:4,16:4,64:8,1024:8,1280:8
+  };
+  const bytes=sizes[datatype]??0;
   if(!bytes||v.getInt16(72,true)!==bytes*8||
      (kind==="mask"&&datatype!==2)||
      (kind==="expert"&&![2,4,512].includes(datatype))||
-     (kind==="ct"&&datatype!==4&&datatype!==16))
+     (kind==="ct"&&!Object.hasOwn(sizes,datatype)))
     throw Error("Неподдерживаемый тип пикселей исходной КТ или маски.");
   const voxOffset=v.getFloat32(108,true);
   if(!Number.isSafeInteger(voxOffset)||voxOffset<352||voxOffset>4096)
@@ -141,9 +147,29 @@ export async function readNativeIchKSlice(
  }
  const pixels=new Float32Array(count);
  for(let i=0;i<count;i++){
-   const raw=info.datatype===4?v.getInt16(i*2,true):v.getFloat32(i*4,true);
+   const at=i*info.bytes;
+   let raw:number;
+   switch(info.datatype){
+     case 2: raw=v.getUint8(at);break;
+     case 256: raw=v.getInt8(at);break;
+     case 4: raw=v.getInt16(at,true);break;
+     case 512: raw=v.getUint16(at,true);break;
+     case 8: raw=v.getInt32(at,true);break;
+     case 768: raw=v.getUint32(at,true);break;
+     case 16: raw=v.getFloat32(at,true);break;
+     case 64: raw=v.getFloat64(at,true);break;
+     case 1024: case 1280: {
+       const integer=info.datatype===1024?v.getBigInt64(at,true):v.getBigUint64(at,true);
+       if(integer>BigInt(Number.MAX_SAFE_INTEGER)||
+          integer<BigInt(Number.MIN_SAFE_INTEGER))
+          throw Error("Слишком большое целое значение КТ.");
+       raw=Number(integer);break;
+     }
+     default: throw Error("Неизвестный тип исходных пикселей.");
+   }
    const intensity=raw*info.slope+info.intercept;
-   if(!Number.isFinite(intensity))throw Error("Исходная КТ содержит недопустимые значения.");
+   if(!Number.isFinite(intensity)||Math.abs(intensity)>3.4e38)
+      throw Error("Исходная КТ содержит недопустимые значения.");
    pixels[i]=intensity;
  }
  return {pixels,dimensions:[dimensions[0],dimensions[1]],
