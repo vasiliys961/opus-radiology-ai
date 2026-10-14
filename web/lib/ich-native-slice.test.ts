@@ -72,10 +72,10 @@ test("native CT review supports unsigned, signed 32-bit and normalized float64 i
  }
 });
 test("rejects out-of-range 64-bit CT intensity safely",async()=>{
- const raw=makeTypedCt(1024,Number.MAX_SAFE_INTEGER);
- // Number.MAX_SAFE_INTEGER is legal but larger values are refused.
- const ok=await readNativeIchKSlice(raw,"ct",2,dims,affine);
- assert.equal(ok.pixels.length,256);
+ const raw=makeTypedCt(1024,Number.MAX_SAFE_INTEGER+1);
+ await assert.rejects(
+  readNativeIchKSlice(raw,"ct",2,dims,affine),
+  /Слишком большое целое/);
 });
 test("reads binary trained mask and rejects unknown labels",async()=>{
  const slice=await readNativeIchKSlice(makeNii("mask"),"mask",2,dims,affine);
