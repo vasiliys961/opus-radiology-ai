@@ -79,8 +79,11 @@ def admission(args) -> tuple[Path, Path, Path]:
     if out.resolve() in (source, reference, source.parent, reference.parent):
         raise ValueError("results_must_be_isolated_from_source")
     if args.mode == "infer":
-        if not args.upstream_model_audited or not args.model_dir:
-            raise ValueError("independently_audited_upstream_model_required")
+        if (not args.upstream_model_audited
+                and not getattr(args, "operator_authorized_upstream_execution", False)):
+            raise ValueError("upstream_model_requires_express_approval_or_audit")
+        if not args.model_dir:
+            raise ValueError("installed_trained_model_directory_required")
         if args.checkpoint_sha256 != SAMIHS_SHA256 or not SHA.fullmatch(args.wrapper_sha256):
             raise ValueError("official_samihs_checkpoint_and_wrapper_sha_required")
         model_dir = Path(args.model_dir)
@@ -244,6 +247,9 @@ def run(args):
                     "executed": True, "device": "cpu", "batchSize": 1,
                     "checkpointSha256": SAMIHS_SHA256,
                     "wrapperSha256": args.wrapper_sha256,
+                    "upstreamModelIndependentlyAudited": bool(args.upstream_model_audited),
+                    "operatorAuthorizedUnverifiedCheckpoint": bool(
+                        getattr(args, "operator_authorized_upstream_execution", False)),
                     "actualModelExecutionSeconds": round(time.monotonic() - start_time, 2),
                 },
                 "predictionMaskSha256": sha256_file(mask_path),
@@ -274,6 +280,8 @@ def main():
     parser.add_argument("--checkpoint-sha256")
     parser.add_argument("--wrapper-sha256")
     parser.add_argument("--upstream-model-audited", action="store_true")
+    parser.add_argument("--operator-authorized-upstream-execution", action="store_true",
+                        help="Explicit owner authorization for pinned but unaudited upstream PyTorch code and checkpoint; not proof of independent audit")
     args = parser.parse_args()
     try:
         result = run(args)
