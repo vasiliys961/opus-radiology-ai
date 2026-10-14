@@ -20,12 +20,18 @@ export default function IchSliceEvidencePanel({comparison,model,onGoToSlice}:{
   }
   const a=audit?.sliceAudit;
   const canNavigate=a?.sourceBoundSliceAxis===2&&model.source.geometry.sliceAxis===2;
-  const missed=a?.sliceEvidence.filter(x=>x.expertVoxels>0)
-    .sort((x,y)=>y.falseNegativeVoxels-x.falseNegativeVoxels)
+  const [missedSort,setMissedSort]=useState<"count"|"fraction">("count");
+  const missed=a?.sliceEvidence.filter(x=>x.falseNegativeVoxels>0)
+    .sort((x,y)=>missedSort==="count"
+      ?y.falseNegativeVoxels-x.falseNegativeVoxels||x.nativeSliceIndex-y.nativeSliceIndex
+      :y.falseNegativeVoxels/y.expertVoxels-x.falseNegativeVoxels/x.expertVoxels||
+        y.falseNegativeVoxels-x.falseNegativeVoxels)
     .slice(0,12);
-  const extra=a?.sliceEvidence.filter(x=>x.predictedVoxels>0)
-    .sort((x,y)=>y.falsePositiveVoxels-x.falsePositiveVoxels)
-    .slice(0,12);
+  const extra=a?.sliceEvidence.filter(x=>x.falsePositiveVoxels>0)
+    .sort((x,y)=>y.falsePositiveVoxels-x.falsePositiveVoxels||
+      x.nativeSliceIndex-y.nativeSliceIndex).slice(0,12);
+  const incomplete=a?.sliceEvidence.filter(x=>x.falseNegativeVoxels>0).length??0;
+  const fpSlices=a?.sliceEvidence.filter(x=>x.falsePositiveVoxels>0).length??0;
   return <section aria-label="Локализация пропущенной экспертной разметки по срезам"
     style={{border:"1px solid #a8bbb4",borderRadius:8,padding:12,margin:"14px 0"}}>
     <h5>Проверка локализации ошибок SAMIHS по исходным срезам</h5>
@@ -47,6 +53,16 @@ export default function IchSliceEvidencePanel({comparison,model,onGoToSlice}:{
         положительных срезов без совпавших вокселей.
         Дополнительные кандидаты вне экспертно положительных срезов:
         <strong> {a.modelOnlyCandidateSlices.length}</strong>.</p>
+      <p role="status"><strong>{incomplete}</strong> срезов содержат пропущенные
+        экспертные воксели, включая частичные ошибки;
+        <strong> {fpSlices}</strong> срезов содержат лишние воксели модели.
+        Это очередь для просмотра врачом, не клинические FP/FN по исследованиям.</p>
+      <label>Сортировка пропусков
+        <select value={missedSort} onChange={e=>setMissedSort(e.target.value as "count"|"fraction")}>
+          <option value="count">По числу пропущенных вокселей</option>
+          <option value="fraction">По доле пропущенной экспертной области</option>
+        </select>
+      </label>
       {!canNavigate&&<p role="alert">Прямой переход отключён:
         индексный срез модели имеет ось {a.sourceBoundSliceAxis}, а просмотр
         исходного NIfTI показывает только ось k (2). Это разные плоскости.</p>}
@@ -54,13 +70,14 @@ export default function IchSliceEvidencePanel({comparison,model,onGoToSlice}:{
         кровоизлияние. Это не чувствительность модели к очагам или пациентам.</small></p>
       <div style={{overflowX:"auto"}}>
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-          <caption style={{textAlign:"left",marginBottom:6}}>Наибольший объём пропущенной
-            экспертной разметки — первые 12 срезов</caption>
+          <caption style={{textAlign:"left",marginBottom:6}}>Приоритетные 12 срезов
+            с полностью или частично пропущенной экспертной разметкой</caption>
           <thead><tr><th>Индекс среза</th><th>Эксперт, вокс.</th>
-            <th>Пропущено, вокс.</th><th>Dice среза</th><th>Исходная КТ</th></tr></thead>
+            <th>Пропущено, вокс.</th><th>Доля пропуска</th><th>Dice среза</th><th>Исходная КТ</th></tr></thead>
           <tbody>{missed?.map(x=><tr key={x.nativeSliceIndex}>
             <td>{x.nativeSliceIndex}</td><td>{x.expertVoxels}</td>
             <td>{x.falseNegativeVoxels}</td>
+            <td>{(100*x.falseNegativeVoxels/x.expertVoxels).toFixed(1)}%</td>
             <td>{x.sliceDice===null?"—":x.sliceDice.toFixed(3)}</td>
             <td><button type="button" disabled={!canNavigate||!onGoToSlice}
               aria-label={`Открыть исходный срез k ${x.nativeSliceIndex+1}`}
