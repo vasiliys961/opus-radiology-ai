@@ -120,7 +120,10 @@ export default function IchReferenceComparisonPanel({modelReport,source,mask}:{
          onGoToSlice={sliceIndex=>setJumpTo(prev=>({
            sliceIndex,requestId:(prev?.requestId??0)+1,
          }))}/>
-       <IchExpertSubtypeCoveragePanel comparison={comparison} model={modelReport}/>
+       <IchExpertSubtypeCoveragePanel comparison={comparison} model={modelReport}
+         onGoToSlice={sliceIndex=>setJumpTo(prev=>({
+           sliceIndex,requestId:(prev?.requestId??0)+1,
+         }))}/>
        <p><strong>Один исследовательский случай.</strong>
          Не доказано, что он не использовался при обучении модели.
          Не проверены независимость экспертной разметки,
