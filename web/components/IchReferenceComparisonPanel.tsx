@@ -10,6 +10,7 @@ import {
   parseIchReferenceComparison,type IchReferenceComparison,
 } from "../lib/ich-reference-comparison";
 import type {IchResearchReport} from "../lib/ich-research";
+import {parseIchCompletedCase,type IchCompletedCase} from "../lib/ich-completed-case";
 
 async function verifySha(file:File,expected:string,signal:AbortSignal){
   if(!file.size||file.size>512*1024*1024)
@@ -28,6 +29,8 @@ export default function IchReferenceComparisonPanel({modelReport,source,mask}:{
  modelReport:IchResearchReport;source:File;mask:File;
 }){
  const [comparison,setComparison]=useState<IchReferenceComparison|null>(null);
+ const [complete,setComplete]=useState<IchCompletedCase|null>(null);
+ const [completeError,setCompleteError]=useState("");
  const [jumpTo,setJumpTo]=useState<{sliceIndex:number;requestId:number}|null>(null);
  const [subtypeFocus,setSubtypeFocus]=useState<{
   file:File;label:number;subtype:string;requestId:number;
@@ -40,7 +43,8 @@ export default function IchReferenceComparisonPanel({modelReport,source,mask}:{
  useEffect(()=>()=>ctrl.current?.abort(),[]);
  function clear(){
    ctrl.current?.abort();ctrl.current=null;
-   setComparison(null);setReferenceVerified(false);setReferenceFile(null);
+   setComparison(null);setComplete(null);setCompleteError("");
+   setReferenceVerified(false);setReferenceFile(null);
    setJumpTo(null);setSubtypeFocus(null);
    setBusy(false);setError("");
  }
@@ -97,6 +101,30 @@ export default function IchReferenceComparisonPanel({modelReport,source,mask}:{
      {referenceVerified&&m&&<>
        <p role="status">SHA-256 экспертной маски совпал. Ниже представлены
          метрики внешнего вычисления, а не пересчёт в браузере.</p>
+       <section style={{border:"1px solid #8ba9a0",borderRadius:8,padding:10,margin:"12px 0"}}>
+         <h5>Итоговый паспорт полного внешнего SAMIHS-исследования</h5>
+         <p>Отдельная сверка доказательств: исходная КТ, модель, маска,
+           эталон и показатели должны соответствовать одному запуску.
+           JSON сам по себе не подтверждает исполнение модели на GPU.</p>
+         <label>Полный паспорт opus-ich-first-public-case-complete.json
+           <input type="file" accept=".json,application/json" onChange={e=>{
+             const file=e.target.files?.[0];e.currentTarget.value="";
+             if(!file)return;
+             setComplete(null);setCompleteError("");
+             if(file.size<1||file.size>2*1024*1024){
+               setCompleteError("Неподдерживаемый размер паспорта.");return;
+             }
+             void file.text().then(raw=>setComplete(parseIchCompletedCase(
+               raw,modelReport,comparison))).catch(err=>
+                 setCompleteError(err instanceof Error?err.message:"Паспорт не принят."));
+           }}/>
+         </label>
+         {completeError&&<p role="alert">{completeError}</p>}
+         {complete&&<p role="status">Паспорт полного случая согласован с импортированными
+           файлами и метриками. Заявленное время CUDA-инференса:
+           <strong> {complete.modelExecutionSeconds.toFixed(2)} с</strong>.
+           Это техническая сверка отчётов, не независимая клиническая валидация.</p>}
+       </section>
        <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
          <p><strong>Dice: {num(m.dice)}</strong></p>
          <p><strong>IoU: {num(m.iou)}</strong></p>
