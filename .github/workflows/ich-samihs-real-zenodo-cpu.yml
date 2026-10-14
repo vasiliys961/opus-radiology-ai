@@ -206,6 +206,14 @@ jobs:
           print("Genuine pretrained checkpoint deserialized on CPU in authorized research subprocess; no CT was processed.")
           PY
 
+      - name: Run REAL pretrained SAMIHS on one synthetic nonpatient CPU slice BEFORE 648MB download
+        shell: bash
+        run: |
+          python scripts/preflight-samihs-real-cpu.py \\
+            --model-dir "${RUNNER_TEMP}/samihs-fixed-upstream" \\
+            --wrapper-sha256 "${{ steps.model.outputs.wrapper_sha }}" \\
+            --timeout-seconds 420
+
       - name: Download published Zenodo SAH CT and original expert masks (dataset NOT uploaded)
         shell: bash
         run: |
