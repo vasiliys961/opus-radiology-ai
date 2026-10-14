@@ -2,9 +2,11 @@
 
 import {useEffect,useRef,useState} from "react";
 import {readNativeIchKSlice} from "../lib/ich-native-slice";
+import {automaticCtWindow,grayscaleCt} from "../lib/ich-ct-window";
 import type {IchResearchReport} from "../lib/ich-research";
 
 const windows={
+ auto:{center:0,width:1,label:"Авто · нормализованная КТ"},
  brain:{center:40,width:80,label:"Мозговое"},
  wide:{center:80,width:200,label:"Широкое"},
 } as const;
@@ -36,7 +38,7 @@ export default function IchExpertErrorOverlay({source,mask,expert,referenceLabel
        section.current?.scrollIntoView({behavior:"smooth",block:"start"});
      }
  },[jumpTo?.requestId,jumpTo?.sliceIndex,dimensions]);
- const [window,setWindow]=useState<W>("brain");
+ const [window,setWindow]=useState<W>("auto");
  const [reviewLayer,setReviewLayer]=useState<ReviewLayer>("errors");
  const [opacity,setOpacity]=useState(65);
  // Cache exactly one verified native k-slice per file trio. Toggling window,
@@ -72,11 +74,11 @@ export default function IchExpertErrorOverlay({source,mask,expert,referenceLabel
      if(!context)throw Error("Невозможно отрисовать исходный срез.");
      const [width,height]=ct.dimensions;
      const img=context.createImageData(width,height);
-     const {center,width:range}=windows[window],low=center-range/2;
+     const win=window==="auto"?automaticCtWindow(ct.pixels as Float32Array):windows[window];
      let tp=0,fp=0,fn=0;
      for(let i=0;i<width*height;i++){
        const value=(ct.pixels as Float32Array)[i];
-       const g=Math.round(Math.max(0,Math.min(255,255*(value-low)/range)));
+       const g=grayscaleCt(value,win);
        const p=(predicted.pixels as Uint8Array)[i]===1;
        const e=(annotated.pixels as Uint8Array)[i]===1;
        if(p&&e)tp++;
@@ -130,6 +132,7 @@ export default function IchExpertErrorOverlay({source,mask,expert,referenceLabel
      <input type="range" min="20" max="90" step="5" value={opacity}
        onChange={e=>setOpacity(Number(e.target.value))}/>
    </label>
+   <p><small>Автоконтраст рассчитан для текущего среза без допущения, что значения пикселей равны HU. Предустановленные окна не подтверждают единицы HU.</small></p>
    <p><span style={{color:"#2fc58b"}}>■</span> Совпадение обеих масок (TP)
       {" · "}<span style={{color:"#ef6c62"}}>■</span> Только модель (FP)
       {" · "}<span style={{color:"#d7ad1c"}}>■</span> Только эксперт (FN)</p>
