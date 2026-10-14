@@ -10,7 +10,7 @@ const comparison={
    expertMaskSha256:sha("c")},
  metrics:{truePositiveVoxels:4,falseNegativeVoxels:12,falsePositiveVoxels:2}
 } as IchReferenceComparison;
-const model={source:{sha256:sha("a"),geometry:{voxelVolumeMl:.002}},
+const model={source:{sha256:sha("a"),geometry:{voxelVolumeMl:.002,dimensions:[12,12,6]}},
  prediction:{maskSha256:sha("b")}} as IchResearchReport;
 function passport(){
  return {
@@ -37,6 +37,24 @@ test("accepts source-bound IPH/SAH coverage without claiming model subtype",()=>
  assert.equal(a.expertVoxelClasses[1].modelMissedExpertVoxels,8);
  assert.equal(a.modelSubtypeClassifierExecuted,false);
  assert.equal(a.clinicalSubtypeSensitivity,null);
+});
+test("peak missed subtype CT-slice is native-bound and cannot be forged",()=>{
+ const data=passport();
+ const first=data.expertVoxelClasses[0] as typeof data.expertVoxelClasses[0]&{
+  peakMissedSliceIndexK?:number|null;peakMissedSliceVoxels?:number|null
+ };
+ first.peakMissedSliceIndexK=1;
+ first.peakMissedSliceVoxels=2;
+ assert.equal(parseIchExpertSubtypeCoverage(JSON.stringify(data),comparison,model)
+  .expertVoxelClasses[0].peakMissedSliceIndexK,1);
+ first.peakMissedSliceIndexK=10;
+ assert.throws(()=>parseIchExpertSubtypeCoverage(JSON.stringify(data),comparison,model));
+ first.peakMissedSliceIndexK=1;
+ first.peakMissedSliceVoxels=5;
+ assert.throws(()=>parseIchExpertSubtypeCoverage(JSON.stringify(data),comparison,model));
+ first.peakMissedSliceVoxels=2;
+ first.peakMissedSliceIndexK=null;
+ assert.throws(()=>parseIchExpertSubtypeCoverage(JSON.stringify(data),comparison,model));
 });
 test("rejects forged model classification, foreign source or wrong subtype false negatives",()=>{
  const p=passport();
