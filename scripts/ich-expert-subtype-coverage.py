@@ -114,4 +114,13 @@ def score_source_bound_case(source_path, prediction_path, derived_path,
             not math.isclose(float(original.dataobj.inter), 0., abs_tol=1e-9)):
         raise ValueError("scaled_original_expert_labelmap_not_supported")
     o = np.asanyarray(original.dataobj)
-    return measure_coverage(p, d, o, meanings, expected_counts, metrics, voxel_ml)
+    result = measure_coverage(p, d, o, meanings, expected_counts, metrics, voxel_ml)
+    result["evidenceHashes"] = {
+        "sourceSha256": evaluator.sha256(Path(source_path)),
+        "predictionSha256": evaluator.sha256(Path(prediction_path)),
+        "expertMaskSha256": evaluator.sha256(Path(derived_path)),
+        "originalExpertMaskSha256": evaluator.sha256(Path(original_path)),
+        "ontologySha256": evaluator.sha256(Path(ontology_path)),
+    }
+    result["ontologySourceUrl"] = ontology["sourceUrl"]
+    return result
