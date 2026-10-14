@@ -132,6 +132,9 @@ export default function IchResearchResults(){
             return <fieldset key={c.componentIndex} style={{margin:"12px 0",padding:10}}>
               <legend><strong>Кандидат {c.componentIndex+1}</strong></legend>
               <p>Предложение модели: {c.volumeMl.toFixed(2)} мл;
+                {c.peakSliceIndexK!==undefined?
+                  <> наиболее насыщенный срез k {c.peakSliceIndexK+1}
+                    ({c.peakSliceComponentVoxels} вокселей компоненты);</>:null}
                 бокс в индексах исходного NIfTI: {c.boundsVoxelMin.join("/")}
                 {" — "}{c.boundsVoxelMax.join("/")}. Не подтверждён как гематома.</p>
               <label>Врачебная оценка
