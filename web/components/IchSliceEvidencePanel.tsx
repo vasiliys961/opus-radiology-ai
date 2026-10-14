@@ -2,6 +2,7 @@
 
 import {useState} from "react";
 import {parseIchSliceEvidence,type IchSliceEvidence} from "../lib/ich-slice-evidence";
+import {contiguousIchErrorRuns} from "../lib/ich-error-runs";
 import type {IchReferenceComparison} from "../lib/ich-reference-comparison";
 import type {IchResearchReport} from "../lib/ich-research";
 
@@ -32,6 +33,8 @@ export default function IchSliceEvidencePanel({comparison,model,onGoToSlice}:{
       x.nativeSliceIndex-y.nativeSliceIndex).slice(0,12);
   const incomplete=a?.sliceEvidence.filter(x=>x.falseNegativeVoxels>0).length??0;
   const fpSlices=a?.sliceEvidence.filter(x=>x.falsePositiveVoxels>0).length??0;
+  const fnRuns=a?contiguousIchErrorRuns(a.sliceEvidence,"fn"):[];
+  const fpRuns=a?contiguousIchErrorRuns(a.sliceEvidence,"fp"):[];
   return <section aria-label="Локализация пропущенной экспертной разметки по срезам"
     style={{border:"1px solid #a8bbb4",borderRadius:8,padding:12,margin:"14px 0"}}>
     <h5>Проверка локализации ошибок SAMIHS по исходным срезам</h5>
@@ -63,6 +66,26 @@ export default function IchSliceEvidencePanel({comparison,model,onGoToSlice}:{
           <option value="fraction">По доле пропущенной экспертной области</option>
         </select>
       </label>
+      <h5>Непрерывные диапазоны ошибок по индексной оси NIfTI</h5>
+      <p>Группировка соседних срезов с FN или FP. Диапазон не равен
+        отдельной гематоме и не подтверждает её анатомическую протяжённость.</p>
+      {([["FN · пропущенная экспертная область",fnRuns],
+         ["FP · лишняя маска модели",fpRuns]] as const).map(([heading,runs])=>
+        <div key={heading}>
+          <h6>{heading} · диапазонов {runs.length}</h6>
+          {!runs.length?<p>Воксельных ошибок этого типа не найдено.</p>:
+            <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+              {runs.slice(0,12).map(run=><button type="button"
+                key={run.firstSliceIndex} disabled={!canNavigate||!onGoToSlice}
+                onClick={()=>onGoToSlice?.(run.peakSliceIndex)}
+                title="Открыть срез с максимальным числом несовпадающих вокселей">
+                k {run.firstSliceIndex+1}–{run.lastSliceIndex+1}
+                {" · "}{run.sliceCount} срез.
+                {" · "}{run.totalUnmatchedVoxels} вокс.
+                {" · пик k "}{run.peakSliceIndex+1}
+              </button>)}
+            </div>}
+        </div>)}
       {!canNavigate&&<p role="alert">Прямой переход отключён:
         индексный срез модели имеет ось {a.sourceBoundSliceAxis}, а просмотр
         исходного NIfTI показывает только ось k (2). Это разные плоскости.</p>}
