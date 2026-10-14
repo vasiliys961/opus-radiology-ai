@@ -141,5 +141,40 @@ class Pairing(unittest.TestCase):
                 mod.select_public_case(root,16)
 
 
+    def test_only_qform_metric_physical_geometry_accepted(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td)
+            a=np.linspace(0,100,32*32*40,dtype=np.float32).reshape(32,32,40)
+            b=np.zeros(a.shape,dtype=np.uint8);b[4,5,20]=1
+            ct=save(root/"images"/"ct_037.nii.gz",a)
+            ref=save(root/"masks"/"mask_037.nii.gz",b)
+            for file in (ct,ref):
+                nii=nib.load(str(file))
+                nii.set_sform(nii.affine,code=0)
+                nii.set_qform(nii.affine,code=1)
+                nib.save(nii,str(file))
+            chosen,expert,start=mod.select_public_case(root,16)
+            self.assertEqual(chosen,ct);self.assertEqual(expert,ref)
+            self.assertTrue(start <= 20 < start+16)
+
+    def test_missing_both_spatial_codes_or_non_mm_units_rejected(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td)
+            a=np.linspace(0,100,32*32*40,dtype=np.float32).reshape(32,32,40)
+            b=np.zeros(a.shape,dtype=np.uint8);b[4,5,20]=1
+            ct=save(root/"images"/"ct_037.nii.gz",a)
+            ref=save(root/"masks"/"mask_037.nii.gz",b)
+            nii=nib.load(str(ct));nii.set_sform(nii.affine,code=0)
+            nii.set_qform(nii.affine,code=0);nib.save(nii,str(ct))
+            with self.assertRaisesRegex(ValueError,"no_unambiguously"):
+                mod.select_public_case(root,16)
+            ct.unlink()
+            ct=save(root/"images"/"ct_037.nii.gz",a)
+            nii=nib.load(str(ct));nii.header.set_xyzt_units(xyz="unknown")
+            nib.save(nii,str(ct))
+            with self.assertRaisesRegex(ValueError,"no_unambiguously"):
+                mod.select_public_case(root,16)
+
+
 if __name__=="__main__":
     unittest.main()

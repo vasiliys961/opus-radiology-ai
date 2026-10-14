@@ -93,10 +93,17 @@ def describe(p: Path, reasons: Counter):
                 or min(nii.shape) < 16 or max(nii.shape) > 512):
             reasons["unsupported_nifti_dimensions"] += 1
             return None
+        # Some legitimate public scientific NIfTI volumes preserve a valid
+        # qform while leaving sform_code=0. Nibabel uses that qform as affine.
+        # Do NOT assume voxel size or a fictitious RAS transform when BOTH
+        # codes are missing, or when physical units are unspecified.
+        scode = int(nii.header["sform_code"])
+        qcode = int(nii.header["qform_code"])
         if (nii.header.get_xyzt_units()[0] != "mm"
-                or int(nii.header["sform_code"]) <= 0):
-            reasons["missing_mm_sform"] += 1
+                or (scode <= 0 and qcode <= 0)):
+            reasons["missing_explicit_mm_sform_or_qform"] += 1
             return None
+        reasons["native_sform" if scode > 0 else "native_qform_only"] += 1
         affine = np.asarray(nii.affine)
         if (not np.all(np.isfinite(affine))
                 or not np.isfinite(np.linalg.det(affine[:3, :3]))
