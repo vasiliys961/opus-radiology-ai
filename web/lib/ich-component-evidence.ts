@@ -5,6 +5,8 @@ export type IchMaskFragment={
  componentIndex:number;voxelCount:number;volumeMl:number;
  boundsVoxelMin:[number,number,number];boundsVoxelMax:[number,number,number];
  otherMaskComponentIndices:number[];overlapVoxels:number;
+ unmatchedVoxels?:number;reviewSliceIndexK?:number;
+ reviewSliceUnmatchedVoxels?:number;
  componentOverlapFraction:number;hasAnyVoxelOverlap:boolean;
  ambiguousMultiComponentContact:boolean;
 };
@@ -68,6 +70,19 @@ function validateFragments(
       lo.some((v,i)=>v>hi[i]||hi[i]>=dimension[i])||
       n>lo.reduce((acc,v,i)=>acc*(hi[i]-v+1),1))
      throw Error("Несогласованная 3D-компонента "+kind+".");
+   // New reports point to a slice containing the largest local mismatch;
+   // old research reports without these optional fields remain importable.
+   const hasAny=["unmatchedVoxels","reviewSliceIndexK","reviewSliceUnmatchedVoxels"]
+     .some(key=>r[key]!==undefined);
+   if(hasAny&&(
+      !int(r.unmatchedVoxels)||r.unmatchedVoxels!==n-overlap||
+      !int(r.reviewSliceIndexK)||
+      r.reviewSliceIndexK<lo[2]||r.reviewSliceIndexK>hi[2]||
+      !int(r.reviewSliceUnmatchedVoxels)||
+      r.reviewSliceUnmatchedVoxels>r.unmatchedVoxels||
+      (r.unmatchedVoxels>0&&r.reviewSliceUnmatchedVoxels===0)||
+      (r.unmatchedVoxels===0&&r.reviewSliceUnmatchedVoxels!==0)
+   ))throw Error("Срез локализации ошибки не согласован с масками.");
    ids.add(index);prev=n;volume+=n;fragments.push(r as unknown as IchMaskFragment);
  }
  if(total<=128&&volume!==volumeVoxels)
