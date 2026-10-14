@@ -68,54 +68,6 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq p7zip-full >/dev/null
 
-      - name: Download published Zenodo SAH CT and original expert masks (dataset NOT uploaded)
-        shell: bash
-        run: |
-          set -euo pipefail
-          curl --fail --silent --show-error --location --retry 3 --max-time 2100 \
-            "https://zenodo.org/records/8228847/files/subarachnoid_hemorrhage_rhuh.rar?download=1" \
-            --output "$RUNNER_TEMP/zenodo-sah-original-ct-and-experts.rar"
-          bytes=$(stat -c %s "$RUNNER_TEMP/zenodo-sah-original-ct-and-experts.rar")
-          if (( bytes < 1000000 || bytes > 750000000 )); then
-            echo "Zenodo archive unexpectedly sized; rejecting." >&2
-            exit 2
-          fi
-          echo "a67bf358ebb326f156071864c318ab42  $RUNNER_TEMP/zenodo-sah-original-ct-and-experts.rar" | md5sum --status -c -
-          7z l -slt "$RUNNER_TEMP/zenodo-sah-original-ct-and-experts.rar" > "$RUNNER_TEMP/archive-list-private.txt"
-          python - <<'PY'
-          import os,re
-          from pathlib import Path
-          listing=Path(os.environ["RUNNER_TEMP"])/"archive-list-private.txt"
-          txt=listing.read_text(errors="replace")
-          values=[int(x) for x in re.findall(r"(?m)^Size = (\d+)\s*$",txt)]
-          if not values or sum(values)>7*1024**3:
-              raise SystemExit("Public dataset extraction exceeds 7 GiB safety budget")
-          # Only anonymous file-type totals: NEVER log original study/case IDs.
-          # RAR listings can contain volume or expert files under arbitrary
-          # directories, and some archives contain nested archives instead.
-          paths=re.findall(r"(?m)^Path = (.+)$",txt)
-          file_types={
-              "nifti":sum(x.lower().endswith((".nii",".nii.gz")) for x in paths),
-              "nested_archive":sum(x.lower().endswith((".rar",".zip",".7z",".tar",".tar.gz")) for x in paths),
-              "nrrd":sum(x.lower().endswith((".nrrd",".mha",".mhd")) for x in paths),
-              "other":sum(not x.lower().endswith((".nii",".nii.gz",".rar",".zip",".7z",".tar",".tar.gz",".nrrd",".mha",".mhd")) for x in paths),
-          }
-          print("Original Zenodo archive anonymous file-format counts: "+str(file_types))
-          PY
-          mkdir -p "$RUNNER_TEMP/zenodo-sah-unpacked"
-          7z x -y -bso0 -bse0 -bb0 "-o$RUNNER_TEMP/zenodo-sah-unpacked" \
-            "$RUNNER_TEMP/zenodo-sah-original-ct-and-experts.rar" >/dev/null
-          rm -f "$RUNNER_TEMP/zenodo-sah-original-ct-and-experts.rar" "$RUNNER_TEMP/archive-list-private.txt"
-          echo "Published CT/expert archive integrity verified and unpacked privately."
-
-      - name: Select one genuine, geometry-matched original CT/expert NIfTI and native positive slab
-        id: selected
-        shell: bash
-        run: |
-          python scripts/select-ich-zenodo-sah-case.py \
-            --extracted-dir "$RUNNER_TEMP/zenodo-sah-unpacked" \
-            --slice-count "$SOURCE_SLICES" --github-output "$GITHUB_OUTPUT"
-
       - name: Install pretrained PyTorch CPU runtime (never GPU)
         shell: bash
         run: |
@@ -185,6 +137,80 @@ jobs:
           python -m pip install --disable-pip-version-check --no-cache-dir \
             -r "$RUNNER_TEMP/safe-model-requirements.txt"
           python -m pip check
+
+      - name: Confirm pinned SAMIHS Python CLI imports under installed CPU runtime
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import importlib.util,os,subprocess,sys,tempfile
+          wrapper=Path(os.environ["RUNNER_TEMP"])/"samihs-fixed-upstream"/"segment_ich.py"
+          spec=importlib.util.spec_from_file_location("opus_cpu_diagnostic","scripts/run-ich-samihs-cpu-pilot.py")
+          diagnostic=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(diagnostic)
+          # --help loads the real pinned vendor CLI and imports without reading
+          # any CT or deserializing checkpoint data. Suppress untrusted traceback.
+          with tempfile.TemporaryFile(mode="w+b") as private_log:
+              proc=subprocess.run(
+                  [sys.executable,str(wrapper),"--help"],
+                  cwd=str(wrapper.parent),stdin=subprocess.DEVNULL,
+                  stdout=private_log,stderr=subprocess.STDOUT,
+                  timeout=90,env={**os.environ,"HF_HUB_OFFLINE":"1","TRANSFORMERS_OFFLINE":"1"})
+              if proc.returncode!=0:
+                  private_log.seek(0,os.SEEK_END)
+                  private_log.seek(max(0,private_log.tell()-32768))
+                  summary=diagnostic.classify_upstream_failure(private_log.read(),proc.returncode)
+                  raise SystemExit("Pinned SAMIHS CPU CLI preflight failed before public CT download: "+summary)
+          print("Official pinned SAMIHS CLI imports successfully on GitHub CPU. Model inference NOT tested by preflight.")
+          PY
+
+      - name: Download published Zenodo SAH CT and original expert masks (dataset NOT uploaded)
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --retry 3 --max-time 2100 \
+            "https://zenodo.org/records/8228847/files/subarachnoid_hemorrhage_rhuh.rar?download=1" \
+            --output "$RUNNER_TEMP/zenodo-sah-original-ct-and-experts.rar"
+          bytes=$(stat -c %s "$RUNNER_TEMP/zenodo-sah-original-ct-and-experts.rar")
+          if (( bytes < 1000000 || bytes > 750000000 )); then
+            echo "Zenodo archive unexpectedly sized; rejecting." >&2
+            exit 2
+          fi
+          echo "a67bf358ebb326f156071864c318ab42  $RUNNER_TEMP/zenodo-sah-original-ct-and-experts.rar" | md5sum --status -c -
+          7z l -slt "$RUNNER_TEMP/zenodo-sah-original-ct-and-experts.rar" > "$RUNNER_TEMP/archive-list-private.txt"
+          python - <<'PY'
+          import os,re
+          from pathlib import Path
+          listing=Path(os.environ["RUNNER_TEMP"])/"archive-list-private.txt"
+          txt=listing.read_text(errors="replace")
+          values=[int(x) for x in re.findall(r"(?m)^Size = (\d+)\s*$",txt)]
+          if not values or sum(values)>7*1024**3:
+              raise SystemExit("Public dataset extraction exceeds 7 GiB safety budget")
+          # Only anonymous file-type totals: NEVER log original study/case IDs.
+          # RAR listings can contain volume or expert files under arbitrary
+          # directories, and some archives contain nested archives instead.
+          paths=re.findall(r"(?m)^Path = (.+)$",txt)
+          file_types={
+              "nifti":sum(x.lower().endswith((".nii",".nii.gz")) for x in paths),
+              "nested_archive":sum(x.lower().endswith((".rar",".zip",".7z",".tar",".tar.gz")) for x in paths),
+              "nrrd":sum(x.lower().endswith((".nrrd",".mha",".mhd")) for x in paths),
+              "other":sum(not x.lower().endswith((".nii",".nii.gz",".rar",".zip",".7z",".tar",".tar.gz",".nrrd",".mha",".mhd")) for x in paths),
+          }
+          print("Original Zenodo archive anonymous file-format counts: "+str(file_types))
+          PY
+          mkdir -p "$RUNNER_TEMP/zenodo-sah-unpacked"
+          7z x -y -bso0 -bse0 -bb0 "-o$RUNNER_TEMP/zenodo-sah-unpacked" \
+            "$RUNNER_TEMP/zenodo-sah-original-ct-and-experts.rar" >/dev/null
+          rm -f "$RUNNER_TEMP/zenodo-sah-original-ct-and-experts.rar" "$RUNNER_TEMP/archive-list-private.txt"
+          echo "Published CT/expert archive integrity verified and unpacked privately."
+
+      - name: Select one genuine, geometry-matched original CT/expert NIfTI and native positive slab
+        id: selected
+        shell: bash
+        run: |
+          python scripts/select-ich-zenodo-sah-case.py \
+            --extracted-dir "$RUNNER_TEMP/zenodo-sah-unpacked" \
+            --slice-count "$SOURCE_SLICES" --github-output "$GITHUB_OUTPUT"
 
       - name: Execute trained SAMIHS on original consecutive CT source voxels and compare ORIGINAL expert mask
         id: inference

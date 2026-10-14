@@ -18,6 +18,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import tempfile
 import time
 from urllib.parse import urlparse
 
@@ -167,6 +168,63 @@ def source_aligned_slab(source: Path, reference: Path, axis: int, start: int,
     }
 
 
+
+def classify_upstream_failure(raw: bytes, returncode: int) -> str:
+    """Only bounded, typed errors from vendor logs; never patient identifiers.
+
+    No paths, original case names, values, raw traceback or source imagery
+    may enter public GitHub Actions output. Fingerprint links repeated errors.
+    """
+    data = raw[-32768:]
+    message = data.decode("utf-8", errors="replace")
+    fingerprint = hashlib.sha256(data).hexdigest()[:16]
+    category = "unclassified_vendor_failure"
+    detail = ""
+    if found := re.search(r"No module named ['\"]([A-Za-z_][A-Za-z0-9_.]{0,78})['\"]", message):
+        category = "missing_python_module"
+        detail = "; module=" + found.group(1)
+    elif "unrecognized arguments:" in message or "error: argument" in message:
+        category = "incompatible_upstream_cli"
+    elif "Weights only load failed" in message or "weights_only" in message:
+        category = "upstream_pytorch_checkpoint_loader"
+    elif ("not compiled with CUDA" in message or "Torch not compiled with CUDA" in message
+          or "CUDA is not available" in message or "Found no NVIDIA driver" in message):
+        category = "upstream_requires_cuda"
+    elif ("out of memory" in message.lower()
+          or "cannot allocate memory" in message.lower()):
+        category = "cpu_memory_exceeded"
+    elif "size mismatch" in message and ("state_dict" in message or "weight" in message):
+        category = "checkpoint_architecture_mismatch"
+    elif "FileNotFoundError:" in message or "No such file or directory" in message:
+        category = "upstream_missing_resource"
+    elif "ModuleNotFoundError:" in message or "ImportError:" in message:
+        category = "upstream_python_import_error"
+    elif found := re.findall(r"(?m)^(RuntimeError|ValueError|TypeError|AssertionError|AttributeError|OSError|IndexError|KeyError|NotImplementedError):", message):
+        category = "upstream_" + found[-1].lower()
+    elif returncode < 0:
+        category = "upstream_terminated_by_signal"
+    return ("category=" + category + detail + "; exitCode=" + str(returncode)
+            + "; diagnosticSha256Prefix=" + fingerprint)
+
+
+def invoke_verified_upstream(command: list[str], model_dir: Path, timeout_seconds: int):
+    """Execute genuine upstream wrapper; never echo untrusted model output."""
+    with tempfile.TemporaryFile(mode="w+b") as private_log:
+        result = subprocess.run(
+            command, cwd=str(model_dir.resolve()), check=False,
+            timeout=timeout_seconds,
+            env={**os.environ, "OMP_NUM_THREADS": "2", "MKL_NUM_THREADS": "2",
+                 "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"},
+            stdout=private_log, stderr=subprocess.STDOUT,
+        )
+        if result.returncode != 0:
+            private_log.seek(0, os.SEEK_END)
+            length = private_log.tell()
+            private_log.seek(max(0, length - 32768))
+            diagnostic = classify_upstream_failure(private_log.read(), result.returncode)
+            raise RuntimeError("trained_samihs_cpu_wrapper_failed; " + diagnostic)
+
+
 def run(args):
     source, reference, output = admission(args)
     import nibabel as nib
@@ -222,13 +280,7 @@ def run(args):
         ]
         start_time = time.monotonic()
         try:
-            subprocess.run(
-                command, cwd=str(Path(args.model_dir).resolve()), check=True,
-                timeout=args.timeout_seconds,
-                env={**os.environ, "OMP_NUM_THREADS": "2", "MKL_NUM_THREADS": "2",
-                     "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"},
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            )
+            invoke_verified_upstream(command, Path(args.model_dir), args.timeout_seconds)
             predicted = nib.load(str(required_file(str(mask_path))))
             if (predicted.shape != slab_ct.shape or predicted.header.get_data_dtype().kind not in "iu"
                     or not np.allclose(predicted.affine, slab_ct.affine, atol=0.05, rtol=0)):
@@ -296,8 +348,11 @@ def main():
             "fullOriginalStudyProcessed": False,
         }))
     except Exception as error:
-        print("ICH bounded CPU pilot failed: " + type(error).__name__ + ": " +
-              str(error).split("/")[0][:100], file=sys.stderr)
+        if str(error).startswith("trained_samihs_cpu_wrapper_failed; "):
+            print("SAMIHS real CPU inference failed: " + str(error), file=sys.stderr)
+        else:
+            print("ICH bounded CPU pilot failed: " + type(error).__name__ +
+                  " (private data and vendor traceback suppressed)", file=sys.stderr)
         raise SystemExit(2)
 
 
