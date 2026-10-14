@@ -110,10 +110,12 @@ def source_aligned_slab(source: Path, reference: Path, axis: int, start: int,
             or ct.shape[2] > 400 or math.prod(ct.shape) > 512 * 512 * 400
             or start + count > ct.shape[axis]):
         raise ValueError("unsupported_real_3d_source_or_slice_span")
+    # Explicit metric qform is a legitimate native physical grid when sform
+    # is absent; never invent an affine when neither is coded in the source.
     if (ct.header.get_xyzt_units()[0] != "mm" or
             expert.header.get_xyzt_units()[0] != "mm" or
-            int(ct.header["sform_code"]) <= 0 or
-            int(expert.header["sform_code"]) <= 0 or
+            all(int(ct.header[k]) <= 0 for k in ("sform_code", "qform_code")) or
+            all(int(expert.header[k]) <= 0 for k in ("sform_code", "qform_code")) or
             not np.all(np.isfinite(ct.affine)) or
             not np.allclose(ct.affine, expert.affine, rtol=0, atol=0.05)):
         raise ValueError("original_ct_expert_native_mm_grid_mismatch")
