@@ -160,5 +160,38 @@ class NativeCpuPilotContracts(unittest.TestCase):
             self.assertEqual(generated.header.get_data_dtype().kind,"u")
 
 
+    def test_explicit_native_qform_only_coordinates_round_trip(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td)
+            ct,ref=make_files(root)
+            original=nib.load(str(ct))
+            for file in (ct,ref):
+                nii=nib.load(str(file))
+                affine=nii.affine.copy()
+                nii.set_sform(affine,code=0)
+                nii.set_qform(affine,code=1)
+                nib.save(nii,str(file))
+            cfg=args(root,ct,ref)
+            result=pilot.run(cfg)
+            self.assertFalse(result["model"]["executed"])
+            exported=nib.load(str(root/"results"/"source-native-slab.nii.gz"))
+            self.assertEqual(int(exported.header["qform_code"]),1)
+            np.testing.assert_allclose(
+                exported.affine @ [3,4,7,1],
+                original.affine @ [3,4,19,1],rtol=0,atol=1e-4)
+
+    def test_missing_original_physical_affine_rejected(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);ct,ref=make_files(root)
+            original=nib.load(str(ct))
+            affine=original.affine.copy()
+            original.set_sform(affine,code=0)
+            original.set_qform(affine,code=0)
+            nib.save(original,str(ct))
+            cfg=args(root,ct,ref)
+            with self.assertRaisesRegex(ValueError,"native_mm_grid_mismatch"):
+                pilot.run(cfg)
+
+
 if __name__=="__main__":
     unittest.main()
