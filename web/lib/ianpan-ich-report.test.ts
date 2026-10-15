@@ -89,3 +89,33 @@ test("admitted geometry-only source ROI remains explicitly unvalidated",()=>{
   ...mapped,source:{...r.source}
  })),/источника для/);
 });
+
+test("real published Figshare HU-LIKE source stays unverified and edema is not ICH mask",()=>{
+ const r=sample();
+ const published={
+  ...r,
+  externalExpertHemorrhageLocalizationComparisonPerformed:false,
+  source:{
+    ...r.source,
+    sourceOriginalDicomHURescaleIndependentlyVerified:false,
+    publishedFigshareHuLikeWithoutOriginalDicomRescaleAudit:true,
+    referenceLabelsOnlyPerihematomalEdema:true,
+  },
+ };
+ const parsed=parseIchAlternativeReport(JSON.stringify(published));
+ assert.equal(parsed.source.publishedFigshareHuLikeWithoutOriginalDicomRescaleAudit,true);
+ assert.equal(parsed.source.sourceOriginalDicomHURescaleIndependentlyVerified,false);
+ assert.equal(parsed.source.referenceLabelsOnlyPerihematomalEdema,true);
+ const spoof={
+  ...published,
+  source:{...published.source,sourceOriginalDicomHURescaleIndependentlyVerified:true},
+ };
+ assert.throws(()=>parseIchAlternativeReport(JSON.stringify(spoof)),/статус/);
+ const spoofMask={
+  ...published,
+  source:{...published.source,referenceLabelsOnlyPerihematomalEdema:false},
+ };
+ assert.throws(()=>parseIchAlternativeReport(JSON.stringify(spoofMask)),/статус/);
+ const spoofValidation={...published,externalExpertHemorrhageLocalizationComparisonPerformed:true};
+ assert.throws(()=>parseIchAlternativeReport(JSON.stringify(spoofValidation)),/статус/);
+});
