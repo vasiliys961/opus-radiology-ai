@@ -61,7 +61,8 @@ def train(args):
         model.eval();target=[];pred=[];known=[];uids=[]
         with torch.inference_mode():
             for row in val_rows:
-                try:x=study_slices(Path(args.dicom_root),index,row["StudyInstanceUID"],args.slices,args.series_limit).cuda()
+                try:x=study_slices(Path(args.dicom_root),index,row["StudyInstanceUID"],args.slices,args.series_limit,
+                                       series_order="provided" if args.series_selection=="balanced" else "legacy").cuda()
                 except ValueError:continue
                 y,m=extract_labels(row)
                 score=model(normalize(x)).sigmoid().cpu().tolist()
