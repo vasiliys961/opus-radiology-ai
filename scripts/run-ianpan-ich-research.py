@@ -32,8 +32,8 @@ MODEL_FILES = {
 }
 CLASS_NAMES = ("epidural", "intraparenchymal", "intraventricular",
                "subarachnoid", "subdural", "any")
-MAX_SOURCE_BYTES = 128 * 1024**2
-MAX_SOURCE_VOXELS = 512 * 512 * 64
+MAX_SOURCE_BYTES = 256 * 1024**2
+MAX_SOURCE_VOXELS = 512 * 512 * 128
 
 def sha256(path: Path) -> str:
     h = hashlib.sha256()
@@ -195,7 +195,7 @@ def run(args):
     upstream = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(upstream)
     volume = upstream.read_nifti_volume(source)
-    if volume.shape[0] > 64 or volume.ndim != 3 or not np.isfinite(volume).all():
+    if volume.shape[0] > 128 or volume.ndim != 3 or not np.isfinite(volume).all():
         raise ValueError("unsupported_public_head_series_volume")
     # Finite range is a sanity check; manifest provenance is still required.
     if float(volume.min()) < -4096 or float(volume.max()) > 6000 or float(volume.max()-volume.min()) < 100:
