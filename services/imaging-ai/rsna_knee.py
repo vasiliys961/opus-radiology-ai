@@ -64,7 +64,32 @@ def extract_labels(row):
         mask.append(float(valid))
     return values,mask
 
-def study_slices(root,index,uid,per_series=8,max_series=9,series_order="legacy"):
+def normalize_mr_pixel(pixel, dataset, mode="legacy"):
+    """Return 8-bit MRI intensity with optional DICOM-aware rescale and inversion."""
+    import numpy as np
+    values=np.asarray(pixel,dtype=np.float32)
+    if values.ndim!=2:
+        raise ValueError("Expected grayscale MRI")
+    if mode not in ("legacy","dicom"):
+        raise ValueError("Unsupported MRI pixel preprocessing")
+    if mode=="dicom":
+        slope=float(getattr(dataset,"RescaleSlope",1))
+        intercept=float(getattr(dataset,"RescaleIntercept",0))
+        if not np.isfinite(slope) or not np.isfinite(intercept) or slope==0:
+            raise ValueError("Invalid DICOM intensity rescale")
+        values=values*slope+intercept
+    valid=np.isfinite(values)
+    if not valid.any():
+        raise ValueError("No finite MRI intensities")
+    low,high=np.percentile(values[valid],(1,99))
+    if not np.isfinite(low) or not np.isfinite(high) or high<=low:
+        raise ValueError("Constant or invalid MRI pixel range")
+    normalized=np.clip((np.nan_to_num(values,nan=low,posinf=high,neginf=low)-low)/(high-low),0,1)
+    if mode=="dicom" and str(getattr(dataset,"PhotometricInterpretation","")).upper()=="MONOCHROME1":
+        normalized=1-normalized
+    return (normalized*255).astype("uint8")
+
+def study_slices(root,index,uid,per_series=8,max_series=9,series_order="legacy",pixel_mode="legacy"):
     import numpy as np
     import pydicom
     import torch
@@ -80,11 +105,7 @@ def study_slices(root,index,uid,per_series=8,max_series=9,series_order="legacy")
         for i in np.linspace(0,len(files)-1,min(len(files),per_series),dtype=int) if files else []:
             try:
                 ds=pydicom.dcmread(str(files[int(i)]))
-                pixel=ds.pixel_array.astype(np.float32)
-                if pixel.ndim!=2:continue
-                low,high=np.percentile(pixel,(1,99))
-                if high<=low or not np.isfinite(high):continue
-                pixel=(np.clip((pixel-low)/(high-low),0,1)*255).astype("uint8")
+                pixel=normalize_mr_pixel(ds.pixel_array,ds,mode=pixel_mode)
                 pixel=np.asarray(Image.fromarray(pixel).resize((224,224)),dtype=np.float32)/255
                 images.append(torch.from_numpy(pixel).unsqueeze(0).repeat(3,1,1))
             except (OSError,ValueError,RuntimeError,AttributeError,ImportError):
