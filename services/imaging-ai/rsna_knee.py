@@ -48,7 +48,7 @@ def series_index(rows):
     index={}
     for row in rows:
         uid=row["StudyInstanceUID"];sid=row["SeriesInstanceUID"]
-        if any(x in item for item in (uid,sid) for x in ("..","/","\\\\") ):
+        if any(x in item for item in (uid,sid) for x in ("..","/","\\") ):
             raise ValueError("Unsafe DICOM identifier")
         if row.get("Anatomical_Plane") not in PLANES:
             continue
@@ -64,13 +64,18 @@ def extract_labels(row):
         mask.append(float(valid))
     return values,mask
 
-def study_slices(root,index,uid,per_series=8,max_series=9):
+def study_slices(root,index,uid,per_series=8,max_series=9,series_order="legacy"):
     import numpy as np
     import pydicom
     import torch
     from PIL import Image
+    if series_order not in ("legacy","provided"):
+        raise ValueError("Unknown series order")
     images=[]
-    for sid in sorted(index.get(uid,[]))[:max_series]:
+    selected=index.get(uid,[])
+    if series_order=="legacy":
+        selected=sorted(selected)
+    for sid in selected[:max_series]:
         files=sorted((root/uid/sid).glob("*.dcm"))
         for i in np.linspace(0,len(files)-1,min(len(files),per_series),dtype=int) if files else []:
             try:
