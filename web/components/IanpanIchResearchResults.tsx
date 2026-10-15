@@ -5,6 +5,7 @@ import {
   parseIchAlternativeReport,ICH_CLASSES,ICH_CLASS_LABELS,
   type IchAlternativeClass,type IchAlternativeReport,
 } from "../lib/ianpan-ich-report";
+import IchSourceNativeReview from "./IchSourceNativeReview";
 import {groupIchResearchCandidateRegions} from "../lib/ianpan-ich-candidate-groups";
 
 /**
@@ -174,6 +175,7 @@ export default function IanpanIchResearchResults(){
             карта пуста либо её область лежит в полях дополнения модели.</small>}
         </div>)}
       </div>
+      <IchSourceNativeReview key={report.source.niftiSha256+report.runtime.elapsedSeconds} report={report}/>
       <label style={{display:"block",marginTop:12}}>Комментарий врача-исследователя (не удостоверен)
         <textarea rows={2} maxLength={1500} value={notes}
           onChange={e=>setNotes(e.target.value)}
