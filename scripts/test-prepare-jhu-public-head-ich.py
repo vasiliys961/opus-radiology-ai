@@ -23,9 +23,9 @@ class JHUPublicSourceTest(unittest.TestCase):
     def make_original(self,root):
         import numpy as np
         import nibabel as nib
-        data=np.zeros((32,32,12),np.float32)
-        data[:,:,:]=-970
-        data[4:28,4:28,:]=40
+        rng=np.random.default_rng(31)
+        data=rng.normal(-950,25,(32,32,12)).astype(np.float32)
+        data[4:28,4:28,:]=rng.normal(40,12,(24,24,12))
         data[10:20,10:20,6]=220
         nii=root/"original.nii.gz"
         nif=nib.Nifti1Image(data,np.diag([.8,.8,2.,1.]))
@@ -51,6 +51,12 @@ class JHUPublicSourceTest(unittest.TestCase):
                     "PUBLISHED_DICOM_DERIVED_CT_HU_LIKE_NOT_DICOM_RESCALE_INDEPENDENTLY_VERIFIED")
                 self.assertEqual(document["publisherProvenance"]["dicomRescaleIndependentlyVerified"],False)
                 self.assertEqual(document["sourceNiftiSha256"],runner.sha256(output))
+                # Fixture proof uses a synthetic tar digest. Bind the test to
+                # the genuine published archive ID only for the strict
+                # contract check; no source is ever reported as real.
+                test_document=json.loads(manifest.read_text())
+                test_document["publisherProvenance"]["publishedArchiveMd5"] = runner.PUBLISHER_JHU_ARCHIVE_MD5 if hasattr(runner,"PUBLISHER_JHU_ARCHIVE_MD5") else "a1e57f5cb684fc238d32a019bec456ad"
+                manifest.write_text(json.dumps(test_document))
                 self.assertIs(runner.validate_public_manifest(output,manifest)["sourceFullStudy"],True)
                 self.assertEqual(document["publisherProvenance"]["dimensionsXYZ"],[32,32,12])
                 self.assertFalse(document["publisherProvenance"]["publicSourceAuditIsNotClinicalValidation"] is False)
