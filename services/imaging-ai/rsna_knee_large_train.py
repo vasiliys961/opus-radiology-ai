@@ -15,6 +15,7 @@ from rsna_knee import LABELS, balanced_series, read_rows, extract_labels, study_
 from rsna_knee_validation import load_partition
 from rsna_knee_finding_mil import make_finding_mil
 from rsna_knee_warmstart import validate_warmstart
+from rsna_knee_tail_finetune import configure_trainable_tail, encode_with_tail
 
 
 def configuration(args):
@@ -88,6 +89,14 @@ def train(args):
 
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA required for full-corpus DINOv2 feature encoding")
+    if args.tail_blocks<0 or args.encoder_lr<=0:
+        raise ValueError("Invalid encoder fine-tuning configuration")
+    if args.tail_blocks and args.cache_dir:
+        raise ValueError("Fine-tuning cannot use stale frozen feature cache")
+    if args.tail_blocks and args.head!="finding-v2":
+        raise ValueError("Tail fine-tuning requires --head finding-v2")
+    if args.tail_blocks and args.resume:
+        raise ValueError("Legacy frozen optimizer resume incompatible with tail fine-tuning; use --warmstart")
     if args.slice_batch<1 or args.epochs<1 or args.slices<1:
         raise ValueError("Invalid batch, epochs or slices")
     random.seed(args.seed);torch.manual_seed(args.seed)
@@ -108,7 +117,14 @@ def train(args):
     },sort_keys=True).encode()).hexdigest()
     head=make_finding_mil(384,findings=len(LABELS)).cuda() if args.head=="finding-v2" else None
     trainable=list(head.parameters()) if head is not None else (list(model.attention.parameters())+list(model.classifier.parameters()))
-    optimizer=torch.optim.AdamW(trainable,lr=args.lr)
+    if args.tail_blocks:
+        configure_trainable_tail(model.backbone,args.tail_blocks)
+        optimizer=torch.optim.AdamW([
+            {"params":trainable,"lr":args.lr},
+            {"params":[p for p in model.backbone.parameters() if p.requires_grad],"lr":args.encoder_lr}
+        ])
+    else:
+        optimizer=torch.optim.AdamW(trainable,lr=args.lr)
     start=0
     if args.warmstart:
         checkpoint=torch.load(args.warmstart,map_location="cpu",weights_only=True)
@@ -127,22 +143,32 @@ def train(args):
             head.load_state_dict(checkpoint["head_state_dict"],strict=True)
         optimizer.load_state_dict(checkpoint["optimizer"])
         start=int(checkpoint["epoch"])
-    model.backbone.eval()
-    for parameter in model.backbone.parameters():
-        parameter.requires_grad_(False)
+    if not args.tail_blocks:
+        model.backbone.eval()
+        for parameter in model.backbone.parameters():
+            parameter.requires_grad_(False)
     out=Path(args.output)
+    best_auc=-1.0
     for epoch in range(start,args.epochs):
         if head is None:
             model.attention.train();model.classifier.train()
         else:
             head.train()
+        if args.tail_blocks:
+            model.backbone.train()
         order=list(training)
         random.Random(args.seed+epoch).shuffle(order)
         losses=[];failed=0
         for row in order:
             uid=row["StudyInstanceUID"]
             try:
-                features=cache_features(model,uid,index,args,"cuda",encoder_id)
+                if args.tail_blocks:
+                    images=study_slices(Path(args.dicom_root),index,uid,args.slices,args.series_limit,
+                        series_order="provided" if args.series_selection=="balanced" else "legacy",
+                        pixel_mode=args.pixel_mode,slice_order=args.slice_order)
+                    features=encode_with_tail(model,images,args.slice_batch,"cuda",train=True)
+                else:
+                    features=cache_features(model,uid,index,args,"cuda",encoder_id)
             except (ValueError,OSError,RuntimeError):
                 failed+=1
                 continue
@@ -152,17 +178,28 @@ def train(args):
             optimizer.zero_grad(set_to_none=True)
             logits=head(features) if head is not None else forward_head(model,features)
             loss=(F.binary_cross_entropy_with_logits(logits,target,reduction="none")*mask).sum()/mask.sum().clamp_min(1)
-            loss.backward();optimizer.step();losses.append(loss.item())
+            loss.backward()
+            if args.tail_blocks:
+                torch.nn.utils.clip_grad_norm_(model.backbone.parameters(),1.0)
+            optimizer.step();losses.append(loss.item())
             del features
         if head is None:
             model.attention.eval();model.classifier.eval()
         else:
             head.eval()
+        if args.tail_blocks:
+            model.backbone.eval()
         predictions=[];truth=[];known=[]
         with torch.inference_mode():
             for row in validation:
                 try:
-                    features=cache_features(model,row["StudyInstanceUID"],index,args,"cuda",encoder_id)
+                    if args.tail_blocks:
+                        images=study_slices(Path(args.dicom_root),index,row["StudyInstanceUID"],args.slices,args.series_limit,
+                            series_order="provided" if args.series_selection=="balanced" else "legacy",
+                            pixel_mode=args.pixel_mode,slice_order=args.slice_order)
+                        features=encode_with_tail(model,images,args.slice_batch,"cuda",train=False)
+                    else:
+                        features=cache_features(model,row["StudyInstanceUID"],index,args,"cuda",encoder_id)
                 except (ValueError,OSError,RuntimeError):
                     continue
                 pred=(head(features) if head is not None else forward_head(model,features)).sigmoid().cpu().tolist()
@@ -172,7 +209,9 @@ def train(args):
         for j,label in enumerate(LABELS):
             pairs=[(t[j],p[j]) for t,p,k in zip(truth,predictions,known) if k[j]]
             auc[label]=float(roc_auc_score([x[0] for x in pairs],[x[1] for x in pairs])) if len({x[0] for x in pairs})==2 else None
-        report={"epoch":epoch+1,"loss":sum(losses)/len(losses) if losses else None,
+        valid_auc=[x for x in auc.values() if x is not None]
+        macro_auc=sum(valid_auc)/len(valid_auc) if valid_auc else None
+        report={"epoch":epoch+1,"macro_auc":macro_auc,"evaluable_classes":len(valid_auc),"loss":sum(losses)/len(losses) if losses else None,
                 "failed_studies":failed,"validation_studies":len(truth),"auc":auc}
         print(json.dumps(report),flush=True)
         state={k:v.detach().cpu() for k,v in model.state_dict().items()}
@@ -182,11 +221,15 @@ def train(args):
                     "slice_order":args.slice_order,"research_only":True,
                     "trainer_fingerprint":fingerprint,"encoder_id":encoder_id,
                     "epoch":epoch+1,"optimizer":optimizer.state_dict(),"metrics":report,
+                    "tail_blocks":args.tail_blocks,"encoder_lr":args.encoder_lr,
                     "warmstart_source":str(Path(args.warmstart).name) if args.warmstart else None}
         if head is not None:
             checkpoint["head_family"]="finding-v2"
             checkpoint["head_state_dict"]={k:v.detach().cpu() for k,v in head.state_dict().items()}
         save_atomic(torch,checkpoint,out)
+        if macro_auc is not None and macro_auc>best_auc:
+            best_auc=macro_auc
+            save_atomic(torch,checkpoint,out.with_name(out.stem+".best"+out.suffix))
     return out
 
 
@@ -204,6 +247,9 @@ def main():
     p.add_argument("--series-limit",type=int,default=3)
     p.add_argument("--slice-batch",type=int,default=8)
     p.add_argument("--lr",type=float,default=1e-3)
+    p.add_argument("--tail-blocks",type=int,default=0,
+                   help="Train final N DINOv2 transformer blocks; 0 keeps frozen encoder")
+    p.add_argument("--encoder-lr",type=float,default=1e-5)
     p.add_argument("--seed",type=int,default=42)
     p.add_argument("--pixel-mode",choices=("legacy","dicom"),default="dicom")
     p.add_argument("--slice-order",choices=("legacy","geometry-v2"),default="geometry-v2")
