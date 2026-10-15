@@ -58,8 +58,8 @@ const obj=(x:unknown):Record<string,unknown>=>{
   if(!x||typeof x!=="object"||Array.isArray(x))throw Error("Неверный формат экспертного паспорта.");
   return x as Record<string,unknown>;
 };
-const integer=(n:unknown)=>typeof n==="number"&&Number.isSafeInteger(n)&&n>=0;
-const number=(n:unknown)=>typeof n==="number"&&Number.isFinite(n)&&n>=0;
+const integer=(n:unknown):n is number=>typeof n==="number"&&Number.isSafeInteger(n)&&n>=0;
+const number=(n:unknown):n is number=>typeof n==="number"&&Number.isFinite(n)&&n>=0;
 export function parseIchBloodExpertSpatialReview(
   raw:string,model:IchAlternativeReport,originalModelReportSha256:string
 ):IchBloodReferenceResult{
@@ -138,10 +138,9 @@ export function parseIchBloodExpertSpatialReview(
         throw Error("Покрытие экспертных вокселей не соответствует исходным числам.");
       if(!number(c.maxRawUncalibratedScore)&&c.maxRawUncalibratedScore!==null)
         throw Error("Невалидная исследовательская оценка модели.");
-      if(available.length&&!number(c.maxRawUncalibratedScore))
-        throw Error("Отсутствует максимальная оценка модели.");
-      if(available.length&&Math.abs(Math.max(...available.map(v=>v.rawUncalibratedScore))-
-          c.maxRawUncalibratedScore)>1e-6)
+      const maxReported=c.maxRawUncalibratedScore;
+      if(available.length&&(!number(maxReported)||
+        Math.abs(Math.max(...available.map(v=>v.rawUncalibratedScore))-maxReported)>1e-6))
         throw Error("Оценка модели не соответствует исходной КТ.");
     }
     seenLabel.add(c.label);seenClass.add(cl);
