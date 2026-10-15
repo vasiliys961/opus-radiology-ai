@@ -58,3 +58,22 @@ Source-voxel transformation is validated against published MONAI 1.4.0
 world LPS conversion plus original MetaImage physical geometry. DICOM/SOP,
 independent clinical contour validation, patient diagnosis, sensitivity and
 FROC remain **NOT VALIDATED**.
+
+## 3D candidate box on contiguous original CT slices
+
+The physician research viewer also inversely projects the real MONAI 3D
+`centerMonaiWorldMm` and `extentMm` model cuboid into a **bounded original
+MetaImage voxel-space axis-aligned envelope**. All eight original world
+box corners are transformed through the checked source physical 3×3
+direction+spacing+origin; native x/y rectangle appears only on source z
+slices intersecting that cuboid. A clinician may toggle the outline
+independently of the model-center marker and compare neighboring slices.
+
+**This cuboid is NOT a lesion segmentation, expert-measured diameter,
+ellipsoid or measured nodule volume.** On non-axis-aligned source CT the
+rectangle is a conservative native-voxel envelope, not a polygon-accurate
+section of a transformed cuboid. Boxes are clipped to the original volume
+and an explicit warning says when this occurred. The mark is solid only
+for the exact independently verified real LUNA16 comparison; otherwise
+it remains hypothetical and dashed. No patient or private scan registration
+is inferred and no diagnosis/sensitivity number is generated.
