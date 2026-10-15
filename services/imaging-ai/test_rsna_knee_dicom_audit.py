@@ -23,7 +23,7 @@ class DicomAuditTest(unittest.TestCase):
                 meta.TransferSyntaxUID=ExplicitVRLittleEndian
                 meta.MediaStorageSOPClassUID=SecondaryCaptureImageStorage
                 meta.MediaStorageSOPInstanceUID=generate_uid()
-                ds=FileDataset(str(folder/f"{i}.dcm"),{},file_meta=meta,preamble=b"\\0"*128)
+                ds=FileDataset(str(folder/f"{i}.dcm"),{},file_meta=meta,preamble=bytes(128))
                 ds.Rows=32;ds.Columns=32;ds.InstanceNumber=1
                 ds.save_as(str(folder/f"{i}.dcm"),enforce_file_format=True)
             result=inspect_series(directory,[{"StudyInstanceUID":"study1","SeriesInstanceUID":"series1","Anatomical_Plane":"Sagittal"}])
