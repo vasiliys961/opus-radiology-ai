@@ -50,6 +50,30 @@ def validate_public_manifest(source: Path, manifest_path: Path) -> dict:
     if manifest_path.is_symlink() or not manifest_path.is_file() or manifest_path.stat().st_size > 4096:
         raise ValueError("invalid_public_manifest")
     document = json.loads(manifest_path.read_text(encoding="utf-8"))
+    # Admission for ONE fixed licensed PHE-SICH-CT-IDS publisher NIfTI:
+    # no originating DICOM RescaleSlope/Intercept audit is available.
+    # It can only be an exploratory HU-LIKE candidate, never the strict
+    # HU_FROM_VERIFIED_DICOM_RESCALE category.
+    figshare = (
+        isinstance(document,dict)
+        and document.get("sourceUnits") == "PUBLISHED_FIGSHARE_NONCONTRAST_CT_HU_LIKE_NOT_INDEPENDENTLY_VERIFIED"
+        and isinstance(document.get("publisherProvenance"),dict)
+        and document["publisherProvenance"].get("articleId")==23957937
+        and document["publisherProvenance"].get("fileId")==63081925
+        and document["publisherProvenance"].get("license")=="CC BY 4.0"
+        and document["publisherProvenance"].get("publishedArchiveSize")==1300209108
+        and document["publisherProvenance"].get("publishedArchiveMd5MetadataOnlyNotRecomputed")=="a2c3f32f11478167b975d5036edbb510"
+        and document["publisherProvenance"].get("originalMemberCRC32Checked") is True
+        and document["publisherProvenance"].get("huFromOriginalDicomRescaleIndependentlyVerified") is False
+        and document["publisherProvenance"].get("originalFullVolumePreserved") is True
+        and document["publisherProvenance"].get("intensityUnitsOnlyPlausibleHU") is True
+        and document["publisherProvenance"].get("referenceLabelsArePerihematomalEdemaNotHemorrhage") is True
+        and document["publisherProvenance"].get("expertHematomaMaskCompared") is False
+        and document["publisherProvenance"].get("modelLesionDetectionProven") is False
+        and isinstance(document["publisherProvenance"].get("originalGzipSha256"),str)
+        and len(document["publisherProvenance"]["originalGzipSha256"])==64
+    )
+    original_dicom = isinstance(document,dict) and document.get("sourceUnits") == "HU_FROM_VERIFIED_DICOM_RESCALE"
     if not isinstance(document, dict) or any([
         document.get("schema") != "opus-public-head-ct-hu-evidence/v1",
         document.get("modality") != "CT",
@@ -57,7 +81,7 @@ def validate_public_manifest(source: Path, manifest_path: Path) -> dict:
         document.get("contrast") != "NONCONTRAST",
         document.get("publicDataRightsReviewed") is not True,
         document.get("deidentifiedPublicDataset") is not True,
-        document.get("sourceUnits") != "HU_FROM_VERIFIED_DICOM_RESCALE",
+        not (original_dicom or figshare),
         document.get("sourceFullStudy") is not True,
         document.get("consent") != "PUBLIC-HEAD-NCCT-RESEARCH-OK",
     ]):
@@ -192,6 +216,7 @@ def run(args):
     result = {
         "schema": "opus-ianpan-genuine-public-ich-research/v1",
         "status": "genuine_pretrained_inference_requires_independent_validation",
+        "externalExpertHemorrhageLocalizationComparisonPerformed": False,
         "model": {"id": MODEL_REPO,"revision":MODEL_REV,
                   "sha256ByArtifact":{key:val[0] for key,val in MODEL_FILES.items()},
                   "checkpointSha256Verified":True},
@@ -202,7 +227,10 @@ def run(args):
                    "huProvenanceOperatorAttestedNotIndependentlyConfirmed":True,
                    "modelPixelsNotRegisteredToSource":True,
                    "researchRoiVoxelGeometryProjectionAvailable":True,
-                   "researchRoiClinicalValidation":False},
+                   "researchRoiClinicalValidation":False,
+                   "sourceOriginalDicomHURescaleIndependentlyVerified": original_dicom,
+                   "publishedFigshareHuLikeWithoutOriginalDicomRescaleAudit":figshare,
+                   "referenceLabelsOnlyPerihematomalEdema":figshare},
         "runtime": {"executionDevice":args.device,
                     "elapsedSeconds":round(time.monotonic()-started,3)},
         **evidence,
