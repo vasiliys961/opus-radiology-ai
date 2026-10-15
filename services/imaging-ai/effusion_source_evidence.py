@@ -45,7 +45,7 @@ def run(source,mask,source_hash,model_weights_sha,authorization):
     import nibabel as nib
     import numpy as np
     if authorization!="PUBLIC-OR-AUTHORIZED-CHEST-CT-RESEARCH-OK":
-        raise ValueError("explicit_authorized_chest_ct_research_required")
+        raise ValueError("explicit_chest_ct_research_authorization_required")
     if (not isinstance(source_hash,str) or len(source_hash)!=64 or
         not isinstance(model_weights_sha,str) or len(model_weights_sha)!=64 or
         any(ch not in "0123456789abcdef" for ch in source_hash+model_weights_sha)):
