@@ -3,6 +3,7 @@
 import {useState} from "react";
 import {calculateManualIchVolume,type IchDimensions,type ManualIchVolume} from "../lib/ich-volume";
 import IchResearchResults from "./IchResearchResults";
+import IanpanIchResearchResults from "./IanpanIchResearchResults";
 
 /** Manual CT HEAD quantitative clinical tool; NOT an AI hemorrhage detector. */
 export default function HeadHemorrhageVolumePanel({seriesKeys}:{
@@ -72,5 +73,6 @@ export default function HeadHemorrhageVolumePanel({seriesKeys}:{
       а также не заменяет объёмную сегментацию при сложной форме очага.
       Результат не является автоматическим диагнозом и не отправляется в облако.</p>
     <IchResearchResults/>
+    <IanpanIchResearchResults/>
   </section>;
 }
