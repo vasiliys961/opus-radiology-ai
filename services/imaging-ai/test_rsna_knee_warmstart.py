@@ -29,4 +29,11 @@ class WarmstartTests(unittest.TestCase):
     def test_reject_empty_weights(self):
         self.ckpt["head_state_dict"]={}
         with self.assertRaises(ValueError):validate_warmstart(self.ckpt,self.args)
+    def test_checkpoint_position_embedding_shape_diagnostic(self):
+        # Real Kaggle baseline saved 1370 positional tokens, while a fresh
+        # minimal Dinov2Config generated only 257; use pretrained architecture.
+        from pathlib import Path
+        code=Path(__file__).with_name("rsna_knee_large_train.py").read_text()
+        self.assertIn("model=model_factory(pretrained=True).cuda()",code)
+        self.assertNotIn("model=model_factory(pretrained=not bool(args.resume or args.warmstart))",code)
 if __name__=="__main__":unittest.main()
