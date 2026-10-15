@@ -285,7 +285,7 @@ jobs:
             --wrapper-sha256 "$MODEL_WRAPPER_SHA" \
             --start-slice "$CT_NATIVE_K" --slice-count "$SOURCE_SLICES" --slice-axis 2 \
             --output-dir "$RUNNER_TEMP/samihs-real-case" \
-            --reference-label 1 --timeout-seconds 1200 \
+            --reference-label 1 --timeout-seconds 1200 --probe-empty-prediction \
             --rights-attested --deidentified-public-data \
             --operator-authorized-upstream-execution \
             --authorization AUTHORIZED-PUBLIC-ICH-CPU-SLAB
