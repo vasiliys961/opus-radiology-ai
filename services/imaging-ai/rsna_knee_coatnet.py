@@ -4,6 +4,7 @@ import json
 import random
 from pathlib import Path
 from rsna_knee import LABELS, read_rows, series_index, extract_labels, study_slices
+from rsna_knee_validation import load_partition
 
 def build_model(pretrained=True, architecture="coatnet_0_rw_224"):
     import torch
@@ -40,9 +41,7 @@ def train(args):
     index=series_index(read_rows(args.series_csv))
     rows=[r for r in read_rows(args.train_csv) if r["StudyInstanceUID"] in index and any(extract_labels(r)[1])]
     if len(rows)<3:raise ValueError("Need at least three labeled studies")
-    rng=random.Random(args.seed);rng.shuffle(rows)
-    n=max(1,min(len(rows)-1,int(.8*len(rows))))
-    train_rows,val_rows=rows[:n],rows[n:]
+    train_rows,val_rows=load_partition(rows,args.manifest)
     model=build_model(not args.no_pretrained,args.architecture).cuda()
     opt=torch.optim.AdamW(model.parameters(),lr=args.lr)
     history=[]
@@ -94,6 +93,7 @@ def main():
     p.add_argument("--epochs",type=int,default=2);p.add_argument("--slices",type=int,default=3)
     p.add_argument("--series-limit",type=int,default=3);p.add_argument("--lr",type=float,default=2e-5)
     p.add_argument("--seed",type=int,default=42)
+    p.add_argument("--manifest",required=True,help="Shared held-out study manifest; mandatory to prevent inconsistent splits")
     p.add_argument("--architecture",default="coatnet_0_rw_224")
     p.add_argument("--no-pretrained",action="store_true")
     train(p.parse_args())
