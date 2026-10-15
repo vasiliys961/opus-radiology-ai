@@ -3,6 +3,7 @@ import {useState} from "react";
 import PathologyFindingsReview from "./PathologyFindingsReview";
 import PublicLuna16SourceSlices from "./PublicLuna16SourceSlices";
 import type {MonaiResearchReport} from "../lib/pathology-findings";
+import {validateMonaiRealCenterEvidence,type MonaiLunaCenterComparison} from "../lib/monai-luna16-center-evidence";
 
 type Report=MonaiResearchReport & {status:string;candidateCount:number};
 type PublicReference={schema:string;sourceSeriesIdSha256:string;sourceMhdSha256:string;annotationsSha256:string;referenceNodules:Array<{centerMm:number[];diameterMm:number;nativeVoxelIndex:number[];sliceIndex0Based:number}>;coordinateMappingStatus:string;independentHoldout:false;clinicalValidation:false;sourceGeometry:{dimensions:number[];spacingMm:number[];origin:number[];directionMatrix:number[][]}};
@@ -78,16 +79,25 @@ export default function LungNoduleResearchResults({isChestCT}:{isChestCT:boolean
  const [reference,setReference]=useState<PublicReference|null>(null);
  const [referenceLoading,setReferenceLoading]=useState(false);
  const [referenceError,setReferenceError]=useState("");
+ const [comparison,setComparison]=useState<MonaiLunaCenterComparison|null>(null);
  async function reviewReference(){
    if(!report)return;
-   setReferenceLoading(true);setReferenceError("");setReference(null);
+   setReferenceLoading(true);setReferenceError("");setReference(null);setComparison(null);
    try{
      if(!report.publicStudy.sourceSeriesIdSha256||!report.publicStudy.sourceMhdSha256)
        throw Error("Отчёт не содержит хеши оригинальной публичной КТ.");
      const response=await fetch("/api/research/luna16-reference",{cache:"no-store"});
      if(!response.ok)throw Error("Не удалось проверить публикацию LUNA16.");
      const value:unknown=await response.json();
-     setReference(validatePublicReference(value,report));
+     const checked=validatePublicReference(value,report);
+     setReference(checked);
+     const evidenceResponse=await fetch(
+       "/examples/luna16-monai-expert-center-run-38724788094.json",
+       {cache:"no-store"}
+     );
+     if(!evidenceResponse.ok)throw Error("Недоступно доказательство сравнения с экспертным центром.");
+     const evidence:unknown=await evidenceResponse.json();
+     setComparison(validateMonaiRealCenterEvidence(evidence,report,checked));
    }catch(err){setReferenceError(err instanceof Error?err.message:"Ошибка сравнения.");}
    finally{setReferenceLoading(false);}
  }
@@ -98,7 +108,7 @@ export default function LungNoduleResearchResults({isChestCT}:{isChestCT:boolean
   <p>Публичный пример настоящего CPU-инференса MONAI на КТ LUNA16. Модель не запускается на этом Mac; координаты ещё не сопоставлены с DICOM.</p>
   {!isChestCT?<p role="status">Выберите серию КТ грудной клетки для исследовательского контекста.</p>:null}
   <button type="button" disabled={loadingExample} onClick={async()=>{
-   setLoadingExample(true);setReport(null);setReference(null);setReferenceError("");setError("");
+   setLoadingExample(true);setReport(null);setReference(null);setReferenceError("");setComparison(null);setError("");
    try{
      const response=await fetch("/examples/luna16-monai-cpu-run-38436406805.json",{cache:"no-store"});
      if(!response.ok)throw Error("Не удалось загрузить публичный пример.");
@@ -108,7 +118,7 @@ export default function LungNoduleResearchResults({isChestCT}:{isChestCT:boolean
   }}>{loadingExample?"Загрузка публичного результата…":"Показать реальный пример LUNA16 (3 кандидата)"}</button>
   <p><a href="https://github.com/vasiliys961/opus-radiology-ai/actions/runs/38436406805" target="_blank" rel="noopener noreferrer">Доказательство выполнения: GitHub Actions #38436406805</a>. Это результат другой публичной КТ, а не анализ загруженного пациентского исследования.</p>
   <label>Импорт JSON результата <input type="file" accept=".json,application/json" onChange={async e=>{
-   const file=e.target.files?.[0];e.currentTarget.value="";setReport(null);setReference(null);setReferenceError("");setError("");
+   const file=e.target.files?.[0];e.currentTarget.value="";setReport(null);setReference(null);setReferenceError("");setComparison(null);setError("");
    if(!file)return;
    try{if(file.size>4*1024*1024)throw Error("Файл превышает 4 МиБ.");
       setReport(readReport(await file.text()));
@@ -118,7 +128,7 @@ export default function LungNoduleResearchResults({isChestCT}:{isChestCT:boolean
   {report&&<div>
    <p><strong>MONAI {report.model.version}</strong> · {report.candidateCount} кандидатов · {report.publicStudy.luna16GroundTruthNoduleCount} эталонных узлов в публичном исследовании.</p>
    <p>Веса SHA-256: <code>{report.model.weightsSha256.slice(0,16)}…</code></p>
-   <p role="alert">Координаты MONAI ещё не сопоставлены с исходными DICOM/SOP. Отображение маркеров на срезах, диагноз и оценка точности недоступны. Число кандидатов не равно числу истинных узлов.</p>
+   <p role="alert">Нативная пациентская DICOM/SOP-серия не привязана. Пространственная проверка относится только к этой публичной MetaImage КТ. Совпадение с опубликованным узлом не подтверждает клиническую чувствительность и не означает диагноз.</p>
    <div style={{border:"1px solid #6d8981",padding:12,borderRadius:8,margin:"12px 0"}}>
     <strong>Экспертная разметка · реальная КТ LUNA16</strong>
     <p>Сравнение с исходным публичным annotations.csv и заголовком .mhd. Проверяются SHA-256 обоих файлов, геометрия и идентичность исследования. Только открытые эталонные метаданные — без отправки ваших DICOM.</p>
@@ -129,8 +139,28 @@ export default function LungNoduleResearchResults({isChestCT}:{isChestCT:boolean
     {reference&&<>
       <p><strong>Экспертный узел:</strong> {reference.referenceNodules[0].diameterMm.toFixed(1)} мм · центр {reference.referenceNodules[0].centerMm.map(x=>x.toFixed(2)).join(" / ")} мм.</p>
       <p>Исходный MetaImage: срез {reference.referenceNodules[0].sliceIndex0Based+1} из {report.publicStudy.dimensions[2]} (рассчитано по заголовку и эталонной координате).</p>
+      {comparison&&<div style={{border:"1px solid #888",borderRadius:8,padding:12,margin:"10px 0"}}>
+        <strong>Измеренная локализация на настоящей КТ</strong>
+        <p>Предобученная MONAI нашла кандидат вблизи опубликованного экспертного узла:
+          расстояние между центрами <strong>{comparison.modelCandidatesCompared[0].centerDistanceToExpertMm.toFixed(3)} мм</strong>;
+          score модели <strong>{comparison.modelCandidatesCompared[0].rawUncalibratedScore.toFixed(6)}</strong>.
+          Экспертный диаметр узла — <strong>{comparison.independentPublishedLuna16ExpertReference.diameterMm.toFixed(3)} мм</strong>.
+        </p>
+        <p>Критерий совпадения с опубликованным центром при пороге 0,5: {" "}
+          <strong>{comparison.researchReferenceCenterHitAtScorePoint5?"выполнен":"не выполнен"}</strong>.
+          Исходный MHD, аннотации, модель и сохранённый результат проверены
+          по фиксированным версиям и SHA-256.</p>
+        <p><small>Это один исходный пример из LUNA16, использованного разработчиками
+          сети. Внешний независимый тест, эталонная маска, Dice, клиническая
+          чувствительность и FROC отсутствуют. Точность модели на пациентах
+          из одного совпадения оценить нельзя.</small></p>
+        <a href="https://github.com/vasiliys961/opus-radiology-ai/actions/runs/38724788094"
+           target="_blank" rel="noopener noreferrer">Реальное сравнение и измерения · GitHub Actions</a>
+      </div>}
       <PublicLuna16SourceSlices reference={reference} rawSha256={report.publicStudy.sourceRawSha256} candidates={report.candidates}/>
-      <p role="alert"><strong>Предварительная пространственная проверка:</strong> числа координат MONAI сопоставлены с опубликованными координатами LUNA16, но трансформация модели к исходной системе не подтверждена независимым визуальным контролем. Близость не является доказанным true positive; чувствительность и ложноположительные находки пока не рассчитываются.</p>
+      <p role="note">{comparison?
+        "Для этого публичного примера преобразование координат MONAI world → LPS подтверждено оригинальной конфигурацией и геометрией исходного MetaImage. Независимое визуальное подтверждение контура отсутствует; исследовательское совпадение центров не равно клиническому true positive.":
+        "Пространственное сопоставление ещё не прошло проверку подлинных источников. Из одних числовых координат нельзя заключить, что модель обнаружила узел."}</p>
       {report.candidates.map(c=>{
         const d=Math.hypot(...c.centerMonaiWorldMm.map((v,i)=>v-reference.referenceNodules[0].centerMm[i]));
         return <p key={c.candidateIndex}>Кандидат {c.candidateIndex+1} · числовое расстояние до эталонного центра: <strong>{d.toFixed(2)} мм</strong> · score {(c.rawClassificationScore*100).toFixed(1)}%.</p>;
@@ -147,7 +177,7 @@ export default function LungNoduleResearchResults({isChestCT}:{isChestCT:boolean
     </div>)}
    </div>
    <PathologyFindingsReview key={report.publicStudy.sourceSeriesIdSha256+report.model.weightsSha256} report={report}/>
-   <button type="button" onClick={()=>{setReport(null);setReference(null);setReferenceError("");}}>Закрыть результат</button>
+   <button type="button" onClick={()=>{setReport(null);setReference(null);setReferenceError("");setComparison(null);}}>Закрыть результат</button>
   </div>}
  </section>;
 }
