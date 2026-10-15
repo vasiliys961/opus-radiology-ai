@@ -1,0 +1,22 @@
+name: ICH genuine second-model report contract (no weights)
+on:
+  pull_request:
+    paths:
+      - "scripts/compare-ich-independent-totalseg.py"
+      - "scripts/test-compare-ich-independent-totalseg.py"
+      - "scripts/provision-ich-totalseg-official.py"
+      - ".github/workflows/ich-second-model-contract.yml"
+permissions:
+  contents: read
+jobs:
+  native-model-mask-comparison:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install --no-cache-dir "numpy==2.2.6" "nibabel==5.3.2"
+      - run: python -m py_compile scripts/compare-ich-independent-totalseg.py scripts/test-compare-ich-independent-totalseg.py scripts/provision-ich-totalseg-official.py
+      - run: python scripts/test-compare-ich-independent-totalseg.py
