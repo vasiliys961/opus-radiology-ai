@@ -1,0 +1,21 @@
+name: Kaggle knee CPU-only report preflight
+on:
+  pull_request:
+    paths:
+      - 'services/imaging-ai/rsna_knee_kaggle_cpu.py'
+      - 'services/imaging-ai/test_rsna_knee_kaggle_cpu.py'
+      - '.github/workflows/knee-kaggle-cpu.yml'
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: |
+          cd services/imaging-ai
+          python -m unittest test_rsna_knee_kaggle_cpu.py -v
