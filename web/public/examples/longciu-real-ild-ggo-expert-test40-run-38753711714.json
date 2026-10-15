@@ -1,0 +1,65 @@
+{
+  "schema": "opus-longciu-real-40slice-expert-hrct-patterns/v1",
+  "status": "original_three_expert_masks_vs_staple_confirmed_no_model_inference",
+  "source": "LongCIU",
+  "sourceDoi": "10.25820/data.007301",
+  "sourceRights": "ODC-By 1.0",
+  "originalGithubActionRun": 38753711714,
+  "originalNumericArtifactId": 11982242910,
+  "originalFullNumericArtifactSha256": "8864abeb2d8c0f4363f3d422eb4f78f7b174d653e245b77b76d69b2594ec67ce",
+  "sourceMirrorRevision": "c4b975090c16fabe59079a528dd920d956e16c66",
+  "sourceImagesDownloaded": false,
+  "expertMaskFilesSha256Verified": true,
+  "originalStudySlices90AreIndependent2DPatients": true,
+  "authorsDesignatedTestSlices": 40,
+  "stapleIsConsensusOfComparedAnnotators": true,
+  "classLabels": {
+    "1": "ground_glass_opacity",
+    "2": "consolidation"
+  },
+  "test40": {
+    "groundGlassOpacity": {
+      "annotator1": {
+        "mean2DDice": 0.745559,
+        "nonEmptyUnionSlices": 40
+      },
+      "annotator2": {
+        "mean2DDice": 0.854955,
+        "nonEmptyUnionSlices": 40
+      },
+      "annotator3": {
+        "mean2DDice": 0.648818,
+        "nonEmptyUnionSlices": 40
+      }
+    },
+    "consolidation": {
+      "annotator1": {
+        "mean2DDice": 0.515743,
+        "nonEmptyUnionSlices": 26
+      },
+      "annotator2": {
+        "mean2DDice": 0.580319,
+        "nonEmptyUnionSlices": 28
+      },
+      "annotator3": {
+        "mean2DDice": 0.615898,
+        "nonEmptyUnionSlices": 30
+      }
+    }
+  },
+  "original90HumanAnnotator1MeanGgoDice": 0.77251,
+  "precomputedMedpsegMaskPresent": true,
+  "precomputedMedpsegSourceRegistrationValidated": false,
+  "precomputedMedpsegModelRunByOpus": false,
+  "medpsegGgoAndConsolidationScoresWithheldPendingRegistrationAudit": true,
+  "honeycombingAndTractionBronchiectasisPresent": false,
+  "fibrosingILDSubtypeDiagnosisPossible": false,
+  "sourceIsContiguous3DCT": false,
+  "clinicalValidation": false,
+  "limitations": [
+    "Two-dimensional samples are from separate participants, not contiguous CT volume.",
+    "Post-COVID ground-glass opacity and consolidation alone are not fibrotic ILD diagnoses.",
+    "Individual readers contributed to STAPLE consensus, so reader-to-consensus overlap is not independent physician ground truth.",
+    "Published precomputed MEDPSeg masks have not passed independent physical registration audit."
+  ]
+}
