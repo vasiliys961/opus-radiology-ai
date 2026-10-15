@@ -53,6 +53,15 @@ export default function IanpanIchResearchResults(){
         {report.runtime.executionDevice.toUpperCase()}, {report.runtime.elapsedSeconds.toFixed(1)} с.
         Модель обработала {report.source.modelOrderedSliceCount} упорядоченных срезов.
         Результат относится к <strong>другой публичной КТ</strong>, а не к текущей DICOM-серии.</p>
+      {report.source.publishedFigshareHuLikeWithoutOriginalDicomRescaleAudit===true&&
+        <p role="alert"><strong>Источник PHE-SICH-CT-IDS: HU только правдоподобны.</strong>
+          Открытая оригинальная NIfTI содержит значения, совместимые со шкалой HU,
+          но отдельные исходные DICOM RescaleSlope/Intercept не проверены.
+          Опубликованная разметка относится к перифокальному отёку, НЕ к границам
+          кровоизлияния. Здесь нет подтверждения точного очага, площади,
+          гематомного объёма или клинической чувствительности. Результаты
+          нейросети — неподтверждённые исследовательские предложения.
+        </p>}
       <h4>Оценки шести категорий на уровне серии</h4>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))",gap:8}}>
         {ICH_CLASSES.map(k=><div key={k} style={{padding:8,border:"1px solid #8b9b97",borderRadius:6}}>
@@ -119,6 +128,8 @@ export default function IanpanIchResearchResults(){
           reviewerNote:notes,
           modelToSourceCoordinatesVerified:false,
           sourceHUIndependentlyVerified:false,
+          publishedSourceHuOnlyPlausible:report.source.publishedFigshareHuLikeWithoutOriginalDicomRescaleAudit===true,
+          publishedReferenceOnlyPerihematomalEdema:report.source.referenceLabelsOnlyPerihematomalEdema===true,
           patientDicomLinked:false,
           automatedDiagnosis:false,
           clinicalValidation:false,
