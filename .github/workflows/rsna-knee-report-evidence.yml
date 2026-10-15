@@ -1,0 +1,22 @@
+name: Knee conservative report evidence
+on:
+  pull_request:
+    paths:
+      - 'services/imaging-ai/rsna_knee_report_evidence.py'
+      - 'services/imaging-ai/test_rsna_knee_report_evidence.py'
+      - '.github/workflows/rsna-knee-report-evidence.yml'
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify report evidence without GPU or external APIs
+        run: |
+          cd services/imaging-ai
+          python -m unittest test_rsna_knee_report_evidence.py -v
