@@ -1,0 +1,98 @@
+{
+  "schema": "opus-monai-luna16-independent-expert-center-comparison/v1",
+  "status": "genuine_pretrained_predictions_vs_published_expert_center",
+  "study": {
+    "sourceSeriesIdSha256": "0e70f7a05cf8963ea61614a599ebb6fb59ad661bd03299d3058ad14d485b2d76",
+    "sourceMhdSha256": "5a1320abf573d50422961f5340e3f8f6391c23f3a13e29a18322034958f6ac1c",
+    "sourceRawSha256": "ca3c712205e3e8a2d9f5cbc19615a7b47c757ccf2a6b5b9b6a4e15ec0d70afc5",
+    "annotationsSha256": "db9adb75b381f3e95b1f601d9b63f2e42bd6536ab5a06dc539c5ec8a4005cec7"
+  },
+  "model": {
+    "id": "monai-lung-nodule-ct-retinanet",
+    "revision": "7226a40a4c3713f7d5469559b7f2fc296fd54825",
+    "checkpointSha256": "b5e79231466adae93a6fe8e8594029e9add142914e223b879aa0343bb2402d01",
+    "previousGenuineCpuRun": 38436406805
+  },
+  "geometry": {
+    "sourceOriginalDimensions": [
+      512,
+      512,
+      109
+    ],
+    "lpsWorldTransformConfirmedByPinnedVendorBundle": true,
+    "transformContract": "official_monai_itkreader_lps_to_ras_then_affine_box_to_world_lps",
+    "noduleReferenceSourceVoxel": [
+      208.873,
+      249.744,
+      77.639
+    ],
+    "clinicalLesionContoursAvailable": false
+  },
+  "independentPublishedLuna16ExpertReference": {
+    "centerLpsMm": [
+      -64.11833,
+      -4.88744,
+      -85.90245
+    ],
+    "diameterMm": 5.10512,
+    "standard": "published_centroid_and_diameter_not_expert_voxel_mask"
+  },
+  "researchScoreThreshold": 0.5,
+  "modelCandidatesCompared": [
+    {
+      "candidateIndex": 0,
+      "rawUncalibratedScore": 0.981209,
+      "sourceNativeVoxelIndex": [
+        209.055,
+        249.227,
+        77.948
+      ],
+      "centerDistanceToExpertMm": 0.884,
+      "withinExpertReferenceRadius": true,
+      "acceptedAtResearchScorePoint5": true,
+      "referenceCenterMatchAtScorePoint5": true
+    },
+    {
+      "candidateIndex": 1,
+      "rawUncalibratedScore": 0.062326,
+      "sourceNativeVoxelIndex": [
+        341.234,
+        241.823,
+        75.633
+      ],
+      "centerDistanceToExpertMm": 103.714,
+      "withinExpertReferenceRadius": false,
+      "acceptedAtResearchScorePoint5": false,
+      "referenceCenterMatchAtScorePoint5": false
+    },
+    {
+      "candidateIndex": 2,
+      "rawUncalibratedScore": 0.044837,
+      "sourceNativeVoxelIndex": [
+        334.035,
+        287.16,
+        72.467
+      ],
+      "centerDistanceToExpertMm": 102.875,
+      "withinExpertReferenceRadius": false,
+      "acceptedAtResearchScorePoint5": false,
+      "referenceCenterMatchAtScorePoint5": false
+    }
+  ],
+  "candidateCount": 3,
+  "researchReferenceCenterHitAtScorePoint5": true,
+  "researchCenterHitCandidateIndices": [
+    0
+  ],
+  "referenceLesions": 1,
+  "datasetHoldoutFromModelTrainingVerified": false,
+  "independentClinicalValidation": false,
+  "externalValidationSensitivity": null,
+  "fullFroc": null,
+  "dice": null,
+  "falsePositiveClinicalRate": null,
+  "patientUseAllowed": false,
+  "negativeDiagnosticConclusionAllowed": false,
+  "evidenceWorkflowRunId": 38724788094,
+  "evidenceWorkflowRunUrl": "https://github.com/vasiliys961/opus-radiology-ai/actions/runs/38724788094"
+}
