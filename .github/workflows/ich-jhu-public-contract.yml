@@ -65,3 +65,27 @@ jobs:
           except Exception as ex:
               raise RuntimeError("public_figshare_metadata_unavailable:"+type(ex).__name__) from ex
           PY
+  probe-figshare-range-ct-package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Check byte-range capability and ZIP tail of LICENSED public Figshare archive
+        run: |
+          python - <<'PY'
+          import urllib.request
+          url="https://ndownloader.figshare.com/files/63081925"
+          size=1300209108
+          request=urllib.request.Request(url,headers={
+              "User-Agent":"OpusRadiologyPublicResearch/1.0",
+              "Range":f"bytes={size-4096}-{size-1}"})
+          with urllib.request.urlopen(request,timeout=50) as resp:
+              print("RANGE_HTTP_STATUS",resp.status)
+              print("CONTENT_RANGE",resp.headers.get("Content-Range"))
+              print("CONTENT_LENGTH",resp.headers.get("Content-Length"))
+              raw=resp.read(4097)
+              print("TAIL_BYTES",len(raw))
+              if resp.status!=206 or len(raw)!=4096:
+                  raise RuntimeError("figshare_does_not_support_safe_zip_ranged_reads")
+              print("ZIP_EOCD_FOUND",raw.rfind(b'PK'+bytes((5,6)))>=0)
+              assert raw.rfind(b'PK'+bytes((5,6)))>=0,"Unexpected archive tail without ZIP EOCD"
+          PY
