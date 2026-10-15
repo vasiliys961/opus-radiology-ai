@@ -1,6 +1,8 @@
 "use client";
 
 import {useState} from "react";
+import {sha256} from "@noble/hashes/sha2.js";
+import IchBloodReferenceReview from "./IchBloodReferenceReview";
 import {
   parseIchAlternativeReport,ICH_CLASSES,ICH_CLASS_LABELS,
   type IchAlternativeClass,type IchAlternativeReport,
@@ -19,6 +21,9 @@ export default function IanpanIchResearchResults(){
   const [minScore,setMinScore]=useState(0.5);
   const [type,setType]=useState<IchAlternativeClass|"all">("all");
   const [notes,setNotes]=useState("");
+  const [originalModelSha,setOriginalModelSha]=useState<string|null>(null);
+  const modelSha=(raw:string)=>Array.from(sha256(new TextEncoder().encode(raw)),v=>
+    v.toString(16).padStart(2,"0")).join("");
   const spatialGroups=report?groupIchResearchCandidateRegions(report):null;
   const visible=(report?.candidates??[]).filter(c=>
     c.rawUncalibratedScore>=minScore&&(type==="all"||c.class===type)
@@ -34,14 +39,15 @@ export default function IanpanIchResearchResults(){
     <div style={{padding:"10px 0"}}>
       <button type="button" disabled={loadingRealExample}
         onClick={async()=>{
-          setReport(null);setError("");setNotes("");setLoadingRealExample(true);
+          setReport(null);setOriginalModelSha(null);setError("");setNotes("");setLoadingRealExample(true);
           try{
             const response=await fetch(
               "/examples/ianpan-ich-real-figshare-run-38734338486.json",
               {cache:"no-store"}
             );
             if(!response.ok)throw Error("Настоящий публичный результат сейчас недоступен.");
-            const checked=parseIchAlternativeReport(await response.text());
+            const originalText=await response.text();
+            const checked=parseIchAlternativeReport(originalText);
             if(checked.source.niftiSha256!=="0543a46065314468fe7ab18b9187277ae1affc4e7c864d0fd8ae608afa554a95"||
                checked.source.modelOrderedSliceCount!==25||
                checked.source.publishedFigshareHuLikeWithoutOriginalDicomRescaleAudit!==true||
@@ -52,6 +58,7 @@ export default function IanpanIchResearchResults(){
                checked.seriesRawUncalibratedScores.any!==0.993365||
                checked.externalExpertHemorrhageLocalizationComparisonPerformed!==false)
               throw Error("Публичный результат не соответствует проверенному запуску и источнику.");
+            setOriginalModelSha(modelSha(originalText));
             setReport(checked);
           }catch(e){setError(e instanceof Error?e.message:"Неверные исходные данные.");}
           finally{setLoadingRealExample(false);}
@@ -67,11 +74,14 @@ export default function IanpanIchResearchResults(){
     <label>JSON-отчёт выполнения предобученной модели (до 2 МиБ)
       <input type="file" accept=".json,application/json" onChange={async e=>{
         const f=e.target.files?.[0];e.currentTarget.value="";
-        setReport(null);setError("");setNotes("");
+        setReport(null);setOriginalModelSha(null);setError("");setNotes("");
         if(!f)return;
         try{
           if(f.size>2*1024*1024)throw Error("Слишком большой файл отчёта.");
-          setReport(parseIchAlternativeReport(await f.text()));
+          const originalText=await f.text();
+          const checked=parseIchAlternativeReport(originalText);
+          setOriginalModelSha(modelSha(originalText));
+          setReport(checked);
         }catch(err){setError(err instanceof Error?err.message:"Неверный JSON-отчёт.");}
       }}/>
     </label>
@@ -176,6 +186,9 @@ export default function IanpanIchResearchResults(){
         </div>)}
       </div>
       <IchSourceNativeReview key={report.source.niftiSha256+report.runtime.elapsedSeconds} report={report}/>
+      {originalModelSha&&<IchBloodReferenceReview
+        key={originalModelSha}
+        model={report} originalModelReportSha256={originalModelSha}/>}
       <label style={{display:"block",marginTop:12}}>Комментарий врача-исследователя (не удостоверен)
         <textarea rows={2} maxLength={1500} value={notes}
           onChange={e=>setNotes(e.target.value)}
@@ -210,7 +223,7 @@ export default function IanpanIchResearchResults(){
         window.setTimeout(()=>URL.revokeObjectURL(url),1000);
       }}>Скачать неподписанную исследовательскую заметку</button>{" "}
       <button type="button" onClick={()=>{
-        setReport(null);setNotes("");setError("");
+        setReport(null);setOriginalModelSha(null);setNotes("");setError("");
       }}>Закрыть результат</button>
       <p><small>В новых отчётах координаты областей теперь вычисляются в
         нативных вокселях NIfTI обратным преобразованием из модели; источник
