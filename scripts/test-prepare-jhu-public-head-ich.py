@@ -77,7 +77,7 @@ class JHUPublicSourceTest(unittest.TestCase):
             root=Path(d)
             scan=nib.Nifti1Image(np.ones((32,32,12),np.float32)*80,np.eye(4))
             path=root/"windowed.nii.gz";nib.save(scan,path)
-            with self.assertRaisesRegex(ValueError,"HU"):
+            with self.assertRaisesRegex(ValueError,"hu_scale"):
                 m.convert_publisher_ct_and_manifest(path,root/"bad.nii",root/"bad.json")
             self.assertFalse((root/"bad.nii").exists())
 
