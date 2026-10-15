@@ -1,4 +1,5 @@
 name: BOUNDED real second ICH model on one public CT (research only)
+# Genuine second attempt: admit official archive's extra non-model metadata safely.
 on:
   push:
     branches: [feature/ich-second-opinion-totalseg-fast-20261015, feature/ich-second-totalseg-runner-env-fix-20261015]
