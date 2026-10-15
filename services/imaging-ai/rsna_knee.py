@@ -126,7 +126,12 @@ def ordered_mri_files(files, mode="legacy"):
             instance=int(instance) if instance is not None else None
             records.append((path,normal,position,instance))
         except (AttributeError,KeyError,TypeError,ValueError,OverflowError,OSError,EOFError):
-            records.append((path,None,None,None))
+            try:
+                ds=pydicom.dcmread(str(path),stop_before_pixels=True)
+                number=int(ds.InstanceNumber)
+            except (AttributeError,TypeError,ValueError,OSError,EOFError):
+                number=None
+            records.append((path,None,None,number))
     if len(records)==len(files) and all(r[1] is not None for r in records):
         reference=records[0][1]
         if all(sum(x*y for x,y in zip(reference,r[1]))>0.999 for r in records):
