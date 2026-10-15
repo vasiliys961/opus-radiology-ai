@@ -66,12 +66,16 @@ def candidate_states(report):
             neg = bool(re.search(NEGATIVE[label], clause))
             if not pos and not neg:
                 continue
+            # A negative pattern must not be overridden by its own "no".
+            # Contradictory affirmative/negative evidence in one clause abstains.
             if UNCERTAINTY.search(clause):
                 evidence.add("uncertain")
-            elif pos and (neg or NEGATION.search(clause)):
-                evidence.add("uncertain")
-            elif neg:
+            elif neg and not pos:
                 evidence.add("negative")
+            elif neg and pos:
+                evidence.add("uncertain")
+            elif pos and NEGATION.search(clause):
+                evidence.add("uncertain")
             else:
                 evidence.add("positive")
         if evidence:
