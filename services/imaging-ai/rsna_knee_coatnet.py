@@ -3,7 +3,7 @@ import argparse
 import json
 import random
 from pathlib import Path
-from rsna_knee import LABELS, read_rows, series_index, extract_labels, study_slices
+from rsna_knee import LABELS, read_rows, series_index, balanced_series, extract_labels, study_slices
 from rsna_knee_validation import load_partition
 
 def build_model(pretrained=True, architecture="coatnet_0_rw_224"):
@@ -38,7 +38,8 @@ def train(args):
     from sklearn.metrics import roc_auc_score
     if not torch.cuda.is_available():raise RuntimeError("CUDA GPU required")
     torch.manual_seed(args.seed)
-    index=series_index(read_rows(args.series_csv))
+    index=(balanced_series(read_rows(args.series_csv),max_series=args.series_limit)
+           if args.series_selection=="balanced" else series_index(read_rows(args.series_csv)))
     rows=[r for r in read_rows(args.train_csv) if r["StudyInstanceUID"] in index and any(extract_labels(r)[1])]
     if len(rows)<3:raise ValueError("Need at least three labeled studies")
     train_rows,val_rows=load_partition(rows,args.manifest)
@@ -48,7 +49,8 @@ def train(args):
     for epoch in range(args.epochs):
         model.train();losses=[];skipped=0
         for row in train_rows:
-            try:x=study_slices(Path(args.dicom_root),index,row["StudyInstanceUID"],args.slices,args.series_limit).cuda()
+            try:x=study_slices(Path(args.dicom_root),index,row["StudyInstanceUID"],args.slices,args.series_limit,
+                               series_order="provided" if args.series_selection=="balanced" else "legacy").cuda()
             except ValueError:skipped+=1;continue
             labels,known=extract_labels(row)
             y=torch.tensor(labels,device="cuda");mask=torch.tensor(known,device="cuda")
@@ -77,7 +79,7 @@ def train(args):
     torch.save({"architecture":args.architecture,"family":"coatnet-attention-mil-v1",
                 "state_dict":{k:v.detach().cpu() for k,v in model.state_dict().items()},
                 "labels":list(LABELS),"slices":args.slices,"series_limit":args.series_limit,
-                "research_only":True},out)
+                "series_selection":args.series_selection,"research_only":True},out)
     out.with_suffix(".metrics.json").write_text(json.dumps(history,indent=2))
     if pred:
         import csv
@@ -95,6 +97,7 @@ def main():
     p.add_argument("--seed",type=int,default=42)
     p.add_argument("--manifest",required=True,help="Shared held-out study manifest; mandatory to prevent inconsistent splits")
     p.add_argument("--architecture",default="coatnet_0_rw_224")
+    p.add_argument("--series-selection",choices=("legacy","balanced"),default="legacy")
     p.add_argument("--no-pretrained",action="store_true")
     train(p.parse_args())
 if __name__=="__main__":main()
