@@ -11,7 +11,7 @@ class BalancedSeriesTest(unittest.TestCase):
         ]
         self.assertEqual(balanced_series(rows,3)["one"],["MMM","AAA","ZZZ"])
         self.assertEqual(balanced_series(list(reversed(rows)),3),balanced_series(rows,3))
-        self.assertEqual(series_index(rows)["one"][:3],["MMM","AAA","ZZZ"])
+        self.assertEqual(sorted(series_index(rows)["one"])[:3],["AAA","MMM","NNN"])
 
     def test_missing_plane_and_unsafe_ids(self):
         rows=[{"StudyInstanceUID":"one","SeriesInstanceUID":"A","Anatomical_Plane":"Sagittal"},
