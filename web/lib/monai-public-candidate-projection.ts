@@ -77,3 +77,63 @@ export function projectMonaiCandidateHypothesis(
     sourceFrameIndependentlyVerified:false,dicomBound:false,truePositiveEstablished:false,
   };
 }
+
+/** Bounded 3D WORLD-axis-aligned model proposal projected to native MetaImage.
+ *
+ * Project all eight world-space corners and compute the source-axis-aligned
+ * envelope. On tilted scans this is an envelope, NOT the true 3D intersection
+ * polygon or physician-measured lesion dimensions. For the pinned one-case
+ * LUNA16 example source world LPS is audited separately by its evidence gate.
+ */
+export type CandidateModelBoxProjection={
+  candidateIndex:number;
+  nativeVoxelBoundingEnvelopeXYZ:[number,number,number,number,number,number];
+  sourceSliceIndexRangeInclusive:[number,number];
+  truncatedBySourceVolume:boolean;
+  geometry:"model_world_mm_axis_aligned_cuboid_to_native_metaimage_envelope";
+  clinicalLesionSegmentation:false;
+  independentlyConfirmedTumorVolume:false;
+};
+export function projectMonaiCandidateBoundingBox(
+ g:MetaImageGeometry,c:MonaiCandidate
+):CandidateModelBoxProjection|null{
+ const centerResult=projectMonaiCandidateHypothesis(g,c);
+ if(centerResult===null)return null;
+ const {spacing,origin,matrix}=geometryChecked(g);
+ const half=triple(c.extentMm,"candidate_extent").map(v=>v/2);
+ const center=triple(c.centerMonaiWorldMm,"candidate_center");
+ const points:number[][]=[];
+ for(const a of [-1,1])for(const b of [-1,1])for(const d of [-1,1]){
+   const world=[
+     center[0]+a*half[0],
+     center[1]+b*half[1],
+     center[2]+d*half[2],
+   ];
+   const delta=world.map((v,i)=>v-origin[i]);
+   points.push([0,1,2].map(col=>
+     matrix.reduce((sum,row,r)=>sum+row[col]*delta[r],0)/spacing[col]
+   ));
+ }
+ const low=[0,1,2].map(j=>Math.min(...points.map(p=>p[j])));
+ const high=[0,1,2].map(j=>Math.max(...points.map(p=>p[j])));
+ if(low.some((v,i)=>v>g.dimensions[i]-1)||
+    high.some(v=>v<0))return null;
+ const clippedLow=low.map(v=>Math.max(0,v));
+ const clippedHigh=high.map((v,i)=>Math.min(g.dimensions[i]-1,v));
+ const sliceMin=Math.max(0,Math.ceil(clippedLow[2]-.5));
+ const sliceMax=Math.min(g.dimensions[2]-1,Math.floor(clippedHigh[2]+.5));
+ if(sliceMin>sliceMax)return null;
+ return {
+   candidateIndex:c.candidateIndex,
+   nativeVoxelBoundingEnvelopeXYZ:[
+     clippedLow[0],clippedLow[1],clippedLow[2],
+     clippedHigh[0],clippedHigh[1],clippedHigh[2],
+   ],
+   sourceSliceIndexRangeInclusive:[sliceMin,sliceMax],
+   truncatedBySourceVolume:low.some(v=>v<0)||
+     high.some((v,i)=>v>g.dimensions[i]-1),
+   geometry:"model_world_mm_axis_aligned_cuboid_to_native_metaimage_envelope",
+   clinicalLesionSegmentation:false,
+   independentlyConfirmedTumorVolume:false,
+ };
+}
