@@ -3,6 +3,11 @@ from rsna_knee_finding_mil import make_finding_mil
 
 
 class FindingMILTests(unittest.TestCase):
+    def setUp(self):
+        try:
+            import torch
+        except ImportError:
+            self.skipTest('torch optional in generic CI')
     def test_separate_attention_and_gradients(self):
         try:
             import torch
