@@ -45,15 +45,26 @@ def download_and_admit(dst:Path,install_root:Path):
             if not any("checkpoint" in e.filename.lower() and
                        e.filename.endswith((".pth",".pt",".pkl")) for e in members):
                 raise ValueError("pretrained_ich_checkpoint_not_found")
+            chosen=[]
             for entry in members:
-                name=entry.filename
                 from pathlib import PurePosixPath
-                p=PurePosixPath(name)
+                p=PurePosixPath(entry.filename)
                 if (p.is_absolute() or ".." in p.parts or not p.parts or
-                    p.parts[0]!="Dataset150_icb_v0" or
-                    entry.external_attr >>16 & 0o170000 == 0o120000):
+                    len(p.parts)>12 or
+                    (entry.external_attr >> 16) & 0o170000 == 0o120000):
                     raise ValueError("unsafe_checkpoint_archive_member")
-            archive.extractall(install_root)
+                # Ignore extraneous official release metadata outside the
+                # recognized task-150 directory; never extract it.
+                if p.parts[0]!="Dataset150_icb_v0":
+                    continue
+                if any(part.startswith(".") for part in p.parts):
+                    continue  # Discard vendor .DS_Store/AppleDouble, never extract it.
+                chosen.append(entry)
+            archive.extractall(install_root,members=chosen)
+        installed=install_root/"Dataset150_icb_v0"
+        roots=sorted({Path(e.filename).parts[0] for e in members if Path(e.filename).parts})
+        if not installed.is_dir() or not list(installed.rglob("checkpoint_final.pth")):
+            raise ValueError("official_model_dataset150_layout_unexpected:"+",".join(roots[:8]))
         print(json.dumps({"model":"TotalSegmentator cerebral_bleed",
           "officialRelease":"v2.0.0-weights",
           "originalArchiveBytes":written,
