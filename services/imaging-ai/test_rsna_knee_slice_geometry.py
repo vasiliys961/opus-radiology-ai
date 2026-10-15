@@ -11,7 +11,7 @@ class SliceGeometryTests(unittest.TestCase):
         self.files=[Path(f"slice_{v}.dcm") for v in (1,2,3)]
 
     def dicom(self, path, stop_before_pixels=True):
-        number=int(path.stem.split("_")[-1])
+        number=int(Path(path).stem.split("_")[-1])
         # File-name order and spatial order deliberately disagree.
         z={1:30,2:10,3:20}[number]
         return SimpleNamespace(
@@ -31,7 +31,7 @@ class SliceGeometryTests(unittest.TestCase):
 
     def test_incomplete_geometry_uses_instance_number(self):
         def missing(path,stop_before_pixels=True):
-            v=int(path.stem.split("_")[-1])
+            v=int(Path(path).stem.split("_")[-1])
             return SimpleNamespace(InstanceNumber=4-v)
         with patch("pydicom.dcmread",side_effect=missing):
             self.assertEqual([p.stem for p in ordered_mri_files(self.files,"geometry-v2")],
@@ -39,7 +39,7 @@ class SliceGeometryTests(unittest.TestCase):
 
     def test_duplicate_positions_fall_back(self):
         def duplicate(path,stop_before_pixels=True):
-            v=int(path.stem.split("_")[-1])
+            v=int(Path(path).stem.split("_")[-1])
             return SimpleNamespace(
                 ImageOrientationPatient=[1,0,0,0,1,0],
                 ImagePositionPatient=[0,0,10],
