@@ -39,7 +39,7 @@ class LauncherTests(unittest.TestCase):
     def test_rejects_without_mass_weak_supervision(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp);self.fixtures(root)
-            with self.assertRaisesRegex(ValueError,"Only 0 weak-labeled"):
+            with self.assertRaisesRegex(ValueError,"Manifest must cover exactly"):
                 prepare(self.options(root))
     def test_accepts_approved_training_manifest(self):
         with tempfile.TemporaryDirectory() as tmp:
