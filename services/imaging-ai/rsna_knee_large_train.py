@@ -17,8 +17,11 @@ from rsna_knee_finding_mil import make_finding_mil
 
 
 def configuration(args):
-    return {k:getattr(args,k) for k in ("slices","series_limit","pixel_mode",
-           "slice_order","seed","lr","series_selection")} | {"head":getattr(args,"head","legacy")}
+    options={k:getattr(args,k) for k in ("slices","series_limit","pixel_mode",
+           "slice_order","seed","lr","series_selection")}
+    if getattr(args,"head","legacy")!="legacy":
+        options["head"]=args.head
+    return options
 
 
 def cache_key(uid, options, encoder_id):
