@@ -127,7 +127,7 @@ jobs:
           assert pos==csize
           print("ZIP_ENTRIES",len(entries))
           from collections import Counter
-          print("ZIP_EXTENSIONS",Counter(name.lower().rsplit(".",1)[-1] for name,*_ in entries))
+          print("ZIP_FILE_TYPES",Counter(name.rsplit(".",1)[-1].lower() for name,*_ in entries if name.endswith((".nii.gz",".nii",".png",".jpg",".dcm"))))
           valid=[]
           for name,compressed,uncompressed,method,local in entries:
               if name.lower().endswith((".nii",".nii.gz",".nrrd")):
@@ -137,4 +137,6 @@ jobs:
                       "method":method,"localOffset":local})
           print("CT_NIFTI_MEMBERS_FIRST_30",json.dumps(valid[:30]))
           print("CT_NIFTI_MEMBER_COUNT",len(valid))
+          print("CT_NIFTI_TOP_15",json.dumps(sorted(valid,key=lambda v:-v["uncompressed"])[:15]))
+          print("CT_NIFTI_CATEGORIES",Counter("/".join(name.split("/")[:3]) for name,_,_,_,_ in entries if name.endswith((".nii.gz",".nii"))))
           PY
