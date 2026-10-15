@@ -1,0 +1,32 @@
+name: ICH original public Figshare source admission (real HU gate; no weights)
+on:
+  pull_request:
+    paths:
+      - "scripts/prepare-figshare-ich-public.py"
+      - "scripts/test-prepare-figshare-ich-public.py"
+      - ".github/workflows/ich-figshare-public-admission.yml"
+  push:
+    paths:
+      - "scripts/prepare-figshare-ich-public.py"
+      - "scripts/test-prepare-figshare-ich-public.py"
+      - ".github/workflows/ich-figshare-public-admission.yml"
+permissions:
+  contents: read
+jobs:
+  original-ct-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install --no-cache-dir "numpy==2.2.6" "nibabel==5.3.2"
+      - run: python -m py_compile scripts/prepare-figshare-ich-public.py scripts/test-prepare-figshare-ich-public.py
+      - run: python scripts/test-prepare-figshare-ich-public.py
+      - name: Admit ONE actual original noncontrast hemorrhagic CT with remote ZIP CRC, HU and native geometry
+        run: |
+          python scripts/prepare-figshare-ich-public.py --out-folder "$RUNNER_TEMP/opus-public-ich-ct"
+      - name: Wipe all CT source data and derivative NIfTI
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/opus-public-ich-ct"
