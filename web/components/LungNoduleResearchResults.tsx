@@ -129,7 +129,7 @@ export default function LungNoduleResearchResults({isChestCT}:{isChestCT:boolean
     {reference&&<>
       <p><strong>Экспертный узел:</strong> {reference.referenceNodules[0].diameterMm.toFixed(1)} мм · центр {reference.referenceNodules[0].centerMm.map(x=>x.toFixed(2)).join(" / ")} мм.</p>
       <p>Исходный MetaImage: срез {reference.referenceNodules[0].sliceIndex0Based+1} из {report.publicStudy.dimensions[2]} (рассчитано по заголовку и эталонной координате).</p>
-      <PublicLuna16SourceSlices reference={reference} rawSha256={report.publicStudy.sourceRawSha256}/>
+      <PublicLuna16SourceSlices reference={reference} rawSha256={report.publicStudy.sourceRawSha256} candidates={report.candidates}/>
       <p role="alert"><strong>Предварительная пространственная проверка:</strong> числа координат MONAI сопоставлены с опубликованными координатами LUNA16, но трансформация модели к исходной системе не подтверждена независимым визуальным контролем. Близость не является доказанным true positive; чувствительность и ложноположительные находки пока не рассчитываются.</p>
       {report.candidates.map(c=>{
         const d=Math.hypot(...c.centerMonaiWorldMm.map((v,i)=>v-reference.referenceNodules[0].centerMm[i]));
