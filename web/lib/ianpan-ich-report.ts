@@ -41,6 +41,9 @@ export type IchAlternativeReport={
     sourceOriginalDicomHURescaleIndependentlyVerified?:boolean;
     publishedFigshareHuLikeWithoutOriginalDicomRescaleAudit?:boolean;
     referenceLabelsOnlyPerihematomalEdema?:boolean;
+    sourceCtHuexactDICOMRescaleVerified?:false;
+    sourceIsPublishedCCBYSpontaneousICHResearch?:true;
+    expertReferenceIsPerihematomalEdemaNotHematomaMask?:true;
   };
   runtime:{executionDevice:"cpu"|"cuda";elapsedSeconds:number};
   seriesRawUncalibratedScores:Record<IchAlternativeClass,number>;
@@ -52,6 +55,15 @@ export type IchAlternativeReport={
   sensitivity:null; specificity:null; dice:null;
   negativeDiagnosticConclusionAllowed:false;
   readyForClinicalUse:false;
+  publishedResearchEvidence?:{
+    kind:"curated_numeric_transcription_from_genuine_actions_artifact";
+    originalWorkflowRun:38733865982;
+    originalArtifactId:11971696413;
+    originalArtifactZipSha256:string;
+    originalFullReportSha256:string;
+    notIndependentExternalValidation:true;
+    note:string;
+  };
 };
 const SHA=/^[a-f0-9]{64}$/;
 const knownClasses=new Set<string>(ICH_CLASSES);
@@ -104,6 +116,16 @@ export function parseIchAlternativeReport(raw:string):IchAlternativeReport{
      typeof source.publishedFigshareHuLikeWithoutOriginalDicomRescaleAudit!=="boolean")||
     (source.referenceLabelsOnlyPerihematomalEdema!==undefined&&
      typeof source.referenceLabelsOnlyPerihematomalEdema!=="boolean")||
+
+    (source.sourceIsPublishedCCBYSpontaneousICHResearch!==undefined&&
+      (source.sourceIsPublishedCCBYSpontaneousICHResearch!==true||
+       source.sourceCtHuexactDICOMRescaleVerified!==false||
+       source.expertReferenceIsPerihematomalEdemaNotHematomaMask!==true||
+       root.externalExpertHemorrhageLocalizationComparisonPerformed!==false))||
+    (source.sourceCtHuexactDICOMRescaleVerified===false&&
+      source.sourceOriginalDicomHURescaleIndependentlyVerified===true)||
+    (source.expertReferenceIsPerihematomalEdemaNotHematomaMask===true&&
+      source.referenceLabelsOnlyPerihematomalEdema===false)||
     (source.publishedFigshareHuLikeWithoutOriginalDicomRescaleAudit===true&&
      (source.sourceOriginalDicomHURescaleIndependentlyVerified!==false||
       source.referenceLabelsOnlyPerihematomalEdema!==true||
@@ -113,6 +135,19 @@ export function parseIchAlternativeReport(raw:string):IchAlternativeReport{
     root.negativeDiagnosticConclusionAllowed!==false||
     root.readyForClinicalUse!==false)
    throw Error("Неверный исследовательский статус модели или исходной КТ.");
+
+ if(root.publishedResearchEvidence!==undefined){
+   const e=object(root.publishedResearchEvidence,"публичный исследовательский прогон");
+   if(e.kind!=="curated_numeric_transcription_from_genuine_actions_artifact"||
+      e.originalWorkflowRun!==38733865982||e.originalArtifactId!==11971696413||
+      e.originalArtifactZipSha256!=="b9019dc3f3cc19e42a6a7402c5acb03d608c627c8d45c69cecf61952122de0a6"||
+      e.originalFullReportSha256!=="471f344bab65ed17542731d2f257523ea994c9dd0338178816fb87e5b5becd65"||
+      e.notIndependentExternalValidation!==true||
+      source.niftiSha256!=="0543a46065314468fe7ab18b9187277ae1affc4e7c864d0fd8ae608afa554a95"||
+      source.sourceIsPublishedCCBYSpontaneousICHResearch!==true||
+      root.externalExpertHemorrhageLocalizationComparisonPerformed!==false)
+     throw Error("Исследовательский отчёт не принадлежит исходному публичному прогону.");
+ }
  const classes=object(root.seriesRawUncalibratedScores,"классы");
  for(const key of ICH_CLASSES)if(!score(classes[key]))
    throw Error("Повреждён ряд оценок кровоизлияния: "+key);
