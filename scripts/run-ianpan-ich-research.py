@@ -73,7 +73,14 @@ def validate_public_manifest(source: Path, manifest_path: Path) -> dict:
         and isinstance(document["publisherProvenance"].get("originalGzipSha256"),str)
         and len(document["publisherProvenance"]["originalGzipSha256"])==64
     )
-    original_dicom = isinstance(document,dict) and document.get("sourceUnits") == "HU_FROM_VERIFIED_DICOM_RESCALE"
+    original_dicom = (
+        isinstance(document,dict)
+        and document.get("sourceUnits") == "HU_FROM_VERIFIED_DICOM_RESCALE"
+        and not (
+            isinstance(document.get("publisherProvenance"),dict)
+            and document["publisherProvenance"].get("huFromOriginalDicomRescaleIndependentlyVerified") is False
+        )
+    )
     if not isinstance(document, dict) or any([
         document.get("schema") != "opus-public-head-ct-hu-evidence/v1",
         document.get("modality") != "CT",
