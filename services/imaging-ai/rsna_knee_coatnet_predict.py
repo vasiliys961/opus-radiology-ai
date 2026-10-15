@@ -2,7 +2,7 @@
 import argparse
 import csv
 from pathlib import Path
-from rsna_knee import LABELS,read_rows,series_index,study_slices
+from rsna_knee import LABELS,read_rows,series_index,balanced_series,study_slices
 from rsna_knee_dinov2_predict import prediction_ids
 
 def validate_checkpoint(ckpt):
@@ -19,6 +19,8 @@ def validate_checkpoint(ckpt):
         value=ckpt.get(key)
         if type(value) is not int or not 1<=value<=32:
             raise ValueError("Unsafe or invalid preprocessing: "+key)
+    if ckpt.get("series_selection","legacy") not in ("legacy","balanced"):
+        raise ValueError("Unknown MRI series selection")
     return ckpt
 
 def predict(args):
@@ -31,7 +33,8 @@ def predict(args):
     device=torch.device("cuda" if args.device=="auto" and torch.cuda.is_available()
                         else "cpu" if args.device=="auto" else args.device)
     model.to(device).eval()
-    index=series_index(read_rows(args.series_csv))
+    index=(balanced_series(read_rows(args.series_csv),max_series=ckpt["series_limit"])
+           if ckpt.get("series_selection","legacy")=="balanced" else series_index(read_rows(args.series_csv)))
     ids=prediction_ids(args.studies_csv)
     if not set(ids)<=set(index):
         raise ValueError("Study IDs missing from series index")
@@ -44,7 +47,8 @@ def predict(args):
             with torch.inference_mode():
                 for uid in ids:
                     images=study_slices(Path(args.dicom_root),index,uid,
-                                        ckpt["slices"],ckpt["series_limit"]).to(device)
+                                        ckpt["slices"],ckpt["series_limit"],
+                                        series_order="provided" if ckpt.get("series_selection","legacy")=="balanced" else "legacy").to(device)
                     probabilities=model(normalize(images)).sigmoid().cpu().tolist()
                     if len(probabilities)!=len(LABELS):
                         raise ValueError("Output schema mismatch")

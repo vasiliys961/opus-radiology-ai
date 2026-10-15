@@ -1,0 +1,25 @@
+name: Knee series mode end-to-end contract
+on:
+  pull_request:
+    paths:
+      - 'services/imaging-ai/rsna_knee_dinov2.py'
+      - 'services/imaging-ai/rsna_knee_coatnet.py'
+      - 'services/imaging-ai/rsna_knee_dinov2_predict.py'
+      - 'services/imaging-ai/rsna_knee_coatnet_predict.py'
+      - 'services/imaging-ai/rsna_knee_compare.py'
+      - 'services/imaging-ai/test_rsna_knee_series_mode.py'
+      - '.github/workflows/rsna-knee-series-mode.yml'
+  workflow_dispatch:
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: |
+          python -m py_compile services/imaging-ai/rsna_knee_{dinov2,coatnet,compare,dinov2_predict,coatnet_predict}.py
+          PYTHONPATH=services/imaging-ai python -m unittest discover -s services/imaging-ai -p 'test_rsna_knee_series_mode.py' -v

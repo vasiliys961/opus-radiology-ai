@@ -7,7 +7,7 @@ import csv
 import json
 from pathlib import Path
 
-from rsna_knee import LABELS, read_rows, series_index, study_slices
+from rsna_knee import LABELS, read_rows, series_index, balanced_series, study_slices
 
 
 def validate_checkpoint(checkpoint):
@@ -24,6 +24,8 @@ def validate_checkpoint(checkpoint):
         value=checkpoint.get(key)
         if isinstance(value,bool) or not isinstance(value,int) or not 1<=value<=32:
             raise ValueError("Invalid checkpoint preprocessing setting: "+key)
+    if checkpoint.get("series_selection","legacy") not in ("legacy","balanced"):
+        raise ValueError("Unknown MRI series selection")
     return checkpoint
 
 
@@ -44,7 +46,8 @@ def predict(args):
     if not path.is_file():
         raise FileNotFoundError(path)
     ckpt=validate_checkpoint(torch.load(path,map_location="cpu",weights_only=True))
-    index=series_index(read_rows(args.series_csv))
+    index=(balanced_series(read_rows(args.series_csv),max_series=ckpt["series_limit"])
+           if ckpt.get("series_selection","legacy")=="balanced" else series_index(read_rows(args.series_csv)))
     ids=prediction_ids(args.studies_csv)
     absent=set(ids)-set(index)
     if absent:
@@ -65,7 +68,8 @@ def predict(args):
             with torch.inference_mode():
                 for count,uid in enumerate(ids,1):
                     images=study_slices(Path(args.dicom_root),index,uid,
-                                       ckpt["slices"],ckpt["series_limit"]).to(device)
+                                       ckpt["slices"],ckpt["series_limit"],
+                                        series_order="provided" if ckpt.get("series_selection","legacy")=="balanced" else "legacy").to(device)
                     probabilities=model(preprocess(images)).sigmoid().cpu().tolist()
                     if len(probabilities)!=len(LABELS):
                         raise ValueError("Model output does not match label schema")
