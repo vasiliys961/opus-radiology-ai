@@ -157,7 +157,7 @@ export default function LungNoduleResearchResults({isChestCT}:{isChestCT:boolean
         <a href="https://github.com/vasiliys961/opus-radiology-ai/actions/runs/38724788094"
            target="_blank" rel="noopener noreferrer">Реальное сравнение и измерения · GitHub Actions</a>
       </div>}
-      <PublicLuna16SourceSlices reference={reference} rawSha256={report.publicStudy.sourceRawSha256} candidates={report.candidates}/>
+      <PublicLuna16SourceSlices reference={reference} rawSha256={report.publicStudy.sourceRawSha256} candidates={report.candidates} sourceGeometryVerified={comparison!==null}/>
       <p role="note">{comparison?
         "Для этого публичного примера преобразование координат MONAI world → LPS подтверждено оригинальной конфигурацией и геометрией исходного MetaImage. Независимое визуальное подтверждение контура отсутствует; исследовательское совпадение центров не равно клиническому true positive.":
         "Пространственное сопоставление ещё не прошло проверку подлинных источников. Из одних числовых координат нельзя заключить, что модель обнаружила узел."}</p>
