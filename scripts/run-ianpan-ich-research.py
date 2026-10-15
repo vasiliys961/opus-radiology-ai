@@ -220,6 +220,11 @@ def run(args):
     evidence = numeric_predictions(output,len(volume))
     from ianpan_source_roi import map_ich_model_regions_to_nifti
     evidence["candidates"] = map_ich_model_regions_to_nifti(image,evidence["candidates"])
+    # The source provenance gate was checked inside validate_public_manifest,
+    # but its locally scoped flags must be recomputed from that admitted
+    # manifest in the final research report (not referenced out of scope).
+    original_dicom = manifest["sourceUnits"]=="HU_FROM_VERIFIED_DICOM_RESCALE"
+    figshare = manifest["sourceUnits"]=="PUBLISHED_FIGSHARE_NONCONTRAST_CT_HU_LIKE_NOT_INDEPENDENTLY_VERIFIED"
     result = {
         "schema": "opus-ianpan-genuine-public-ich-research/v1",
         "status": "genuine_pretrained_inference_requires_independent_validation",
