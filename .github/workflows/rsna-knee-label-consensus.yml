@@ -1,0 +1,22 @@
+name: Knee report-label consensus contract
+on:
+  pull_request:
+    paths:
+      - 'services/imaging-ai/rsna_knee_label_consensus.py'
+      - 'services/imaging-ai/test_rsna_knee_label_consensus.py'
+      - '.github/workflows/rsna-knee-label-consensus.yml'
+  workflow_dispatch:
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile and test label consensus
+        run: |
+          cd services/imaging-ai
+          python -m unittest test_rsna_knee_label_consensus.py -v
