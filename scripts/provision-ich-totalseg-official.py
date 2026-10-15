@@ -58,7 +58,7 @@ def download_and_admit(dst:Path,install_root:Path):
                 if p.parts[0]!="Dataset150_icb_v0":
                     continue
                 if any(part.startswith(".") for part in p.parts):
-                    raise ValueError("hidden_checkpoint_member_not_allowed")
+                    continue  # Discard vendor .DS_Store/AppleDouble, never extract it.
                 chosen.append(entry)
             archive.extractall(install_root,members=chosen)
         installed=install_root/"Dataset150_icb_v0"
