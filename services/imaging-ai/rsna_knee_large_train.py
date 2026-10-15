@@ -93,6 +93,8 @@ def train(args):
         raise ValueError("Invalid encoder fine-tuning configuration")
     if args.tail_blocks and args.cache_dir:
         raise ValueError("Fine-tuning cannot use stale frozen feature cache")
+    if args.tail_blocks and args.head!="finding-v2":
+        raise ValueError("Tail fine-tuning requires --head finding-v2")
     if args.tail_blocks and args.resume:
         raise ValueError("Legacy frozen optimizer resume incompatible with tail fine-tuning; use --warmstart")
     if args.slice_batch<1 or args.epochs<1 or args.slices<1:
@@ -146,6 +148,7 @@ def train(args):
         for parameter in model.backbone.parameters():
             parameter.requires_grad_(False)
     out=Path(args.output)
+    best_auc=-1.0
     for epoch in range(start,args.epochs):
         if head is None:
             model.attention.train();model.classifier.train()
@@ -206,7 +209,9 @@ def train(args):
         for j,label in enumerate(LABELS):
             pairs=[(t[j],p[j]) for t,p,k in zip(truth,predictions,known) if k[j]]
             auc[label]=float(roc_auc_score([x[0] for x in pairs],[x[1] for x in pairs])) if len({x[0] for x in pairs})==2 else None
-        report={"epoch":epoch+1,"loss":sum(losses)/len(losses) if losses else None,
+        valid_auc=[x for x in auc.values() if x is not None]
+        macro_auc=sum(valid_auc)/len(valid_auc) if valid_auc else None
+        report={"epoch":epoch+1,"macro_auc":macro_auc,"evaluable_classes":len(valid_auc),"loss":sum(losses)/len(losses) if losses else None,
                 "failed_studies":failed,"validation_studies":len(truth),"auc":auc}
         print(json.dumps(report),flush=True)
         state={k:v.detach().cpu() for k,v in model.state_dict().items()}
@@ -222,6 +227,9 @@ def train(args):
             checkpoint["head_family"]="finding-v2"
             checkpoint["head_state_dict"]={k:v.detach().cpu() for k,v in head.state_dict().items()}
         save_atomic(torch,checkpoint,out)
+        if macro_auc is not None and macro_auc>best_auc:
+            best_auc=macro_auc
+            save_atomic(torch,checkpoint,out.with_name(out.stem+".best"+out.suffix))
     return out
 
 
