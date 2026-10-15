@@ -1,0 +1,77 @@
+name: REAL pretrained ICH on one public JHU head CT (CPU)
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/ich-ianpan-real-jhu-public.yml"
+      - "scripts/prepare-jhu-public-head-ich.py"
+  workflow_dispatch:
+    inputs:
+      public_ct_only:
+        type: string
+        required: true
+        description: "Type PUBLIC-HEAD-NCCT-RESEARCH-OK"
+permissions:
+  contents: read
+jobs:
+  pinned-public-real-ich:
+    if: ${{ github.event_name == 'push' || (github.ref == 'refs/heads/main' && inputs.public_ct_only == 'PUBLIC-HEAD-NCCT-RESEARCH-OK') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 62
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      OMP_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "2"
+      TOKENIZERS_PARALLELISM: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Admit CPU worker RAM before downloads
+        run: |
+          python - <<'PY'
+          import shutil
+          import os
+          free_mem=os.sysconf('SC_AVPHYS_PAGES')*os.sysconf('SC_PAGE_SIZE')
+          assert free_mem>=10*1024**3,"Public ICH research worker needs 10 GiB available RAM"
+          assert shutil.disk_usage(".").free>=9*1024**3,"Public ICH research worker needs 9 GiB disk"
+          print("Resource admission passed; no source images downloaded yet.")
+          PY
+      - name: Pinned CPU PyTorch and original vendor inference dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --no-cache-dir torch==2.6.0 torchvision==0.21.0 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --no-cache-dir \
+            "numpy==2.2.6" "opencv-python-headless==4.11.0.86" \
+            "safetensors==0.7.0" "timm==1.0.27" "einops==0.8.1" \
+            "nibabel==5.3.2" "pydicom==3.0.1" \
+            "huggingface-hub==1.23.0" "psutil==6.1.1"
+          python -m pip install --no-cache-dir --no-deps \
+            "git+https://github.com/i-pan/ct-head-hemorrhage-detection.git@098b7ff"
+      - name: Download ONE genuinely public published CT, verify MD5, admit full native HU-like original
+        run: |
+          python scripts/prepare-jhu-public-head-ich.py --out-folder "$RUNNER_TEMP/opus-public-jhu"
+      - name: Execute actual pretrained ianpan model on original public head CT (bounded)
+        run: |
+          python scripts/run-ianpan-ich-research.py \
+            --source "$RUNNER_TEMP/opus-public-jhu/research-hu-head.nii" \
+            --manifest "$RUNNER_TEMP/opus-public-jhu/research-hu-evidence.json" \
+            --model-dir "$RUNNER_TEMP/opus-pinned-ich-weights" \
+            --output "$RUNNER_TEMP/opus-ich-genuine-jhu-report.json" \
+            --device cpu --download-pretrained
+      - name: Publish ONLY non-image research candidate numbers
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-pretrained-ich-public-jhu-research
+          path: ${{ runner.temp }}/opus-ich-genuine-jhu-report.json
+          retention-days: 30
+          if-no-files-found: error
+      - name: Delete public pixels, model weights and intermediate files
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/opus-public-jhu" "$RUNNER_TEMP/opus-pinned-ich-weights" "$RUNNER_TEMP/opus-ich-genuine-jhu-report.json"
