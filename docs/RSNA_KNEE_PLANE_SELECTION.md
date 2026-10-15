@@ -1,5 +1,7 @@
-# Plane-balanced MRI series selection
+# Opt-in MRI plane-balanced selection
 
-The original `study_slices` chose the first series by sorted SeriesInstanceUID, which does not represent a clinical acquisition order. It now iterates deterministic sagittal, coronal, axial round-robin series from `Anatomical_Plane` metadata, preserving the original `series_index` shape.
+Legacy `series_index` and the default `study_slices(..., series_order="legacy")` preserve exact sorted-series behavior for previously trained checkpoints.
 
-**Compatibility warning:** this changes which images are fed to the model. Previously trained ResNet18/DINOv2/CoAtNet checkpoints were trained using sorted-series selection and **must not be silently reused** with the new selection. Validate preprocessing provenance or use the legacy selection at inference until the new protocol is trained and evaluated. This change does not claim better AUC, and sequence types (T1/T2/PD/FS) are not yet identified reliably.
+For **new experimental training only**, first call `balanced_series(read_rows(series_csv), max_series=3)`; then pass that index into `study_slices(..., series_order="provided")` so sagittal, coronal and axial series are sampled in balanced order. Callers must opt in; no existing model or inference uses the new mode automatically.
+
+These series are categorized by Anatomical_Plane; this is not sequence-type recognition (T1/T2/PD/FS). New training and evaluation are required before claiming benefits. Existing DINOv2/CoAtNet weights should continue to use the legacy mode.
