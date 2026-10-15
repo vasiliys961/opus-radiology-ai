@@ -1,0 +1,30 @@
+name: CT pleural and pericardial effusion source evidence
+on:
+  pull_request:
+    paths:
+      - "services/imaging-ai/effusion_source_evidence.py"
+      - "services/imaging-ai/test_effusion_source_evidence.py"
+      - ".github/workflows/chest-effusion-source-evidence.yml"
+  push:
+    paths:
+      - "services/imaging-ai/effusion_source_evidence.py"
+      - "services/imaging-ai/test_effusion_source_evidence.py"
+      - ".github/workflows/chest-effusion-source-evidence.yml"
+permissions:
+  contents: read
+jobs:
+  task315-source-geometry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Fast original NIfTI geometry math dependencies ONLY; no pretrained weights
+        run: python -m pip install --no-cache-dir numpy==2.2.6 nibabel==5.3.2
+      - name: Verify anatomical class NOT effusion; classes 2/3 true model fluid candidates
+        working-directory: services/imaging-ai
+        run: |
+          python -m py_compile effusion_source_evidence.py test_effusion_source_evidence.py
+          python test_effusion_source_evidence.py
