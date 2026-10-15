@@ -45,18 +45,22 @@ def download_and_admit(dst:Path,install_root:Path):
             if not any("checkpoint" in e.filename.lower() and
                        e.filename.endswith((".pth",".pt",".pkl")) for e in members):
                 raise ValueError("pretrained_ich_checkpoint_not_found")
+            chosen=[]
             for entry in members:
-                name=entry.filename
                 from pathlib import PurePosixPath
-                p=PurePosixPath(name)
-                # The official ZIP can include harmless metadata outside
-                # the weight folder. Never allow absolute paths, traversal,
-                # symlinks, or hidden filesystem-control entries.
+                p=PurePosixPath(entry.filename)
                 if (p.is_absolute() or ".." in p.parts or not p.parts or
-                    len(p.parts)>12 or any(part.startswith(".") for part in p.parts) or
+                    len(p.parts)>12 or
                     (entry.external_attr >> 16) & 0o170000 == 0o120000):
                     raise ValueError("unsafe_checkpoint_archive_member")
-            archive.extractall(install_root)
+                # Ignore extraneous official release metadata outside the
+                # recognized task-150 directory; never extract it.
+                if p.parts[0]!="Dataset150_icb_v0":
+                    continue
+                if any(part.startswith(".") for part in p.parts):
+                    raise ValueError("hidden_checkpoint_member_not_allowed")
+                chosen.append(entry)
+            archive.extractall(install_root,members=chosen)
         installed=install_root/"Dataset150_icb_v0"
         roots=sorted({Path(e.filename).parts[0] for e in members if Path(e.filename).parts})
         if not installed.is_dir() or not list(installed.rglob("checkpoint_final.pth")):
