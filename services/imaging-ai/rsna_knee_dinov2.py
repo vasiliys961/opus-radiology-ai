@@ -5,6 +5,7 @@ import json
 import random
 from pathlib import Path
 from rsna_knee import LABELS, read_rows, series_index, extract_labels, study_slices
+from rsna_knee_validation import load_partition
 
 def model_factory(pretrained=True):
     import torch
@@ -50,6 +51,7 @@ def main():
     p.add_argument("--series-limit",type=int,default=3)
     p.add_argument("--lr",type=float,default=2e-5)
     p.add_argument("--seed",type=int,default=42)
+    p.add_argument("--manifest",required=True,help="Shared held-out study manifest; mandatory to prevent inconsistent splits")
     p.add_argument("--no-pretrained",action="store_true")
     args=p.parse_args()
     if not torch.cuda.is_available():raise RuntimeError("GPU required for this experiment")
@@ -58,8 +60,7 @@ def main():
     rows=[r for r in read_rows(args.train_csv) if
           r["StudyInstanceUID"] in index and any(extract_labels(r)[1])]
     if len(rows)<3:raise RuntimeError("Fewer than 3 labeled studies")
-    random.shuffle(rows);cut=max(1,min(len(rows)-1,int(.8*len(rows))))
-    train,val=rows[:cut],rows[cut:]
+    train,val=load_partition(rows,args.manifest)
     device="cuda"
     model=model_factory(not args.no_pretrained).to(device)
     optimizer=torch.optim.AdamW(model.parameters(),lr=args.lr)
@@ -79,13 +80,14 @@ def main():
             loss=(F.binary_cross_entropy_with_logits(logits,y,reduction="none")*m).sum()/m.sum().clamp_min(1)
             loss.backward();optimizer.step();losses.append(float(loss.item()))
             del x,logits,loss
-        model.eval();truth=[];scores=[];known=[]
+        model.eval();truth=[];scores=[];known=[];uids=[]
         with torch.inference_mode():
             for row in val:
                 try:
                     x=study_slices(Path(args.dicom_root),index,row["StudyInstanceUID"],args.slices,args.series_limit).to(device)
                 except ValueError:continue
                 y,m=extract_labels(row)
+                uids.append(row["StudyInstanceUID"])
                 truth.append(y);known.append(m);scores.append(model(preprocess(x)).sigmoid().cpu().numpy())
         auc={}
         if truth:
@@ -102,5 +104,9 @@ def main():
                 "slices":args.slices,"series_limit":args.series_limit,
                 "research_only":True},output)
     output.with_suffix(".metrics.json").write_text(json.dumps(metrics,indent=2))
+    with output.with_suffix(".validation.csv").open("w",newline="",encoding="utf-8") as f:
+        writer=csv.DictWriter(f,fieldnames=["StudyInstanceUID",*LABELS]);writer.writeheader()
+        for uid,prob in zip(uids,scores):
+            writer.writerow({"StudyInstanceUID":uid,**dict(zip(LABELS,map(float,prob)))})
 
 if __name__=="__main__":main()
