@@ -108,7 +108,7 @@ def train(args):
         raise ValueError("Empty train/validation split")
     if args.resume and args.warmstart:
         raise ValueError("--resume and --warmstart are mutually exclusive")
-    model=model_factory(pretrained=not bool(args.resume or args.warmstart)).cuda()
+    # Use the same HF DINOv2 architecture as the original baseline. The\n    # hand-built Dinov2Config has 257 positional tokens whereas the Kaggle\n    # baseline checkpoint has 1370; loading into that config fails.\n    model=model_factory(pretrained=True).cuda()
     encoder_id="facebook/dinov2-small:frozen-v1"
     fingerprint=hashlib.sha256(json.dumps({
         "config":configuration(args),"train":sorted(r["StudyInstanceUID"] for r in training),
