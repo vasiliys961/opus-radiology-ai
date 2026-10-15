@@ -119,3 +119,25 @@ test("real published Figshare HU-LIKE source stays unverified and edema is not I
  const spoofValidation={...published,externalExpertHemorrhageLocalizationComparisonPerformed:true};
  assert.throws(()=>parseIchAlternativeReport(JSON.stringify(spoofValidation)),/статус/);
 });
+
+test("recorded genuine pretrained ICH public series has 14 proposals with no hematoma-ground-truth claim",async()=>{
+ const {readFileSync}=await import("node:fs");
+ const raw=readFileSync(new URL("../public/examples/ich-ianpan-real-figshare-run-38733865982.json",import.meta.url),"utf8");
+ const result=parseIchAlternativeReport(raw);
+ assert.deepEqual(result.source.sourceDimensionsXYZ,[512,512,25]);
+ assert.equal(result.source.niftiSha256,"0543a46065314468fe7ab18b9187277ae1affc4e7c864d0fd8ae608afa554a95");
+ assert.equal(result.model.checkpointSha256Verified,true);
+ assert.equal(result.seriesRawUncalibratedScores.intraparenchymal,0.989428);
+ assert.equal(result.seriesRawUncalibratedScores.any,0.993365);
+ assert.equal(result.candidates.length,14);
+ assert.deepEqual([...new Set(result.candidates.map(v=>v.sliceIndexModelOrdered))],[9,10,11,12,13,14,15]);
+ assert.deepEqual(result.candidates[0].sourceVoxelProjection?.boundingBoxNativeNiftiXYZ,[143,227,9,177,275,9]);
+ assert.equal(result.source.sourceOriginalDicomHURescaleIndependentlyVerified,false);
+ assert.equal(result.source.publishedFigshareHuLikeWithoutOriginalDicomRescaleAudit,true);
+ assert.equal(result.source.referenceLabelsOnlyPerihematomalEdema,true);
+ assert.equal(result.externalExpertHemorrhageLocalizationComparisonPerformed,false);
+ assert.equal(result.readyForClinicalUse,false);
+ assert.equal(result.dice,null);
+ assert.equal(result.sensitivity,null);
+ assert.equal(result.negativeDiagnosticConclusionAllowed,false);
+});
