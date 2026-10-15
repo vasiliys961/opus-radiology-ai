@@ -50,6 +50,22 @@ def validate_public_manifest(source: Path, manifest_path: Path) -> dict:
     if manifest_path.is_symlink() or not manifest_path.is_file() or manifest_path.stat().st_size > 4096:
         raise ValueError("invalid_public_manifest")
     document = json.loads(manifest_path.read_text(encoding="utf-8"))
+    # Fixed, separately published public original CT. It is only HU-LIKE:
+    # DICOM RescaleSlope/Intercept of individual originals were NOT independently
+    # rechecked. This is exploratory pretrained inference, NEVER validated HU.
+    publisher_source = (
+        isinstance(document, dict)
+        and document.get("sourceUnits")
+          == "PUBLISHED_DICOM_DERIVED_CT_HU_LIKE_NOT_DICOM_RESCALE_INDEPENDENTLY_VERIFIED"
+        and isinstance(document.get("publisherProvenance"),dict)
+        and document["publisherProvenance"].get("datasetDoi")=="10.7281/T1/CZDPSX"
+        and document["publisherProvenance"].get("publishedArchiveMd5")=="a1e57f5cb684fc238d32a019bec456ad"
+        and document["publisherProvenance"].get("dicomRescaleIndependentlyVerified") is False
+        and document["publisherProvenance"].get("intensitiesAreOnlyPlausiblyHU") is True
+        and document["publisherProvenance"].get("originalStudyAllSourceSlicesRetained") is True
+        and document["publisherProvenance"].get("publicSourceAuditIsNotClinicalValidation") is True
+    )
+    direct_dicom_source = isinstance(document,dict) and document.get("sourceUnits") == "HU_FROM_VERIFIED_DICOM_RESCALE"
     if not isinstance(document, dict) or any([
         document.get("schema") != "opus-public-head-ct-hu-evidence/v1",
         document.get("modality") != "CT",
@@ -57,7 +73,7 @@ def validate_public_manifest(source: Path, manifest_path: Path) -> dict:
         document.get("contrast") != "NONCONTRAST",
         document.get("publicDataRightsReviewed") is not True,
         document.get("deidentifiedPublicDataset") is not True,
-        document.get("sourceUnits") != "HU_FROM_VERIFIED_DICOM_RESCALE",
+        not (direct_dicom_source or publisher_source),
         document.get("sourceFullStudy") is not True,
         document.get("consent") != "PUBLIC-HEAD-NCCT-RESEARCH-OK",
     ]):
@@ -67,6 +83,8 @@ def validate_public_manifest(source: Path, manifest_path: Path) -> dict:
         raise ValueError("missing_public_source_sha256")
     if sha256(source) != expected:
         raise ValueError("source_sha256_changed")
+    if publisher_source and document.get("publisherProvenance",{}).get("dimensionsXYZ") != list(__import__("nibabel").load(str(source)).shape):
+        raise ValueError("published_source_dimensions_mismatch")
     # An operator provenance assertion is not independent confirmation of HU.
     # In particular the previously used Zenodo 16-slice slab is NOT admitted
     # without proof that its stored values are original calibrated CT HU.
@@ -192,6 +210,7 @@ def run(args):
     result = {
         "schema": "opus-ianpan-genuine-public-ich-research/v1",
         "status": "genuine_pretrained_inference_requires_independent_validation",
+        "externalExpertHemorrhageLocalizationComparisonPerformed":False,
         "model": {"id": MODEL_REPO,"revision":MODEL_REV,
                   "sha256ByArtifact":{key:val[0] for key,val in MODEL_FILES.items()},
                   "checkpointSha256Verified":True},
@@ -200,6 +219,8 @@ def run(args):
                    "modelOrderedSliceCount":len(volume),
                    "publicRightsOperatorAttested":True,
                    "huProvenanceOperatorAttestedNotIndependentlyConfirmed":True,
+                   "huScaleRecheckedFromOriginalDicom":bool(manifest.get("sourceUnits") == "HU_FROM_VERIFIED_DICOM_RESCALE"),
+                   "publisherCtNiftiHuOnlyPlausible":bool(manifest.get("sourceUnits") != "HU_FROM_VERIFIED_DICOM_RESCALE"),
                    "modelPixelsNotRegisteredToSource":True,
                    "researchRoiVoxelGeometryProjectionAvailable":True,
                    "researchRoiClinicalValidation":False},
