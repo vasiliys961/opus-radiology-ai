@@ -1,6 +1,8 @@
 "use client";
 
 import {useState} from "react";
+import {sha256} from "@noble/hashes/sha2.js";
+import {parseRealPlethoraHumanReference,type PlethoraHumanReference} from "../lib/plethora-real-reference";
 import {parseEffusionResearchReport,type EffusionResearchReport} from "../lib/chest-effusion-research";
 
 /** Pure browser import of independently generated original model evidence.
@@ -9,6 +11,9 @@ import {parseEffusionResearchReport,type EffusionResearchReport} from "../lib/ch
 export default function ChestEffusionResearchResults({isChestCT}:{isChestCT:boolean}){
   const [report,setReport]=useState<EffusionResearchReport|null>(null);
   const [error,setError]=useState("");
+  const [humanReference,setHumanReference]=useState<PlethoraHumanReference|null>(null);
+  const [humanBusy,setHumanBusy]=useState(false);
+  const [humanError,setHumanError]=useState("");
   const [selectedClass,setSelectedClass]=useState<2|3>(2);
   const candidate=report?.fluidCandidates.find(c=>c.labelId===selectedClass);
   return <section className="cs-geometry" aria-label="Плевральный и перикардиальный выпот · исследовательский разбор">
@@ -19,6 +24,51 @@ export default function ChestEffusionResearchResults({isChestCT}:{isChestCT:bool
     {!isChestCT&&<p role="note">Для исследований грудной клетки выберите КТ грудной клетки.
       Импорт независимого исследовательского NIfTI-отчёта не означает
       привязку находки к выбранному DICOM-исследованию.</p>}
+    <div style={{border:"1px solid #91a7a2",padding:12,borderRadius:8,margin:"12px 0"}}>
+      <strong>Независимый врачебный эталон плеврального выпота · TCIA PleThora</strong>
+      <p>В публичном наборе 78 пар экспертных пересмотров. Можно открыть
+        зафиксированное реальное сравнение двух врачебных масок на одном
+        исследовании, не загружая изображения на сервер и не выполняя нейросеть.</p>
+      <button type="button" disabled={humanBusy} onClick={async()=>{
+        setHumanBusy(true);setHumanError("");setHumanReference(null);
+        try{
+          const response=await fetch(
+            "/examples/plethora-real-two-human-effusion-reference-run-38750003799.json",
+            {cache:"no-store"});
+          if(!response.ok)throw Error("Эталонные числовые данные TCIA сейчас недоступны.");
+          const bytes=new Uint8Array(await response.arrayBuffer());
+          const digest=Array.from(sha256(bytes),n=>n.toString(16).padStart(2,"0")).join("");
+          const content=new TextDecoder("utf-8",{fatal:true}).decode(bytes);
+          setHumanReference(parseRealPlethoraHumanReference(content,digest));
+        }catch(e){setHumanError(e instanceof Error?e.message:"Ошибка загрузки эталона.");}
+        finally{setHumanBusy(false);}
+      }}>{humanBusy?"Проверка оригинального результата TCIA…":
+          "Показать реальное согласие двух экспертных разметок"}</button>
+      {humanError&&<p role="alert">{humanError}</p>}
+      {humanReference&&<div>
+        <p role="status"><strong>Human–human Dice:
+          {" "}{humanReference.humanExpertInterreaderDice.toFixed(3)}</strong>
+          {" "}— измеренное совпадение двух отдельных экспертных
+          сегментаций плеврального выпота, НЕ точность TotalSegmentator.</p>
+        <p>Исходная разметка 1: {" "}{humanReference.originalReviewerAMaskVolumeMl.toFixed(2)} мл
+          {" "}({humanReference.originalReviewerAMaskVoxels.toLocaleString("ru-RU")} вокселей).
+          Разметка 2: {" "}{humanReference.originalReviewerBMaskVolumeMl.toFixed(2)} мл
+          {" "}({humanReference.originalReviewerBMaskVoxels.toLocaleString("ru-RU")} вокселей).
+          Совпадающих вокселей {humanReference.originalExpertIntersectionVoxels.toLocaleString("ru-RU")}.</p>
+        <p>Различия по {humanReference.humanExpertDiscordantSliceCount} исходным
+          индексным срезам из {humanReference.originalShapeXYZ[2]}.
+          Маски имеют подтверждённую общую физическую NIfTI-сетку,
+          но оригинальная DICOM КТ для этих разметок ещё не загружена.</p>
+        <p role="note">Числовое сопоставление с нейросетью невозможно до запуска
+          именно на соответствующей CT: этот экспертный случай не равен
+          автоматически текущему JSON выпота или выбранной серии DICOM.
+          Границы исходного DICOM RAI и NIfTI RPI требуют регистрации.</p>
+        <p><small><a href="https://github.com/vasiliys961/opus-radiology-ai/actions/runs/38750003799"
+          target="_blank" rel="noopener noreferrer">Подлинный CPU-расчёт исходных
+          экспертных масок · GitHub Actions</a>.
+          Источник TCIA DOI 10.7937/tcia.2020.6c7y-gq39, CC BY 3.0.</small></p>
+      </div>}
+    </div>
     <label>Числовой отчёт оригинальной CT-маски task 315 (.json)
       <input type="file" accept=".json,application/json"
         onChange={async e=>{
