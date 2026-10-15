@@ -13,6 +13,8 @@ on:
       - "scripts/test-ich-expert-binary-union.py"
       - "scripts/ich-expert-subtype-coverage.py"
       - "scripts/test-ich-expert-subtype-coverage.py"
+      - "scripts/evaluate-ianpan-ich-expert-roi.py"
+      - "scripts/test-evaluate-ianpan-ich-expert-roi.py"
       - ".github/workflows/ich-reference-comparison.yml"
   push:
     paths:
@@ -26,6 +28,8 @@ on:
       - "scripts/test-ich-expert-binary-union.py"
       - "scripts/ich-expert-subtype-coverage.py"
       - "scripts/test-ich-expert-subtype-coverage.py"
+      - "scripts/evaluate-ianpan-ich-expert-roi.py"
+      - "scripts/test-evaluate-ianpan-ich-expert-roi.py"
       - ".github/workflows/ich-reference-comparison.yml"
 
 permissions:
@@ -52,3 +56,7 @@ jobs:
         run: python scripts/test-ich-expert-binary-union.py
       - name: Assess true per-subtype expert-mask voxel coverage (no clinical sensitivity)
         run: python scripts/test-ich-expert-subtype-coverage.py
+      - name: Verify expert BLOOD mask versus pretrained source ROI; refuse Figshare edema
+        run: |
+          python -m py_compile scripts/evaluate-ianpan-ich-expert-roi.py scripts/test-evaluate-ianpan-ich-expert-roi.py
+          python scripts/test-evaluate-ianpan-ich-expert-roi.py
