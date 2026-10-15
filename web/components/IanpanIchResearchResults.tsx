@@ -5,6 +5,7 @@ import {
   parseIchAlternativeReport,ICH_CLASSES,ICH_CLASS_LABELS,
   type IchAlternativeClass,type IchAlternativeReport,
 } from "../lib/ianpan-ich-report";
+import {groupIchResearchSourceCandidates} from "../lib/ich-real-lesion-tracks";
 
 /**
  * Public-research JSON importer. Does not execute models or upload study data.
@@ -17,6 +18,8 @@ export default function IanpanIchResearchResults(){
   const [minScore,setMinScore]=useState(0.5);
   const [type,setType]=useState<IchAlternativeClass|"all">("all");
   const [notes,setNotes]=useState("");
+  const grouping=report?.source.researchRoiVoxelGeometryProjectionAvailable===true
+    ?groupIchResearchSourceCandidates(report):null;
   const visible=(report?.candidates??[]).filter(c=>
     c.rawUncalibratedScore>=minScore&&(type==="all"||c.class===type)
   ).sort((a,b)=>a.sliceIndexModelOrdered-b.sliceIndexModelOrdered||
@@ -96,6 +99,32 @@ export default function IanpanIchResearchResults(){
           гематомного объёма или клинической чувствительности. Результаты
           нейросети — неподтверждённые исследовательские предложения.
         </p>}
+      {grouping&&<>
+        <h4>Связанные области на последовательных срезах оригинальной КТ</h4>
+        <p>После устранения повторов класса «любое кровоизлияние» получено
+          {" "}<strong>{grouping.tracks.length}</strong> групп пространственно
+          связанных модельных находок. Исключено из повторного подсчёта
+          {grouping.broadAnyChannelCandidatesNotCountedAsSeparateLesions}
+          {" "}совпадающих записей широкого класса «любое кровоизлияние».
+          Это не число клинически подтверждённых гематом.</p>
+        {grouping.tracks.map(track=><div key={track.trackId}
+          style={{padding:10,margin:"10px 0",border:"1px dashed #938096",borderRadius:8}}>
+          <strong>{ICH_CLASS_LABELS[track.subtype]}</strong>
+          <div>Соседних исследовательских участков: {track.candidatesGrouped}</div>
+          <div>Нативные срезы NIfTI (нумерация от 1): {" "}
+            {track.sourceSliceIndices.map(z=>z+1).join(", ")}</div>
+          <div>Общая ограничивающая область XYZ, воксели: {" "}
+            {track.sourceVoxelBoundingEnvelopeXYZ.join(" / ")}</div>
+          <div>Максимальная исходная оценка модели: {track.researchScoreMax.toFixed(3)}</div>
+          <small>Пространственная связь определяется перекрытием рамок на
+            соседних срезах. Ограничивающая область — гипотеза локализации,
+            НЕ точный контур, НЕ объём крови и НЕ доказанный очаг кровоизлияния.
+            Нет внешней экспертной маски гематомы.</small>
+        </div>)}
+        {grouping.unprojectedModelCandidates>0&&
+          <p role="note">{grouping.unprojectedModelCandidates} областей модели
+            не имеют допустимой привязки к исходным вокселям и не сгруппированы.</p>}
+      </>}
       <h4>Оценки шести категорий на уровне серии</h4>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))",gap:8}}>
         {ICH_CLASSES.map(k=><div key={k} style={{padding:8,border:"1px solid #8b9b97",borderRadius:6}}>
@@ -159,6 +188,14 @@ export default function IanpanIchResearchResults(){
           sourceNiftiSha256:report.source.niftiSha256,
           modelId:report.model.id,modelRevision:report.model.revision,
           candidateCount:report.candidates.length,
+          researchNativeCandidateTracks:grouping?.tracks.map(t=>({
+            subtype:t.subtype,modelSliceIndices:t.modelSliceIndices,
+            sourceSliceIndices:t.sourceSliceIndices,
+            nativeVoxelEnvelope:t.sourceVoxelBoundingEnvelopeXYZ,
+            rawUncalibratedScoreMaximum:t.researchScoreMax,
+            clinicalLesionConfirmed:false,measuredHematomaVolumeMl:null,
+            independentExpertHematomaMaskCompared:false
+          }))??[],
           reviewerNote:notes,
           modelToSourceCoordinatesVerified:false,
           sourceHUIndependentlyVerified:false,
