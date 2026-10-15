@@ -1,6 +1,6 @@
 "use client";
 import {useEffect, useMemo, useRef, useState} from "react";
-import {projectMonaiCandidateHypothesis,type MonaiCandidate} from "../lib/monai-public-candidate-projection";
+import {projectMonaiCandidateHypothesis,projectMonaiCandidateBoundingBox,type MonaiCandidate} from "../lib/monai-public-candidate-projection";
 import {sha256} from "@noble/hashes/sha2.js";
 import {sourceClickToMetaImagePoint,type SourceClickPoint} from "../lib/metaimage-physician-point";
 
@@ -44,6 +44,7 @@ export default function PublicLuna16SourceSlices({
   const [manualPoint,setManualPoint]=useState<SourceClickPoint|null>(null);
   const [selectedCandidateIndex,setSelectedCandidateIndex]=useState<number|null>(null);
   const [showHypotheses,setShowHypotheses]=useState(false);
+  const [showModelBox,setShowModelBox]=useState(true);
   const g=reference.sourceGeometry;
   const [w,h,depth]=g.dimensions;
   const nodule=reference.referenceNodules[0];
@@ -55,6 +56,11 @@ export default function PublicLuna16SourceSlices({
     return projected?[projected]:[];
   }),[candidates,g]);
   const selectedHypothesis=hypotheses.find(c=>c.candidateIndex===selectedCandidateIndex);
+  const projected3dBoxes=useMemo(()=>candidates.flatMap(candidate=>{
+    const box=projectMonaiCandidateBoundingBox(g,candidate);
+    return box?[box]:[];
+  }),[candidates,g]);
+  const selectedModelBox=projected3dBoxes.find(c=>c.candidateIndex===selectedCandidateIndex);
 
   async function load(fileCandidate:File){
     setFile(null);setManualPoint(null);setValidating(true);setError("");setProgress(0);setDisplayError("");
@@ -120,6 +126,17 @@ export default function PublicLuna16SourceSlices({
         context.stroke();
         context.restore();
       }
+      if(showHypotheses&&showModelBox&&selectedModelBox&&
+         index>=selectedModelBox.sourceSliceIndexRangeInclusive[0]&&
+         index<=selectedModelBox.sourceSliceIndexRangeInclusive[1]){
+        const [x0,y0,,x1,y1]=selectedModelBox.nativeVoxelBoundingEnvelopeXYZ;
+        context.save();
+        context.strokeStyle="#f36cce";
+        context.lineWidth=1.7;
+        context.setLineDash(sourceGeometryVerified?[]:[5,3]);
+        context.strokeRect(x0,y0,x1-x0,y1-y0);
+        context.restore();
+      }
       if(showHypotheses&&selectedHypothesis&&selectedHypothesis.sourceSliceIndexHypothesis===index){
         const [px,py]=selectedHypothesis.nativeVoxelIndexHypothesis;
         context.save();context.strokeStyle="#f36cce";context.lineWidth=2;
@@ -137,7 +154,7 @@ export default function PublicLuna16SourceSlices({
       setDisplayError("");
     }).catch(e=>{if(!cancelled)setDisplayError(e instanceof Error?e.message:"Срез не читается.");});
     return()=>{cancelled=true;};
-  },[file,slice,preset,w,h,depth,nodule.nativeVoxelIndex,nodule.diameterMm,g.spacingMm,manualPoint,showHypotheses,selectedHypothesis,sourceGeometryVerified]);
+  },[file,slice,preset,w,h,depth,nodule.nativeVoxelIndex,nodule.diameterMm,g.spacingMm,manualPoint,showHypotheses,selectedHypothesis,selectedModelBox,showModelBox,sourceGeometryVerified]);
 
   return <section aria-label="Исходные пиксели публичной КТ LUNA16"
     style={{border:"1px solid #778c86",padding:12,borderRadius:8,margin:"12px 0"}}>
@@ -163,7 +180,10 @@ export default function PublicLuna16SourceSlices({
         {sourceGeometryVerified?
           <p role="note"><strong>Сопоставление исходной геометрии подтверждено для этой публичной КТ.</strong>
           Пурпурный <strong>сплошной</strong> крест — настоящий центр, полученный MONAI
-          и пересчитанный из world LPS в исходный MetaImage. Оранжевое кольцо —
+          и пересчитанный из world LPS в исходный MetaImage. Пурпурная
+          прямоугольная рамка — ограничение оригинального 3D-бокса модели
+          на каждом пересекаемом срезе, но НЕ измеренный контур узла.
+          Оранжевое кольцо —
           независимо опубликованный экспертный центр и диаметр. Совпадение центров
           проверено отдельным GitHub Actions по SHA-256 источников и подлинному
           результату модели. Это не экспертный контур, не независимый клинический
@@ -178,7 +198,23 @@ export default function PublicLuna16SourceSlices({
           Кандидат {h.candidateIndex+1} · срез {h.sourceSliceIndexHypothesis+1} {sourceGeometryVerified?"(проверенная физическая геометрия)":"(гипотеза)"} · score {h.rawUncalibratedScore.toFixed(3)}
         </button>)}
         {showHypotheses&&<button type="button" onClick={()=>{setShowHypotheses(false);setSelectedCandidateIndex(null);}}>Скрыть центр MONAI</button>}
-        <p><small>Центр показывается только на исходном срезе после полной проверки SHA-256 пикселей. {sourceGeometryVerified?
+        {showHypotheses&&selectedModelBox&&<label style={{display:"block",marginTop:8}}>
+          <input type="checkbox" checked={showModelBox}
+            onChange={e=>setShowModelBox(e.target.checked)}/>
+          {" "}Показать объёмную рамку кандидата MONAI на исходных срезах
+        </label>}
+        {showHypotheses&&selectedModelBox&&<p><small>
+          Истинный исследовательский 3D-бокс модели преобразован из world LPS
+          в исходные воксели CT; интервал срезов {" "}
+          {selectedModelBox.sourceSliceIndexRangeInclusive[0]+1}–{selectedModelBox.sourceSliceIndexRangeInclusive[1]+1}.
+          {selectedModelBox.truncatedBySourceVolume?" Часть области за пределами исходной КТ обрезана.":""}
+          {" "}Прямоугольник — ограничивающая рамка модельного бокса,
+          не границы узла по КТ, не диаметр, не маска и не рассчитанный объём.
+          {sourceGeometryVerified?
+            " Для этой публичной КТ исходная физическая геометрия подтверждена.":
+            " Проекция пока гипотетическая; используется пунктир."}
+        </small></p>}
+        <p><small>Центр и объёмная рамка показываются только на исходных срезах после полной проверки SHA-256 пикселей. {sourceGeometryVerified?
           "Геометрия модели к публичной MetaImage проверена по оригинальному исходному коду MONAI и контрольной разметке. Клинические TP/FP/FN, Dice и диагностические заключения не вычислялись.":
           "Привязка к исходной системе MONAI не проверена; клиническая оценка невозможна."}</small></p>
       </div>
