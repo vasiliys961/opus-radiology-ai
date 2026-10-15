@@ -1,0 +1,21 @@
+name: Knee dataset partitions
+on:
+  pull_request:
+    paths:
+      - 'services/imaging-ai/rsna_knee_corpus_partitions.py'
+      - 'services/imaging-ai/test_rsna_knee_corpus_partitions.py'
+      - '.github/workflows/knee-dataset-partitions.yml'
+  workflow_dispatch:
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: |
+          cd services/imaging-ai
+          python -m unittest test_rsna_knee_corpus_partitions.py -v
