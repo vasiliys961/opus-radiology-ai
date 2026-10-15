@@ -81,12 +81,26 @@ def run(source,mask,source_hash,model_weights_sha,authorization):
     volume_ml=abs(np.linalg.det(a[:3,:3]))/1000.
     proposals=[]
     for idx in (2,3):
-        xyz=np.array(np.nonzero(array==idx),dtype=np.int32)
-        count=int(xyz.shape[1])
+        # Iterate original K slices: never allocate a full-volume 3×N array
+        # of positive-voxel coordinates for large pathological regions.
+        count=0
+        low=[src.shape[0],src.shape[1],src.shape[2]]
+        high=[-1,-1,-1]
+        slices=[]
+        for k in range(src.shape[2]):
+            plane=array[:,:,k]==idx
+            local=int(np.count_nonzero(plane))
+            if not local:continue
+            count+=local
+            xx,yy=np.nonzero(plane)
+            low[0]=min(low[0],int(xx.min()))
+            low[1]=min(low[1],int(yy.min()))
+            low[2]=min(low[2],k)
+            high[0]=max(high[0],int(xx.max()))
+            high[1]=max(high[1],int(yy.max()))
+            high[2]=max(high[2],k)
+            slices.append(k)
         if count:
-            low=xyz.min(axis=1).astype(int).tolist()
-            high=xyz.max(axis=1).astype(int).tolist()
-            slices=np.unique(xyz[2]).astype(int).tolist()
             corner_world=[]
             for x in (low[0],high[0]):
                 for y in (low[1],high[1]):
