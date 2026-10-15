@@ -53,6 +53,7 @@ def main():
     p.add_argument("--seed",type=int,default=42)
     p.add_argument("--manifest",required=True,help="Shared held-out study manifest; mandatory to prevent inconsistent splits")
     p.add_argument("--series-selection",choices=("legacy","balanced"),default="legacy")
+    p.add_argument("--pixel-mode",choices=("legacy","dicom"),default="legacy")
     p.add_argument("--no-pretrained",action="store_true")
     args=p.parse_args()
     if not torch.cuda.is_available():raise RuntimeError("GPU required for this experiment")
@@ -73,7 +74,8 @@ def main():
             uid=row["StudyInstanceUID"]
             try:
                 x=study_slices(Path(args.dicom_root),index,uid,args.slices,args.series_limit,
-                               series_order="provided" if args.series_selection=="balanced" else "legacy").to(device)
+                               series_order="provided" if args.series_selection=="balanced" else "legacy",
+                               pixel_mode=args.pixel_mode).to(device)
             except ValueError:skipped+=1;continue
             target,mask=extract_labels(row)
             y=torch.tensor(target,device=device)
@@ -88,7 +90,8 @@ def main():
             for row in val:
                 try:
                     x=study_slices(Path(args.dicom_root),index,row["StudyInstanceUID"],args.slices,args.series_limit,
-                                       series_order="provided" if args.series_selection=="balanced" else "legacy").to(device)
+                                       series_order="provided" if args.series_selection=="balanced" else "legacy",
+                               pixel_mode=args.pixel_mode).to(device)
                 except ValueError:continue
                 y,m=extract_labels(row)
                 uids.append(row["StudyInstanceUID"])
@@ -106,7 +109,7 @@ def main():
     torch.save({"model":"dinov2-small-mil-v1","labels":list(LABELS),
                 "state_dict":{k:v.detach().cpu() for k,v in model.state_dict().items()},
                 "slices":args.slices,"series_limit":args.series_limit,
-                "series_selection":args.series_selection,"research_only":True},output)
+                "series_selection":args.series_selection,"pixel_mode":args.pixel_mode,"research_only":True},output)
     output.with_suffix(".metrics.json").write_text(json.dumps(metrics,indent=2))
     with output.with_suffix(".validation.csv").open("w",newline="",encoding="utf-8") as f:
         writer=csv.DictWriter(f,fieldnames=["StudyInstanceUID",*LABELS]);writer.writeheader()
