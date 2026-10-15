@@ -5,6 +5,7 @@ import random
 from pathlib import Path
 from rsna_knee import LABELS, read_rows, series_index, balanced_series, extract_labels, study_slices
 from rsna_knee_validation import load_partition
+from rsna_knee_class_balance import positive_weights
 
 def build_model(pretrained=True, architecture="coatnet_0_rw_224"):
     import torch
@@ -43,6 +44,9 @@ def train(args):
     rows=[r for r in read_rows(args.train_csv) if r["StudyInstanceUID"] in index and any(extract_labels(r)[1])]
     if len(rows)<3:raise ValueError("Need at least three labeled studies")
     train_rows,val_rows=load_partition(rows,args.manifest)
+    train_examples=train_rows
+    weights,weight_counts=positive_weights(train_examples)
+    positive_weight_tensor=torch.tensor(weights,device="cuda") if args.class_balance else None
     model=build_model(not args.no_pretrained,args.architecture).cuda()
     opt=torch.optim.AdamW(model.parameters(),lr=args.lr)
     history=[]
@@ -57,7 +61,7 @@ def train(args):
             y=torch.tensor(labels,device="cuda");mask=torch.tensor(known,device="cuda")
             opt.zero_grad(set_to_none=True)
             logits=model(normalize(x))
-            loss=(F.binary_cross_entropy_with_logits(logits,y,reduction="none")*mask).sum()/mask.sum().clamp_min(1)
+            loss=(F.binary_cross_entropy_with_logits(logits,y,reduction="none",pos_weight=positive_weight_tensor)*mask).sum()/mask.sum().clamp_min(1)
             loss.backward();opt.step();losses.append(float(loss.detach()))
         model.eval();target=[];pred=[];known=[];uids=[]
         with torch.inference_mode():
@@ -82,7 +86,9 @@ def train(args):
     torch.save({"architecture":args.architecture,"family":"coatnet-attention-mil-v1",
                 "state_dict":{k:v.detach().cpu() for k,v in model.state_dict().items()},
                 "labels":list(LABELS),"slices":args.slices,"series_limit":args.series_limit,
-                "series_selection":args.series_selection,"pixel_mode":args.pixel_mode,"research_only":True},out)
+                "series_selection":args.series_selection,"pixel_mode":args.pixel_mode,"class_balance":args.class_balance,
+                "train_class_weights":weights if args.class_balance else None,
+                "train_class_counts":weight_counts if args.class_balance else None,"research_only":True},out)
     out.with_suffix(".metrics.json").write_text(json.dumps(history,indent=2))
     if pred:
         import csv
@@ -102,6 +108,7 @@ def main():
     p.add_argument("--architecture",default="coatnet_0_rw_224")
     p.add_argument("--series-selection",choices=("legacy","balanced"),default="legacy")
     p.add_argument("--pixel-mode",choices=("legacy","dicom"),default="legacy")
+    p.add_argument("--class-balance",action="store_true",help="Training-only capped positive class reweighting")
     p.add_argument("--no-pretrained",action="store_true")
     train(p.parse_args())
 if __name__=="__main__":main()
