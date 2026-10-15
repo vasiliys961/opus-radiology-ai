@@ -24,7 +24,7 @@ def balanced_series(rows,max_series=3):
     buckets={}
     for row in rows:
         uid=row["StudyInstanceUID"];sid=row["SeriesInstanceUID"]
-        if not uid or not sid or any(x in s for s in (uid,sid) for x in ("..","/","\\\\") ):
+        if not uid or not sid or any(x in s for s in (uid,sid) for x in ("..","/","\\") ):
             raise ValueError("Unsafe DICOM identifier")
         plane=row.get("Anatomical_Plane")
         if plane not in PLANES:
