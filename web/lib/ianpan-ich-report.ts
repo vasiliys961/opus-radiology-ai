@@ -38,12 +38,16 @@ export type IchAlternativeReport={
     modelPixelsNotRegisteredToSource:true;
     researchRoiVoxelGeometryProjectionAvailable?:true;
     researchRoiClinicalValidation?:false;
+    sourceOriginalDicomHURescaleIndependentlyVerified?:boolean;
+    publishedFigshareHuLikeWithoutOriginalDicomRescaleAudit?:boolean;
+    referenceLabelsOnlyPerihematomalEdema?:boolean;
   };
   runtime:{executionDevice:"cpu"|"cuda";elapsedSeconds:number};
   seriesRawUncalibratedScores:Record<IchAlternativeClass,number>;
   candidates:IchAlternativeCandidate[];
   thresholdForResearchListing:0.5;
   diagnosticInterpretation:"research_candidates_only";
+  externalExpertHemorrhageLocalizationComparisonPerformed?:false;
   modelInputHeatmapsAreSourceAligned:false;
   sensitivity:null; specificity:null; dice:null;
   negativeDiagnosticConclusionAllowed:false;
@@ -92,6 +96,18 @@ export function parseIchAlternativeReport(raw:string):IchAlternativeReport{
     runtime.elapsedSeconds<0||runtime.elapsedSeconds>100000||
     root.thresholdForResearchListing!==0.5||
     root.diagnosticInterpretation!=="research_candidates_only"||
+    (root.externalExpertHemorrhageLocalizationComparisonPerformed!==undefined&&
+     root.externalExpertHemorrhageLocalizationComparisonPerformed!==false)||
+    (source.sourceOriginalDicomHURescaleIndependentlyVerified!==undefined&&
+     typeof source.sourceOriginalDicomHURescaleIndependentlyVerified!=="boolean")||
+    (source.publishedFigshareHuLikeWithoutOriginalDicomRescaleAudit!==undefined&&
+     typeof source.publishedFigshareHuLikeWithoutOriginalDicomRescaleAudit!=="boolean")||
+    (source.referenceLabelsOnlyPerihematomalEdema!==undefined&&
+     typeof source.referenceLabelsOnlyPerihematomalEdema!=="boolean")||
+    (source.publishedFigshareHuLikeWithoutOriginalDicomRescaleAudit===true&&
+     (source.sourceOriginalDicomHURescaleIndependentlyVerified!==false||
+      source.referenceLabelsOnlyPerihematomalEdema!==true||
+      root.externalExpertHemorrhageLocalizationComparisonPerformed!==false))||
     root.modelInputHeatmapsAreSourceAligned!==false||
     root.sensitivity!==null||root.specificity!==null||root.dice!==null||
     root.negativeDiagnosticConclusionAllowed!==false||
