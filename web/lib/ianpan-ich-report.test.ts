@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
 import {parseIchAlternativeReport,ICH_CLASSES} from "./ianpan-ich-report.ts";
 const s="a".repeat(64);
 function sample(){
@@ -118,4 +119,27 @@ test("real published Figshare HU-LIKE source stays unverified and edema is not I
  assert.throws(()=>parseIchAlternativeReport(JSON.stringify(spoofMask)),/статус/);
  const spoofValidation={...published,externalExpertHemorrhageLocalizationComparisonPerformed:true};
  assert.throws(()=>parseIchAlternativeReport(JSON.stringify(spoofValidation)),/статус/);
+});
+
+test("genuine archived 25-slice model report contains 7 repeated-slice proposals, NOT 14 hematomas",()=>{
+ const raw=readFileSync(new URL("../public/examples/ianpan-ich-real-figshare-run-38734338486.json",import.meta.url),"utf8");
+ const result=parseIchAlternativeReport(raw);
+ assert.equal(result.source.niftiSha256,"0543a46065314468fe7ab18b9187277ae1affc4e7c864d0fd8ae608afa554a95");
+ assert.equal(result.model.checkpointSha256Verified,true);
+ assert.equal(result.model.revision,"e6d89c2");
+ assert.equal(result.source.modelOrderedSliceCount,25);
+ assert.equal(result.candidates.length,14);
+ assert.equal(new Set(result.candidates.map(c=>c.sliceIndexModelOrdered)).size,7);
+ assert.deepEqual([...new Set(result.candidates.map(c=>c.class))].sort(),["any","intraparenchymal"]);
+ assert.equal(result.seriesRawUncalibratedScores.intraparenchymal,0.989428);
+ assert.equal(result.seriesRawUncalibratedScores.any,0.993365);
+ assert.ok(result.candidates.every(c=>c.sourceVoxelProjection?.expertMaskCompared===false));
+ assert.ok(result.candidates.every(c=>c.sourceVoxelProjection?.independentlyClinicallyVerified===false));
+ assert.equal(result.source.publishedFigshareHuLikeWithoutOriginalDicomRescaleAudit,true);
+ assert.equal(result.source.sourceOriginalDicomHURescaleIndependentlyVerified,false);
+ assert.equal(result.source.referenceLabelsOnlyPerihematomalEdema,true);
+ assert.equal(result.externalExpertHemorrhageLocalizationComparisonPerformed,false);
+ assert.equal(result.dice,null);
+ assert.equal(result.sensitivity,null);
+ assert.equal(result.readyForClinicalUse,false);
 });
