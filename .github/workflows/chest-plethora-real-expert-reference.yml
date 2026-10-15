@@ -1,0 +1,38 @@
+name: PleThora real dual-expert pleural effusion reference (public, no models)
+on:
+  push:
+    branches: [feature/chest-plethora-independent-expert-reference-20261015]
+    paths:
+      - ".github/workflows/chest-plethora-real-expert-reference.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  original-licensed-expert-pair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      OPUS_PLETHORA_NUMBERS_OUT: /tmp/opus-plethora-human-expert-reference.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Small numeric-original-NIfTI dependencies, no pretrained model
+        run: python -m pip install --no-cache-dir numpy==2.2.6 nibabel==5.3.2
+      - name: Download one official published TCIA 2020 PleThora 1.7MB effusion ZIP and calculate real two-human annotation agreement
+        run: python scripts/audit-plethora-true-expert-effusion.py
+      - name: Preserve ONLY anonymous expert human-human research measurements
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: genuine-tcia-plethora-two-human-effusion-reference-numeric
+          path: /tmp/opus-plethora-human-expert-reference.json
+          retention-days: 14
+          if-no-files-found: error
+      - name: Delete original physician masks
+        if: always()
+        run: rm -f /tmp/opus-plethora-human-expert-reference.json
