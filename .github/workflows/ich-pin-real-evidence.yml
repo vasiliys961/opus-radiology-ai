@@ -1,0 +1,64 @@
+name: Preserve source-verified genuine ICH numeric evidence on research branch
+on:
+  push:
+    branches: [feature/ich-real-figshare-public-20261015]
+    paths:
+      - ".github/workflows/ich-pin-real-evidence.yml"
+permissions:
+  contents: write
+  actions: read
+jobs:
+  preserve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Retrieve ONLY previous successful pinned public research report
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/opus-genuine-ich"
+          gh run download 38734338486 -R "${{ github.repository }}" \
+            --name real-ich-model-output-figshare-single-public-ct \
+            --dir "$RUNNER_TEMP/opus-genuine-ich"
+      - name: Admit true bytes and preserve complete 14 candidate research report
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib,json,os,pathlib
+          source=pathlib.Path(os.environ["RUNNER_TEMP"])/"opus-genuine-ich"/"opus-public-ich-model-research.json"
+          raw=source.read_bytes()
+          digest=hashlib.sha256(raw).hexdigest()
+          assert digest=="c121d869f4358de9197232fc1c6eeb5ec2f6f8977af3e28ffb8130dcba365f62","published numeric artifact changed"
+          r=json.loads(raw)
+          assert r["schema"]=="opus-ianpan-genuine-public-ich-research/v1"
+          assert r["model"]["checkpointSha256Verified"] is True
+          assert r["model"]["id"]=="ianpan/ct-head-hemorrhage-detection"
+          assert r["source"]["niftiSha256"]=="0543a46065314468fe7ab18b9187277ae1affc4e7c864d0fd8ae608afa554a95"
+          assert r["source"]["modelOrderedSliceCount"]==25
+          assert r["source"]["publishedFigshareHuLikeWithoutOriginalDicomRescaleAudit"] is True
+          assert r["source"]["sourceOriginalDicomHURescaleIndependentlyVerified"] is False
+          assert r["source"]["referenceLabelsOnlyPerihematomalEdema"] is True
+          assert r["externalExpertHemorrhageLocalizationComparisonPerformed"] is False
+          assert r["readyForClinicalUse"] is False and r["dice"] is None
+          assert len(r["candidates"])==14
+          assert r["seriesRawUncalibratedScores"]["intraparenchymal"]==0.989428
+          assert r["seriesRawUncalibratedScores"]["any"]==0.993365
+          p=pathlib.Path("web/public/examples/ianpan-ich-real-figshare-run-38734338486.json")
+          p.parent.mkdir(parents=True,exist_ok=True)
+          assert not p.exists(),"Research evidence must only be created once"
+          p.write_bytes(raw)
+          print("VERIFIED_REAL_PUBLIC_ICH_EVIDENCE_ADMITTED",digest,"14 candidate records no pixels")
+          PY
+      - name: Commit published numeric evidence only
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- web/public/examples/ianpan-ich-real-figshare-run-38734338486.json
+          git commit -m "ICH: archive true 14-candidate public pretrained result with original report SHA"
+          git push origin HEAD:feature/ich-real-figshare-public-20261015
+      - name: Delete downloaded evidence from runner temp
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/opus-genuine-ich"

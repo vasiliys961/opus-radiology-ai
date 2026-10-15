@@ -1,0 +1,563 @@
+{
+  "schema": "opus-ianpan-genuine-public-ich-research/v1",
+  "status": "genuine_pretrained_inference_requires_independent_validation",
+  "externalExpertHemorrhageLocalizationComparisonPerformed": false,
+  "model": {
+    "id": "ianpan/ct-head-hemorrhage-detection",
+    "revision": "e6d89c2",
+    "sha256ByArtifact": {
+      "inference.py": "9792e50ad1d863e80a549d391ee53c5031d490abb75acba42d471b02a83fbafb",
+      "classifier/model.safetensors": "525b5fc1731dab82fcdb1eb878570f4cf4b0fed483e307bc65e312a4d91c1489",
+      "sequence/model.safetensors": "9421066cb5c6882087730b367b578f0fb8b6935391c2611bbc4bc2241c8ee487",
+      "segmentation/fold0.safetensors": "d299e204c640bdc124829b5cc2e6d5e08973b8c17698a5bffdd565baa46ec786",
+      "segmentation/fold1.safetensors": "1dbad6ad4dfd21e963e01a71f4486558287fe32e3acdcf47ad601ad8a3132c3e",
+      "segmentation/fold2.safetensors": "e814b8e398b7c879c22663187d7c58ff88ee0fcaf11ea4e76859c35488b4d052",
+      "segmentation/fold3.safetensors": "971bfe1163797c3587c045ef013475e6cd5973aa7116f8b01f8305725777910d",
+      "segmentation/fold4.safetensors": "f1913ce8d7f9cacbb948615a7690cfad568fe0f713c1f11de9ac3199ff060e8f"
+    },
+    "checkpointSha256Verified": true
+  },
+  "source": {
+    "niftiSha256": "0543a46065314468fe7ab18b9187277ae1affc4e7c864d0fd8ae608afa554a95",
+    "sourceDimensionsXYZ": [
+      512,
+      512,
+      25
+    ],
+    "modelOrderedSliceCount": 25,
+    "publicRightsOperatorAttested": true,
+    "huProvenanceOperatorAttestedNotIndependentlyConfirmed": true,
+    "modelPixelsNotRegisteredToSource": true,
+    "researchRoiVoxelGeometryProjectionAvailable": true,
+    "researchRoiClinicalValidation": false,
+    "sourceOriginalDicomHURescaleIndependentlyVerified": false,
+    "publishedFigshareHuLikeWithoutOriginalDicomRescaleAudit": true,
+    "referenceLabelsOnlyPerihematomalEdema": true
+  },
+  "runtime": {
+    "executionDevice": "cpu",
+    "elapsedSeconds": 27.986
+  },
+  "seriesRawUncalibratedScores": {
+    "epidural": 0.003299,
+    "intraparenchymal": 0.989428,
+    "intraventricular": 0.007087,
+    "subarachnoid": 0.04055,
+    "subdural": 0.02222,
+    "any": 0.993365
+  },
+  "candidates": [
+    {
+      "sliceIndexModelOrdered": 9,
+      "class": "intraparenchymal",
+      "rawUncalibratedScore": 0.967383,
+      "heatmapPositivePixelsAtPoint5": 784,
+      "modelInputBoundingBoxXY": [
+        143,
+        236,
+        177,
+        284
+      ],
+      "localizationFrame": "preprocessed_512_model_input_not_source_voxel",
+      "clinicallyConfirmed": false,
+      "sourceVoxelProjection": {
+        "boundingBoxNativeNiftiXYZ": [
+          143,
+          227,
+          9,
+          177,
+          275,
+          9
+        ],
+        "boundingBoxWorldRasMm": [
+          38.574,
+          -136.872,
+          -401.89,
+          55.176,
+          -113.434,
+          -401.89
+        ],
+        "projectionMethod": "vendor_e6d89c2_lps_reorientation_center_pad_inverse_v1",
+        "trimmedOutsideOriginalCT": false,
+        "independentlyClinicallyVerified": false,
+        "expertMaskCompared": false
+      }
+    },
+    {
+      "sliceIndexModelOrdered": 9,
+      "class": "any",
+      "rawUncalibratedScore": 0.954033,
+      "heatmapPositivePixelsAtPoint5": 739,
+      "modelInputBoundingBoxXY": [
+        143,
+        236,
+        178,
+        284
+      ],
+      "localizationFrame": "preprocessed_512_model_input_not_source_voxel",
+      "clinicallyConfirmed": false,
+      "sourceVoxelProjection": {
+        "boundingBoxNativeNiftiXYZ": [
+          143,
+          227,
+          9,
+          178,
+          275,
+          9
+        ],
+        "boundingBoxWorldRasMm": [
+          38.086,
+          -136.872,
+          -401.89,
+          55.176,
+          -113.434,
+          -401.89
+        ],
+        "projectionMethod": "vendor_e6d89c2_lps_reorientation_center_pad_inverse_v1",
+        "trimmedOutsideOriginalCT": false,
+        "independentlyClinicallyVerified": false,
+        "expertMaskCompared": false
+      }
+    },
+    {
+      "sliceIndexModelOrdered": 10,
+      "class": "intraparenchymal",
+      "rawUncalibratedScore": 0.960646,
+      "heatmapPositivePixelsAtPoint5": 2007,
+      "modelInputBoundingBoxXY": [
+        141,
+        228,
+        187,
+        293
+      ],
+      "localizationFrame": "preprocessed_512_model_input_not_source_voxel",
+      "clinicallyConfirmed": false,
+      "sourceVoxelProjection": {
+        "boundingBoxNativeNiftiXYZ": [
+          141,
+          218,
+          10,
+          187,
+          283,
+          10
+        ],
+        "boundingBoxWorldRasMm": [
+          33.691,
+          -141.266,
+          -396.89,
+          56.152,
+          -109.528,
+          -396.89
+        ],
+        "projectionMethod": "vendor_e6d89c2_lps_reorientation_center_pad_inverse_v1",
+        "trimmedOutsideOriginalCT": false,
+        "independentlyClinicallyVerified": false,
+        "expertMaskCompared": false
+      }
+    },
+    {
+      "sliceIndexModelOrdered": 10,
+      "class": "any",
+      "rawUncalibratedScore": 0.960997,
+      "heatmapPositivePixelsAtPoint5": 1986,
+      "modelInputBoundingBoxXY": [
+        141,
+        228,
+        187,
+        293
+      ],
+      "localizationFrame": "preprocessed_512_model_input_not_source_voxel",
+      "clinicallyConfirmed": false,
+      "sourceVoxelProjection": {
+        "boundingBoxNativeNiftiXYZ": [
+          141,
+          218,
+          10,
+          187,
+          283,
+          10
+        ],
+        "boundingBoxWorldRasMm": [
+          33.691,
+          -141.266,
+          -396.89,
+          56.152,
+          -109.528,
+          -396.89
+        ],
+        "projectionMethod": "vendor_e6d89c2_lps_reorientation_center_pad_inverse_v1",
+        "trimmedOutsideOriginalCT": false,
+        "independentlyClinicallyVerified": false,
+        "expertMaskCompared": false
+      }
+    },
+    {
+      "sliceIndexModelOrdered": 11,
+      "class": "intraparenchymal",
+      "rawUncalibratedScore": 0.959663,
+      "heatmapPositivePixelsAtPoint5": 2518,
+      "modelInputBoundingBoxXY": [
+        144,
+        212,
+        187,
+        297
+      ],
+      "localizationFrame": "preprocessed_512_model_input_not_source_voxel",
+      "clinicallyConfirmed": false,
+      "sourceVoxelProjection": {
+        "boundingBoxNativeNiftiXYZ": [
+          144,
+          214,
+          11,
+          187,
+          299,
+          11
+        ],
+        "boundingBoxWorldRasMm": [
+          33.691,
+          -143.22,
+          -391.89,
+          54.688,
+          -101.716,
+          -391.89
+        ],
+        "projectionMethod": "vendor_e6d89c2_lps_reorientation_center_pad_inverse_v1",
+        "trimmedOutsideOriginalCT": false,
+        "independentlyClinicallyVerified": false,
+        "expertMaskCompared": false
+      }
+    },
+    {
+      "sliceIndexModelOrdered": 11,
+      "class": "any",
+      "rawUncalibratedScore": 0.968698,
+      "heatmapPositivePixelsAtPoint5": 2552,
+      "modelInputBoundingBoxXY": [
+        144,
+        211,
+        187,
+        298
+      ],
+      "localizationFrame": "preprocessed_512_model_input_not_source_voxel",
+      "clinicallyConfirmed": false,
+      "sourceVoxelProjection": {
+        "boundingBoxNativeNiftiXYZ": [
+          144,
+          213,
+          11,
+          187,
+          300,
+          11
+        ],
+        "boundingBoxWorldRasMm": [
+          33.691,
+          -143.708,
+          -391.89,
+          54.688,
+          -101.227,
+          -391.89
+        ],
+        "projectionMethod": "vendor_e6d89c2_lps_reorientation_center_pad_inverse_v1",
+        "trimmedOutsideOriginalCT": false,
+        "independentlyClinicallyVerified": false,
+        "expertMaskCompared": false
+      }
+    },
+    {
+      "sliceIndexModelOrdered": 12,
+      "class": "intraparenchymal",
+      "rawUncalibratedScore": 0.961528,
+      "heatmapPositivePixelsAtPoint5": 2709,
+      "modelInputBoundingBoxXY": [
+        146,
+        210,
+        185,
+        303
+      ],
+      "localizationFrame": "preprocessed_512_model_input_not_source_voxel",
+      "clinicallyConfirmed": false,
+      "sourceVoxelProjection": {
+        "boundingBoxNativeNiftiXYZ": [
+          146,
+          208,
+          12,
+          185,
+          301,
+          12
+        ],
+        "boundingBoxWorldRasMm": [
+          34.668,
+          -146.149,
+          -386.89,
+          53.711,
+          -100.739,
+          -386.89
+        ],
+        "projectionMethod": "vendor_e6d89c2_lps_reorientation_center_pad_inverse_v1",
+        "trimmedOutsideOriginalCT": false,
+        "independentlyClinicallyVerified": false,
+        "expertMaskCompared": false
+      }
+    },
+    {
+      "sliceIndexModelOrdered": 12,
+      "class": "any",
+      "rawUncalibratedScore": 0.971906,
+      "heatmapPositivePixelsAtPoint5": 2753,
+      "modelInputBoundingBoxXY": [
+        146,
+        209,
+        185,
+        304
+      ],
+      "localizationFrame": "preprocessed_512_model_input_not_source_voxel",
+      "clinicallyConfirmed": false,
+      "sourceVoxelProjection": {
+        "boundingBoxNativeNiftiXYZ": [
+          146,
+          207,
+          12,
+          185,
+          302,
+          12
+        ],
+        "boundingBoxWorldRasMm": [
+          34.668,
+          -146.637,
+          -386.89,
+          53.711,
+          -100.251,
+          -386.89
+        ],
+        "projectionMethod": "vendor_e6d89c2_lps_reorientation_center_pad_inverse_v1",
+        "trimmedOutsideOriginalCT": false,
+        "independentlyClinicallyVerified": false,
+        "expertMaskCompared": false
+      }
+    },
+    {
+      "sliceIndexModelOrdered": 13,
+      "class": "intraparenchymal",
+      "rawUncalibratedScore": 0.970155,
+      "heatmapPositivePixelsAtPoint5": 2504,
+      "modelInputBoundingBoxXY": [
+        148,
+        211,
+        187,
+        302
+      ],
+      "localizationFrame": "preprocessed_512_model_input_not_source_voxel",
+      "clinicallyConfirmed": false,
+      "sourceVoxelProjection": {
+        "boundingBoxNativeNiftiXYZ": [
+          148,
+          209,
+          13,
+          187,
+          300,
+          13
+        ],
+        "boundingBoxWorldRasMm": [
+          33.691,
+          -145.661,
+          -381.89,
+          52.734,
+          -101.227,
+          -381.89
+        ],
+        "projectionMethod": "vendor_e6d89c2_lps_reorientation_center_pad_inverse_v1",
+        "trimmedOutsideOriginalCT": false,
+        "independentlyClinicallyVerified": false,
+        "expertMaskCompared": false
+      }
+    },
+    {
+      "sliceIndexModelOrdered": 13,
+      "class": "any",
+      "rawUncalibratedScore": 0.977742,
+      "heatmapPositivePixelsAtPoint5": 2541,
+      "modelInputBoundingBoxXY": [
+        148,
+        210,
+        187,
+        303
+      ],
+      "localizationFrame": "preprocessed_512_model_input_not_source_voxel",
+      "clinicallyConfirmed": false,
+      "sourceVoxelProjection": {
+        "boundingBoxNativeNiftiXYZ": [
+          148,
+          208,
+          13,
+          187,
+          301,
+          13
+        ],
+        "boundingBoxWorldRasMm": [
+          33.691,
+          -146.149,
+          -381.89,
+          52.734,
+          -100.739,
+          -381.89
+        ],
+        "projectionMethod": "vendor_e6d89c2_lps_reorientation_center_pad_inverse_v1",
+        "trimmedOutsideOriginalCT": false,
+        "independentlyClinicallyVerified": false,
+        "expertMaskCompared": false
+      }
+    },
+    {
+      "sliceIndexModelOrdered": 14,
+      "class": "intraparenchymal",
+      "rawUncalibratedScore": 0.975249,
+      "heatmapPositivePixelsAtPoint5": 1667,
+      "modelInputBoundingBoxXY": [
+        154,
+        217,
+        189,
+        287
+      ],
+      "localizationFrame": "preprocessed_512_model_input_not_source_voxel",
+      "clinicallyConfirmed": false,
+      "sourceVoxelProjection": {
+        "boundingBoxNativeNiftiXYZ": [
+          154,
+          224,
+          14,
+          189,
+          294,
+          14
+        ],
+        "boundingBoxWorldRasMm": [
+          32.715,
+          -138.337,
+          -376.89,
+          49.805,
+          -104.157,
+          -376.89
+        ],
+        "projectionMethod": "vendor_e6d89c2_lps_reorientation_center_pad_inverse_v1",
+        "trimmedOutsideOriginalCT": false,
+        "independentlyClinicallyVerified": false,
+        "expertMaskCompared": false
+      }
+    },
+    {
+      "sliceIndexModelOrdered": 14,
+      "class": "any",
+      "rawUncalibratedScore": 0.978335,
+      "heatmapPositivePixelsAtPoint5": 1638,
+      "modelInputBoundingBoxXY": [
+        154,
+        217,
+        189,
+        288
+      ],
+      "localizationFrame": "preprocessed_512_model_input_not_source_voxel",
+      "clinicallyConfirmed": false,
+      "sourceVoxelProjection": {
+        "boundingBoxNativeNiftiXYZ": [
+          154,
+          223,
+          14,
+          189,
+          294,
+          14
+        ],
+        "boundingBoxWorldRasMm": [
+          32.715,
+          -138.825,
+          -376.89,
+          49.805,
+          -104.157,
+          -376.89
+        ],
+        "projectionMethod": "vendor_e6d89c2_lps_reorientation_center_pad_inverse_v1",
+        "trimmedOutsideOriginalCT": false,
+        "independentlyClinicallyVerified": false,
+        "expertMaskCompared": false
+      }
+    },
+    {
+      "sliceIndexModelOrdered": 15,
+      "class": "intraparenchymal",
+      "rawUncalibratedScore": 0.966573,
+      "heatmapPositivePixelsAtPoint5": 416,
+      "modelInputBoundingBoxXY": [
+        167,
+        227,
+        185,
+        255
+      ],
+      "localizationFrame": "preprocessed_512_model_input_not_source_voxel",
+      "clinicallyConfirmed": false,
+      "sourceVoxelProjection": {
+        "boundingBoxNativeNiftiXYZ": [
+          167,
+          256,
+          15,
+          185,
+          284,
+          15
+        ],
+        "boundingBoxWorldRasMm": [
+          34.668,
+          -122.712,
+          -371.89,
+          43.457,
+          -109.04,
+          -371.89
+        ],
+        "projectionMethod": "vendor_e6d89c2_lps_reorientation_center_pad_inverse_v1",
+        "trimmedOutsideOriginalCT": false,
+        "independentlyClinicallyVerified": false,
+        "expertMaskCompared": false
+      }
+    },
+    {
+      "sliceIndexModelOrdered": 15,
+      "class": "any",
+      "rawUncalibratedScore": 0.968758,
+      "heatmapPositivePixelsAtPoint5": 380,
+      "modelInputBoundingBoxXY": [
+        168,
+        228,
+        185,
+        255
+      ],
+      "localizationFrame": "preprocessed_512_model_input_not_source_voxel",
+      "clinicallyConfirmed": false,
+      "sourceVoxelProjection": {
+        "boundingBoxNativeNiftiXYZ": [
+          168,
+          256,
+          15,
+          185,
+          283,
+          15
+        ],
+        "boundingBoxWorldRasMm": [
+          34.668,
+          -122.712,
+          -371.89,
+          42.969,
+          -109.528,
+          -371.89
+        ],
+        "projectionMethod": "vendor_e6d89c2_lps_reorientation_center_pad_inverse_v1",
+        "trimmedOutsideOriginalCT": false,
+        "independentlyClinicallyVerified": false,
+        "expertMaskCompared": false
+      }
+    }
+  ],
+  "thresholdForResearchListing": 0.5,
+  "diagnosticInterpretation": "research_candidates_only",
+  "modelInputHeatmapsAreSourceAligned": false,
+  "sensitivity": null,
+  "specificity": null,
+  "dice": null,
+  "negativeDiagnosticConclusionAllowed": false,
+  "readyForClinicalUse": false
+}

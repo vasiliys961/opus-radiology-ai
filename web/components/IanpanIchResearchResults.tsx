@@ -12,6 +12,7 @@ import {
  */
 export default function IanpanIchResearchResults(){
   const [report,setReport]=useState<IchAlternativeReport|null>(null);
+  const [loadingRealExample,setLoadingRealExample]=useState(false);
   const [error,setError]=useState("");
   const [minScore,setMinScore]=useState(0.5);
   const [type,setType]=useState<IchAlternativeClass|"all">("all");
@@ -27,6 +28,39 @@ export default function IanpanIchResearchResults(){
       <strong> ianpan/ct-head-hemorrhage-detection</strong> после отдельного реального
       запуска на разрешённой публичной КТ с доказанной шкалой HU.
       На этом экране вычисление модели не запускается, никакие DICOM не передаются.</p>
+    <div style={{padding:"10px 0"}}>
+      <button type="button" disabled={loadingRealExample}
+        onClick={async()=>{
+          setReport(null);setError("");setNotes("");setLoadingRealExample(true);
+          try{
+            const response=await fetch(
+              "/examples/ianpan-ich-real-figshare-run-38734338486.json",
+              {cache:"no-store"}
+            );
+            if(!response.ok)throw Error("Настоящий публичный результат сейчас недоступен.");
+            const checked=parseIchAlternativeReport(await response.text());
+            if(checked.source.niftiSha256!=="0543a46065314468fe7ab18b9187277ae1affc4e7c864d0fd8ae608afa554a95"||
+               checked.source.modelOrderedSliceCount!==25||
+               checked.source.publishedFigshareHuLikeWithoutOriginalDicomRescaleAudit!==true||
+               checked.source.sourceOriginalDicomHURescaleIndependentlyVerified!==false||
+               checked.source.referenceLabelsOnlyPerihematomalEdema!==true||
+               checked.candidates.length!==14||
+               checked.seriesRawUncalibratedScores.intraparenchymal!==0.989428||
+               checked.seriesRawUncalibratedScores.any!==0.993365||
+               checked.externalExpertHemorrhageLocalizationComparisonPerformed!==false)
+              throw Error("Публичный результат не соответствует проверенному запуску и источнику.");
+            setReport(checked);
+          }catch(e){setError(e instanceof Error?e.message:"Неверные исходные данные.");}
+          finally{setLoadingRealExample(false);}
+        }}>
+        {loadingRealExample?"Проверка реальных находок…":"Показать настоящий результат ICH · 25 срезов"}
+      </button>
+      <p><small><a href="https://github.com/vasiliys961/opus-radiology-ai/actions/runs/38734338486"
+        target="_blank" rel="noopener noreferrer">Проверяемый реальный CPU-запуск №38734338486</a>
+        {" "}· 14 записей «класс × срез» на 7 срезах, а НЕ 14 гематом.
+        Это одна публичная КТ из отдельного датасета, не анализ текущего пациента.
+        Эталонной маски гематомы нет.</small></p>
+    </div>
     <label>JSON-отчёт выполнения предобученной модели (до 2 МиБ)
       <input type="file" accept=".json,application/json" onChange={async e=>{
         const f=e.target.files?.[0];e.currentTarget.value="";
@@ -81,7 +115,7 @@ export default function IanpanIchResearchResults(){
           min="0.5" max="1" step="0.05" value={minScore}
           onChange={e=>setMinScore(Number(e.target.value))}/></label>
       </div>
-      <p role="status">Предложено {report.candidates.length} категорий на срезах,
+      <p role="status">Предложено {report.candidates.length} записей «класс × срез» (не число гематом),
         по фильтру {visible.length}. Кандидаты не подтверждены врачом.</p>
       <div style={{maxHeight:300,overflowY:"auto"}}>
         {visible.map(c=><div key={c.sliceIndexModelOrdered+"/"+c.class}

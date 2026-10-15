@@ -46,6 +46,54 @@ class ICHResearchTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,"unsupported"):
                 mod.validate_public_manifest(symlink,manifest)
 
+    def test_real_publisher_figshare_ich_can_be_admitted_only_as_hu_like_research(self):
+        with tempfile.TemporaryDirectory() as base:
+            root=Path(base)
+            ct=root/"public.nii"
+            ct.write_bytes(b"x"*352)
+            proof={
+                "schema":"opus-public-head-ct-hu-evidence/v1",
+                "modality":"CT","anatomy":"HEAD","contrast":"NONCONTRAST",
+                "publicDataRightsReviewed":True,"deidentifiedPublicDataset":True,
+                "sourceUnits":"PUBLISHED_FIGSHARE_NONCONTRAST_CT_HU_LIKE_NOT_INDEPENDENTLY_VERIFIED",
+                "sourceFullStudy":True,"consent":"PUBLIC-HEAD-NCCT-RESEARCH-OK",
+                "sourceNiftiSha256":hashlib.sha256(ct.read_bytes()).hexdigest(),
+                "publisherProvenance":{
+                    "articleId":23957937,"fileId":63081925,
+                    "license":"CC BY 4.0","publishedArchiveSize":1300209108,
+                    "publishedArchiveMd5MetadataOnlyNotRecomputed":"a2c3f32f11478167b975d5036edbb510",
+                    "originalMemberCRC32Checked":True,
+                    "huFromOriginalDicomRescaleIndependentlyVerified":False,
+                    "originalFullVolumePreserved":True,
+                    "intensityUnitsOnlyPlausibleHU":True,
+                    "referenceLabelsArePerihematomalEdemaNotHemorrhage":True,
+                    "expertHematomaMaskCompared":False,
+                    "modelLesionDetectionProven":False,
+                    "originalGzipSha256":"b"*64,
+                },
+            }
+            manifest=root/"source.json"
+            manifest.write_text(json.dumps(proof))
+            self.assertEqual(mod.validate_public_manifest(ct,manifest)["publisherProvenance"]["expertHematomaMaskCompared"],False)
+            for update in (
+                {"license":"restrictive"},
+                {"huFromOriginalDicomRescaleIndependentlyVerified":True},
+                {"referenceLabelsArePerihematomalEdemaNotHemorrhage":False},
+                {"expertHematomaMaskCompared":True},
+                {"modelLesionDetectionProven":True},
+            ):
+                changed=json.loads(json.dumps(proof))
+                changed["publisherProvenance"].update(update)
+                manifest.write_text(json.dumps(changed))
+                with self.assertRaisesRegex(ValueError,"provenance"):
+                    mod.validate_public_manifest(ct,manifest)
+            changed=json.loads(json.dumps(proof))
+            changed["sourceUnits"]="HU_FROM_VERIFIED_DICOM_RESCALE"
+            manifest.write_text(json.dumps(changed))
+            # Changing a manifest label is not proof of original DICOM HU.
+            with self.assertRaisesRegex(ValueError,"provenance"):
+                mod.validate_public_manifest(ct,manifest)
+
     def test_real_weight_hashes_not_bypassed_by_same_length(self):
         with tempfile.TemporaryDirectory() as base:
             with self.assertRaisesRegex(ValueError,"missing_or_tampered"):
