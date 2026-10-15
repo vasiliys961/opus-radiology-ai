@@ -1,0 +1,25 @@
+name: ICH alternative pretrained runtime contract (no weights or CT)
+on:
+  pull_request:
+    paths:
+      - "scripts/run-ianpan-ich-research.py"
+      - "scripts/test-ianpan-ich-research.py"
+      - ".github/workflows/ich-ianpan-contract.yml"
+  push:
+    paths:
+      - "scripts/run-ianpan-ich-research.py"
+      - "scripts/test-ianpan-ich-research.py"
+      - ".github/workflows/ich-ianpan-contract.yml"
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install --no-cache-dir "numpy==2.2.6"
+      - run: python -m py_compile scripts/run-ianpan-ich-research.py scripts/test-ianpan-ich-research.py
+      - run: python scripts/test-ianpan-ich-research.py
