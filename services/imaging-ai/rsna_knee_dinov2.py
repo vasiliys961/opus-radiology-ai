@@ -6,6 +6,7 @@ import random
 from pathlib import Path
 from rsna_knee import LABELS, read_rows, series_index, balanced_series, extract_labels, study_slices
 from rsna_knee_validation import load_partition
+from rsna_knee_class_balance import positive_weights
 
 def model_factory(pretrained=True):
     import torch
@@ -54,6 +55,7 @@ def main():
     p.add_argument("--manifest",required=True,help="Shared held-out study manifest; mandatory to prevent inconsistent splits")
     p.add_argument("--series-selection",choices=("legacy","balanced"),default="legacy")
     p.add_argument("--pixel-mode",choices=("legacy","dicom"),default="legacy")
+    p.add_argument("--class-balance",action="store_true",help="Training-only capped positive class reweighting")
     p.add_argument("--no-pretrained",action="store_true")
     args=p.parse_args()
     if not torch.cuda.is_available():raise RuntimeError("GPU required for this experiment")
@@ -64,6 +66,9 @@ def main():
           r["StudyInstanceUID"] in index and any(extract_labels(r)[1])]
     if len(rows)<3:raise RuntimeError("Fewer than 3 labeled studies")
     train,val=load_partition(rows,args.manifest)
+    train_examples=train
+    weights,weight_counts=positive_weights(train_examples)
+    positive_weight_tensor=torch.tensor(weights,device="cuda") if args.class_balance else None
     device="cuda"
     model=model_factory(not args.no_pretrained).to(device)
     optimizer=torch.optim.AdamW(model.parameters(),lr=args.lr)
@@ -82,7 +87,7 @@ def main():
             m=torch.tensor(mask,device=device)
             optimizer.zero_grad(set_to_none=True)
             logits=model(preprocess(x))
-            loss=(F.binary_cross_entropy_with_logits(logits,y,reduction="none")*m).sum()/m.sum().clamp_min(1)
+            loss=(F.binary_cross_entropy_with_logits(logits,y,reduction="none",pos_weight=positive_weight_tensor)*m).sum()/m.sum().clamp_min(1)
             loss.backward();optimizer.step();losses.append(float(loss.item()))
             del x,logits,loss
         model.eval();truth=[];scores=[];known=[];uids=[]
@@ -109,7 +114,9 @@ def main():
     torch.save({"model":"dinov2-small-mil-v1","labels":list(LABELS),
                 "state_dict":{k:v.detach().cpu() for k,v in model.state_dict().items()},
                 "slices":args.slices,"series_limit":args.series_limit,
-                "series_selection":args.series_selection,"pixel_mode":args.pixel_mode,"research_only":True},output)
+                "series_selection":args.series_selection,"pixel_mode":args.pixel_mode,"class_balance":args.class_balance,
+                "train_class_weights":weights if args.class_balance else None,
+                "train_class_counts":weight_counts if args.class_balance else None,"research_only":True},output)
     output.with_suffix(".metrics.json").write_text(json.dumps(metrics,indent=2))
     with output.with_suffix(".validation.csv").open("w",newline="",encoding="utf-8") as f:
         writer=csv.DictWriter(f,fieldnames=["StudyInstanceUID",*LABELS]);writer.writeheader()
