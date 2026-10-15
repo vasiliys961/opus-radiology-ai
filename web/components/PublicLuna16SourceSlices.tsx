@@ -1,5 +1,6 @@
 "use client";
-import {useEffect, useRef, useState} from "react";
+import {useEffect, useMemo, useRef, useState} from "react";
+import {projectMonaiCandidateHypothesis,type MonaiCandidate} from "../lib/monai-public-candidate-projection";
 import {sha256} from "@noble/hashes/sha2.js";
 import {sourceClickToMetaImagePoint,type SourceClickPoint} from "../lib/metaimage-physician-point";
 
@@ -24,8 +25,8 @@ const RAW_URL="https://huggingface.co/datasets/Yousra0x0/LUNA16_RAW/resolve/af8f
 /** Displays ONLY hash-matched, browser-local, public LUNA16 native source pixels.
  * Not a DICOM viewer: no SOP linking, no automatic MONAI candidate overlay.
  */
-export default function PublicLuna16SourceSlices({reference,rawSha256}:{
-  reference:Reference;rawSha256:string;
+export default function PublicLuna16SourceSlices({reference,rawSha256,candidates=[]}:{
+  reference:Reference;rawSha256:string;candidates?:MonaiCandidate[];
 }){
   const canvas=useRef<HTMLCanvasElement|null>(null);
   const [file,setFile]=useState<File|null>(null);
@@ -36,10 +37,19 @@ export default function PublicLuna16SourceSlices({reference,rawSha256}:{
   const [error,setError]=useState("");
   const [displayError,setDisplayError]=useState("");
   const [manualPoint,setManualPoint]=useState<SourceClickPoint|null>(null);
+  const [selectedCandidateIndex,setSelectedCandidateIndex]=useState<number|null>(null);
+  const [showHypotheses,setShowHypotheses]=useState(false);
   const g=reference.sourceGeometry;
   const [w,h,depth]=g.dimensions;
   const nodule=reference.referenceNodules[0];
   const expectedBytes=w*h*depth*2;
+  // Do not evaluate a model-to-source frame hypothesis as established geometry.
+  // The projection is for an explicitly labelled research visual check only.
+  const hypotheses=useMemo(()=>candidates.flatMap(candidate=>{
+    const projected=projectMonaiCandidateHypothesis(g,candidate);
+    return projected?[projected]:[];
+  }),[candidates,g]);
+  const selectedHypothesis=hypotheses.find(c=>c.candidateIndex===selectedCandidateIndex);
 
   async function load(fileCandidate:File){
     setFile(null);setManualPoint(null);setValidating(true);setError("");setProgress(0);setDisplayError("");
@@ -97,6 +107,14 @@ export default function PublicLuna16SourceSlices({reference,rawSha256}:{
         context.stroke();
         context.restore();
       }
+      if(showHypotheses&&selectedHypothesis&&selectedHypothesis.sourceSliceIndexHypothesis===index){
+        const [px,py]=selectedHypothesis.nativeVoxelIndexHypothesis;
+        context.save();context.strokeStyle="#f36cce";context.lineWidth=2;
+        context.setLineDash([5,3]);context.beginPath();
+        context.moveTo(px-12,py);context.lineTo(px+12,py);
+        context.moveTo(px,py-12);context.lineTo(px,py+12);
+        context.stroke();context.restore();
+      }
       if(manualPoint&&manualPoint.index3d[2]===index){
         const [x,y]=manualPoint.index3d;
         context.save();context.strokeStyle="#17e4ce";context.lineWidth=2;
@@ -106,7 +124,7 @@ export default function PublicLuna16SourceSlices({reference,rawSha256}:{
       setDisplayError("");
     }).catch(e=>{if(!cancelled)setDisplayError(e instanceof Error?e.message:"Срез не читается.");});
     return()=>{cancelled=true;};
-  },[file,slice,preset,w,h,depth,nodule.nativeVoxelIndex,nodule.diameterMm,g.spacingMm,manualPoint]);
+  },[file,slice,preset,w,h,depth,nodule.nativeVoxelIndex,nodule.diameterMm,g.spacingMm,manualPoint,showHypotheses,selectedHypothesis]);
 
   return <section aria-label="Исходные пиксели публичной КТ LUNA16"
     style={{border:"1px solid #778c86",padding:12,borderRadius:8,margin:"12px 0"}}>
@@ -127,6 +145,17 @@ export default function PublicLuna16SourceSlices({reference,rawSha256}:{
           onChange={e=>setSlice(Number(e.target.value))}/>
       </label>
       <button type="button" onClick={()=>setSlice(nodule.sliceIndex0Based)}>Перейти к эталонному узлу</button>
+      <div style={{margin:"12px 0",padding:10,border:"1px dashed #c17eac",borderRadius:8}}>
+        <strong>Кандидаты настоящей MONAI · экспериментальная локализация</strong>
+        <p role="alert">Пурпурный пунктир — только <strong>гипотеза</strong> положения центра, если координаты MONAI world совпадают с физической системой исходного MetaImage. Это пока НЕ подтверждённое преобразование. Оранжевое кольцо — независимая экспертная аннотация, а не предсказанная маска. Близость меток не доказывает TP.</p>
+        {hypotheses.length===0?<p>Ни один кандидат не проецируется внутрь исходного объёма; отрицательное заключение недопустимо.</p>:
+        hypotheses.map(h=><button key={h.candidateIndex} type="button" style={{margin:4}}
+          onClick={()=>{setSelectedCandidateIndex(h.candidateIndex);setShowHypotheses(true);setSlice(h.sourceSliceIndexHypothesis);}}>
+          Кандидат {h.candidateIndex+1} · срез {h.sourceSliceIndexHypothesis+1} (гипотеза) · score {h.rawUncalibratedScore.toFixed(3)}
+        </button>)}
+        {showHypotheses&&<button type="button" onClick={()=>{setShowHypotheses(false);setSelectedCandidateIndex(null);}}>Скрыть неподтверждённый центр MONAI</button>}
+        <p><small>Показывается только один центр на соответствующем исходном срезе после полной проверки SHA-256 пикселей. Никаких вычисленных TP/FP/FN, Dice или диагностических заключений из этой проекции не следует.</small></p>
+      </div>
       <label>Окно КТ
         <select value={preset} onChange={e=>setPreset(e.target.value as Preset)}>
           {Object.entries(windows).map(([key,item])=>
@@ -165,7 +194,7 @@ export default function PublicLuna16SourceSlices({reference,rawSha256}:{
       </div>}
       {displayError&&<p role="alert">{displayError}</p>}
       <p><small>Оранжевый эллипс — условная сферическая визуализация по опубликованным экспертным центру и диаметру; это не нарисованный радиологом контур и не сегментация,
-        это не подтверждённый контур MONAI. Ориентация — нативный порядок строк RAW, не радиологический стандарт.
+        это не подтверждённый контур MONAI. Пурпурный пунктир — неподтверждённая пространственная гипотеза, не верифицированная находка. Ориентация — нативный порядок строк RAW, не радиологический стандарт.
         Сопоставление MONAI→исходная КТ и DICOM/SOP UID всё ещё не подтверждено.</small></p>
     </>}
   </section>;
