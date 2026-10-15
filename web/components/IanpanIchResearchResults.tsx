@@ -73,7 +73,7 @@ export default function IanpanIchResearchResults(){
       <p role="status">Предложено {report.candidates.length} категорий на срезах,
         по фильтру {visible.length}. Кандидаты не подтверждены врачом.</p>
       <div style={{maxHeight:300,overflowY:"auto"}}>
-        {visible.map((c,i)=><div key={c.sliceIndexModelOrdered+"/"+c.class}
+        {visible.map(c=><div key={c.sliceIndexModelOrdered+"/"+c.class}
           style={{margin:"8px 0",padding:8,borderBottom:"1px solid #8b9b97"}}>
           <strong>{ICH_CLASS_LABELS[c.class]}</strong> · модельный срез
           {" "}{c.sliceIndexModelOrdered+1}/{report.source.modelOrderedSliceCount}
