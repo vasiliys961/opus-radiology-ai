@@ -5,6 +5,7 @@ import {
   parseIchAlternativeReport,ICH_CLASSES,ICH_CLASS_LABELS,
   type IchAlternativeClass,type IchAlternativeReport,
 } from "../lib/ianpan-ich-report";
+import {groupIchResearchSourceCandidates} from "../lib/ich-real-lesion-tracks";
 
 /**
  * Public-research JSON importer. Does not execute models or upload study data.
@@ -16,6 +17,9 @@ export default function IanpanIchResearchResults(){
   const [minScore,setMinScore]=useState(0.5);
   const [type,setType]=useState<IchAlternativeClass|"all">("all");
   const [notes,setNotes]=useState("");
+  const [loadingExample,setLoadingExample]=useState(false);
+  const grouped=report?.source.researchRoiVoxelGeometryProjectionAvailable===true
+    ?groupIchResearchSourceCandidates(report):null;
   const visible=(report?.candidates??[]).filter(c=>
     c.rawUncalibratedScore>=minScore&&(type==="all"||c.class===type)
   ).sort((a,b)=>a.sliceIndexModelOrdered-b.sliceIndexModelOrdered||
@@ -27,6 +31,32 @@ export default function IanpanIchResearchResults(){
       <strong> ianpan/ct-head-hemorrhage-detection</strong> после отдельного реального
       запуска на разрешённой публичной КТ с доказанной шкалой HU.
       На этом экране вычисление модели не запускается, никакие DICOM не передаются.</p>
+
+    <p>Реальный исследовательский прогон: опубликованная КТ PHE-SICH-CT-IDS,
+      25 срезов, оригинальный диапазон интенсивностей −1024…+1813.
+      Предобученная модель действительно выполнена на Linux CPU,
+      без использования пациентской КТ или компьютера врача.</p>
+    <button type="button" disabled={loadingExample} onClick={async()=>{
+      setLoadingExample(true);setError("");setReport(null);setNotes("");
+      try{
+        const res=await fetch("/examples/ich-ianpan-figshare-real-run-38733865982.json",
+          {cache:"no-store"});
+        if(!res.ok)throw Error("Публичный результат исследовательского прогона недоступен.");
+        const parsed=parseIchAlternativeReport(await res.text());
+        if(parsed.publishedResearchEvidence?.originalWorkflowRun!==38733865982||
+           parsed.candidates.length!==14||
+           parsed.seriesRawUncalibratedScores.intraparenchymal!==0.989428||
+           parsed.seriesRawUncalibratedScores.any!==0.993365)
+          throw Error("Не совпадают числовые доказательства оригинального запуска.");
+        setReport(parsed);
+      }catch(err){setError(err instanceof Error?err.message:"Ошибка проверенного исследовательского примера.");}
+      finally{setLoadingExample(false);}
+    }}>{loadingExample?"Чтение сохранённого реального прогона…":
+       "Открыть настоящий ICH-результат: семь соседних срезов"}</button>
+    <p><small><a href="https://github.com/vasiliys961/opus-radiology-ai/actions/runs/38733865982"
+      target="_blank" rel="noopener noreferrer">Оригинальный запуск и цифровой артефакт в GitHub Actions</a>.
+      Здесь хранится только проверяемая числовая выписка результатов.
+      Это не анализ текущей загруженной DICOM-серии.</small></p>
     <label>JSON-отчёт выполнения предобученной модели (до 2 МиБ)
       <input type="file" accept=".json,application/json" onChange={async e=>{
         const f=e.target.files?.[0];e.currentTarget.value="";
@@ -53,7 +83,8 @@ export default function IanpanIchResearchResults(){
         {report.runtime.executionDevice.toUpperCase()}, {report.runtime.elapsedSeconds.toFixed(1)} с.
         Модель обработала {report.source.modelOrderedSliceCount} упорядоченных срезов.
         Результат относится к <strong>другой публичной КТ</strong>, а не к текущей DICOM-серии.</p>
-      {report.source.publishedFigshareHuLikeWithoutOriginalDicomRescaleAudit===true&&
+      {(report.source.publishedFigshareHuLikeWithoutOriginalDicomRescaleAudit===true||
+          report.source.sourceIsPublishedCCBYSpontaneousICHResearch===true)&&
         <p role="alert"><strong>Источник PHE-SICH-CT-IDS: HU только правдоподобны.</strong>
           Открытая оригинальная NIfTI содержит значения, совместимые со шкалой HU,
           но отдельные исходные DICOM RescaleSlope/Intercept не проверены.
@@ -62,6 +93,32 @@ export default function IanpanIchResearchResults(){
           гематомного объёма или клинической чувствительности. Результаты
           нейросети — неподтверждённые исследовательские предложения.
         </p>}
+      {grouped&&<>
+        <h4>Протяжённые кандидаты по исходным срезам КТ</h4>
+        <p><strong>{grouped.tracks.length}</strong> пространственно связанных
+          исследовательских групп по типам кровоизлияния.
+          Из них {grouped.broadAnyChannelCandidatesNotCountedAsSeparateLesions}
+          кандидатов класса «любое кровоизлияние» не подсчитаны повторно
+          как отдельные очаги. Это группировка модельных областей,
+          <strong> не количество подтверждённых гематом.</strong></p>
+        {grouped.tracks.map(track=><div key={track.trackId}
+          style={{padding:10,margin:"8px 0",border:"1px dashed #867b8d",borderRadius:8}}>
+          <strong>{ICH_CLASS_LABELS[track.subtype]}</strong> ·
+          {track.candidatesGrouped} соседних локализаций
+          <div>Исходные срезы NIfTI: {track.sourceSliceIndices.map(z=>z+1).join(", ")}</div>
+          <div>Расчётная ограничивающая область XYZ, воксели: {" "}
+            {track.sourceVoxelBoundingEnvelopeXYZ.join(" / ")}</div>
+          <div>Максимальная некалиброванная оценка модели: {" "}
+            {track.researchScoreMax.toFixed(3)}</div>
+          <small>Только оригинальные воксельные границы предложенных моделью
+            областей, не сегментация. Число пикселей карты не преобразуется
+            в объём гематомы. Экспертная маска крови и независимое
+            подтверждение патологического очага отсутствуют.</small>
+        </div>)}
+        {grouped.unprojectedModelCandidates>0&&<p role="note">
+          Не спроецированы в исходную КТ: {grouped.unprojectedModelCandidates} кандидатов.
+        </p>}
+      </>}
       <h4>Оценки шести категорий на уровне серии</h4>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))",gap:8}}>
         {ICH_CLASSES.map(k=><div key={k} style={{padding:8,border:"1px solid #8b9b97",borderRadius:6}}>
@@ -125,11 +182,21 @@ export default function IanpanIchResearchResults(){
           sourceNiftiSha256:report.source.niftiSha256,
           modelId:report.model.id,modelRevision:report.model.revision,
           candidateCount:report.candidates.length,
+          researchSourceCandidateTracks:grouped?.tracks.map(t=>({
+            subtype:t.subtype,sourceVoxelBoundingEnvelopeXYZ:t.sourceVoxelBoundingEnvelopeXYZ,
+            sourceSliceIndices:t.sourceSliceIndices,researchScoreMax:t.researchScoreMax,
+            clinicallyConfirmed:false,measuredHematomaVolumeMl:null,
+          }))??[],
+          originalPretrainedRun:report.publishedResearchEvidence?.originalWorkflowRun??null,
           reviewerNote:notes,
           modelToSourceCoordinatesVerified:false,
           sourceHUIndependentlyVerified:false,
-          publishedSourceHuOnlyPlausible:report.source.publishedFigshareHuLikeWithoutOriginalDicomRescaleAudit===true,
-          publishedReferenceOnlyPerihematomalEdema:report.source.referenceLabelsOnlyPerihematomalEdema===true,
+          publishedSourceHuOnlyPlausible:
+            report.source.publishedFigshareHuLikeWithoutOriginalDicomRescaleAudit===true||
+            report.source.sourceIsPublishedCCBYSpontaneousICHResearch===true,
+          publishedReferenceOnlyPerihematomalEdema:
+            report.source.referenceLabelsOnlyPerihematomalEdema===true||
+            report.source.expertReferenceIsPerihematomalEdemaNotHematomaMask===true,
           patientDicomLinked:false,
           automatedDiagnosis:false,
           clinicalValidation:false,
