@@ -5,6 +5,9 @@ from rsna_knee_tail_finetune import configure_trainable_tail
 class FakeParameter:
     def __init__(self): self.requires_grad=True
     def numel(self):return 1
+    def requires_grad_(self,value):
+        self.requires_grad=value
+        return self
 class FakeLayer:
     def __init__(self):self.p=FakeParameter()
     def parameters(self):return [self.p]
