@@ -18,8 +18,30 @@ class CandidateEvidenceTests(unittest.TestCase):
         self.assertEqual(candidate_states("No evidence of complete ACL tear.")["ACL"],"uncertain")
     def test_explicit_abstention(self):
         self.assertEqual(candidate_states("Meniscal signal abnormality. Normal other structures.")["Medial Meniscus"],"not_mentioned")
-        self.assertEqual(candidate_states("Old ACL tear.")["ACL"],"not_mentioned")
+        self.assertEqual(candidate_states("Old ACL tear.")["ACL"],"uncertain")
         self.assertEqual(candidate_states("разрыв передней крестообразной связки")["ACL"],"not_mentioned")
+    def test_all_twelve_candidate_coverage(self):
+        examples={
+            "ACL":"ACL rupture",
+            "MCL":"MCL tear",
+            "Medial Meniscus":"Medial meniscus tear",
+            "Lateral Meniscus":"Lateral meniscus tear",
+            "Medial OA":"Medial compartment osteoarthritis",
+            "Lateral OA":"Lateral compartment osteoarthrosis",
+            "PF OA":"Patellofemoral osteoarthritis",
+            "Effusion":"Small joint effusion",
+            "Synovitis":"Diffuse synovitis",
+            "Baker's":"Baker's cyst present",
+            "Contusion":"Bone contusion",
+            "Fracture":"Acute fracture",
+        }
+        for label,report in examples.items():
+            with self.subTest(label=label):
+                self.assertEqual(candidate_states(report)[label],"positive")
+    def test_no_unmentioned_negative_and_contradiction(self):
+        self.assertEqual(candidate_states("No knee effusion.")["ACL"],"not_mentioned")
+        self.assertEqual(candidate_states("No lateral meniscus tear.")["Lateral Meniscus"],"uncertain")
+        self.assertEqual(candidate_states("Baker's cyst present. No Baker's cyst.")["Baker's"],"uncertain")
     def test_jsonl_contract_and_no_text_output(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory)

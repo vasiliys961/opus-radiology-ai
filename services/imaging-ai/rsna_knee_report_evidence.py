@@ -12,47 +12,70 @@ import re
 from pathlib import Path
 from rsna_knee import LABELS
 
-PATTERNS={
- "ACL":(r"\b(?:complete|full.thickness)\s+(?:acl|anterior cruciate ligament)\s+tear\b",
-        r"\b(?:acl|anterior cruciate ligament)\s+(?:is\s+)?intact\b"),
- "MCL":(r"\b(?:complete|full.thickness)\s+(?:mcl|medial collateral ligament)\s+tear\b",
-        r"\b(?:mcl|medial collateral ligament)\s+(?:is\s+)?intact\b"),
- "Effusion":(r"\b(?:moderate|large)\s+(?:knee\s+|joint\s+)?effusion\b",
-             r"\bno\s+(?:knee\s+|joint\s+)?effusion\b"),
- "Baker's":(r"\bbaker'?s\s+cyst\s+(?:is\s+)?(?:present|identified)\b",
-            r"\bno\s+baker'?s\s+cyst\b"),
- "Fracture":(r"\bacute\s+(?:non.?displaced\s+|displaced\s+)?fracture\b",
-             r"\bno\s+(?:acute\s+)?fracture\b"),
+# Conservative English candidates, NOT a replacement for competition ontology.
+# Explicit "tear" and "osteoarthritis" are accepted; generic degeneration is not.
+STRUCTURE = {
+    "ACL": r"(?:acl|anterior cruciate ligament)",
+    "MCL": r"(?:mcl|medial collateral ligament)",
+    "Medial Meniscus": r"(?:medial meniscus|medial meniscal)",
+    "Lateral Meniscus": r"(?:lateral meniscus|lateral meniscal)",
 }
-NEGATION=re.compile(r"\b(?:no|without|denies|exclude|excluded|rule\s+out|not|absence\s+of)\b",re.I)
-UNCERTAINTY=re.compile(r"\b(?:possible|possibly|probable|suspect(?:ed)?|cannot\s+exclude|question(?:able)?|may\s+represent|versus|vs\.?|history\s+of|prior|old)\b",re.I)
+POSITIVE = {
+    "ACL": rf"(?:\b{STRUCTURE['ACL']}\b.{{0,45}}\b(?:tear|rupture|torn)\b|\b(?:tear|rupture)\b.{{0,30}}\b{STRUCTURE['ACL']}\b)",
+    "MCL": rf"(?:\b{STRUCTURE['MCL']}\b.{{0,45}}\b(?:tear|rupture|torn)\b|\b(?:tear|rupture)\b.{{0,30}}\b{STRUCTURE['MCL']}\b)",
+    "Medial Meniscus": rf"(?:\b{STRUCTURE['Medial Meniscus']}\b.{{0,45}}\b(?:tear|torn)\b|\b(?:tear|torn)\b.{{0,30}}\b{STRUCTURE['Medial Meniscus']}\b)",
+    "Lateral Meniscus": rf"(?:\b{STRUCTURE['Lateral Meniscus']}\b.{{0,45}}\b(?:tear|torn)\b|\b(?:tear|torn)\b.{{0,30}}\b{STRUCTURE['Lateral Meniscus']}\b)",
+    "Medial OA": r"\bmedial (?:compartment|tibiofemoral)\b.{0,45}\b(?:osteoarthritis|osteoarthrosis)\b|\b(?:osteoarthritis|osteoarthrosis)\b.{0,45}\bmedial (?:compartment|tibiofemoral)\b",
+    "Lateral OA": r"\blateral (?:compartment|tibiofemoral)\b.{0,45}\b(?:osteoarthritis|osteoarthrosis)\b|\b(?:osteoarthritis|osteoarthrosis)\b.{0,45}\blateral (?:compartment|tibiofemoral)\b",
+    "PF OA": r"\b(?:patellofemoral|patello.femoral)\b.{0,45}\b(?:osteoarthritis|osteoarthrosis)\b|\b(?:osteoarthritis|osteoarthrosis)\b.{0,45}\bpatellofemoral\b",
+    "Effusion": r"\b(?:moderate|large|small|mild|trace)\s+(?:knee\s+|joint\s+|suprapatellar\s+)?effusion\b|\b(?:knee\s+|joint\s+|suprapatellar\s+)?effusion\s+(?:present|seen|noted)\b",
+    "Synovitis": r"\b(?:active|diffuse|marked|mild|moderate|severe)\s+synovitis\b|\bsynovitis\s+(?:present|noted|seen)\b",
+    "Baker's": r"\bbaker'?s?\s+cyst\b|\bpopliteal\s+cyst\b",
+    "Contusion": r"\b(?:bone|osseous|marrow)\s+contusion\b|\bbone\s+bruise\b",
+    "Fracture": r"\b(?:acute|subacute|nondisplaced|displaced|impaction)\s+(?:\w+\s+){0,2}fracture\b",
+}
+NEGATIVE = {
+    **{k:rf"\b{v}\b\s+(?:is\s+)?intact\b|\bintact\s+{v}\b|\bno\s+(?:evidence\s+of\s+)?(?:tear|rupture)\s+(?:of\s+)?(?:the\s+)?{v}\b"
+       for k,v in STRUCTURE.items()},
+    "Medial OA": r"\bno\s+medial\s+(?:compartment\s+)?osteoarthritis\b",
+    "Lateral OA": r"\bno\s+lateral\s+(?:compartment\s+)?osteoarthritis\b",
+    "PF OA": r"\bno\s+patellofemoral\s+osteoarthritis\b",
+    "Effusion": r"\b(?:no|without)\s+(?:significant\s+)?(?:knee\s+|joint\s+|suprapatellar\s+)?effusion\b",
+    "Synovitis": r"\b(?:no|without)\s+(?:evidence\s+of\s+)?synovitis\b",
+    "Baker's": r"\b(?:no|without)\s+(?:baker'?s?\s+cyst|popliteal\s+cyst)\b",
+    "Contusion": r"\b(?:no|without)\s+(?:bone|osseous|marrow)\s+contusion\b|\bno\s+bone\s+bruise\b",
+    "Fracture": r"\b(?:no|without)\s+(?:acute\s+)?fracture\b",
+}
+UNCERTAINTY = re.compile(r"\b(?:possible|possibly|probable|suspect(?:ed)?|cannot\s+exclude|question(?:able)?|may\s+represent|versus|vs\.?|history\s+of|prior|old|chronic|postsurgical|status\s+post)\b", re.I)
+NEGATION = re.compile(r"\b(?:no|without|not|absence\s+of|negative\s+for)\b", re.I)
 
 
 def candidate_states(report):
-    if not isinstance(report,str):
-        report=""
-    result={label:"not_mentioned" for label in LABELS}
+    if not isinstance(report, str):
+        report = ""
+    result = {label: "not_mentioned" for label in LABELS}
     if not report.strip():
         return result
-    # Do not derive negatives from silence or generic 'normal MRI'.
-    sentences=re.split(r"[.;\n]+",report.lower())
-    for label,(positive,negative) in PATTERNS.items():
-        seen=set()
-        for sentence in sentences:
-            if not sentence.strip():continue
-            pos=bool(re.search(positive,sentence))
-            neg=bool(re.search(negative,sentence))
-            if not pos and not neg:continue
-            if UNCERTAINTY.search(sentence):
-                seen.add("uncertain")
-            elif pos and NEGATION.search(sentence) and not neg:
-                seen.add("uncertain")
-            elif pos and neg:
-                seen.add("uncertain")
-            elif pos:seen.add("positive")
-            elif neg:seen.add("negative")
-        if seen:
-            result[label]=next(iter(seen)) if len(seen)==1 else "uncertain"
+    # Splitting at headings/newlines/semicolons limits the negation scope.
+    # Do not translate or guess the status from absent mentions.
+    clauses = re.split(r"[.;\n]+", report.lower())
+    for label in LABELS:
+        evidence = set()
+        for clause in clauses:
+            pos = bool(re.search(POSITIVE[label], clause))
+            neg = bool(re.search(NEGATIVE[label], clause))
+            if not pos and not neg:
+                continue
+            if UNCERTAINTY.search(clause):
+                evidence.add("uncertain")
+            elif pos and (neg or NEGATION.search(clause)):
+                evidence.add("uncertain")
+            elif neg:
+                evidence.add("negative")
+            else:
+                evidence.add("positive")
+        if evidence:
+            result[label] = next(iter(evidence)) if len(evidence) == 1 else "uncertain"
     return result
 
 
