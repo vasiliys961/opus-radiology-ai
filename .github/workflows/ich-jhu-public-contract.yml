@@ -26,3 +26,19 @@ jobs:
       - run: python -m pip install --no-cache-dir "numpy==2.2.6" "nibabel==5.3.2"
       - run: python -m py_compile scripts/prepare-jhu-public-head-ich.py scripts/test-prepare-jhu-public-head-ich.py scripts/run-ianpan-ich-research.py
       - run: python scripts/test-prepare-jhu-public-head-ich.py
+  real-public-jhu-source-admission:
+    needs: public-hu-evidence-contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install --no-cache-dir "numpy==2.2.6" "nibabel==5.3.2"
+      - name: Admit one actual publisher MD5-bound public JHU NCCT (NO model or weights)
+        run: |
+          python scripts/prepare-jhu-public-head-ich.py --out-folder "$RUNNER_TEMP/opus-jhu-real-source"
+      - name: Delete all downloaded CT pixels
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/opus-jhu-real-source"
