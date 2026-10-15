@@ -1,0 +1,24 @@
+name: Knee finding-MIL training and inference
+on:
+  pull_request:
+    paths:
+      - 'services/imaging-ai/rsna_knee_large_train.py'
+      - 'services/imaging-ai/rsna_knee_finding_predict.py'
+      - 'services/imaging-ai/test_rsna_knee_finding_pipeline.py'
+      - '.github/workflows/rsna-knee-finding-pipeline.yml'
+  workflow_dispatch:
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile and verify checkpoint contracts
+        run: |
+          python -m py_compile services/imaging-ai/rsna_knee_large_train.py services/imaging-ai/rsna_knee_finding_predict.py
+          cd services/imaging-ai
+          python -m unittest test_rsna_knee_finding_pipeline.py test_rsna_knee_large_train.py -v

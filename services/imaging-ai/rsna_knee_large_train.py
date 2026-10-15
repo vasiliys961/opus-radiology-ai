@@ -13,11 +13,15 @@ from pathlib import Path
 
 from rsna_knee import LABELS, balanced_series, read_rows, extract_labels, study_slices
 from rsna_knee_validation import load_partition
+from rsna_knee_finding_mil import make_finding_mil
 
 
 def configuration(args):
-    return {k:getattr(args,k) for k in ("slices","series_limit","pixel_mode",
+    options={k:getattr(args,k) for k in ("slices","series_limit","pixel_mode",
            "slice_order","seed","lr","series_selection")}
+    if getattr(args,"head","legacy")!="legacy":
+        options["head"]=args.head
+    return options
 
 
 def cache_key(uid, options, encoder_id):
@@ -99,14 +103,19 @@ def train(args):
         "val":sorted(r["StudyInstanceUID"] for r in validation),
         "encoder":encoder_id
     },sort_keys=True).encode()).hexdigest()
-    optimizer=torch.optim.AdamW(list(model.attention.parameters())+
-                                list(model.classifier.parameters()),lr=args.lr)
+    head=make_finding_mil(384,findings=len(LABELS)).cuda() if args.head=="finding-v2" else None
+    trainable=list(head.parameters()) if head is not None else (list(model.attention.parameters())+list(model.classifier.parameters()))
+    optimizer=torch.optim.AdamW(trainable,lr=args.lr)
     start=0
     if args.resume:
         checkpoint=torch.load(args.resume,map_location="cpu",weights_only=True)
         if checkpoint.get("trainer_fingerprint")!=fingerprint or checkpoint.get("encoder_id")!=encoder_id:
             raise ValueError("Refusing to resume incompatible training")
         model.load_state_dict(checkpoint["state_dict"],strict=True)
+        if head is not None:
+            if checkpoint.get("head_family")!="finding-v2":
+                raise ValueError("Incompatible finding-specific checkpoint")
+            head.load_state_dict(checkpoint["head_state_dict"],strict=True)
         optimizer.load_state_dict(checkpoint["optimizer"])
         start=int(checkpoint["epoch"])
     model.backbone.eval()
@@ -114,7 +123,10 @@ def train(args):
         parameter.requires_grad_(False)
     out=Path(args.output)
     for epoch in range(start,args.epochs):
-        model.attention.train();model.classifier.train()
+        if head is None:
+            model.attention.train();model.classifier.train()
+        else:
+            head.train()
         order=list(training)
         random.Random(args.seed+epoch).shuffle(order)
         losses=[];failed=0
@@ -129,11 +141,14 @@ def train(args):
             target=torch.tensor(y,device="cuda",dtype=torch.float32)
             mask=torch.tensor(known,device="cuda",dtype=torch.float32)
             optimizer.zero_grad(set_to_none=True)
-            logits=forward_head(model,features)
+            logits=head(features) if head is not None else forward_head(model,features)
             loss=(F.binary_cross_entropy_with_logits(logits,target,reduction="none")*mask).sum()/mask.sum().clamp_min(1)
             loss.backward();optimizer.step();losses.append(loss.item())
             del features
-        model.attention.eval();model.classifier.eval()
+        if head is None:
+            model.attention.eval();model.classifier.eval()
+        else:
+            head.eval()
         predictions=[];truth=[];known=[]
         with torch.inference_mode():
             for row in validation:
@@ -141,7 +156,7 @@ def train(args):
                     features=cache_features(model,row["StudyInstanceUID"],index,args,"cuda",encoder_id)
                 except (ValueError,OSError,RuntimeError):
                     continue
-                pred=forward_head(model,features).sigmoid().cpu().tolist()
+                pred=(head(features) if head is not None else forward_head(model,features)).sigmoid().cpu().tolist()
                 y,m=extract_labels(row)
                 predictions.append(pred);truth.append(y);known.append(m)
         auc={}
@@ -152,12 +167,15 @@ def train(args):
                 "failed_studies":failed,"validation_studies":len(truth),"auc":auc}
         print(json.dumps(report),flush=True)
         state={k:v.detach().cpu() for k,v in model.state_dict().items()}
-        checkpoint={"model":"dinov2-small-mil-v1","state_dict":state,"labels":list(LABELS),
+        checkpoint={"model":"dinov2-small-mil-v1" if head is None else "dinov2-small-finding-mil-v2","state_dict":state,"labels":list(LABELS),
                     "slices":args.slices,"series_limit":args.series_limit,
                     "series_selection":args.series_selection,"pixel_mode":args.pixel_mode,
                     "slice_order":args.slice_order,"research_only":True,
                     "trainer_fingerprint":fingerprint,"encoder_id":encoder_id,
                     "epoch":epoch+1,"optimizer":optimizer.state_dict(),"metrics":report}
+        if head is not None:
+            checkpoint["head_family"]="finding-v2"
+            checkpoint["head_state_dict"]={k:v.detach().cpu() for k,v in head.state_dict().items()}
         save_atomic(torch,checkpoint,out)
     return out
 
@@ -168,6 +186,7 @@ def main():
         p.add_argument("--"+key,required=True)
     p.add_argument("--cache-dir",default=None)
     p.add_argument("--resume",default=None)
+    p.add_argument("--head",choices=("legacy","finding-v2"),default="legacy")
     p.add_argument("--epochs",type=int,default=5)
     p.add_argument("--slices",type=int,default=8)
     p.add_argument("--series-limit",type=int,default=3)
