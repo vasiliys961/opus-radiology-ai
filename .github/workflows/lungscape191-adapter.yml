@@ -1,0 +1,34 @@
+name: LungSCAPE191 adapter syntax and CLI contract
+on:
+  pull_request:
+    paths:
+      - "scripts/run-lungscape191-research.py"
+      - "docs/LUNGSCAPE191_REAL_MODEL_ADAPTER.md"
+      - ".github/workflows/lungscape191-adapter.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-adapter:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile adapter without loading models or downloading CT
+        run: python -m py_compile scripts/run-lungscape191-research.py
+      - name: Validate explicit opt-in arguments
+        run: |
+          python scripts/run-lungscape191-research.py --help | grep -- --execute
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+          p=Path("scripts/run-lungscape191-research.py")
+          tree=ast.parse(p.read_text(encoding="utf-8"))
+          names={node.name for node in ast.walk(tree) if isinstance(node,ast.FunctionDef)}
+          assert {"sha256","run","main"} <= names
+          assert "subprocess.run" in p.read_text(encoding="utf-8")
+          print("PASS: explicit opt-in command-line adapter; no model or CT run")
+          PY
