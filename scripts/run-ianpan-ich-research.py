@@ -151,7 +151,7 @@ def numeric_predictions(output, slices: int):
     }
 
 def run(args):
-    source = args.source.resolve()
+    source = args.source
     manifest = validate_public_manifest(source,args.manifest)
     if args.output.exists():
         raise ValueError("output_already_exists")
