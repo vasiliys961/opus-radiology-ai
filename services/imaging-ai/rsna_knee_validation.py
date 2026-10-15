@@ -26,9 +26,14 @@ def make_manifest(csv_path,output,seed=42):
     out.write_text(json.dumps(data,indent=2),encoding="utf-8")
     return data
 
+def binary_auc(truth,scores):
+    """Mann-Whitney ROC-AUC with half-credit for ties, no extra dependencies."""
+    pos=[p for y,p in zip(truth,scores) if y==1]
+    neg=[p for y,p in zip(truth,scores) if y==0]
+    if not pos or not neg:return None
+    return sum(1 if p>n else 0.5 if p==n else 0 for p in pos for n in neg)/(len(pos)*len(neg))
+
 def evaluate(gold_csv,manifest_json,prediction_csv):
-    from sklearn.metrics import roc_auc_score
-    import numpy as np
     manifest=json.loads(Path(manifest_json).read_text(encoding="utf-8"))
     val=manifest["validation"]
     if not val or set(val)&set(manifest["train"]):raise ValueError("Train/validation overlap or empty validation")
@@ -46,10 +51,10 @@ def evaluate(gold_csv,manifest_json,prediction_csv):
         if len(set(truth))<2:
             outcomes[label]={"auc":None,"n":len(truth),"reason":"single_class"}
         else:
-            outcomes[label]={"auc":float(roc_auc_score(truth,score)),
+            outcomes[label]={"auc":binary_auc(truth,score),
                              "n":len(truth),"positives":int(sum(truth))}
     valid=[v["auc"] for v in outcomes.values() if v["auc"] is not None]
-    return {"macro_auc_observed_classes":float(np.mean(valid)) if valid else None,
+    return {"macro_auc_observed_classes":sum(valid)/len(valid) if valid else None,
             "n_validation":len(val),"evaluable_classes":len(valid),"labels":outcomes,
             "warning":"Not an independent clinical test; 58 gold examples in full dataset."}
 
