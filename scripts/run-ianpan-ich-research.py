@@ -153,22 +153,23 @@ def numeric_predictions(output, slices: int):
 def run(args):
     source = args.source
     manifest = validate_public_manifest(source,args.manifest)
-    if args.output.exists():
-        raise ValueError("output_already_exists")
+    if args.output.exists() or args.output.suffix != ".json":
+        raise ValueError("output_must_be_new_json_file")
     if args.device not in ("cpu","cuda"):
         raise ValueError("unknown_device")
-    # Admission before any pretrained-model execution, downloads, or GPU use.
+    # Admit resources and source geometry BEFORE any external weight download.
+    # This is for a provisioned research worker, NOT the user's M1/8GiB Mac.
+    import psutil
+    available = psutil.virtual_memory().available
+    if available < 10 * 1024**3:
+        raise MemoryError("research_worker_requires_10_gib_available_ram")
     image = check_nii_geometry(source)
     original_dims = list(image.shape)
-    obtain_model(args.model_dir,args.download_pretrained)
     import torch
     if args.device == "cuda" and not torch.cuda.is_available():
         raise ValueError("approved_cuda_device_not_available")
+    obtain_model(args.model_dir,args.download_pretrained)
     import numpy as np
-    import psutil
-    available = psutil.virtual_memory().available
-    if available < 6 * 1024**3:
-        raise MemoryError("host_available_ram_below_6_gib")
     # Never execute arbitrary upstream Python until its exact SHA-256 matches.
     spec = importlib.util.spec_from_file_location("opus_ianpan_pinned_inference",args.model_dir/"inference.py")
     if spec is None or spec.loader is None:
