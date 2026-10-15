@@ -7,7 +7,7 @@
  * inference errors or non-overlapping source regions.
  */
 import {ICH_CLASSES,type IchAlternativeClass,
-  type IchAlternativeCandidate,type IchAlternativeReport} from "./ianpan-ich-report";
+  type IchAlternativeCandidate,type IchAlternativeReport} from "./ianpan-ich-report.ts";
 
 export type IchCandidateGroup={
   id:string;
