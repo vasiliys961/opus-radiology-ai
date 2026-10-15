@@ -3,6 +3,7 @@
 import {useState} from "react";
 import {sha256} from "@noble/hashes/sha2.js";
 import IchBloodReferenceReview from "./IchBloodReferenceReview";
+import IchSecondModelComparison from "./IchSecondModelComparison";
 import {
   parseIchAlternativeReport,ICH_CLASSES,ICH_CLASS_LABELS,
   type IchAlternativeClass,type IchAlternativeReport,
@@ -186,6 +187,8 @@ export default function IanpanIchResearchResults(){
         </div>)}
       </div>
       <IchSourceNativeReview key={report.source.niftiSha256+report.runtime.elapsedSeconds} report={report}/>
+      {originalModelSha&&<IchSecondModelComparison key={"second-"+originalModelSha}
+        first={report} originalFirstSha={originalModelSha}/>}
       {originalModelSha&&<IchBloodReferenceReview
         key={originalModelSha}
         model={report} originalModelReportSha256={originalModelSha}/>}
