@@ -23,6 +23,8 @@ def validate_checkpoint(ckpt):
         raise ValueError("Unknown MRI series selection")
     if ckpt.get("pixel_mode","legacy") not in ("legacy","dicom"):
         raise ValueError("Unknown MRI pixel mode")
+    if ckpt.get("slice_order","legacy") not in ("legacy","geometry-v2"):
+        raise ValueError("Unknown MRI slice order")
     return ckpt
 
 def predict(args):
@@ -51,7 +53,8 @@ def predict(args):
                     images=study_slices(Path(args.dicom_root),index,uid,
                                         ckpt["slices"],ckpt["series_limit"],
                                         series_order="provided" if ckpt.get("series_selection","legacy")=="balanced" else "legacy",
-                                        pixel_mode=ckpt.get("pixel_mode","legacy")).to(device)
+                                        pixel_mode=ckpt.get("pixel_mode","legacy"),
+                                        slice_order=ckpt.get("slice_order","legacy")).to(device)
                     probabilities=model(normalize(images)).sigmoid().cpu().tolist()
                     if len(probabilities)!=len(LABELS):
                         raise ValueError("Output schema mismatch")
