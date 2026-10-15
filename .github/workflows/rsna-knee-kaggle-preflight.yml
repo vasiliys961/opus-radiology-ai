@@ -1,0 +1,22 @@
+name: Knee Kaggle corpus preflight
+on:
+  pull_request:
+    paths:
+      - 'services/imaging-ai/rsna_knee_kaggle_preflight.py'
+      - 'services/imaging-ai/test_rsna_knee_kaggle_preflight.py'
+      - '.github/workflows/rsna-knee-kaggle-preflight.yml'
+  workflow_dispatch:
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Kaggle input preflight checks
+        run: |
+          cd services/imaging-ai
+          python -m unittest test_rsna_knee_kaggle_preflight.py -v
