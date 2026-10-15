@@ -1,0 +1,22 @@
+name: Knee report gold calibration audit
+on:
+  pull_request:
+    paths:
+      - 'services/imaging-ai/rsna_knee_report_audit.py'
+      - 'services/imaging-ai/test_rsna_knee_report_audit.py'
+      - '.github/workflows/rsna-knee-report-audit.yml'
+  workflow_dispatch:
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify no leakage and conservative lower bounds
+        run: |
+          cd services/imaging-ai
+          python -m unittest test_rsna_knee_report_audit.py -v
