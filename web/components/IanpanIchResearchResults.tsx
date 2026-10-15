@@ -5,6 +5,7 @@ import {
   parseIchAlternativeReport,ICH_CLASSES,ICH_CLASS_LABELS,
   type IchAlternativeClass,type IchAlternativeReport,
 } from "../lib/ianpan-ich-report";
+import {groupIchResearchCandidateRegions} from "../lib/ianpan-ich-candidate-groups";
 
 /**
  * Public-research JSON importer. Does not execute models or upload study data.
@@ -17,6 +18,7 @@ export default function IanpanIchResearchResults(){
   const [minScore,setMinScore]=useState(0.5);
   const [type,setType]=useState<IchAlternativeClass|"all">("all");
   const [notes,setNotes]=useState("");
+  const spatialGroups=report?groupIchResearchCandidateRegions(report):null;
   const visible=(report?.candidates??[]).filter(c=>
     c.rawUncalibratedScore>=minScore&&(type==="all"||c.class===type)
   ).sort((a,b)=>a.sliceIndexModelOrdered-b.sliceIndexModelOrdered||
@@ -26,7 +28,7 @@ export default function IanpanIchResearchResults(){
     <h3>КТ головы · альтернативный исследовательский ICH-детектор</h3>
     <p>Импорт классификационных оценок и областей локализации модели
       <strong> ianpan/ct-head-hemorrhage-detection</strong> после отдельного реального
-      запуска на разрешённой публичной КТ с доказанной шкалой HU.
+      запуска на разрешённой публичной КТ с указанной степенью проверки HU.
       На этом экране вычисление модели не запускается, никакие DICOM не передаются.</p>
     <div style={{padding:"10px 0"}}>
       <button type="button" disabled={loadingRealExample}
@@ -105,6 +107,33 @@ export default function IanpanIchResearchResults(){
       </div>
       <p><small>Числа — некалиброванные выходные оценки нейросети, НЕ клиническая вероятность
         заболевания и НЕ доказательство патологического очага.</small></p>
+      {spatialGroups&&<section aria-label="Пространственные группы исследовательских ICH-кандидатов"
+        style={{border:"1px solid #8b9b97",padding:10,borderRadius:8,margin:"12px 0"}}>
+        <strong>Пространственные группы кандидатов — не подсчёт гематом</strong>
+        <p role="status">{spatialGroups.groups.length} групп по совпадению локализации
+          на соседних срезах. Повторяющиеся каналы «любое кровоизлияние»:
+          {" "}{spatialGroups.anyCategoryDuplicatesSuppressed} не засчитаны повторно.
+          Нелокализованных классификационных записей:
+          {" "}{spatialGroups.unlocalizedClassifierEntries}.</p>
+        <p><small>Группы вычислены только из модельных рамок на соседних срезах.
+          Это НЕ контур гематомы, не измерение объёма, не установленное число
+          патологических очагов и не подтверждение диагноза.</small></p>
+        {spatialGroups.groups.map(g=><div key={g.id}
+          style={{borderTop:"1px solid #8b9b97",padding:"8px 0"}}>
+          <strong>{ICH_CLASS_LABELS[g.candidateClass]}</strong>
+          <div>Срезы модели {g.firstModelSliceZeroBased+1}–{g.lastModelSliceZeroBased+1}
+            {" "}· {g.modelSlicesWithRegions} срезов с пространственной областью
+            {" "}· максимальная оценка {g.peakRawUncalibratedScore.toFixed(3)}</div>
+          <div>Охватывающая область 512 × 512: {g.modelInputBoundingEnvelopeXY.join(" / ")}</div>
+          {g.nativeNiftiBoundingEnvelopeXYZ&&<div>
+            Границы нативных вокселей исходной NIfTI (XYZ):
+            {" "}{g.nativeNiftiBoundingEnvelopeXYZ.join(" / ")}.
+            Это ограничивающая рамка, не гематомный объём.</div>}
+          <button type="button" onClick={()=>{
+            setType(g.candidateClass);setMinScore(0.5);
+          }}>Показать посрезовые записи этой категории</button>
+        </div>)}
+      </section>}
       <div style={{display:"flex",gap:12,flexWrap:"wrap",margin:"12px 0"}}>
         <label>Категория <select value={type}
           onChange={e=>setType(e.target.value as IchAlternativeClass|"all")}>
@@ -159,6 +188,8 @@ export default function IanpanIchResearchResults(){
           sourceNiftiSha256:report.source.niftiSha256,
           modelId:report.model.id,modelRevision:report.model.revision,
           candidateCount:report.candidates.length,
+          researchSpatialCandidateGroups:spatialGroups?.groups.length??0,
+          spatialGroupsAreProvenHematomas:false,
           reviewerNote:notes,
           modelToSourceCoordinatesVerified:false,
           sourceHUIndependentlyVerified:false,
