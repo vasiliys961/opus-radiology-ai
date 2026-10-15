@@ -14,6 +14,7 @@ from pathlib import Path
 from rsna_knee import LABELS, balanced_series, read_rows, extract_labels, study_slices
 from rsna_knee_validation import load_partition
 from rsna_knee_finding_mil import make_finding_mil
+from rsna_knee_warmstart import validate_warmstart
 
 
 def configuration(args):
@@ -96,7 +97,9 @@ def train(args):
     training,validation=load_partition(rows,args.manifest)
     if not training or not validation:
         raise ValueError("Empty train/validation split")
-    model=model_factory(pretrained=not bool(args.resume)).cuda()
+    if args.resume and args.warmstart:
+        raise ValueError("--resume and --warmstart are mutually exclusive")
+    model=model_factory(pretrained=not bool(args.resume or args.warmstart)).cuda()
     encoder_id="facebook/dinov2-small:frozen-v1"
     fingerprint=hashlib.sha256(json.dumps({
         "config":configuration(args),"train":sorted(r["StudyInstanceUID"] for r in training),
@@ -107,6 +110,12 @@ def train(args):
     trainable=list(head.parameters()) if head is not None else (list(model.attention.parameters())+list(model.classifier.parameters()))
     optimizer=torch.optim.AdamW(trainable,lr=args.lr)
     start=0
+    if args.warmstart:
+        checkpoint=torch.load(args.warmstart,map_location="cpu",weights_only=True)
+        provenance=validate_warmstart(checkpoint,args)
+        model.load_state_dict(checkpoint["state_dict"],strict=True)
+        head.load_state_dict(checkpoint["head_state_dict"],strict=True)
+        print(json.dumps({"warmstart":provenance}),flush=True)
     if args.resume:
         checkpoint=torch.load(args.resume,map_location="cpu",weights_only=True)
         if checkpoint.get("trainer_fingerprint")!=fingerprint or checkpoint.get("encoder_id")!=encoder_id:
@@ -172,7 +181,8 @@ def train(args):
                     "series_selection":args.series_selection,"pixel_mode":args.pixel_mode,
                     "slice_order":args.slice_order,"research_only":True,
                     "trainer_fingerprint":fingerprint,"encoder_id":encoder_id,
-                    "epoch":epoch+1,"optimizer":optimizer.state_dict(),"metrics":report}
+                    "epoch":epoch+1,"optimizer":optimizer.state_dict(),"metrics":report,
+                    "warmstart_source":str(Path(args.warmstart).name) if args.warmstart else None}
         if head is not None:
             checkpoint["head_family"]="finding-v2"
             checkpoint["head_state_dict"]={k:v.detach().cpu() for k,v in head.state_dict().items()}
@@ -186,6 +196,8 @@ def main():
         p.add_argument("--"+key,required=True)
     p.add_argument("--cache-dir",default=None)
     p.add_argument("--resume",default=None)
+    p.add_argument("--warmstart",default=None,
+                   help="Gold-trained finding-v2 checkpoint; fresh optimizer and new epochs")
     p.add_argument("--head",choices=("legacy","finding-v2"),default="legacy")
     p.add_argument("--epochs",type=int,default=5)
     p.add_argument("--slices",type=int,default=8)
