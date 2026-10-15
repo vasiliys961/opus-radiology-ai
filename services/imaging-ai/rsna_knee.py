@@ -44,8 +44,16 @@ def balanced_series(rows,max_series=3):
     return result
 
 def series_index(rows):
-    """Legacy interface; prioritize representation from all three MR planes."""
-    return balanced_series(rows,max_series=256)
+    """Legacy interface; keep original series order for old checkpoints."""
+    index={}
+    for row in rows:
+        uid=row["StudyInstanceUID"];sid=row["SeriesInstanceUID"]
+        if any(x in item for item in (uid,sid) for x in ("..","/","\\\\") ):
+            raise ValueError("Unsafe DICOM identifier")
+        if row.get("Anatomical_Plane") not in PLANES:
+            continue
+        index.setdefault(uid,[]).append(sid)
+    return index
 
 def extract_labels(row):
     values=[];mask=[]
@@ -62,7 +70,7 @@ def study_slices(root,index,uid,per_series=8,max_series=9):
     import torch
     from PIL import Image
     images=[]
-    for sid in index.get(uid,[])[:max_series]:
+    for sid in sorted(index.get(uid,[]))[:max_series]:
         files=sorted((root/uid/sid).glob("*.dcm"))
         for i in np.linspace(0,len(files)-1,min(len(files),per_series),dtype=int) if files else []:
             try:
