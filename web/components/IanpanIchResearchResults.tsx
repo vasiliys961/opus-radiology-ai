@@ -12,6 +12,8 @@ import {
  */
 export default function IanpanIchResearchResults(){
   const [report,setReport]=useState<IchAlternativeReport|null>(null);
+  const [loadingExample,setLoadingExample]=useState(false);
+  const [isGenuinePublicExample,setIsGenuinePublicExample]=useState(false);
   const [error,setError]=useState("");
   const [minScore,setMinScore]=useState(0.5);
   const [type,setType]=useState<IchAlternativeClass|"all">("all");
@@ -23,14 +25,38 @@ export default function IanpanIchResearchResults(){
   return <section aria-label="Альтернативный детектор внутричерепного кровоизлияния"
     style={{padding:14,border:"1px solid #688f81",borderRadius:10,marginTop:18}}>
     <h3>КТ головы · альтернативный исследовательский ICH-детектор</h3>
-    <p>Импорт классификационных оценок и областей локализации модели
-      <strong> ianpan/ct-head-hemorrhage-detection</strong> после отдельного реального
-      запуска на разрешённой публичной КТ с доказанной шкалой HU.
-      На этом экране вычисление модели не запускается, никакие DICOM не передаются.</p>
+    <p>Первый настоящий pretrained-результат модели
+      <strong> ianpan/ct-head-hemorrhage-detection</strong> получен на открытой
+      КТ головы PHE-SICH-CT-IDS из 25 срезов. Исходные интенсивности
+      выглядят как HU, однако оригинальные DICOM-теги для подтверждения
+      точной HU-калибровки недоступны. На этой странице нейросеть повторно
+      не запускается, пациентские DICOM не передаются.</p>
+    <button type="button" disabled={loadingExample} onClick={async()=>{
+      setLoadingExample(true);setReport(null);setError("");setNotes("");
+      setIsGenuinePublicExample(false);
+      try{
+        const response=await fetch(
+          "/examples/ich-ianpan-real-figshare-run-38733865982.json",
+          {cache:"no-store"});
+        if(!response.ok)throw Error("Сохранённый публичный результат сейчас недоступен.");
+        const found=parseIchAlternativeReport(await response.text());
+        if(found.source.niftiSha256!=="0543a46065314468fe7ab18b9187277ae1affc4e7c864d0fd8ae608afa554a95"||
+           found.source.modelOrderedSliceCount!==25||
+           found.candidates.length!==14)
+          throw Error("Неверный подлинный исследовательский источник.");
+        setReport(found);setIsGenuinePublicExample(true);
+      }catch(err){setError(err instanceof Error?err.message:"Ошибка публичного примера.");}
+      finally{setLoadingExample(false);}
+    }}>{loadingExample?"Загрузка настоящего результата…":
+       "Показать реальную КТ: находки ICH-детектора"}</button>
+    <p><small><a href="https://github.com/vasiliys961/opus-radiology-ai/actions/runs/38733865982"
+      target="_blank" rel="noopener noreferrer">Оригинальный запуск с предобученными весами и исходный JSON в GitHub Actions</a>.
+      Получены 14 локализованных предложений на семи последовательных срезах.
+      Этот публичный пример не связан с КТ текущего пациента.</small></p>
     <label>JSON-отчёт выполнения предобученной модели (до 2 МиБ)
       <input type="file" accept=".json,application/json" onChange={async e=>{
         const f=e.target.files?.[0];e.currentTarget.value="";
-        setReport(null);setError("");setNotes("");
+        setReport(null);setError("");setNotes("");setIsGenuinePublicExample(false);
         if(!f)return;
         try{
           if(f.size>2*1024*1024)throw Error("Слишком большой файл отчёта.");
@@ -47,12 +73,21 @@ export default function IanpanIchResearchResults(){
         не подтверждаются. Для новых результатов вычисляется положение
         области в координатах исходной NIfTI, но связь с DICOM SOP и
         подтверждение специалистом отсутствуют.
-        Отсутствие кандидатов не позволяет исключить кровоизлияние.</p>
+        Отсутствие кандидатов не позволяет исключить кровоизлияние.
+        Оценка модели не является клинической вероятностью.</p>
       <p>Источники: полный SHA-256 публичной NIfTI — <code>{report.source.niftiSha256}</code>.
         Модель: {report.model.id} ({report.model.revision}); заявленный режим —
         {report.runtime.executionDevice.toUpperCase()}, {report.runtime.elapsedSeconds.toFixed(1)} с.
         Модель обработала {report.source.modelOrderedSliceCount} упорядоченных срезов.
         Результат относится к <strong>другой публичной КТ</strong>, а не к текущей DICOM-серии.</p>
+      {isGenuinePublicExample&&<p role="status">
+        <strong>Подтверждён настоящий pretrained-инференс, не диагноз.</strong>
+        Согласно описанию публикации, КТ относится к когорте спонтанных
+        внутримозговых кровоизлияний. Однако опубликованные маски этого
+        набора относятся к перифокальному отёку, а не к гематоме.
+        Модельные рамки вычислены в исходных вокселях NIfTI,
+        но попадание в экспертную маску самой гематомы ещё не проверено.
+      </p>}
       <h4>Оценки шести категорий на уровне серии</h4>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))",gap:8}}>
         {ICH_CLASSES.map(k=><div key={k} style={{padding:8,border:"1px solid #8b9b97",borderRadius:6}}>
@@ -111,6 +146,8 @@ export default function IanpanIchResearchResults(){
       <button type="button" onClick={()=>{
         // The export remains a research observation, not a signed patient record.
         const exportData={
+          originalPublishedRunId:isGenuinePublicExample?38733865982:null,
+          independentExpertHematomaMaskComparison:false,
           schema:"opus-ianpan-ich-local-unsigned-review/v1",
           scope:"separate_public_research_study_only",
           sourceNiftiSha256:report.source.niftiSha256,
@@ -132,7 +169,7 @@ export default function IanpanIchResearchResults(){
         window.setTimeout(()=>URL.revokeObjectURL(url),1000);
       }}>Скачать неподписанную исследовательскую заметку</button>{" "}
       <button type="button" onClick={()=>{
-        setReport(null);setNotes("");setError("");
+        setReport(null);setNotes("");setError("");setIsGenuinePublicExample(false);
       }}>Закрыть результат</button>
       <p><small>В новых отчётах координаты областей теперь вычисляются в
         нативных вокселях NIfTI обратным преобразованием из модели; источник
