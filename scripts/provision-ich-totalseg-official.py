@@ -49,11 +49,18 @@ def download_and_admit(dst:Path,install_root:Path):
                 name=entry.filename
                 from pathlib import PurePosixPath
                 p=PurePosixPath(name)
+                # The official ZIP can include harmless metadata outside
+                # the weight folder. Never allow absolute paths, traversal,
+                # symlinks, or hidden filesystem-control entries.
                 if (p.is_absolute() or ".." in p.parts or not p.parts or
-                    p.parts[0]!="Dataset150_icb_v0" or
-                    entry.external_attr >>16 & 0o170000 == 0o120000):
+                    len(p.parts)>12 or any(part.startswith(".") for part in p.parts) or
+                    (entry.external_attr >> 16) & 0o170000 == 0o120000):
                     raise ValueError("unsafe_checkpoint_archive_member")
             archive.extractall(install_root)
+        installed=install_root/"Dataset150_icb_v0"
+        roots=sorted({Path(e.filename).parts[0] for e in members if Path(e.filename).parts})
+        if not installed.is_dir() or not list(installed.rglob("checkpoint_final.pth")):
+            raise ValueError("official_model_dataset150_layout_unexpected:"+",".join(roots[:8]))
         print(json.dumps({"model":"TotalSegmentator cerebral_bleed",
           "officialRelease":"v2.0.0-weights",
           "originalArchiveBytes":written,
