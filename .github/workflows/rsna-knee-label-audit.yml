@@ -1,0 +1,21 @@
+name: Knee label audit contract
+on:
+  pull_request:
+    paths:
+      - 'services/imaging-ai/rsna_knee_label_audit.py'
+      - 'services/imaging-ai/test_rsna_knee_label_audit.py'
+      - '.github/workflows/rsna-knee-label-audit.yml'
+  workflow_dispatch:
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: |
+          python -m py_compile services/imaging-ai/rsna_knee_label_audit.py
+          python -m unittest discover -s services/imaging-ai -p 'test_rsna_knee_label_audit.py' -v
