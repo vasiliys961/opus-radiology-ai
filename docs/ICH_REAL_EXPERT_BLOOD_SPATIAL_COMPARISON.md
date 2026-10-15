@@ -114,3 +114,32 @@ No real expert **hematoma** localization match for our exact public
 to exercise true cross-grid comparison and strict refusal of edema.
 No medical images, identifiers, real weights or permissions are
 required from the user to develop and merge this feature.
+
+## Physician browser review of original independent blood reference
+
+The `IanpanIchResearchResults` panel now offers an additional optional
+`IchBloodReferenceReview` section for the external evaluator's numeric
+JSON. On either an imported original model report or the embedded genuine
+pretrained research example, the browser computes SHA-256 of the **exact
+model JSON bytes** and rejects any comparison referring to a different
+report. It checks the same source CT NIfTI SHA-256, source voxel dimensions,
+declared clinical-negative status, source candidate subtype/count/score,
+and the algebraic consistency of reported blood voxel coverage.
+
+To **show** the external numbers, the browser also requires the **actual
+original uncompressed expert BLOOD NIfTI-1 .nii** file. Locally in RAM, without
+uploading it anywhere, the client checks the complete file's SHA-256 against
+the external evaluation report, parses its native labelmap, and confirms
+source-grid dimensions, reported label IDs, voxels per class and physical
+reference blood volumes. Any mismatch hides the numerical results.
+
+The original source NIfTI affine and provenance were checked by the external
+CLI. Browser-side mask parsing alone does not independently prove identical
+source CT affine or annotation authorship. Those limitations are shown
+next to the measurements. The current real Figshare study still does **not**
+have an allowed independently verified hematoma mask; therefore the
+browser cannot show any fictitious real expert overlap, even though genuine
+model predictions on its original CT already exist.
+
+No user testing is requested during development; these are optional tools
+for later authorized physician research review.
