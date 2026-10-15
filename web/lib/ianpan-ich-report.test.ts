@@ -55,3 +55,37 @@ test("refuses unlimited files, unexpected origins and invalid model hash",()=>{
  assert.throws(()=>parse({...r,source:{...r.source,niftiSha256:"invalid"}}),/статус/);
  assert.throws(()=>parse({...r,model:{...r.model,sha256ByArtifact:{"inference.py":s}}}),/статус/);
 });
+
+test("admitted geometry-only source ROI remains explicitly unvalidated",()=>{
+ const r=sample();
+ const projection={
+  boundingBoxNativeNiftiXYZ:[125,130,12,128,133,12],
+  boundingBoxWorldRasMm:[110,124,-26,112.4,126.4,-26],
+  projectionMethod:"vendor_e6d89c2_lps_reorientation_center_pad_inverse_v1",
+  trimmedOutsideOriginalCT:false,independentlyClinicallyVerified:false,
+  expertMaskCompared:false
+ };
+ const mapped={
+  ...r,
+  source:{...r.source,researchRoiVoxelGeometryProjectionAvailable:true,
+   researchRoiClinicalValidation:false},
+  candidates:[{...r.candidates[0],sourceVoxelProjection:projection}],
+ };
+ const result=parseIchAlternativeReport(JSON.stringify(mapped));
+ assert.deepEqual(result.candidates[0].sourceVoxelProjection?.boundingBoxNativeNiftiXYZ,
+  [125,130,12,128,133,12]);
+ assert.equal(result.source.researchRoiClinicalValidation,false);
+ assert.throws(()=>parseIchAlternativeReport(JSON.stringify({
+  ...mapped,candidates:[{...mapped.candidates[0],sourceVoxelProjection:{
+   ...projection,independentlyClinicallyVerified:true
+  }}]
+ })),/статус проекции/);
+ assert.throws(()=>parseIchAlternativeReport(JSON.stringify({
+  ...mapped,candidates:[{...mapped.candidates[0],sourceVoxelProjection:{
+   ...projection,boundingBoxNativeNiftiXYZ:[125,130,12,513,133,12]
+  }}]
+ })),/границы проекции/);
+ assert.throws(()=>parseIchAlternativeReport(JSON.stringify({
+  ...mapped,source:{...r.source}
+ })),/источника для/);
+});
