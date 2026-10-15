@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {parseEffusionResearchReport} from "./chest-effusion-research";
+import {parseEffusionResearchReport} from "./chest-effusion-research.ts";
 
 const base=()=>{
  const dims:[number,number,number]=[32,32,12];
