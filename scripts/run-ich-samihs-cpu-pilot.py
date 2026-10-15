@@ -248,6 +248,94 @@ def invoke_verified_upstream(command: list[str], model_dir: Path, timeout_second
             raise RuntimeError("trained_samihs_cpu_wrapper_failed; " + diagnostic)
 
 
+
+def summarize_stored_intensities(slab_ct, slab_expert):
+    """Bounded anonymous summary of stored NIfTI values, NOT inferred HU.
+
+    The Zenodo collection is processed/normalized, and the vendor performs
+    its own per-slice percentile clipping. These values cannot reconstruct CT
+    pixels; no DICOM identifiers, slice-level maps or exemplar voxels are kept.
+    """
+    import numpy as np
+
+    image = np.asarray(slab_ct.dataobj)
+    expert = np.asarray(slab_expert.dataobj, dtype=np.bool_)
+    if image.ndim != 3 or image.shape != expert.shape or not np.all(np.isfinite(image)):
+        raise ValueError("intensity_summary_requires_finite_native_source")
+    p = np.percentile(image, (0.5, 50, 99.5))
+    positive = image[expert]
+    pp = np.percentile(positive, (0.5, 50, 99.5)) if positive.size else None
+    spans = [float(np.ptp(image[:, :, k].astype(np.float64)))
+             for k in range(image.shape[2])]
+    return {
+        "valuesAreHounsfieldUnits": False,
+        "units": "native_stored_nifti_values_not_verified_HU",
+        "wholeSlabPercentilesP005P50P995": [round(float(x), 5) for x in p],
+        "expertPositivePercentilesP005P50P995": (
+            [round(float(x), 5) for x in pp] if pp is not None else None),
+        "nearConstantSourceSlices": sum(v < 1e-6 for v in spans),
+        "sliceCount": len(spans),
+        "vendorDocumentedPreprocessing": "slice_percentile_0.5_99.5_then_minmax",
+        "vendorDocumentedOrientation": "stored_array_order_no_affine_reorientation",
+        "noSourcePixelsOrIdentifiersExported": True,
+    }
+
+
+def read_binary_native_prediction(path: Path, original):
+    """Refuse resampled, nonbinary or non-source-grid vendor output."""
+    import nibabel as nib
+    import numpy as np
+
+    predicted = nib.load(str(required_file(str(path))))
+    if (predicted.shape != original.shape
+            or predicted.header.get_data_dtype().kind not in "iu"
+            or not np.allclose(predicted.affine, original.affine, atol=0.05, rtol=0)):
+        raise ValueError("trained_cpu_output_must_match_native_ct_slab")
+    mask = np.asarray(predicted.dataobj)
+    if not np.all((mask == 0) | (mask == 1)):
+        raise ValueError("trained_cpu_output_must_be_binary")
+    return mask.astype(np.bool_)
+
+
+def probe_empty_mask_threshold(command: list[str], model_dir: Path, slab_ct,
+                               expert, voxel_ml: float, evaluator,
+                               timeout_seconds: int, authorized_pickle: bool,
+                               output_path: Path):
+    """Re-run authentic vendor with 0.1 threshold only after empty 0.5 mask.
+
+    Separate research diagnostic: NOT model calibration or substituted Dice.
+    Nothing about the 0.5 reference measurement or output mask is modified.
+    """
+    import numpy as np
+    probe_path = output_path.parent / "samihs-threshold-0p1-research-only.nii.gz"
+    if probe_path.exists() or probe_path.is_symlink():
+        raise ValueError("threshold_probe_requires_new_isolated_output")
+    probe_command = list(command)
+    if probe_command.count("--output") != 1 or probe_command.count("--threshold") != 1:
+        raise ValueError("unexpected_vendor_threshold_or_output_contract")
+    probe_command[probe_command.index("--output") + 1] = str(probe_path)
+    probe_command[probe_command.index("--threshold") + 1] = "0.1"
+    started = time.monotonic()
+    try:
+        invoke_verified_upstream(
+            probe_command, model_dir, timeout_seconds,
+            operator_authorized_legacy_pickle=authorized_pickle)
+        mask = read_binary_native_prediction(probe_path, slab_ct)
+        metric = evaluator.segmentation_metrics(
+            mask, expert, voxel_ml, slab_ct.affine)
+        return {
+            "status": "executed",
+            "threshold": 0.1,
+            "purpose": "research_diagnostic_only_not_clinical_calibration",
+            "actualModelExecutionSeconds": round(time.monotonic() - started, 2),
+            "maskSha256": sha256_file(probe_path),
+            "predictedPositiveVoxels": int(np.count_nonzero(mask)),
+            "metrics": metric,
+        }
+    finally:
+        probe_path.unlink(missing_ok=True)
+
+
 def run(args):
     source, reference, output = admission(args)
     import nibabel as nib
@@ -318,20 +406,39 @@ def run(args):
                 operator_authorized_legacy_pickle=bool(
                     getattr(args, "operator_authorized_upstream_execution", False)),
             )
-            predicted = nib.load(str(required_file(str(mask_path))))
-            if (predicted.shape != slab_ct.shape or predicted.header.get_data_dtype().kind not in "iu"
-                    or not np.allclose(predicted.affine, slab_ct.affine, atol=0.05, rtol=0)):
-                raise ValueError("trained_cpu_output_must_match_native_ct_slab")
-            mask = np.asarray(predicted.dataobj)
-            if not np.all((mask == 0) | (mask == 1)):
-                raise ValueError("trained_cpu_output_must_be_binary")
+            primary_model_seconds = round(time.monotonic() - start_time, 2)
+            mask = read_binary_native_prediction(mask_path, slab_ct)
+            expert_binary = np.asarray(slab_expert.dataobj, dtype=np.bool_)
             eval_path = Path(__file__).with_name("evaluate-ich-public-mask.py")
             spec = importlib.util.spec_from_file_location("ich_cpu_reference", eval_path)
             evaluator = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(evaluator)
             metrics = evaluator.segmentation_metrics(
-                mask.astype(np.bool_), np.asarray(slab_expert.dataobj, dtype=np.bool_),
-                coverage["voxelVolumeMl"], slab_ct.affine)
+                mask, expert_binary, coverage["voxelVolumeMl"], slab_ct.affine)
+            research = {
+                "sourceIntensities": summarize_stored_intensities(slab_ct, slab_expert),
+                "primaryThreshold": 0.5,
+                "primaryPredictedPositiveVoxels": int(np.count_nonzero(mask)),
+                "lowerThresholdProbe": {
+                    "status": "not_requested_or_primary_nonempty",
+                    "clinicalCalibration": False,
+                },
+            }
+            if (not np.any(mask) and getattr(args, "probe_empty_prediction", False)):
+                try:
+                    research["lowerThresholdProbe"] = probe_empty_mask_threshold(
+                        command, Path(args.model_dir), slab_ct, expert_binary,
+                        coverage["voxelVolumeMl"], evaluator, args.timeout_seconds,
+                        bool(getattr(args, "operator_authorized_upstream_execution", False)),
+                        mask_path)
+                except Exception as error:
+                    # The original reference comparison is valid even when
+                    # a second diagnostic probe fails. Do not leak vendor logs.
+                    research["lowerThresholdProbe"] = {
+                        "status": "failed_original_primary_still_valid",
+                        "failureType": type(error).__name__,
+                        "clinicalCalibration": False,
+                    }
             result.update({
                 "status": "trained_samihs_cpu_slab_executed_and_expert_compared",
                 "model": {
@@ -341,10 +448,11 @@ def run(args):
                     "upstreamModelIndependentlyAudited": bool(args.upstream_model_audited),
                     "operatorAuthorizedUnverifiedCheckpoint": bool(
                         getattr(args, "operator_authorized_upstream_execution", False)),
-                    "actualModelExecutionSeconds": round(time.monotonic() - start_time, 2),
+                    "actualModelExecutionSeconds": primary_model_seconds,
                 },
                 "predictionMaskSha256": sha256_file(mask_path),
                 "metrics": metrics,
+                "researchDiagnostics": research,
             })
         except Exception:
             mask_path.unlink(missing_ok=True)
@@ -371,6 +479,8 @@ def main():
     parser.add_argument("--checkpoint-sha256")
     parser.add_argument("--wrapper-sha256")
     parser.add_argument("--upstream-model-audited", action="store_true")
+    parser.add_argument("--probe-empty-prediction", action="store_true",
+                        help="On an empty 0.5 prediction rerun the same genuine pretrained model at 0.1; keep primary results unchanged")
     parser.add_argument("--operator-authorized-upstream-execution", action="store_true",
                         help="Explicit owner authorization for pinned but unaudited upstream PyTorch code and checkpoint; not proof of independent audit")
     args = parser.parse_args()
