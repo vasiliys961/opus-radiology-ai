@@ -29,7 +29,11 @@ class AssemblyTests(unittest.TestCase):
             assemble(self.p,self.p/"manifest.json",self.approved([2]),self.p/"out.csv")
     def test_refuse_inferred_negative(self):
         f=self.approved([3])
-        content=f.read_text().replace(",1\n",",unknown\n")
-        f.write_text(content)
+        with f.open(newline="") as stream:
+            rows=list(csv.DictReader(stream))
+        rows[0]["Effusion"]="unknown"
+        with f.open("w",newline="") as stream:
+            writer=csv.DictWriter(stream,fieldnames=["StudyInstanceUID",*LABELS])
+            writer.writeheader();writer.writerows(rows)
         with self.assertRaises(ValueError):assemble(self.p,self.p/"manifest.json",f,self.p/"out.csv")
 if __name__=="__main__":unittest.main()
