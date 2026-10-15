@@ -1,0 +1,23 @@
+name: Knee DINOv2 tail training
+on:
+  pull_request:
+    paths:
+      - 'services/imaging-ai/rsna_knee_tail_finetune.py'
+      - 'services/imaging-ai/rsna_knee_large_train.py'
+      - 'services/imaging-ai/test_rsna_knee_tail_finetune.py'
+      - '.github/workflows/knee-tail-training.yml'
+  workflow_dispatch:
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: |
+          cd services/imaging-ai
+          python -m unittest test_rsna_knee_tail_finetune.py -v
+          python -m py_compile rsna_knee_large_train.py rsna_knee_tail_finetune.py
