@@ -11,13 +11,46 @@ def read_rows(path):
     with open(path,encoding="utf-8-sig",newline="") as f:
         return list(csv.DictReader(f))
 
+PLANES=("Sagittal","Coronal","Axial")
+
+def balanced_series(rows,max_series=3):
+    """Deterministic round-robin MRI plane selection from CSV metadata.
+
+    Returns the same uid -> list[sid] interface as the legacy series index.
+    Unknown planes are excluded. Identifiers never influence plane priority.
+    """
+    if type(max_series) is not int or max_series < 1:
+        raise ValueError("max_series must be a positive integer")
+    buckets={}
+    for row in rows:
+        uid=row["StudyInstanceUID"];sid=row["SeriesInstanceUID"]
+        if not uid or not sid or any(x in s for s in (uid,sid) for x in ("..","/","\\") ):
+            raise ValueError("Unsafe DICOM identifier")
+        plane=row.get("Anatomical_Plane")
+        if plane not in PLANES:
+            continue
+        buckets.setdefault(uid,{}).setdefault(plane,set()).add(sid)
+    result={}
+    for uid,planes in buckets.items():
+        ordered={p:sorted(planes.get(p,())) for p in PLANES}
+        selected=[]
+        while len(selected)<max_series and any(ordered.values()):
+            for plane in PLANES:
+                if len(selected)>=max_series:
+                    break
+                if ordered[plane]:
+                    selected.append(ordered[plane].pop(0))
+        result[uid]=selected
+    return result
+
 def series_index(rows):
+    """Legacy interface; keep original series order for old checkpoints."""
     index={}
     for row in rows:
         uid=row["StudyInstanceUID"];sid=row["SeriesInstanceUID"]
-        if any(x in s for s in (uid,sid) for x in ("..","/","\\") ):
+        if any(x in item for item in (uid,sid) for x in ("..","/","\\") ):
             raise ValueError("Unsafe DICOM identifier")
-        if row.get("Anatomical_Plane") not in ("Axial","Coronal","Sagittal"):
+        if row.get("Anatomical_Plane") not in PLANES:
             continue
         index.setdefault(uid,[]).append(sid)
     return index
@@ -31,13 +64,18 @@ def extract_labels(row):
         mask.append(float(valid))
     return values,mask
 
-def study_slices(root,index,uid,per_series=8,max_series=9):
+def study_slices(root,index,uid,per_series=8,max_series=9,series_order="legacy"):
     import numpy as np
     import pydicom
     import torch
     from PIL import Image
+    if series_order not in ("legacy","provided"):
+        raise ValueError("Unknown series order")
     images=[]
-    for sid in sorted(index.get(uid,[]))[:max_series]:
+    selected=index.get(uid,[])
+    if series_order=="legacy":
+        selected=sorted(selected)
+    for sid in selected[:max_series]:
         files=sorted((root/uid/sid).glob("*.dcm"))
         for i in np.linspace(0,len(files)-1,min(len(files),per_series),dtype=int) if files else []:
             try:
