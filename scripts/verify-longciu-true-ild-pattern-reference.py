@@ -69,7 +69,12 @@ def evaluate_volume(root):
         if nii.header.get_data_dtype().kind not in ("i","u"):
             raise ValueError("original_mask_must_be_integer_labelmap")
         array=np.asanyarray(nii.dataobj)
-        if not np.isin(array,[0,1,2]).all():
+        # Authors' published MEDPSeg output additionally has class 3.
+        # Original LongCIU dice.ipynb explicitly selects model label 1 for
+        # GGO and 2 for consolidation. Class 3 is NOT a labeled ILD pattern.
+        # We retain its presence, and never relabel it as disease.
+        allowed=[0,1,2,3] if name=="medpseg" else [0,1,2]
+        if not np.isin(array,allowed).all():
             raise ValueError("unknown_ild_pattern_labels:"+name+":"+str(np.unique(array).astype(int).tolist()[:16]))
         masks[name]=array
     out={}
@@ -106,6 +111,8 @@ def evaluate_volume(root):
         "originalCTImagePixelsDownloaded":False,
         "pretrainedMEDPSegInferencePerformedByOpus":False,
         "precomputedMEDPSegModelTrainingHeldoutAuditedByOpus":False,
+        "medpsegPublishedModelLabelThreeExcludedFromGGOAndConsolidation":True,
+        "medpsegOtherLabelThreeVoxelCount":int((masks["medpseg"]==3).sum()),
         "result":out,
         "modelGenuineILDClassificationClinicallyValidated":False,
         "sufficientToDiagnoseFibrosingInterstitialLungDisease":False,
@@ -114,7 +121,7 @@ def evaluate_volume(root):
            "90 axial slices are independent subjects, NOT 90 adjacent CT volume slices. No 3D disease volume can be inferred.",
            "GGO/consolidation reflect post-COVID changes and are not equivalent to fibrotic ILD diagnosis.",
            "Human STAPLE consensus shares the annotator masks; reader-vs-STAPLE Dice is not independent reference.",
-           "MEDPSeg masks are authors' PRECOMPUTED model predictions, not a second pretrained model run by Opus.",
+           "MEDPSeg masks are authors' PRECOMPUTED model predictions, not a second pretrained model run by Opus. Published model label 3 is excluded from both target GGO/consolidation classes.",
            "Mean Dice excludes both-empty 2D slices, and no trained-checkpoint generalization/holdout is independently audited."
         ]
     }
