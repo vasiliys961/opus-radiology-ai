@@ -89,3 +89,25 @@ test("admitted geometry-only source ROI remains explicitly unvalidated",()=>{
   ...mapped,source:{...r.source}
  })),/источника для/);
 });
+
+test("actual authenticated 2026 public CT model run retains 14 hemorrhage proposals without diagnosing",async()=>{
+ const {readFileSync}=await import("node:fs");
+ const raw=readFileSync(new URL("../public/examples/ich-ianpan-real-figshare-run-38733865982.json",import.meta.url),"utf8");
+ const report=parseIchAlternativeReport(raw);
+ assert.equal(report.model.id,"ianpan/ct-head-hemorrhage-detection");
+ assert.equal(report.source.niftiSha256,"0543a46065314468fe7ab18b9187277ae1affc4e7c864d0fd8ae608afa554a95");
+ assert.deepEqual(report.source.sourceDimensionsXYZ,[512,512,25]);
+ assert.equal(report.source.modelOrderedSliceCount,25);
+ assert.equal(report.seriesRawUncalibratedScores.intraparenchymal,0.989428);
+ assert.equal(report.seriesRawUncalibratedScores.any,0.993365);
+ assert.equal(report.candidates.length,14);
+ assert.deepEqual([...new Set(report.candidates.map(c=>c.sliceIndexModelOrdered))],[9,10,11,12,13,14,15]);
+ assert.equal(report.candidates[0].class,"intraparenchymal");
+ assert.equal(report.candidates[0].rawUncalibratedScore,0.967383);
+ assert.deepEqual(report.candidates[0].sourceVoxelProjection?.boundingBoxNativeNiftiXYZ,[143,227,9,177,275,9]);
+ assert.equal(report.modelInputHeatmapsAreSourceAligned,false);
+ assert.equal(report.negativeDiagnosticConclusionAllowed,false);
+ assert.equal(report.readyForClinicalUse,false);
+ assert.equal(report.dice,null);
+ assert.equal(report.sensitivity,null);
+});
