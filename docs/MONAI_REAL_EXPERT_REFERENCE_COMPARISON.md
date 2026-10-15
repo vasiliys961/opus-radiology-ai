@@ -37,3 +37,24 @@ MONAI training used LUNA16, so this case cannot be assumed to be an external
 unseen holdout.** A correct centroid match is evidence of functional
 localization on ONE true CT, not a validated diagnostic performance claim.
 No genuine ICH model result is inferred from this independent lung CT study.
+
+## Source CT lesion marker in the research viewer
+
+Once the page validates BOTH the original LUNA16 expert-reference response
+and the saved real `0.884 mm` comparison result against the actual model
+candidates and SHA-256-bound source files, the public MetaImage slice viewer
+may mark the top real MONAI model center with a **solid magenta cross** on the
+original 512×512 source RAW slice. The separate expert centroid/diameter is
+the orange ellipse, not a segmentation mask. The highest-scoring model slice
+is automatically selected after the browser locally verifies the entire
+original RAW SHA-256. No patient CT upload or local Mac model computation.
+
+Without validated geometric evidence, the viewer retains the old **dashed
+magenta hypothetical** marker, explicitly does not assert source alignment,
+and never upgrades imported arbitrary MONAI reports. The verified research
+overlay is bound only to this exact public source/report/model checkpoint.
+
+Source-voxel transformation is validated against published MONAI 1.4.0
+world LPS conversion plus original MetaImage physical geometry. DICOM/SOP,
+independent clinical contour validation, patient diagnosis, sensitivity and
+FROC remain **NOT VALIDATED**.

@@ -23,10 +23,15 @@ const windows:Record<Preset,{center:number;width:number;label:string}>={
 const RAW_URL="https://huggingface.co/datasets/Yousra0x0/LUNA16_RAW/resolve/af8fdf04c27dcaa97ccfd755043d8096299d6a40/subset0/1.3.6.1.4.1.14519.5.2.1.6279.6001.395623571499047043765181005112.raw";
 
 /** Displays ONLY hash-matched, browser-local, public LUNA16 native source pixels.
- * Not a DICOM viewer: no SOP linking, no automatic MONAI candidate overlay.
+ * The fixed independently audited MONAI world-LPS→MetaImage transform is allowed
+ * only after caller validates the separate genuine-centroid comparison artifact.
+ * Research source overlay is NOT a DICOM SOP registration or clinical TP.
  */
-export default function PublicLuna16SourceSlices({reference,rawSha256,candidates=[]}:{
+export default function PublicLuna16SourceSlices({
+  reference,rawSha256,candidates=[],sourceGeometryVerified=false,
+}:{
   reference:Reference;rawSha256:string;candidates?:MonaiCandidate[];
+  sourceGeometryVerified?:boolean;
 }){
   const canvas=useRef<HTMLCanvasElement|null>(null);
   const [file,setFile]=useState<File|null>(null);
@@ -67,6 +72,14 @@ export default function PublicLuna16SourceSlices({reference,rawSha256,candidates
       const actual=Array.from(digest.digest(),v=>v.toString(16).padStart(2,"0")).join("");
       if(actual!==rawSha256)throw Error("SHA-256 RAW не совпадает с публичным исходником. Пиксели не будут отображены.");
       setSlice(nodule.sliceIndex0Based);setFile(fileCandidate);
+      if(sourceGeometryVerified&&hypotheses.length){
+        // Candidate #0 is the highest-scoring real positive-case proposal;
+        // display it on its true source slice alongside expert reference.
+        const top=[...hypotheses].sort((a,b)=>b.rawUncalibratedScore-a.rawUncalibratedScore)[0];
+        setSelectedCandidateIndex(top.candidateIndex);
+        setShowHypotheses(true);
+        setSlice(top.sourceSliceIndexHypothesis);
+      }
     }catch(e){setError(e instanceof Error?e.message:"Не удалось открыть публичную КТ.");}
     finally{setValidating(false);}
   }
@@ -110,7 +123,7 @@ export default function PublicLuna16SourceSlices({reference,rawSha256,candidates
       if(showHypotheses&&selectedHypothesis&&selectedHypothesis.sourceSliceIndexHypothesis===index){
         const [px,py]=selectedHypothesis.nativeVoxelIndexHypothesis;
         context.save();context.strokeStyle="#f36cce";context.lineWidth=2;
-        context.setLineDash([5,3]);context.beginPath();
+        context.setLineDash(sourceGeometryVerified?[]:[5,3]);context.beginPath();
         context.moveTo(px-12,py);context.lineTo(px+12,py);
         context.moveTo(px,py-12);context.lineTo(px,py+12);
         context.stroke();context.restore();
@@ -124,7 +137,7 @@ export default function PublicLuna16SourceSlices({reference,rawSha256,candidates
       setDisplayError("");
     }).catch(e=>{if(!cancelled)setDisplayError(e instanceof Error?e.message:"Срез не читается.");});
     return()=>{cancelled=true;};
-  },[file,slice,preset,w,h,depth,nodule.nativeVoxelIndex,nodule.diameterMm,g.spacingMm,manualPoint,showHypotheses,selectedHypothesis]);
+  },[file,slice,preset,w,h,depth,nodule.nativeVoxelIndex,nodule.diameterMm,g.spacingMm,manualPoint,showHypotheses,selectedHypothesis,sourceGeometryVerified]);
 
   return <section aria-label="Исходные пиксели публичной КТ LUNA16"
     style={{border:"1px solid #778c86",padding:12,borderRadius:8,margin:"12px 0"}}>
@@ -147,14 +160,27 @@ export default function PublicLuna16SourceSlices({reference,rawSha256,candidates
       <button type="button" onClick={()=>setSlice(nodule.sliceIndex0Based)}>Перейти к эталонному узлу</button>
       <div style={{margin:"12px 0",padding:10,border:"1px dashed #c17eac",borderRadius:8}}>
         <strong>Кандидаты настоящей MONAI · экспериментальная локализация</strong>
-        <p role="alert">Пурпурный пунктир — только <strong>гипотеза</strong> положения центра, если координаты MONAI world совпадают с физической системой исходного MetaImage. Это пока НЕ подтверждённое преобразование. Оранжевое кольцо — независимая экспертная аннотация, а не предсказанная маска. Близость меток не доказывает TP.</p>
+        {sourceGeometryVerified?
+          <p role="note"><strong>Сопоставление исходной геометрии подтверждено для этой публичной КТ.</strong>
+          Пурпурный <strong>сплошной</strong> крест — настоящий центр, полученный MONAI
+          и пересчитанный из world LPS в исходный MetaImage. Оранжевое кольцо —
+          независимо опубликованный экспертный центр и диаметр. Совпадение центров
+          проверено отдельным GitHub Actions по SHA-256 источников и подлинному
+          результату модели. Это не экспертный контур, не независимый клинический
+          тест и не пациентский диагноз.</p>:
+          <p role="alert">Пурпурный пунктир — только <strong>непроверенная гипотеза</strong>
+          положения MONAI world в физической системе исходной MetaImage.
+          Оранжевое кольцо — опубликованная экспертная аннотация,
+          не предсказанная маска. Близость меток не подтверждает TP.</p>}
         {hypotheses.length===0?<p>Ни один кандидат не проецируется внутрь исходного объёма; отрицательное заключение недопустимо.</p>:
         hypotheses.map(h=><button key={h.candidateIndex} type="button" style={{margin:4}}
           onClick={()=>{setSelectedCandidateIndex(h.candidateIndex);setShowHypotheses(true);setSlice(h.sourceSliceIndexHypothesis);}}>
-          Кандидат {h.candidateIndex+1} · срез {h.sourceSliceIndexHypothesis+1} (гипотеза) · score {h.rawUncalibratedScore.toFixed(3)}
+          Кандидат {h.candidateIndex+1} · срез {h.sourceSliceIndexHypothesis+1} {sourceGeometryVerified?"(проверенная физическая геометрия)":"(гипотеза)"} · score {h.rawUncalibratedScore.toFixed(3)}
         </button>)}
-        {showHypotheses&&<button type="button" onClick={()=>{setShowHypotheses(false);setSelectedCandidateIndex(null);}}>Скрыть неподтверждённый центр MONAI</button>}
-        <p><small>Показывается только один центр на соответствующем исходном срезе после полной проверки SHA-256 пикселей. Никаких вычисленных TP/FP/FN, Dice или диагностических заключений из этой проекции не следует.</small></p>
+        {showHypotheses&&<button type="button" onClick={()=>{setShowHypotheses(false);setSelectedCandidateIndex(null);}}>Скрыть центр MONAI</button>}
+        <p><small>Центр показывается только на исходном срезе после полной проверки SHA-256 пикселей. {sourceGeometryVerified?
+          "Геометрия модели к публичной MetaImage проверена по оригинальному исходному коду MONAI и контрольной разметке. Клинические TP/FP/FN, Dice и диагностические заключения не вычислялись.":
+          "Привязка к исходной системе MONAI не проверена; клиническая оценка невозможна."}</small></p>
       </div>
       <label>Окно КТ
         <select value={preset} onChange={e=>setPreset(e.target.value as Preset)}>
@@ -194,8 +220,10 @@ export default function PublicLuna16SourceSlices({reference,rawSha256,candidates
       </div>}
       {displayError&&<p role="alert">{displayError}</p>}
       <p><small>Оранжевый эллипс — условная сферическая визуализация по опубликованным экспертным центру и диаметру; это не нарисованный радиологом контур и не сегментация,
-        это не подтверждённый контур MONAI. Пурпурный пунктир — неподтверждённая пространственная гипотеза, не верифицированная находка. Ориентация — нативный порядок строк RAW, не радиологический стандарт.
-        Сопоставление MONAI→исходная КТ и DICOM/SOP UID всё ещё не подтверждено.</small></p>
+        это не подтверждённый контур MONAI. Пурпурный крест — локализация кандидата нейросети, не экспертный контур и не диагноз. Ориентация — нативный порядок строк RAW, не радиологический стандарт.
+        {sourceGeometryVerified?
+          "MONAI→MetaImage world LPS геометрия подтверждена на этом публичном исследовании. Подлинные пациентские DICOM/SOP UID не установлены.":
+          "Геометрия MONAI→исходная КТ и DICOM/SOP UID не подтверждена."}</small></p>
     </>}
   </section>;
 }
