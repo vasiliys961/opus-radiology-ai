@@ -34,7 +34,8 @@ def digest(path):
 def ordinary_nifti(path,byte_limit):
     path=Path(path)
     if (path.is_symlink() or not path.is_file() or
-        path.stat().st_size<352 or path.stat().st_size>byte_limit or
+        path.stat().st_size<(64 if path.name.endswith(".nii.gz") else 352) or
+        path.stat().st_size>byte_limit or
         not path.name.endswith((".nii",".nii.gz"))):
         raise ValueError("bounded_original_nifti_file_required")
     return path
