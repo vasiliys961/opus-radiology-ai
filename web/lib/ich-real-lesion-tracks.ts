@@ -53,7 +53,7 @@ export function groupIchResearchSourceCandidates(report:IchAlternativeReport):{
     !Array.isArray(report.candidates)||report.candidates.length>384)
     throw Error("ICH исследовательская пространственная группировка недоступна.");
   const dims=report.source.sourceDimensionsXYZ;
-  const selected=report.candidates.filter(c=>c.class!=="any"&&sourceBound(c))
+  const selected=report.candidates.filter(sourceBound).filter(c=>c.class!=="any")
     .sort((a,b)=>a.sliceIndexModelOrdered-b.sliceIndexModelOrdered||
       a.class.localeCompare(b.class));
   const active:Acc[]=[];
