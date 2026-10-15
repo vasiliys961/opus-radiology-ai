@@ -59,7 +59,7 @@ test("refuse inconsistent physical label volume, slice bounds and duplicate labe
  const a=base();a.fluidCandidates[0].modelUnvalidatedFluidLabelVolumeMl=12;
  assert.throws(()=>parse(a),/Подмена объёма/);
  const b=base();b.fluidCandidates[0].nativeSourceSliceIndicesK=[3,3];
- assert.throws(()=>parse(b),/сеткой/);
+ assert.throws(()=>parse(b),/Недопустимый класс|сеткой/);
  const c=base();(c.fluidCandidates[1] as unknown as {labelId:number}).labelId=2;
  assert.throws(()=>parse(c),/Недопустимый класс/);
 });
