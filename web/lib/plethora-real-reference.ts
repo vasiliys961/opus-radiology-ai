@@ -49,7 +49,8 @@ export function parseRealPlethoraHumanReference(raw:string,bytesSha:string):Plet
     x.originalNativeSpatialUnits!=="mm"||
     x.originalReviewerAMaskVoxels!==63668||x.originalReviewerBMaskVoxels!==54206||
     x.originalExpertIntersectionVoxels!==52625||x.humanExpertInterreaderDice!==0.89290259||
-    Math.abs(2*52625/(63668+54206)-x.humanExpertInterreaderDice)>1e-7||
+    (typeof x.humanExpertInterreaderDice!=="number"||
+      Math.abs(2*52625/(63668+54206)-x.humanExpertInterreaderDice)>1e-7)||
     x.originalReviewerAMaskVolumeMl!==182.15561||
     x.originalReviewerBMaskVolumeMl!==155.08461||
     x.humanExpertDiscordantSliceCount!==62||
