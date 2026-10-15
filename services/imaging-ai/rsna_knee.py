@@ -89,7 +89,58 @@ def normalize_mr_pixel(pixel, dataset, mode="legacy"):
         normalized=1-normalized
     return (normalized*255).astype("uint8")
 
-def study_slices(root,index,uid,per_series=8,max_series=9,series_order="legacy",pixel_mode="legacy"):
+
+def ordered_mri_files(files, mode="legacy"):
+    """Versioned slice ordering; geometry-v2 is opt-in for newly trained models.
+
+    IOP row/column cross product is the slice normal; IPP projected onto it
+    defines physical position. Never infer slice order from InstanceNumber if
+    reliable geometry exists. Ambiguous geometry falls back deterministically.
+    """
+    if mode not in ("legacy", "geometry-v2"):
+        raise ValueError("Unknown MRI slice-order mode")
+    files=sorted(files)
+    if mode=="legacy" or len(files)<2:
+        return files
+    import math
+    import pydicom
+
+    records=[]
+    for path in files:
+        try:
+            ds=pydicom.dcmread(str(path),stop_before_pixels=True)
+            orientation=tuple(float(v) for v in ds.ImageOrientationPatient)
+            position=tuple(float(v) for v in ds.ImagePositionPatient)
+            if len(orientation)!=6 or len(position)!=3 or not all(
+                math.isfinite(v) for v in orientation+position):
+                raise ValueError("Invalid geometry")
+            a,b=orientation[:3],orientation[3:]
+            normal=(a[1]*b[2]-a[2]*b[1],
+                    a[2]*b[0]-a[0]*b[2],
+                    a[0]*b[1]-a[1]*b[0])
+            norm=math.sqrt(sum(v*v for v in normal))
+            if abs(norm-1)>0.02 or abs(sum(a[i]*b[i] for i in range(3)))>0.02:
+                raise ValueError("Nonorthogonal IOP")
+            normal=tuple(v/norm for v in normal)
+            instance=getattr(ds,"InstanceNumber",None)
+            instance=int(instance) if instance is not None else None
+            records.append((path,normal,position,instance))
+        except (AttributeError,KeyError,TypeError,ValueError,OverflowError,OSError,EOFError):
+            records.append((path,None,None,None))
+    if len(records)==len(files) and all(r[1] is not None for r in records):
+        reference=records[0][1]
+        if all(sum(x*y for x,y in zip(reference,r[1]))>0.999 for r in records):
+            projected=[sum(x*y for x,y in zip(reference,r[2])) for r in records]
+            if len(set(round(p,3) for p in projected))==len(files):
+                return [r[0] for _,r in sorted(zip(projected,records),key=lambda t:t[0])]
+    # InstanceNumber is less reliable than physical geometry but can recover
+    # ordered series with missing/conflicting geometry if all numbers are unique.
+    instances=[r[3] for r in records]
+    if all(v is not None for v in instances) and len(set(instances))==len(files):
+        return [r[0] for r in sorted(records,key=lambda r:(r[3],str(r[0])))]
+    return files
+
+def study_slices(root,index,uid,per_series=8,max_series=9,series_order="legacy",pixel_mode="legacy",slice_order="legacy"):
     import numpy as np
     import pydicom
     import torch
@@ -101,7 +152,7 @@ def study_slices(root,index,uid,per_series=8,max_series=9,series_order="legacy",
     if series_order=="legacy":
         selected=sorted(selected)
     for sid in selected[:max_series]:
-        files=sorted((root/uid/sid).glob("*.dcm"))
+        files=ordered_mri_files((root/uid/sid).glob("*.dcm"),mode=slice_order)
         for i in np.linspace(0,len(files)-1,min(len(files),per_series),dtype=int) if files else []:
             try:
                 ds=pydicom.dcmread(str(files[int(i)]))
