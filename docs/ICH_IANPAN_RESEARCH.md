@@ -51,3 +51,29 @@ Use `--device cuda` only on an intentionally provisioned GPU; no automatic fallb
 ## Acceptance needed for a diagnostic milestone
 
 First an actual successfully executed real pretrained ICH run on legal public full NCCT with proven HU plus separate external expert reference; then independently validate source reorientation and heatmap-to-source alignment before claiming localized lesion, TP/FN, spatial Dice or sensitivity. Do not use a model-classification score to substitute for radiologist confirmation or an independently measured lesion. Include negatives in the next evaluation and report study/lesion-level outcomes distinctly.
+
+## Research source-voxel localization (not yet clinical validation)
+
+With a verified genuine model invocation, the runner now derives a bounded
+`sourceVoxelProjection` for each non-empty 512×512 candidate heatmap region.
+It inverts the *published pinned vendor's* NIfTI loading path: nearest-axis
+NIfTI → LPS reorientation, voxel order `(z,y,x)`, then center-padding/cropping
+the HU slice to 512×512. Each projected proposal includes:
+- native source NIfTI voxel `[xMin,yMin,zMin,xMax,yMax,zMax]`;
+- world RAS bounding coordinates (mm) from the original NIfTI affine;
+- whether the model region crossed the original CT field of view;
+- explicit `independentlyClinicallyVerified:false` and `expertMaskCompared:false`.
+
+The source NIfTI SHA-256 still binds the CT. Areas located only in model
+zero-padding correctly receive **null source projection**, not an invented
+lesion. Empty model heatmaps remain empty. The original report retains
+`modelInputHeatmapsAreSourceAligned:false`: the full heatmap is not saved in
+source pixel space and no imported patient DICOM SOP is registered. This
+research inverse geometry is **not** a radiologist-approved interpretation or
+independent model/source accuracy confirmation.
+
+The physician-facing JSON importer can now display source NIfTI voxel and RAS
+bounds for later comparison with independent expert markup, without uploading
+pixels. Synthetic RAS/LPS and swapped-axis test cases validate the inverse
+transform. There is still **no genuine public CT inference result** for this
+model and no independently confirmed ICH localization or sensitivity.

@@ -19,6 +19,14 @@ export type IchAlternativeCandidate={
   modelInputBoundingBoxXY:[number,number,number,number]|null;
   localizationFrame:"preprocessed_512_model_input_not_source_voxel";
   clinicallyConfirmed:false;
+  sourceVoxelProjection?:null|{
+    boundingBoxNativeNiftiXYZ:[number,number,number,number,number,number];
+    boundingBoxWorldRasMm:[number,number,number,number,number,number];
+    projectionMethod:"vendor_e6d89c2_lps_reorientation_center_pad_inverse_v1";
+    trimmedOutsideOriginalCT:boolean;
+    independentlyClinicallyVerified:false;
+    expertMaskCompared:false;
+  };
 };
 export type IchAlternativeReport={
   schema:"opus-ianpan-genuine-public-ich-research/v1";
@@ -28,6 +36,8 @@ export type IchAlternativeReport={
     niftiSha256:string;sourceDimensionsXYZ:number[];modelOrderedSliceCount:number;
     publicRightsOperatorAttested:true;huProvenanceOperatorAttestedNotIndependentlyConfirmed:true;
     modelPixelsNotRegisteredToSource:true;
+    researchRoiVoxelGeometryProjectionAvailable?:true;
+    researchRoiClinicalValidation?:false;
   };
   runtime:{executionDevice:"cpu"|"cuda";elapsedSeconds:number};
   seriesRawUncalibratedScores:Record<IchAlternativeClass,number>;
@@ -73,6 +83,10 @@ export function parseIchAlternativeReport(raw:string):IchAlternativeReport{
     source.publicRightsOperatorAttested!==true||
     source.huProvenanceOperatorAttestedNotIndependentlyConfirmed!==true||
     source.modelPixelsNotRegisteredToSource!==true||
+    (source.researchRoiVoxelGeometryProjectionAvailable!==undefined&&
+     source.researchRoiVoxelGeometryProjectionAvailable!==true)||
+    (source.researchRoiClinicalValidation!==undefined&&
+     source.researchRoiClinicalValidation!==false)||
     !["cpu","cuda"].includes(String(runtime.executionDevice))||
     typeof runtime.elapsedSeconds!=="number"||!Number.isFinite(runtime.elapsedSeconds)||
     runtime.elapsedSeconds<0||runtime.elapsedSeconds>100000||
@@ -110,6 +124,26 @@ export function parseIchAlternativeReport(raw:string):IchAlternativeReport{
      throw Error("Некорректная область модельной карты.");
    if(box===null&&c.heatmapPositivePixelsAtPoint5!==0)
      throw Error("Нет границ карты с ненулевыми пикселями.");
+   if(c.sourceVoxelProjection!==undefined){
+     if(source.researchRoiVoxelGeometryProjectionAvailable!==true)
+       throw Error("Нет источника для исследовательской проекции.");
+     if(c.sourceVoxelProjection!==null){
+       const p=object(c.sourceVoxelProjection,"проекция на исходную NIfTI");
+       if(box===null||p.projectionMethod!=="vendor_e6d89c2_lps_reorientation_center_pad_inverse_v1"||
+          typeof p.trimmedOutsideOriginalCT!=="boolean"||
+          p.independentlyClinicallyVerified!==false||p.expertMaskCompared!==false)
+         throw Error("Недостоверный статус проекции на исходную КТ.");
+       const vox=p.boundingBoxNativeNiftiXYZ;
+       const ras=p.boundingBoxWorldRasMm;
+       if(!Array.isArray(vox)||vox.length!==6||
+          vox.some((v,i)=>!integer(v,0,(source.sourceDimensionsXYZ as number[])[i%3]-1))||
+          vox.slice(0,3).some((v,i)=>v>vox[i+3])||
+          !Array.isArray(ras)||ras.length!==6||
+          ras.some(v=>typeof v!=="number"||!Number.isFinite(v)||Math.abs(v)>10000)||
+          ras.slice(0,3).some((v,i)=>v>ras[i+3]))
+         throw Error("Некорректные границы проекции NIfTI.");
+     }
+   }
  }
  // These assertions describe the IMPORTED author's research JSON contract;
  // trust/independent runtime authenticity still require external audit.

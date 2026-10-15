@@ -187,6 +187,8 @@ def run(args):
         repo_id=MODEL_REPO,revision=MODEL_REV,local_dir=args.model_dir,device=args.device)
     output = model.predict_hu_volume(volume,batch_size=1,return_segmentation=True)
     evidence = numeric_predictions(output,len(volume))
+    from ianpan_source_roi import map_ich_model_regions_to_nifti
+    evidence["candidates"] = map_ich_model_regions_to_nifti(image,evidence["candidates"])
     result = {
         "schema": "opus-ianpan-genuine-public-ich-research/v1",
         "status": "genuine_pretrained_inference_requires_independent_validation",
@@ -198,7 +200,9 @@ def run(args):
                    "modelOrderedSliceCount":len(volume),
                    "publicRightsOperatorAttested":True,
                    "huProvenanceOperatorAttestedNotIndependentlyConfirmed":True,
-                   "modelPixelsNotRegisteredToSource":True},
+                   "modelPixelsNotRegisteredToSource":True,
+                   "researchRoiVoxelGeometryProjectionAvailable":True,
+                   "researchRoiClinicalValidation":False},
         "runtime": {"executionDevice":args.device,
                     "elapsedSeconds":round(time.monotonic()-started,3)},
         **evidence,
