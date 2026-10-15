@@ -1,0 +1,23 @@
+name: Knee checkpoint warmstart
+on:
+  pull_request:
+    paths:
+      - 'services/imaging-ai/rsna_knee_warmstart.py'
+      - 'services/imaging-ai/rsna_knee_large_train.py'
+      - 'services/imaging-ai/test_rsna_knee_warmstart.py'
+      - '.github/workflows/knee-warmstart.yml'
+  workflow_dispatch:
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: |
+          cd services/imaging-ai
+          python -m unittest test_rsna_knee_warmstart.py -v
+          python -m py_compile rsna_knee_large_train.py rsna_knee_warmstart.py
