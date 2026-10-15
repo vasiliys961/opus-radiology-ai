@@ -1,0 +1,23 @@
+name: Knee class balance contract
+on:
+  pull_request:
+    paths:
+      - 'services/imaging-ai/rsna_knee_class_balance.py'
+      - 'services/imaging-ai/test_rsna_knee_class_balance.py'
+      - 'services/imaging-ai/rsna_knee_dinov2.py'
+      - 'services/imaging-ai/rsna_knee_coatnet.py'
+      - '.github/workflows/rsna-knee-class-balance.yml'
+  workflow_dispatch:
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: |
+          python -m py_compile services/imaging-ai/rsna_knee_class_balance.py services/imaging-ai/rsna_knee_dinov2.py services/imaging-ai/rsna_knee_coatnet.py services/imaging-ai/rsna_knee_compare.py
+          PYTHONPATH=services/imaging-ai python -m unittest discover -s services/imaging-ai -p 'test_rsna_knee_class_balance.py' -v
