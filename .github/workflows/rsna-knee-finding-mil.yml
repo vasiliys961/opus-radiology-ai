@@ -1,0 +1,24 @@
+name: Knee pathology-specific MIL contract
+on:
+  pull_request:
+    paths:
+      - 'services/imaging-ai/rsna_knee_finding_mil.py'
+      - 'services/imaging-ai/test_rsna_knee_finding_mil.py'
+      - '.github/workflows/rsna-knee-finding-mil.yml'
+  workflow_dispatch:
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install CPU tensor runtime
+        run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Test pathology specific attention
+        run: |
+          cd services/imaging-ai
+          python -m unittest test_rsna_knee_finding_mil.py -v
