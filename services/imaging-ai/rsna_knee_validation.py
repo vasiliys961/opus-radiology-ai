@@ -26,6 +26,24 @@ def make_manifest(csv_path,output,seed=42):
     out.write_text(json.dumps(data,indent=2),encoding="utf-8")
     return data
 
+def load_partition(rows,manifest_path):
+    """Fail closed unless manifest matches every known labeled study exactly."""
+    manifest=json.loads(Path(manifest_path).read_text(encoding="utf-8"))
+    if manifest.get("label_schema")!=list(LABELS):
+        raise ValueError("Manifest label schema mismatch")
+    train=manifest.get("train")
+    val=manifest.get("validation")
+    if not isinstance(train,list) or not isinstance(val,list) or not train or not val:
+        raise ValueError("Empty or malformed study partitions")
+    if len(train)!=len(set(train)) or len(val)!=len(set(val)) or set(train)&set(val):
+        raise ValueError("Duplicate or overlapping study IDs")
+    labeled={r["StudyInstanceUID"]:r for r in rows if any(extract_labels(r)[1])}
+    if len(labeled)!=len([r for r in rows if any(extract_labels(r)[1])]):
+        raise ValueError("Duplicate labeled study IDs")
+    if set(train)|set(val)!=set(labeled):
+        raise ValueError("Manifest must cover exactly the eligible labeled studies")
+    return [labeled[uid] for uid in train],[labeled[uid] for uid in val]
+
 def binary_auc(truth,scores):
     """Mann-Whitney ROC-AUC with half-credit for ties, no extra dependencies."""
     pos=[p for y,p in zip(truth,scores) if y==1]
