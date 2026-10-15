@@ -78,7 +78,7 @@ def _zip_index():
         raise ValueError("published_zip_end_missing")
     (_,disk,cd_disk,count_disk,total,central_size,central_offset,comment)=struct.unpack_from(
        "<4s4H2LH",tail,end)
-    if (disk or cd_disk or total!=count_disk or not 240<=total<=25000
+    if (disk or cd_disk or total!=count_disk or not 240<=total<=30000
         or not 46<=central_size<=MAX_CENTRAL or
         central_offset+central_size>ZIP_SIZE):
         raise ValueError("unsupported_public_zip_index")
