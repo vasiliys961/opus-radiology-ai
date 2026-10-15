@@ -1,7 +1,7 @@
 name: BOUNDED real second ICH model on one public CT (research only)
 on:
   push:
-    branches: [feature/ich-second-opinion-totalseg-fast-20261015]
+    branches: [feature/ich-second-opinion-totalseg-fast-20261015, feature/ich-second-totalseg-runner-env-fix-20261015]
     paths:
       - ".github/workflows/ich-totalseg-independent-public-once.yml"
   workflow_dispatch:
@@ -22,7 +22,7 @@ jobs:
       OMP_NUM_THREADS: "2"
       MKL_NUM_THREADS: "2"
       OPENBLAS_NUM_THREADS: "1"
-      TOTALSEG_HOME_DIR: ${{ runner.temp }}/opus-totalseg-ich
+      TOTALSEG_HOME_DIR: /tmp/opus-totalseg-ich
       HF_HUB_DISABLE_TELEMETRY: "1"
     steps:
       - uses: actions/checkout@v4
