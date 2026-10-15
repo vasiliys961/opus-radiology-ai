@@ -1,0 +1,37 @@
+name: Real 2D HRCT GGO + consolidation three-expert LongCIU benchmark
+on:
+  push:
+    branches: [feature/ild-real-longciu-ggo-consensus-20261015]
+    paths:
+      - ".github/workflows/ild-longciu-original-reference.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  original-40-test-slice-expert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      OPUS_LONGCIU_REPORT: /tmp/opus-longciu-real-reference-only.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Minimal NIfTI image geometry dependencies (no model weights)
+        run: python -m pip install --no-cache-dir numpy==2.2.6 nibabel==5.3.2
+      - name: Verify original mirrored 5 annotation files against their publisher SHA-256 then compute real GGO and consolidation Dice
+        run: python scripts/verify-longciu-true-ild-pattern-reference.py
+      - name: Upload ONLY aggregate numerical human and precomputed-model evidence
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-longciu-ggo-expert-and-published-medpseg-numeric-only
+          path: /tmp/opus-longciu-real-reference-only.json
+          retention-days: 20
+          if-no-files-found: error
+      - name: Remove numeric scratch (no CT downloaded)
+        if: always()
+        run: rm -f /tmp/opus-longciu-real-reference-only.json
