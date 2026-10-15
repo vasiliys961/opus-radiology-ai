@@ -21,10 +21,10 @@ STRUCTURE = {
     "Lateral Meniscus": r"(?:lateral meniscus|lateral meniscal)",
 }
 POSITIVE = {
-    "ACL": rf"(?:\b{STRUCTURE['ACL']}\b.{0,45}\b(?:tear|rupture|torn)\b|\b(?:tear|rupture)\b.{0,30}\b{STRUCTURE['ACL']}\b)",
-    "MCL": rf"(?:\b{STRUCTURE['MCL']}\b.{0,45}\b(?:tear|rupture|torn)\b|\b(?:tear|rupture)\b.{0,30}\b{STRUCTURE['MCL']}\b)",
-    "Medial Meniscus": rf"(?:\b{STRUCTURE['Medial Meniscus']}\b.{0,45}\b(?:tear|torn)\b|\b(?:tear|torn)\b.{0,30}\b{STRUCTURE['Medial Meniscus']}\b)",
-    "Lateral Meniscus": rf"(?:\b{STRUCTURE['Lateral Meniscus']}\b.{0,45}\b(?:tear|torn)\b|\b(?:tear|torn)\b.{0,30}\b{STRUCTURE['Lateral Meniscus']}\b)",
+    "ACL": rf"(?:\b{STRUCTURE['ACL']}\b.{{0,45}}\b(?:tear|rupture|torn)\b|\b(?:tear|rupture)\b.{{0,30}}\b{STRUCTURE['ACL']}\b)",
+    "MCL": rf"(?:\b{STRUCTURE['MCL']}\b.{{0,45}}\b(?:tear|rupture|torn)\b|\b(?:tear|rupture)\b.{{0,30}}\b{STRUCTURE['MCL']}\b)",
+    "Medial Meniscus": rf"(?:\b{STRUCTURE['Medial Meniscus']}\b.{{0,45}}\b(?:tear|torn)\b|\b(?:tear|torn)\b.{{0,30}}\b{STRUCTURE['Medial Meniscus']}\b)",
+    "Lateral Meniscus": rf"(?:\b{STRUCTURE['Lateral Meniscus']}\b.{{0,45}}\b(?:tear|torn)\b|\b(?:tear|torn)\b.{{0,30}}\b{STRUCTURE['Lateral Meniscus']}\b)",
     "Medial OA": r"\bmedial (?:compartment|tibiofemoral)\b.{0,45}\b(?:osteoarthritis|osteoarthrosis)\b|\b(?:osteoarthritis|osteoarthrosis)\b.{0,45}\bmedial (?:compartment|tibiofemoral)\b",
     "Lateral OA": r"\blateral (?:compartment|tibiofemoral)\b.{0,45}\b(?:osteoarthritis|osteoarthrosis)\b|\b(?:osteoarthritis|osteoarthrosis)\b.{0,45}\blateral (?:compartment|tibiofemoral)\b",
     "PF OA": r"\b(?:patellofemoral|patello.femoral)\b.{0,45}\b(?:osteoarthritis|osteoarthrosis)\b|\b(?:osteoarthritis|osteoarthrosis)\b.{0,45}\bpatellofemoral\b",
