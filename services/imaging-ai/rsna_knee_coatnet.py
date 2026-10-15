@@ -55,7 +55,7 @@ def train(args):
         for row in train_rows:
             try:x=study_slices(Path(args.dicom_root),index,row["StudyInstanceUID"],args.slices,args.series_limit,
                                series_order="provided" if args.series_selection=="balanced" else "legacy",
-                               pixel_mode=args.pixel_mode).cuda()
+                               pixel_mode=args.pixel_mode,slice_order=args.slice_order).cuda()
             except ValueError:skipped+=1;continue
             labels,known=extract_labels(row)
             y=torch.tensor(labels,device="cuda");mask=torch.tensor(known,device="cuda")
@@ -68,7 +68,7 @@ def train(args):
             for row in val_rows:
                 try:x=study_slices(Path(args.dicom_root),index,row["StudyInstanceUID"],args.slices,args.series_limit,
                                        series_order="provided" if args.series_selection=="balanced" else "legacy",
-                               pixel_mode=args.pixel_mode).cuda()
+                               pixel_mode=args.pixel_mode,slice_order=args.slice_order).cuda()
                 except ValueError:continue
                 y,m=extract_labels(row)
                 score=model(normalize(x)).sigmoid().cpu().tolist()
@@ -86,7 +86,7 @@ def train(args):
     torch.save({"architecture":args.architecture,"family":"coatnet-attention-mil-v1",
                 "state_dict":{k:v.detach().cpu() for k,v in model.state_dict().items()},
                 "labels":list(LABELS),"slices":args.slices,"series_limit":args.series_limit,
-                "series_selection":args.series_selection,"pixel_mode":args.pixel_mode,"class_balance":args.class_balance,
+                "series_selection":args.series_selection,"pixel_mode":args.pixel_mode,"slice_order":args.slice_order,"class_balance":args.class_balance,
                 "train_class_weights":weights if args.class_balance else None,
                 "train_class_counts":weight_counts if args.class_balance else None,"research_only":True},out)
     out.with_suffix(".metrics.json").write_text(json.dumps(history,indent=2))
@@ -108,6 +108,7 @@ def main():
     p.add_argument("--architecture",default="coatnet_0_rw_224")
     p.add_argument("--series-selection",choices=("legacy","balanced"),default="legacy")
     p.add_argument("--pixel-mode",choices=("legacy","dicom"),default="legacy")
+    p.add_argument("--slice-order",choices=("legacy","geometry-v2"),default="legacy")
     p.add_argument("--class-balance",action="store_true",help="Training-only capped positive class reweighting")
     p.add_argument("--no-pretrained",action="store_true")
     train(p.parse_args())
