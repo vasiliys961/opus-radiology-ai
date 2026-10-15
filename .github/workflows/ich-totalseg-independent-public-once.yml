@@ -1,0 +1,106 @@
+name: BOUNDED real second ICH model on one public CT (research only)
+on:
+  push:
+    branches: [feature/ich-second-opinion-totalseg-fast-20261015]
+    paths:
+      - ".github/workflows/ich-totalseg-independent-public-once.yml"
+  workflow_dispatch:
+    inputs:
+      public_research_authorization:
+        description: "Type ONE-PUBLIC-ICH-SECOND-OPINION"
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  one-public-ct-cerebral-bleed:
+    if: ${{ github.event_name == 'push' || (github.ref == 'refs/heads/main' && inputs.public_research_authorization == 'ONE-PUBLIC-ICH-SECOND-OPINION') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      PYTHONUNBUFFERED: "1"
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "1"
+      TOTALSEG_HOME_DIR: ${{ runner.temp }}/opus-totalseg-ich
+      HF_HUB_DISABLE_TELEMETRY: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Admit enough CPU RAM and free disk for public-only one-shot
+        run: |
+          python - <<'PY'
+          import os,shutil
+          mem=os.sysconf("SC_AVPHYS_PAGES")*os.sysconf("SC_PAGE_SIZE")
+          disk=shutil.disk_usage(".").free
+          print("Available RAM GiB:",round(mem/1024**3,2),"Disk GiB:",round(disk/1024**3,2))
+          assert mem>=10*1024**3 and disk>=8*1024**3,"Insufficient bounded public research worker"
+          PY
+      - name: Install pinned dependencies on hosted Linux CPU only
+        run: |
+          set -euo pipefail
+          python -m pip install --no-cache-dir torch==2.6.0 torchvision==0.21.0 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --no-cache-dir "TotalSegmentator==2.18.0" "nibabel==5.3.2" "numpy==2.2.6" "scipy==1.15.3"
+          python -m pip check
+      - name: Synthetic-only cross-check contract before real source
+        run: |
+          python scripts/test-compare-ich-independent-totalseg.py
+      - name: Download only one authentic published original hemorrhagic CT
+        run: |
+          python scripts/prepare-figshare-ich-public.py --out-folder "$RUNNER_TEMP/opus-one-original"
+      - name: Download original official cerebral bleed pretrained weights, hash and safely install
+        run: |
+          set -euo pipefail
+          python scripts/provision-ich-totalseg-official.py \
+            --archive "$RUNNER_TEMP/official-ich-checkpoint.zip" \
+            --install-root "$TOTALSEG_HOME_DIR/nnunet/results" \
+            --manifest "$RUNNER_TEMP/official-ich-checkpoint-evidence.json"
+      - name: Run genuine independent pretrained cerebral_bleed segmentation, CPU time capped
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          d=Path(os.environ["TOTALSEG_HOME_DIR"]);d.mkdir(parents=True,exist_ok=True)
+          (d/"config.json").write_text(json.dumps({"send_usage_stats":False,
+            "statistics_disclaimer_shown":True}))
+          PY
+          timeout --signal=TERM --kill-after=30s 700s \
+            TotalSegmentator \
+            -i "$RUNNER_TEMP/opus-one-original/public-original-head-ct-hu-like.nii" \
+            -o "$RUNNER_TEMP/opus-second-ich-mask.nii.gz" \
+            --task cerebral_bleed --device cpu --ml --quiet
+      - name: Numerically compare the actual independent mask with the real first pretrained model
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os,subprocess,sys
+          from pathlib import Path
+          t=Path(os.environ["RUNNER_TEMP"])
+          checks=json.loads((t/"official-ich-checkpoint-evidence.json").read_text())
+          args=[sys.executable,"scripts/compare-ich-independent-totalseg.py",
+            "--original",str(t/"opus-one-original/public-original-head-ct-hu-like.nii"),
+            "--second-mask",str(t/"opus-second-ich-mask.nii.gz"),
+            "--first-report","web/public/examples/ianpan-ich-real-figshare-run-38734338486.json",
+            "--model-archive-sha256",checks["archiveSha256"],
+            "--output",str(t/"opus-ich-true-two-model-research-only.json")]
+          subprocess.run(args,check=True)
+          PY
+      - name: Upload ONLY real study numerical second-model comparison
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-public-ich-independent-second-model-numeric
+          path: ${{ runner.temp }}/opus-ich-true-two-model-research-only.json
+          if-no-files-found: error
+          retention-days: 20
+      - name: Destroy CT, original checkpoints, derived mask and temporary files
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/opus-one-original" "$TOTALSEG_HOME_DIR" \
+            "$RUNNER_TEMP/official-ich-checkpoint.zip" \
+            "$RUNNER_TEMP/official-ich-checkpoint-evidence.json" \
+            "$RUNNER_TEMP/opus-second-ich-mask.nii.gz" \
+            "$RUNNER_TEMP/opus-ich-true-two-model-research-only.json"
