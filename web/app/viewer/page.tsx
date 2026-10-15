@@ -15,6 +15,7 @@ const LungNoduleResearchResults = dynamic(() => import("../../components/LungNod
 const ChestEffusionResearchResults = dynamic(() => import("../../components/ChestEffusionResearchResults"), {ssr:false});
 const IldGgoExpertResearch = dynamic(() => import("../../components/IldGgoExpertResearch"), {ssr:false});
 const IldPatternResearch = dynamic(() => import("../../components/IldPatternResearch"), {ssr:false});
+const ChestExtraPulmonaryResearch = dynamic(() => import("../../components/ChestExtraPulmonaryResearch"), {ssr:false});
 
 const CornerstoneStack = dynamic(() => import("../../components/CornerstoneStack"), {
   ssr: false,
@@ -103,6 +104,7 @@ export default function ViewerPage() {
           <ChestEffusionResearchResults key={"fluid-"+(selected?.key??"empty")} isChestCT={!!selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="CHEST")}/>
           <IldGgoExpertResearch key={"ild-"+(selected?.key??"empty")} isChestCT={!!selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="CHEST")}/>
           <IldPatternResearch key={"ild-pattern-"+(selected?.key??"empty")} isChestCT={!!selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="CHEST")}/>
+          <ChestExtraPulmonaryResearch key={"chest-extra-"+(selected?.key??"empty")} isChestCT={!!selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="CHEST")}/>
           <button type="button" className="cs-clear" disabled={reading || indexed.length === 0} onClick={() => { setIndexed([]); setCurrentSeriesKey(""); setMessage("Список очищен, файлы на диске не изменены."); }}>Очистить загруженное</button>
         </aside>
         <div className="cs-stage">
