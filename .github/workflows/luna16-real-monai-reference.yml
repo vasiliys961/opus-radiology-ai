@@ -1,0 +1,38 @@
+name: Genuine MONAI LUNA16 source vs independent radiologist centroid
+on:
+  pull_request:
+    paths:
+      - "scripts/compare-monai-luna16-real-reference.py"
+      - "scripts/test-monai-luna16-real-reference.py"
+      - "web/public/examples/luna16-monai-cpu-run-38436406805.json"
+      - ".github/workflows/luna16-real-monai-reference.yml"
+  push:
+    paths:
+      - "scripts/compare-monai-luna16-real-reference.py"
+      - "scripts/test-monai-luna16-real-reference.py"
+      - "web/public/examples/luna16-monai-cpu-run-38436406805.json"
+      - ".github/workflows/luna16-real-monai-reference.yml"
+permissions:
+  contents: read
+jobs:
+  real-source-center-comparison:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Contract checks with existing genuine inference evidence (no model rerun)
+        run: |
+          python -m py_compile scripts/compare-monai-luna16-real-reference.py scripts/test-monai-luna16-real-reference.py
+          python scripts/test-monai-luna16-real-reference.py
+      - name: Compare published radiologist annotation to genuine MONAI model centers
+        run: |
+          python scripts/compare-monai-luna16-real-reference.py --out "$RUNNER_TEMP/luna16-expert-center-comparison.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: real-monai-pinned-expert-center-comparison
+          path: ${{ runner.temp }}/luna16-expert-center-comparison.json
+          if-no-files-found: error
+          retention-days: 30
