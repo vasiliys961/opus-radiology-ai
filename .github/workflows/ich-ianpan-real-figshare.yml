@@ -58,6 +58,34 @@ jobs:
             --model-dir "$RUNNER_TEMP/opus-pinned-pretrained-ich-weights" \
             --output "$RUNNER_TEMP/opus-public-ich-model-research.json" \
             --device cpu --download-pretrained
+      - name: Independently inspect completed numeric model report and provenance status
+        run: |
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=Path(os.environ["RUNNER_TEMP"])/"opus-public-ich-model-research.json"
+          data=json.loads(p.read_text())
+          assert data["schema"]=="opus-ianpan-genuine-public-ich-research/v1"
+          assert data["model"]["checkpointSha256Verified"] is True
+          assert data["source"]["publishedFigshareHuLikeWithoutOriginalDicomRescaleAudit"] is True
+          assert data["source"]["sourceOriginalDicomHURescaleIndependentlyVerified"] is False
+          assert data["source"]["referenceLabelsOnlyPerihematomalEdema"] is True
+          assert data["externalExpertHemorrhageLocalizationComparisonPerformed"] is False
+          assert data["readyForClinicalUse"] is False
+          candidates=data["candidates"]
+          print(json.dumps({"actualPretrainedInference":True,
+             "sourceOnlyHUlike":True,"expertICHGroundTruthCompared":False,
+             "modelOrderedSliceCount":data["source"]["modelOrderedSliceCount"],
+             "candidateCountAtPoint5":len(candidates),
+             "seriesRawUncalibratedScores":data["seriesRawUncalibratedScores"],
+             "topFiveCandidates":sorted([{
+                "class":x["class"],"sliceIndexModelOrdered":x["sliceIndexModelOrdered"],
+                "rawUncalibratedScore":x["rawUncalibratedScore"],
+                "hasModelInputRoi":x["modelInputBoundingBoxXY"] is not None
+             } for x in candidates],key=lambda x:-x["rawUncalibratedScore"])[:5],
+             "independentClinicalValidation":False,
+          },ensure_ascii=False))
+          PY
       - name: Publish research NUMBERS only (no original patient CT pixels)
         if: success()
         uses: actions/upload-artifact@v4
