@@ -21,6 +21,8 @@ def validate_checkpoint(ckpt):
             raise ValueError("Unsafe or invalid preprocessing: "+key)
     if ckpt.get("series_selection","legacy") not in ("legacy","balanced"):
         raise ValueError("Unknown MRI series selection")
+    if ckpt.get("pixel_mode","legacy") not in ("legacy","dicom"):
+        raise ValueError("Unknown MRI pixel mode")
     return ckpt
 
 def predict(args):
@@ -48,7 +50,8 @@ def predict(args):
                 for uid in ids:
                     images=study_slices(Path(args.dicom_root),index,uid,
                                         ckpt["slices"],ckpt["series_limit"],
-                                        series_order="provided" if ckpt.get("series_selection","legacy")=="balanced" else "legacy").to(device)
+                                        series_order="provided" if ckpt.get("series_selection","legacy")=="balanced" else "legacy",
+                                        pixel_mode=ckpt.get("pixel_mode","legacy")).to(device)
                     probabilities=model(normalize(images)).sigmoid().cpu().tolist()
                     if len(probabilities)!=len(LABELS):
                         raise ValueError("Output schema mismatch")
