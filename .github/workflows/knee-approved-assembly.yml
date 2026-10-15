@@ -1,0 +1,21 @@
+name: Knee approved data assembly
+on:
+  pull_request:
+    paths:
+      - 'services/imaging-ai/rsna_knee_approved_assembly.py'
+      - 'services/imaging-ai/test_rsna_knee_approved_assembly.py'
+      - '.github/workflows/knee-approved-assembly.yml'
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: |
+          cd services/imaging-ai
+          python -m unittest test_rsna_knee_approved_assembly.py -v
