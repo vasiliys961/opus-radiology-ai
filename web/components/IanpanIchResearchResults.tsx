@@ -1,0 +1,126 @@
+"use client";
+
+import {useState} from "react";
+import {
+  parseIchAlternativeReport,ICH_CLASSES,ICH_CLASS_LABELS,
+  type IchAlternativeClass,type IchAlternativeReport,
+} from "../lib/ianpan-ich-report";
+
+/**
+ * Public-research JSON importer. Does not execute models or upload study data.
+ * Original source image and anatomical registration are intentionally absent.
+ */
+export default function IanpanIchResearchResults(){
+  const [report,setReport]=useState<IchAlternativeReport|null>(null);
+  const [error,setError]=useState("");
+  const [minScore,setMinScore]=useState(0.5);
+  const [type,setType]=useState<IchAlternativeClass|"all">("all");
+  const [notes,setNotes]=useState("");
+  const visible=(report?.candidates??[]).filter(c=>
+    c.rawUncalibratedScore>=minScore&&(type==="all"||c.class===type)
+  ).sort((a,b)=>a.sliceIndexModelOrdered-b.sliceIndexModelOrdered||
+    b.rawUncalibratedScore-a.rawUncalibratedScore);
+  return <section aria-label="Альтернативный детектор внутричерепного кровоизлияния"
+    style={{padding:14,border:"1px solid #688f81",borderRadius:10,marginTop:18}}>
+    <h3>КТ головы · альтернативный исследовательский ICH-детектор</h3>
+    <p>Импорт классификационных оценок и областей локализации модели
+      <strong> ianpan/ct-head-hemorrhage-detection</strong> после отдельного реального
+      запуска на разрешённой публичной КТ с доказанной шкалой HU.
+      На этом экране вычисление модели не запускается, никакие DICOM не передаются.</p>
+    <label>JSON-отчёт выполнения предобученной модели (до 2 МиБ)
+      <input type="file" accept=".json,application/json" onChange={async e=>{
+        const f=e.target.files?.[0];e.currentTarget.value="";
+        setReport(null);setError("");setNotes("");
+        if(!f)return;
+        try{
+          if(f.size>2*1024*1024)throw Error("Слишком большой файл отчёта.");
+          setReport(parseIchAlternativeReport(await f.text()));
+        }catch(err){setError(err instanceof Error?err.message:"Неверный JSON-отчёт.");}
+      }}/>
+    </label>
+    {error&&<p role="alert">{error}</p>}
+    {!report?<p><small>Пока нет импортированного настоящего результата. Пустой экран
+      не означает отсутствие кровоизлияния.</small></p>:<div>
+      <p role="alert"><strong>Исследовательская модель, НЕ диагноз.</strong> JSON лишь
+        декларирует запуск весов; подлинность выполнения, реальная HU-калибровка,
+        корректность ориентации и соответствие экспертной маске здесь независимо
+        не подтверждаются. Ни один бокс не привязан к исходной КТ/DICOM SOP.
+        Отсутствие кандидатов не позволяет исключить кровоизлияние.</p>
+      <p>Источники: полный SHA-256 публичной NIfTI — <code>{report.source.niftiSha256}</code>.
+        Модель: {report.model.id} ({report.model.revision}); заявленный режим —
+        {report.runtime.executionDevice.toUpperCase()}, {report.runtime.elapsedSeconds.toFixed(1)} с.
+        Модель обработала {report.source.modelOrderedSliceCount} упорядоченных срезов.
+        Результат относится к <strong>другой публичной КТ</strong>, а не к текущей DICOM-серии.</p>
+      <h4>Оценки шести категорий на уровне серии</h4>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))",gap:8}}>
+        {ICH_CLASSES.map(k=><div key={k} style={{padding:8,border:"1px solid #8b9b97",borderRadius:6}}>
+          <strong>{ICH_CLASS_LABELS[k]}</strong>
+          <div>{report.seriesRawUncalibratedScores[k].toFixed(3)}</div>
+        </div>)}
+      </div>
+      <p><small>Числа — некалиброванные выходные оценки нейросети, НЕ клиническая вероятность
+        заболевания и НЕ доказательство патологического очага.</small></p>
+      <div style={{display:"flex",gap:12,flexWrap:"wrap",margin:"12px 0"}}>
+        <label>Категория <select value={type}
+          onChange={e=>setType(e.target.value as IchAlternativeClass|"all")}>
+          <option value="all">Все категории</option>
+          {ICH_CLASSES.map(k=><option key={k} value={k}>{ICH_CLASS_LABELS[k]}</option>)}
+        </select></label>
+        <label>Исследовательский порог {minScore.toFixed(2)} <input type="range"
+          min="0.5" max="1" step="0.05" value={minScore}
+          onChange={e=>setMinScore(Number(e.target.value))}/></label>
+      </div>
+      <p role="status">Предложено {report.candidates.length} категорий на срезах,
+        по фильтру {visible.length}. Кандидаты не подтверждены врачом.</p>
+      <div style={{maxHeight:300,overflowY:"auto"}}>
+        {visible.map((c,i)=><div key={c.sliceIndexModelOrdered+"/"+c.class}
+          style={{margin:"8px 0",padding:8,borderBottom:"1px solid #8b9b97"}}>
+          <strong>{ICH_CLASS_LABELS[c.class]}</strong> · модельный срез
+          {" "}{c.sliceIndexModelOrdered+1}/{report.source.modelOrderedSliceCount}
+          {" "}· score {c.rawUncalibratedScore.toFixed(3)}
+          <div>Площадь карты при пороге 0,5: {c.heatmapPositivePixelsAtPoint5}
+            {" "}пикселей из модельных 512 × 512 (не площадь очага в мм²).</div>
+          <div>{c.modelInputBoundingBoxXY?
+            `Рамка на предобработанном изображении: ${c.modelInputBoundingBoxXY.join(" / ")}`:
+            "Карты выше порога 0,5 нет; классификация сама по себе не локализует очаг."}
+          </div>
+        </div>)}
+      </div>
+      <label style={{display:"block",marginTop:12}}>Комментарий врача-исследователя (не удостоверен)
+        <textarea rows={2} maxLength={1500} value={notes}
+          onChange={e=>setNotes(e.target.value)}
+          placeholder="Что необходимо проверить на исходной КТ, сопоставить с экспертной разметкой…"
+          style={{display:"block",width:"100%"}}/>
+      </label>
+      <button type="button" onClick={()=>{
+        // The export remains a research observation, not a signed patient record.
+        const exportData={
+          schema:"opus-ianpan-ich-local-unsigned-review/v1",
+          scope:"separate_public_research_study_only",
+          sourceNiftiSha256:report.source.niftiSha256,
+          modelId:report.model.id,modelRevision:report.model.revision,
+          candidateCount:report.candidates.length,
+          reviewerNote:notes,
+          modelToSourceCoordinatesVerified:false,
+          sourceHUIndependentlyVerified:false,
+          patientDicomLinked:false,
+          automatedDiagnosis:false,
+          clinicalValidation:false,
+          absenceOfHemorrhageEstablished:false,
+        };
+        const url=URL.createObjectURL(new Blob([JSON.stringify(exportData,null,2)],
+          {type:"application/json"}));
+        const a=document.createElement("a");a.href=url;
+        a.download="opus-ich-alternative-unsigned-research-review.json";
+        document.body.appendChild(a);a.click();a.remove();
+        window.setTimeout(()=>URL.revokeObjectURL(url),1000);
+      }}>Скачать неподписанную исследовательскую заметку</button>{" "}
+      <button type="button" onClick={()=>{
+        setReport(null);setNotes("");setError("");
+      }}>Закрыть результат</button>
+      <p><small>Модельные карты не наложены на оригинальную КТ: пока не проверена
+        инверсия ресайза/центрального crop, физическая ориентация и хеш-идентичность
+        исходных пикселей. Для диагностики необходим врач и независимая валидация.</small></p>
+    </div>}
+  </section>;
+}
