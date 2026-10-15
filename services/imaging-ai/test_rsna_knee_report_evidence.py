@@ -42,6 +42,17 @@ class CandidateEvidenceTests(unittest.TestCase):
         self.assertEqual(candidate_states("No knee effusion.")["ACL"],"not_mentioned")
         self.assertEqual(candidate_states("No lateral meniscus tear.")["Lateral Meniscus"],"uncertain")
         self.assertEqual(candidate_states("Baker's cyst present. No Baker's cyst.")["Baker's"],"uncertain")
+    def test_explicit_negatives_are_negative(self):
+        samples={
+            "Effusion":"No joint effusion.",
+            "Fracture":"No acute fracture.",
+            "Synovitis":"No evidence of synovitis.",
+            "Baker's":"No Baker's cyst.",
+            "Contusion":"No bone contusion.",
+        }
+        for label,phrase in samples.items():
+            with self.subTest(label=label):
+                self.assertEqual(candidate_states(phrase)[label],"negative")
     def test_jsonl_contract_and_no_text_output(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory)
