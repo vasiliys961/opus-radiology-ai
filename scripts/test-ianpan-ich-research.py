@@ -90,10 +90,9 @@ class ICHResearchTests(unittest.TestCase):
             changed=json.loads(json.dumps(proof))
             changed["sourceUnits"]="HU_FROM_VERIFIED_DICOM_RESCALE"
             manifest.write_text(json.dumps(changed))
-            # Changing one JSON string cannot upgrade HU provenance:
-            # production has additional immutable original-DICOM evidence
-            # on the actual conversion; the manifest alone is attestational.
-            self.assertEqual(mod.validate_public_manifest(ct,manifest)["sourceUnits"],"HU_FROM_VERIFIED_DICOM_RESCALE")
+            # Changing a manifest label is not proof of original DICOM HU.
+            with self.assertRaisesRegex(ValueError,"provenance"):
+                mod.validate_public_manifest(ct,manifest)
 
     def test_real_weight_hashes_not_bypassed_by_same_length(self):
         with tempfile.TemporaryDirectory() as base:
