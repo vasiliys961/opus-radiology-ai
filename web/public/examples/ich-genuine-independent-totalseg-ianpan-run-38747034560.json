@@ -1,0 +1,43 @@
+{
+  "schema": "opus-public-ich-independent-two-model-consistency/v1",
+  "status": "two_genuine_pretrained_models_on_one_original_public_ct_not_expert_validated",
+  "originalCtSha256": "0543a46065314468fe7ab18b9187277ae1affc4e7c864d0fd8ae608afa554a95",
+  "firstModelReportSha256": "c121d869f4358de9197232fc1c6eeb5ec2f6f8977af3e28ffb8130dcba365f62",
+  "secondModel": "TotalSegmentator cerebral_bleed",
+  "secondModelTask": 150,
+  "officialWeightsRelease": "v2.0.0-weights",
+  "officialWeightsArchiveSha256": "cd9a41917f134dd20f1aba877c7af4cabedf144f0f7aa1c1d16d6376b2425bb4",
+  "secondModelOriginalMaskSha256": "9ef977dd844a9df2ddc547a397d1ff52b3a4284d32b4b89f2afe91321d5f5f0b",
+  "originalShapeXYZ": [
+    512,
+    512,
+    25
+  ],
+  "sourceHURescaleIndependentlyVerified": false,
+  "originalReferenceLabelsArePerihematomalEdema": true,
+  "firstModelSubtypeCandidateBoundingBoxes": 7,
+  "secondModelMaskPositiveVoxels": 10875,
+  "secondModelUnvalidatedMaskVolumeMl": 12.96401,
+  "secondModelSourceSliceIndices": [
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    16
+  ],
+  "secondModelMaskVoxelsInsideFirstModelBoundingBoxUnion": 10862,
+  "secondModelMaskShareWithinFirstModelBounds": 0.9988046,
+  "secondModelNegativeDiagnosticConclusionAllowed": false,
+  "independentRadiologistGroundTruthPresent": false,
+  "segmentationDiceAgainstExpertMask": null,
+  "clinicalLesionTruePositive": null,
+  "clinicalValidation": false,
+  "limitations": [
+    "Two models may share correlated bias. Model agreement is not independent medical expertise.",
+    "The first model ROIs are bounding boxes, not a blood segmentation.",
+    "The public dataset's expert masks are edema, not hemorrhage.",
+    "Neither DICOM pixel rescale nor patient-level sensitivity was independently validated."
+  ]
+}
