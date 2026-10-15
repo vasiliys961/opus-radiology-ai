@@ -62,15 +62,22 @@ def candidate_states(report):
     for label in LABELS:
         evidence = set()
         for clause in clauses:
-            pos = bool(re.search(POSITIVE[label], clause))
-            neg = bool(re.search(NEGATIVE[label], clause))
+            positive_matches = list(re.finditer(POSITIVE[label], clause))
+            negative_matches = list(re.finditer(NEGATIVE[label], clause))
+            pos = bool(positive_matches)
+            neg = bool(negative_matches)
+            # A positive phrase embedded inside an explicit negative statement
+            # is not an independent contradictory finding.
+            only_negated_positive = pos and neg and all(
+                any(n.start() <= p.start() and p.end() <= n.end()
+                    for n in negative_matches) for p in positive_matches)
             if not pos and not neg:
                 continue
             # A negative pattern must not be overridden by its own "no".
             # Contradictory affirmative/negative evidence in one clause abstains.
             if UNCERTAINTY.search(clause):
                 evidence.add("uncertain")
-            elif neg and not pos:
+            elif neg and (not pos or only_negated_positive):
                 evidence.add("negative")
             elif neg and pos:
                 evidence.add("uncertain")
