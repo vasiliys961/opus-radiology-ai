@@ -1,4 +1,5 @@
 name: Real 2D HRCT GGO + consolidation three-expert LongCIU benchmark
+# Model label ontology audit: published output may include anatomy labels beyond 0/1/2.
 on:
   push:
     branches: [feature/ild-real-longciu-ggo-consensus-20261015]
