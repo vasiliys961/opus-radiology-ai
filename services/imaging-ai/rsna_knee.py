@@ -11,16 +11,41 @@ def read_rows(path):
     with open(path,encoding="utf-8-sig",newline="") as f:
         return list(csv.DictReader(f))
 
-def series_index(rows):
-    index={}
+PLANES=("Sagittal","Coronal","Axial")
+
+def balanced_series(rows,max_series=3):
+    """Deterministic round-robin MRI plane selection from CSV metadata.
+
+    Returns the same uid -> list[sid] interface as the legacy series index.
+    Unknown planes are excluded. Identifiers never influence plane priority.
+    """
+    if type(max_series) is not int or max_series < 1:
+        raise ValueError("max_series must be a positive integer")
+    buckets={}
     for row in rows:
         uid=row["StudyInstanceUID"];sid=row["SeriesInstanceUID"]
-        if any(x in s for s in (uid,sid) for x in ("..","/","\\") ):
+        if not uid or not sid or any(x in s for s in (uid,sid) for x in ("..","/","\\\\") ):
             raise ValueError("Unsafe DICOM identifier")
-        if row.get("Anatomical_Plane") not in ("Axial","Coronal","Sagittal"):
+        plane=row.get("Anatomical_Plane")
+        if plane not in PLANES:
             continue
-        index.setdefault(uid,[]).append(sid)
-    return index
+        buckets.setdefault(uid,{}).setdefault(plane,set()).add(sid)
+    result={}
+    for uid,planes in buckets.items():
+        ordered={p:sorted(planes.get(p,())) for p in PLANES}
+        selected=[]
+        while len(selected)<max_series and any(ordered.values()):
+            for plane in PLANES:
+                if len(selected)>=max_series:
+                    break
+                if ordered[plane]:
+                    selected.append(ordered[plane].pop(0))
+        result[uid]=selected
+    return result
+
+def series_index(rows):
+    """Legacy interface; prioritize representation from all three MR planes."""
+    return balanced_series(rows,max_series=256)
 
 def extract_labels(row):
     values=[];mask=[]
@@ -37,7 +62,7 @@ def study_slices(root,index,uid,per_series=8,max_series=9):
     import torch
     from PIL import Image
     images=[]
-    for sid in sorted(index.get(uid,[]))[:max_series]:
+    for sid in index.get(uid,[])[:max_series]:
         files=sorted((root/uid/sid).glob("*.dcm"))
         for i in np.linspace(0,len(files)-1,min(len(files),per_series),dtype=int) if files else []:
             try:
