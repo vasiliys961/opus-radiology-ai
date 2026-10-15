@@ -1,0 +1,22 @@
+name: Knee Kaggle training launcher contract
+on:
+  pull_request:
+    paths:
+      - 'services/imaging-ai/rsna_knee_kaggle_train.py'
+      - 'services/imaging-ai/test_rsna_knee_kaggle_train.py'
+      - '.github/workflows/rsna-knee-kaggle-train.yml'
+  workflow_dispatch:
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test launcher without GPU or external data
+        run: |
+          cd services/imaging-ai
+          python -m unittest test_rsna_knee_kaggle_train.py -v
