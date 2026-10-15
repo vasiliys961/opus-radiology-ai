@@ -50,6 +50,32 @@ def validate_public_manifest(source: Path, manifest_path: Path) -> dict:
     if manifest_path.is_symlink() or not manifest_path.is_file() or manifest_path.stat().st_size > 4096:
         raise ValueError("invalid_public_manifest")
     document = json.loads(manifest_path.read_text(encoding="utf-8"))
+    # A separate ORIGINAL CC-BY public hemorrhagic study was admitted by
+    # publisher ZIP member CRC + exact gzip and source NIfTI SHA-256. The
+    # publisher's whole ZIP MD5 is only OBSERVED, not recomputed. Original
+    # slice DICOM rescale factors remain unverified. Never call HU proven.
+    source_units = document.get("sourceUnits") if isinstance(document,dict) else None
+    publisher = document.get("publisherProvenance") if isinstance(document,dict) else None
+    figshare_published_hu_like = (
+        source_units == "PUBLISHED_FIGSHARE_NONCONTRAST_CT_HU_LIKE_NOT_INDEPENDENTLY_VERIFIED"
+        and isinstance(publisher,dict)
+        and publisher.get("repository") == "Figshare"
+        and publisher.get("articleId") == 23957937
+        and publisher.get("license") == "CC BY 4.0"
+        and publisher.get("fileId") == 63081925
+        and publisher.get("publishedArchiveSize") == 1300209108
+        and publisher.get("publishedArchiveMd5MetadataOnlyNotRecomputed") == "a2c3f32f11478167b975d5036edbb510"
+        and publisher.get("originalMemberCRC32Checked") is True
+        and publisher.get("huFromOriginalDicomRescaleIndependentlyVerified") is False
+        and publisher.get("originalFullVolumePreserved") is True
+        and publisher.get("intensityUnitsOnlyPlausibleHU") is True
+        and publisher.get("positiveHemorrhageStudyPerPublishedCohortNotIndependentlyDiagnosed") is True
+        and publisher.get("referenceLabelsArePerihematomalEdemaNotHemorrhage") is True
+        and publisher.get("expertHematomaMaskCompared") is False
+        and publisher.get("modelLesionDetectionProven") is False
+        and isinstance(publisher.get("originalGzipSha256"),str)
+        and len(publisher["originalGzipSha256"])==64
+    )
     if not isinstance(document, dict) or any([
         document.get("schema") != "opus-public-head-ct-hu-evidence/v1",
         document.get("modality") != "CT",
@@ -57,7 +83,7 @@ def validate_public_manifest(source: Path, manifest_path: Path) -> dict:
         document.get("contrast") != "NONCONTRAST",
         document.get("publicDataRightsReviewed") is not True,
         document.get("deidentifiedPublicDataset") is not True,
-        document.get("sourceUnits") != "HU_FROM_VERIFIED_DICOM_RESCALE",
+        not (source_units == "HU_FROM_VERIFIED_DICOM_RESCALE" or figshare_published_hu_like),
         document.get("sourceFullStudy") is not True,
         document.get("consent") != "PUBLIC-HEAD-NCCT-RESEARCH-OK",
     ]):
@@ -67,6 +93,12 @@ def validate_public_manifest(source: Path, manifest_path: Path) -> dict:
         raise ValueError("missing_public_source_sha256")
     if sha256(source) != expected:
         raise ValueError("source_sha256_changed")
+    if figshare_published_hu_like:
+        # The source is already immutable by actual complete NIfTI SHA-256;
+        # enforce the publisher's original full native dimensions, too.
+        import nibabel
+        if publisher.get("fullVolumeDimensions") != list(nibabel.load(str(source)).shape):
+            raise ValueError("public_figshare_ct_dimensions_changed")
     # An operator provenance assertion is not independent confirmation of HU.
     # In particular the previously used Zenodo 16-slice slab is NOT admitted
     # without proof that its stored values are original calibrated CT HU.
@@ -150,6 +182,12 @@ def numeric_predictions(output, slices: int):
         "thresholdForResearchListing": 0.5,
     }
 
+def source_units_is_verified(manifest):
+    return manifest.get("sourceUnits") == "HU_FROM_VERIFIED_DICOM_RESCALE"
+
+def figshare_source_is_published(manifest):
+    return manifest.get("sourceUnits") == "PUBLISHED_FIGSHARE_NONCONTRAST_CT_HU_LIKE_NOT_INDEPENDENTLY_VERIFIED"
+
 def run(args):
     source = args.source
     manifest = validate_public_manifest(source,args.manifest)
@@ -200,6 +238,9 @@ def run(args):
                    "modelOrderedSliceCount":len(volume),
                    "publicRightsOperatorAttested":True,
                    "huProvenanceOperatorAttestedNotIndependentlyConfirmed":True,
+                   "sourceCtHuexactDICOMRescaleVerified":bool(source_units_is_verified(manifest)),
+                   "sourceIsPublishedCCBYSpontaneousICHResearch":bool(figshare_source_is_published(manifest)),
+                   "expertReferenceIsPerihematomalEdemaNotHematomaMask":bool(figshare_source_is_published(manifest)),
                    "modelPixelsNotRegisteredToSource":True,
                    "researchRoiVoxelGeometryProjectionAvailable":True,
                    "researchRoiClinicalValidation":False},
