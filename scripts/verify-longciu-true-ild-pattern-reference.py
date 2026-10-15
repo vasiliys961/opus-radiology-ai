@@ -70,7 +70,7 @@ def evaluate_volume(root):
             raise ValueError("original_mask_must_be_integer_labelmap")
         array=np.asanyarray(nii.dataobj)
         if not np.isin(array,[0,1,2]).all():
-            raise ValueError("unknown_ild_pattern_labels:"+name)
+            raise ValueError("unknown_ild_pattern_labels:"+name+":"+str(np.unique(array).astype(int).tolist()[:16]))
         masks[name]=array
     out={}
     for scope,slices in (("authorsOriginalTest40",TEST),("all90Independent2DSlices",tuple(range(90)))):
