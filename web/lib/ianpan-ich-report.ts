@@ -79,7 +79,7 @@ export function parseIchAlternativeReport(raw:string):IchAlternativeReport{
     !Array.isArray(source.sourceDimensionsXYZ)||
     source.sourceDimensionsXYZ.length!==3||
     source.sourceDimensionsXYZ.some(n=>!integer(n,8,512))||
-    !integer(source.modelOrderedSliceCount,8,64)||
+    !integer(source.modelOrderedSliceCount,8,128)||
     source.publicRightsOperatorAttested!==true||
     source.huProvenanceOperatorAttestedNotIndependentlyConfirmed!==true||
     source.modelPixelsNotRegisteredToSource!==true||
@@ -100,7 +100,7 @@ export function parseIchAlternativeReport(raw:string):IchAlternativeReport{
  const classes=object(root.seriesRawUncalibratedScores,"классы");
  for(const key of ICH_CLASSES)if(!score(classes[key]))
    throw Error("Повреждён ряд оценок кровоизлияния: "+key);
- if(!Array.isArray(root.candidates)||root.candidates.length>384)
+ if(!Array.isArray(root.candidates)||root.candidates.length>768)
    throw Error("Недопустимое число срезовых кандидатов.");
  const seen=new Set<string>();
  for(const element of root.candidates){
