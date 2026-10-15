@@ -12,6 +12,8 @@ import {
  */
 export default function IanpanIchResearchResults(){
   const [report,setReport]=useState<IchAlternativeReport|null>(null);
+  const [loadingExample,setLoadingExample]=useState(false);
+  const [genuinePublicExample,setGenuinePublicExample]=useState(false);
   const [error,setError]=useState("");
   const [minScore,setMinScore]=useState(0.5);
   const [type,setType]=useState<IchAlternativeClass|"all">("all");
@@ -23,14 +25,40 @@ export default function IanpanIchResearchResults(){
   return <section aria-label="Альтернативный детектор внутричерепного кровоизлияния"
     style={{padding:14,border:"1px solid #688f81",borderRadius:10,marginTop:18}}>
     <h3>КТ головы · альтернативный исследовательский ICH-детектор</h3>
-    <p>Импорт классификационных оценок и областей локализации модели
-      <strong> ianpan/ct-head-hemorrhage-detection</strong> после отдельного реального
-      запуска на разрешённой публичной КТ с доказанной шкалой HU.
-      На этом экране вычисление модели не запускается, никакие DICOM не передаются.</p>
+    <p>Доступен настоящий результат предобученной модели
+      <strong> ianpan/ct-head-hemorrhage-detection</strong> на публичной
+      КТ головы PHE-SICH-CT-IDS из 25 срезов. Интенсивности соответствуют
+      диапазону КТ, но исходная HU-калибровка по DICOM не подтверждена.
+      Повторного запуска модели и передачи DICOM с этой страницы нет.</p>
+    <button type="button" disabled={loadingExample} onClick={async()=>{
+      setLoadingExample(true);setReport(null);setError("");setNotes("");
+      setGenuinePublicExample(false);
+      try{
+        const response=await fetch(
+          "/examples/ich-ianpan-real-figshare-run-38733865982.json",
+          {cache:"no-store"});
+        if(!response.ok)throw Error("Сохранённый реальный пример недоступен.");
+        const loaded=parseIchAlternativeReport(await response.text());
+        if(loaded.source.niftiSha256!=="0543a46065314468fe7ab18b9187277ae1affc4e7c864d0fd8ae608afa554a95"||
+           loaded.source.modelOrderedSliceCount!==25||
+           loaded.candidates.length!==14||
+           loaded.source.publishedFigshareHuLikeWithoutOriginalDicomRescaleAudit!==true||
+           loaded.source.referenceLabelsOnlyPerihematomalEdema!==true)
+          throw Error("Недостоверная версия публичного примера.");
+        setReport(loaded);setGenuinePublicExample(true);
+      }catch(err){setError(err instanceof Error?err.message:"Ошибка загрузки.");}
+      finally{setLoadingExample(false);}
+    }}>{loadingExample?"Загрузка реального ICH-результата…":
+      "Показать реальную КТ: находки детектора кровоизлияния"}</button>
+    <p><small><a href="https://github.com/vasiliys961/opus-radiology-ai/actions/runs/38733865982"
+      target="_blank" rel="noopener noreferrer">
+      Настоящий запуск модели и оригинальный исследовательский JSON в GitHub Actions</a>.
+      На исходной КТ получены 14 модельных предложений на семи
+      последовательных срезах. Это отдельное публичное исследование, не текущий пациент.</small></p>
     <label>JSON-отчёт выполнения предобученной модели (до 2 МиБ)
       <input type="file" accept=".json,application/json" onChange={async e=>{
         const f=e.target.files?.[0];e.currentTarget.value="";
-        setReport(null);setError("");setNotes("");
+        setReport(null);setError("");setNotes("");setGenuinePublicExample(false);
         if(!f)return;
         try{
           if(f.size>2*1024*1024)throw Error("Слишком большой файл отчёта.");
@@ -62,6 +90,14 @@ export default function IanpanIchResearchResults(){
           гематомного объёма или клинической чувствительности. Результаты
           нейросети — неподтверждённые исследовательские предложения.
         </p>}
+      {genuinePublicExample&&<p role="status">
+        <strong>Оригинальная предобученная модель действительно выполнена.</strong>
+        Найдены области, подозрительные на внутримозговое кровоизлияние.
+        Их связь с экспертно размеченной гематомой ещё не подтверждена.
+        К опубликованной исследовательской КТ прилагаются маски перифокального
+        отёка, не маски крови. Поэтому Dice, чувствительность и
+        клиническая достоверность здесь не рассчитываются.
+      </p>}
       <h4>Оценки шести категорий на уровне серии</h4>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))",gap:8}}>
         {ICH_CLASSES.map(k=><div key={k} style={{padding:8,border:"1px solid #8b9b97",borderRadius:6}}>
@@ -121,6 +157,8 @@ export default function IanpanIchResearchResults(){
         // The export remains a research observation, not a signed patient record.
         const exportData={
           schema:"opus-ianpan-ich-local-unsigned-review/v1",
+          genuinePublicWorkflowRunId:genuinePublicExample?38733865982:null,
+          expertHematomaMaskMatched:false,
           scope:"separate_public_research_study_only",
           sourceNiftiSha256:report.source.niftiSha256,
           modelId:report.model.id,modelRevision:report.model.revision,
@@ -143,7 +181,7 @@ export default function IanpanIchResearchResults(){
         window.setTimeout(()=>URL.revokeObjectURL(url),1000);
       }}>Скачать неподписанную исследовательскую заметку</button>{" "}
       <button type="button" onClick={()=>{
-        setReport(null);setNotes("");setError("");
+        setReport(null);setNotes("");setError("");setGenuinePublicExample(false);
       }}>Закрыть результат</button>
       <p><small>В новых отчётах координаты областей теперь вычисляются в
         нативных вокселях NIfTI обратным преобразованием из модели; источник
