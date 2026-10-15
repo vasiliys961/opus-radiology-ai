@@ -1,0 +1,22 @@
+name: Knee full corpus training contract
+on:
+  pull_request:
+    paths:
+      - 'services/imaging-ai/rsna_knee_full_corpus.py'
+      - 'services/imaging-ai/test_rsna_knee_full_corpus.py'
+      - '.github/workflows/rsna-knee-full-corpus.yml'
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Full corpus safety checks
+        run: |
+          cd services/imaging-ai
+          python -m unittest test_rsna_knee_full_corpus.py -v
