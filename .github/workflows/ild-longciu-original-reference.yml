@@ -1,5 +1,5 @@
 name: Real 2D HRCT GGO + consolidation three-expert LongCIU benchmark
-# Model label ontology audit: published output may include anatomy labels beyond 0/1/2.
+# Authors' published dice.ipynb maps MEDPSeg GGO=1 and consolidation=2; class 3 is excluded.
 on:
   push:
     branches: [feature/ild-real-longciu-ggo-consensus-20261015]
