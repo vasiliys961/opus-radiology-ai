@@ -10,12 +10,15 @@ import sys
 from pathlib import Path
 from rsna_knee_validation import make_manifest
 
-def training_commands(root,work,manifest,epochs):
+def training_commands(root,work,manifest,epochs,series_selection="legacy"):
+    if series_selection not in ("legacy","balanced"):
+        raise ValueError("Unknown series selection")
     service=Path(__file__).parent
     common=["--train-csv",str(root/"train.csv"),
             "--series-csv",str(root/"train_series.csv"),
             "--dicom-root",str(root/"train_series"),
-            "--manifest",str(manifest),"--epochs",str(epochs)]
+            "--manifest",str(manifest),"--epochs",str(epochs),
+            "--series-selection",series_selection]
     return [
         [sys.executable,str(service/"rsna_knee_dinov2.py"),*common,
          "--output",str(work/"dinov2_comparison.pt")],
@@ -34,7 +37,7 @@ def run(args):
     work.mkdir(parents=True,exist_ok=True)
     manifest=work/"knee_comparison_split.json"
     make_manifest(root/"train.csv",manifest,args.seed)
-    commands=training_commands(root,work,manifest,args.epochs)
+    commands=training_commands(root,work,manifest,args.epochs,args.series_selection)
     for command in commands:
         print("Executing",Path(command[1]).name,flush=True)
         subprocess.run(command,check=True)
@@ -62,6 +65,7 @@ def main():
     p.add_argument("--work",default="/kaggle/working")
     p.add_argument("--epochs",type=int,default=2)
     p.add_argument("--seed",type=int,default=42)
+    p.add_argument("--series-selection",choices=("legacy","balanced"),default="legacy")
     args=p.parse_args()
     if args.epochs<1:raise ValueError("epochs must be >=1")
     run(args)
