@@ -54,7 +54,7 @@ export function parseLocalLungFacts(raw:unknown):LocalLungFacts{
  const keys=["schema","model","frameCount","rightLungMaskMl","leftLungMaskMl","coverage","masksAreNotPathologyDetectors"];
  if(Object.keys(v).length!==keys.length||!keys.every(k=>Object.hasOwn(v,k))||
     v.schema!=="opus-local-r231-facts/v1"||v.model!=="lungmask-R231"||
-    !Number.isSafeInteger(v.frameCount)||Number(v.frameCount)<3||Number(v.frameCount)>300||
+    typeof v.frameCount!=="number"||!Number.isSafeInteger(v.frameCount)||Number(v.frameCount)<3||Number(v.frameCount)>300||
     !finiteVolume(v.rightLungMaskMl)||!finiteVolume(v.leftLungMaskMl)||
     v.coverage!=="not-clinically-verified"||
     v.masksAreNotPathologyDetectors!==true)
