@@ -1,0 +1,29 @@
+{
+  "schema": "opus-task315-public-ct-technical-run/v1",
+  "publicSource": "TCIA LCTSC CC BY 3.0, 103 supplied frames",
+  "sourceSha256": "99615ddb66e09bd46c2ff70c352d73414285145b358e448682b7cffc41249738",
+  "sourceSpatialGridVerified": true,
+  "modelTask": "pleural_pericard_effusion",
+  "actualPretrainedExecutionReported": true,
+  "modelPackageVersion": "2.18.0",
+  "installedCheckpointSha256": "c971fd018e32079a0d2abd9744f26e234d8778f6567c53ed948b22c21a1b84f0",
+  "activeCheckpointProven": false,
+  "anatomicalClass1NotCountedAsFluid": true,
+  "fluidClasses": [
+    {
+      "class": "pleural_effusion",
+      "modelVoxelCount": 0,
+      "unvalidatedModelVolumeMl": 0
+    },
+    {
+      "class": "pericardial_effusion",
+      "modelVoxelCount": 11211,
+      "unvalidatedModelVolumeMl": 32.074897
+    }
+  ],
+  "elapsedSeconds": 75.312,
+  "expertPleuralEffusionMaskCompared": false,
+  "anatomicalFullChestCoverageVerified": false,
+  "normalStudyEstablished": false,
+  "clinicalValidation": false
+}
