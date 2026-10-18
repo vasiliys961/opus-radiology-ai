@@ -3,7 +3,7 @@
  * This adapter never accepts patient scans or arbitrary model reports.
  * LLMs receive limited numeric facts, never source pixels or source identities.
  */
-export type PublicCaseId="lung-nodule"|"head-hemorrhage";
+export type PublicCaseId="lung-nodule"|"head-hemorrhage"|"chest-effusion";
 export type ResearchFact={id:string;label:string;detail:string};
 export type PublicResearchCase={
   schema:"opus-public-model-review/v1";caseId:PublicCaseId;
@@ -25,10 +25,57 @@ const val=(v:unknown)=>typeof v==="number"&&Number.isFinite(v)?v:null;
 const hash=(v:unknown)=>typeof v==="string"&&/^[a-f0-9]{64}$/.test(v);
 const fmt=(n:number,digits=3)=>n.toFixed(digits);
 export function isPublicCaseId(v:unknown):v is PublicCaseId{
-  return v==="lung-nodule"||v==="head-hemorrhage";
+  return v==="lung-nodule"||v==="head-hemorrhage"||v==="chest-effusion";
 }
 export function assemblePublicCase(id:PublicCaseId,first:unknown,second:unknown):PublicResearchCase{
-  const a=obj(first), b=obj(second);
+  const a=obj(first);
+  if(id==="chest-effusion"){
+    const raw=a.fluidClasses;
+    if(!Array.isArray(raw)||raw.length!==2)throw Error("public_task315_wrong_labels");
+    const pleural=obj(raw[0]),pericardial=obj(raw[1]);
+    const pv=val(pleural.modelVoxelCount),cv=val(pericardial.modelVoxelCount);
+    const pml=val(pleural.unvalidatedModelVolumeMl),
+      cml=val(pericardial.unvalidatedModelVolumeMl);
+    if(a.schema!=="opus-task315-public-ct-technical-run/v1"||
+       a.publicSource!=="TCIA LCTSC CC BY 3.0, 103 supplied frames"||
+       a.sourceSha256!=="99615ddb66e09bd46c2ff70c352d73414285145b358e448682b7cffc41249738"||
+       a.sourceSpatialGridVerified!==true||
+       a.modelTask!=="pleural_pericard_effusion"||
+       a.actualPretrainedExecutionReported!==true||
+       a.modelPackageVersion!=="2.18.0"||
+       a.installedCheckpointSha256!=="c971fd018e32079a0d2abd9744f26e234d8778f6567c53ed948b22c21a1b84f0"||
+       a.activeCheckpointProven!==false||
+       a.anatomicalClass1NotCountedAsFluid!==true||
+       a.expertPleuralEffusionMaskCompared!==false||
+       a.anatomicalFullChestCoverageVerified!==false||
+       a.normalStudyEstablished!==false||
+       a.clinicalValidation!==false||
+       pleural.class!=="pleural_effusion"||
+       pericardial.class!=="pericardial_effusion"||
+       pv!==0||pml!==0||cv!==11211||
+       cml===null||Math.abs(cml-32.074897)>1e-6||
+       val(a.elapsedSeconds)===null||a.elapsedSeconds===0)
+      throw Error("public_task315_source_or_inference_mismatch");
+    return{schema:"opus-public-model-review/v1",caseId:id,
+      title:"Плевральный и перикардиальный выпот · TotalSegmentator",
+      anatomy:"КТ грудной клетки",modelNames:["TotalSegmentator 2.18.0 · task315"],
+      sourceUrl:"https://github.com/vasiliys961/opus-radiology-ai/actions/runs/39152510396",
+      facts:[
+        {id:"fluid-real-run",label:"Настоящий инференс",detail:"Официальная модель task315 обработала все 103 предоставленных среза публичной TCIA LCTSC КТ. Это не загруженный сейчас DICOM."},
+        {id:"fluid-pleural",label:"Плевральная метка",detail:"Модель пометила "+pv+" вокселей плевральной жидкости. Отсутствие маски НЕ исключает выпот."},
+        {id:"fluid-pericardial",label:"Перикардиальная метка",detail:"Модель пометила "+cv+" вокселей, расчёт по маске "+fmt(cml,3)+" мл. Наличие выпота и его объём НЕ подтверждены врачом."},
+        {id:"fluid-class1",label:"Анатомический контроль",detail:"Класс 1 (lung_pleural) — анатомия, не жидкость. В качестве выпота рассматриваются только исследовательские классы 2 и 3."},
+        {id:"fluid-provenance",label:"Паспорт модели и источника",detail:"SHA оригинального исследования и установленного checkpoint зафиксированы, маска пространственно сопоставлена с КТ. Внутренняя загрузка именно этого checkpoint криптографически не подтверждена."},
+        {id:"fluid-reference",label:"Независимый контроль",detail:"Для этой КТ нет экспертной разметки выпота. Полнота анатомии грудной клетки не подтверждена; независимые Dice, чувствительность и специфичность неизвестны."}
+      ],
+      limitations:["32,075 мл — только предполагаемый объём модельной маски, не клиническое измерение.",
+        "Нет независимой экспертной маски выпота; ложноположительные находки возможны.",
+        "Нулевая плевральная маска не доказывает отсутствия выпота.",
+        "Исследовано 103 предоставленных среза, не подтверждён весь объём грудной клетки.",
+        "LLM получит только эти шесть фактов, без изображений и без права ставить диагноз."],
+      patientStudyAnalyzed:false,clinicalValidation:false,liveInference:false};
+  }
+  const b=obj(second);
   if(id==="lung-nodule"){
     const study=obj(a.publicStudy),model=obj(a.model),coverage=obj(a.coverage);
     const reference=obj(b.independentPublishedLuna16ExpertReference);
