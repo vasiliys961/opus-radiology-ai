@@ -53,7 +53,7 @@ export default function NativeCtResearchExport({
      // await that could lose browser activation.
      const picker=(window as Window&Partial<LocalSavePicker>).showSaveFilePicker;
      if(!picker)throw Error("Браузер не поддерживает потоковую запись. Откройте локальный Opus в Chromium.");
-     const handle=await picker({
+     const handle=await picker.call(window,{
        suggestedName:"opus-original-public-chest.nii",
        types:[{description:"Оригинальная КТ NIfTI-1 (HU)",accept:{"application/octet-stream":[".nii"]}}],
      });
@@ -112,7 +112,7 @@ export default function NativeCtResearchExport({
      <button type="button" onClick={manifest}>Скачать паспорт для запуска MONAI</button>
      <p>Следующий шаг — локальный исследовательский Linux-исполнитель: оригинальный .nii вместе с паспортом;
      результат импортируется через вкладку «MONAI · узлы КТ». Перенос пациента в облако не разрешён.</p>
-     <a href="/viewer" aria-label="Исследовательская вкладка MONAI">Вкладка MONAI в этом просмотрщике</a>
+     <p>Вкладка MONAI доступна в переключателе формата исходного исследования вверху этого просмотрщика.</p>
    </>}
  </details>;
 }
