@@ -9,9 +9,9 @@ type ReviewResponse={caseData:PublicResearchCase;review:PublicLLMReview;model:st
   remoteInferencePerformed:true;patientDataSubmitted:false;clinicalStatus:"unverified_research_draft"};
 const available=[
  {title:"Lungmask R231",status:"LIVE · LOCAL",description:"Настоящая сегментация правого/левого лёгкого из основной рабочей станции через отдельный CPU worker. Не является детектором узлов, опухолей и ILD.",href:"/"},
- {title:"MONAI RetinaNet",status:"PUBLIC CASE · RESEARCH",description:"Обученный локализующий детектор узлов. Проверено на одной публичной КТ LUNA16; произвольный DICOM ещё не подключён.",href:"/viewer"},
+ {title:"MONAI RetinaNet",status:"PUBLIC CASE · RESEARCH",description:"Обученный локализующий детектор узлов. Проверено на одной публичной КТ LUNA16; доступен локальный экспорт DICOM→NIfTI, а исполнение модели — на отдельном Linux CPU.",href:"/viewer"},
  {title:"ianpan + TotalSegmentator",status:"PUBLIC CASE · RESEARCH",description:"Два настоящих детектора кровоизлияний на одной публичной КТ. Экспертной маски крови и клинических метрик нет.",href:"/"},
- {title:"TotalSegmentator · выпоты / органы",status:"IMPORT · RESEARCH",description:"Анатомические маски и исследовательский импорт task315. Не автоматическая диагностика новой КТ.",href:"/viewer"},
+ {title:"TotalSegmentator · выпоты / органы",status:"PRETRAINED · PUBLIC CASE",description:"Настоящий task315 на публичной КТ: перикардиальная маска 32,075 мл (не подтверждённый диагноз). Прямой анализ произвольной DICOM КТ пока не подключён.",href:"/viewer"},
 ];
 export default function ClinicalLab(){
   const [index,setIndex]=useState<IndexResponse|null>(null);
@@ -68,6 +68,7 @@ export default function ClinicalLab(){
         <div className="cl-toggle">
           <button type="button" className={caseId==="lung-nodule"?"active":""} onClick={()=>{setCaseId("lung-nodule");setAccepted(false);setReview(null);setError("");}}>КТ лёгких · узел</button>
           <button type="button" className={caseId==="head-hemorrhage"?"active":""} onClick={()=>{setCaseId("head-hemorrhage");setAccepted(false);setReview(null);setError("");}}>КТ головы · кровоизлияние</button>
+          <button type="button" className={caseId==="chest-effusion"?"active":""} onClick={()=>{setCaseId("chest-effusion");setAccepted(false);setReview(null);setError("");}}>КТ грудной клетки · выпоты</button>
         </div>
         {selected?<div className="cl-case">
           <h3>{selected.title}</h3>
