@@ -375,3 +375,15 @@ Actual full-reference Linux acceptance: all 103 original frames, 825 chunks,
 complete mask SHA/counts, four native MPR ranges and DELETE/404 PASS; model RSS
 588.92 MiB, inference 116.761 s. See docs/verification/r231-full-browser-linux.json.
 This does not accept Mac/Safari/clinical accuracy. 271 Web / 64 Python tests pass.
+
+
+## Owner-approved CI-based agent merges — 2026-10-18
+
+The owner now authorizes autonomous **squash merge** of the agent's own PRs after
+all required CI checks pass at the current head and mergeability is verified.
+This replaces previous manual-merge-only operational text, **not** any clinical,
+patient privacy, licensing or branch protection requirement. Direct main pushes
+and merges with failing/incomplete checks remain forbidden. The agent should
+test task models on legal public de-identified cases with actual pinned pretrained
+weights, keep results source-hash-bound and distinguish successful inference
+from independent diagnostic accuracy.
