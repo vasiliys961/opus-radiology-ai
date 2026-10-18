@@ -1,3 +1,23 @@
+
+## Repository owner operational decision — 2026-10-18
+
+The repository owner **explicitly authorizes the coding agent to squash-merge its own
+completed feature PRs**, replacing the older "manual merge only" operational rule
+for agent-authored work. This is not authorization to ignore GitHub protection,
+security policy or medical validation. Merge only after checking the CURRENT
+PR head, required GitHub Actions all success, actual mergeability, and no
+known blocker. Never merge a failed, queued, conflicted or unreviewable change;
+fix it on its branch and rerun CI first. Keep short PRs, do not push straight
+to main, preserve the functioning DICOM/MPR/3D pipeline, keep patient/cloud gates
+closed, and report the merged SHA and known research-vs-clinical limitations.
+
+The owner also instructs testing on **lawfully usable public de-identified
+CT/MR examples**, not actual patients or undisclosed uploads. Record dataset
+license/access, verified source SHA, real checkpoint provenance and independent
+accuracy gaps; no synthetic fixture can count as trained-model clinical evidence.
+This new decision overrides earlier manual-merge wording in this AGENTS.md and
+REQUIREMENTS.md only on the matter of merging agent-authored, green PRs.
+
 # Opus Radiology AI — Instructions for Future Chats, Cursor and Coding Agents
 
 
