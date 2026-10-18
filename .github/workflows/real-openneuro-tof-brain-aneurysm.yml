@@ -1,0 +1,112 @@
+name: REAL TOF brain aneurysm pretrained mask versus OpenNeuro manual lesion
+on:
+  push:
+    branches:
+      - research/real-tof-brain-aneurysm-openneuro
+    paths:
+      - .github/workflows/real-openneuro-tof-brain-aneurysm.yml
+      - scripts/real-openneuro-tof-aneurysm.py
+permissions:
+  contents: read
+jobs:
+  real-tof-brain-aneurysm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      TOTALSEG_HOME_DIR: /tmp/opus-totalseg-tof-brain-aneurysm
+      PYTHONUNBUFFERED: "1"
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "1"
+      HF_HUB_DISABLE_TELEMETRY: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Require adequate research-only Linux CPU memory and disk
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import shutil
+          memory=int(next(s.split()[1] for s in Path("/proc/meminfo").read_text().splitlines() if s.startswith("MemAvailable:")))*1024
+          space=shutil.disk_usage(".").free
+          print("RAM GiB",round(memory/2**30,1),"disk GiB",round(space/2**30,1))
+          assert memory>=10*2**30 and space>=8*2**30,"Missing isolated 3D inference resources"
+          PY
+      - name: Install only original NIfTI source validation dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --no-cache-dir "numpy==2.2.6" "nibabel==5.3.2"
+      - name: Fetch pinned ORIGINAL CC0 positive TOF MRI and manual aneurysm reference
+        run: |
+          set -euo pipefail
+          python scripts/real-openneuro-tof-aneurysm.py \
+            --mode prepare --dir "$RUNNER_TEMP/original-positive-openneuro-tof"
+      - name: Install official pretrained TotalSegmentator 2.18 CPU model
+        run: |
+          set -euo pipefail
+          python -m pip install --no-cache-dir torch==2.6.0 torchvision==0.21.0 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --no-cache-dir "TotalSegmentator==2.18.0" "scipy==1.15.3" "numpy==2.2.6" "nibabel==5.3.2"
+      - name: Fetch OFFICIAL research-only brain_aneurysm pretrained checkpoint
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=20s 460s totalseg_download_weights -t brain_aneurysm
+          python - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          root=Path(os.environ["TOTALSEG_HOME_DIR"])
+          models=sorted((root/"nnunet/results").rglob("checkpoint_final.pth"))
+          if not models:raise RuntimeError("No actual pretrained official brain_aneurysm weights")
+          digest=hashlib.sha256()
+          for model in models:
+              if model.is_symlink() or not 1024<model.stat().st_size<1024**3:raise RuntimeError("Suspicious brain aneurysm checkpoint")
+              with model.open("rb") as f:
+                  for chunk in iter(lambda:f.read(1024*1024),b""):digest.update(chunk)
+          manifest={"task":"brain_aneurysm","packageVersion":"2.18.0",
+                    "modelLicense":"CC BY-NC 4.0 - noncommercial only",
+                    "observedCheckpointSha256":digest.hexdigest(),
+                    "numberOfOfficialCheckpointFiles":len(models),
+                    "publisherSigned":False}
+          (Path(os.environ["RUNNER_TEMP"])/"original-brain-aneurysm-model.json").write_text(json.dumps(manifest))
+          print("Observed licensed pretrained model SHA",manifest["observedCheckpointSha256"])
+          PY
+      - name: Execute GENUINE pretrained cerebral aneurysm model on original TOF-MRA
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          root=Path(os.environ["TOTALSEG_HOME_DIR"]);root.mkdir(parents=True,exist_ok=True)
+          (root/"config.json").write_text(json.dumps({"send_usage_stats":False,
+            "statistics_disclaimer_shown":True}))
+          PY
+          timeout --signal=TERM --kill-after=25s 2050s \
+            TotalSegmentator \
+              -i "$RUNNER_TEMP/original-positive-openneuro-tof/tof.nii.gz" \
+              -o "$RUNNER_TEMP/actual-brain-aneurysm-mask.nii.gz" \
+              --task brain_aneurysm --device cpu --ml --quiet
+      - name: Verify actual native TOF and model-grid alignment then numeric manual-mask overlap
+        run: |
+          set -euo pipefail
+          python scripts/real-openneuro-tof-aneurysm.py \
+            --mode evaluate \
+            --dir "$RUNNER_TEMP/original-positive-openneuro-tof" \
+            --model-mask "$RUNNER_TEMP/actual-brain-aneurysm-mask.nii.gz" \
+            --weights-manifest "$RUNNER_TEMP/original-brain-aneurysm-model.json" \
+            --output "/tmp/opus-real-brain-aneurysm-numeric.json"
+      - name: Retain ONLY numeric public research evaluation; NO original image or pixel masks
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-openneuro-tof-aneurysm-research-numeric
+          path: /tmp/opus-real-brain-aneurysm-numeric.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Always delete public TOF MRI, original reference, predicted masks and NC model weights
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/original-positive-openneuro-tof" \
+            "$RUNNER_TEMP/actual-brain-aneurysm-mask.nii.gz" \
+            "$RUNNER_TEMP/original-brain-aneurysm-model.json" \
+            /tmp/opus-real-brain-aneurysm-numeric.json "$TOTALSEG_HOME_DIR"
