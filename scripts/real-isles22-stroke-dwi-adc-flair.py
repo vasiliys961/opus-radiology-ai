@@ -156,14 +156,47 @@ def evaluate(path,prediction,out):
     print(json.dumps({k:result[k] for k in ("task","expertIschemicMaskVoxels",
      "predictedIschemicMaskVoxels","truePositiveVoxels","falsePositiveVoxels",
      "falseNegativeVoxels","oneScanIschemicDice","clinicalValidation")}))
+def run_real_pretrained_model(root,output_dir):
+    """Separate script process needed for nnU-Net multiprocessing spawn."""
+    import shutil
+    import torch
+    from nnunetv2.inference.predict_from_raw_data import nnUNetPredictor
+    record=json.loads((root/"admission.json").read_text())
+    weights=root/record["relativePretrainedModelFolder"]
+    checkpoint=weights/"fold_0/checkpoint_best.pth"
+    if (not checkpoint.is_file() or
+        sha(checkpoint)!=record["originalFold0CheckpointSha256"]):
+        raise ValueError("original_pretrained_ischemic_stroke_checkpoint_changed")
+    images=root/"nnunet-prediction-input"
+    if images.exists():raise ValueError("clean_model_input_directory_required")
+    images.mkdir(mode=0o700)
+    for i in range(3):
+        file=root/("stroke_000"+str(i)+".nii.gz")
+        if not file.is_file():raise ValueError("original_registered_stroke_MR_channel_missing")
+        shutil.copy2(file,images/file.name)
+    if output_dir.exists():raise ValueError("new_model_output_directory_required")
+    output_dir.mkdir(mode=0o700,parents=True)
+    predictor=nnUNetPredictor(tile_step_size=0.8,use_gaussian=True,
+         use_mirroring=False,perform_everything_on_device=False,
+         device=torch.device("cpu"),verbose=False,
+         verbose_preprocessing=False,allow_tqdm=False)
+    predictor.initialize_from_trained_model_folder(str(weights),
+         use_folds=(0,),checkpoint_name="checkpoint_best.pth")
+    predictor.predict_from_files(str(images),str(output_dir),
+         save_probabilities=False,overwrite=True,
+         num_processes_preprocessing=1,num_processes_segmentation_export=1)
+    if not (output_dir/"stroke.nii.gz").is_file():
+        raise ValueError("original_pretrained_nnUNet_did_not_produce_binary_ischemic_stroke_mask")
+
 def main():
     p=argparse.ArgumentParser()
-    p.add_argument("--mode",choices=("prepare","evaluate"),required=True)
+    p.add_argument("--mode",choices=("prepare","infer","evaluate"),required=True)
     p.add_argument("--dir",type=Path,required=True)
     p.add_argument("--prediction",type=Path)
     p.add_argument("--output",type=Path)
     a=p.parse_args()
     if a.mode=="prepare":prepare(a.dir)
-    elif a.prediction and a.output:evaluate(a.dir,a.prediction,a.output)
+    elif a.mode=="infer" and a.output:run_real_pretrained_model(a.dir,a.output)
+    elif a.mode=="evaluate" and a.prediction and a.output:evaluate(a.dir,a.prediction,a.output)
     else:raise ValueError("real_trained_prediction_required")
 if __name__=="__main__":main()
