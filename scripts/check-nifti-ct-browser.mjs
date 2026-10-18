@@ -78,6 +78,13 @@ try{
     return route.continue();
   });
   await page.goto(url+"/viewer",{waitUntil:"networkidle"});
+  // The trained-model source/result importer MUST be reachable in the visible
+  // navigation, not merely present as a lazy component in source code.
+  await page.getByRole("button",{name:"MONAI · узлы КТ"}).click();
+  await page.locator(".cs-nodule-bound .cs-nodule-controls input[type=file]").first()
+    .waitFor({state:"attached",timeout:15000});
+  assert.equal(await page.locator(".cs-nodule-bound .cs-nodule-controls input[type=file]").count(),2);
+  assert.match(await page.locator(".cs-nodule-bound").innerText(),/MONAI RetinaNet|RetinaNet 0.6.9/);
   await page.getByRole("button",{name:"NIfTI · КТ брюшной полости"}).click();
   const pickers=page.locator(".cs-nifti-controls input[type=file]");
   await pickers.first().waitFor({state:"attached",timeout:15000});
