@@ -65,3 +65,46 @@ test("Unknown case IDs cannot call a detector",()=>{
  assert.equal(isPublicCaseId("mr-hemorrhage"),false);
  assert.equal(isPublicCaseId("head-hemorrhage"),true);
 });
+
+
+const realTask315={
+ schema:"opus-task315-public-ct-technical-run/v1",
+ publicSource:"TCIA LCTSC CC BY 3.0, 103 supplied frames",
+ sourceSha256:"99615ddb66e09bd46c2ff70c352d73414285145b358e448682b7cffc41249738",
+ sourceSpatialGridVerified:true,modelTask:"pleural_pericard_effusion",
+ actualPretrainedExecutionReported:true,modelPackageVersion:"2.18.0",
+ installedCheckpointSha256:"c971fd018e32079a0d2abd9744f26e234d8778f6567c53ed948b22c21a1b84f0",
+ activeCheckpointProven:false,anatomicalClass1NotCountedAsFluid:true,
+ fluidClasses:[
+   {class:"pleural_effusion",modelVoxelCount:0,unvalidatedModelVolumeMl:0},
+   {class:"pericardial_effusion",modelVoxelCount:11211,unvalidatedModelVolumeMl:32.074897},
+ ],elapsedSeconds:75.312,
+ expertPleuralEffusionMaskCompared:false,anatomicalFullChestCoverageVerified:false,
+ normalStudyEstablished:false,clinicalValidation:false,
+};
+test("real pretrained task315 shows fluid proposal without diagnosing effusion or absence",()=>{
+ assert.equal(isPublicCaseId("chest-effusion"),true);
+ const report=assemblePublicCase("chest-effusion",realTask315,null);
+ assert.equal(report.clinicalValidation,false);
+ assert.equal(report.patientStudyAnalyzed,false);
+ assert.equal(report.liveInference,false);
+ assert.match(report.facts.find(f=>f.id==="fluid-pericardial")?.detail??"",/32.075 мл/);
+ assert.match(report.facts.find(f=>f.id==="fluid-pleural")?.detail??"",/НЕ исключает/);
+ assert.match(report.limitations.join(" "),/ложноположительные/);
+ const review=JSON.stringify({schema:"opus-public-llm-review/v1",
+   rankedFacts:[{factId:"fluid-reference",priority:"high",reason:"Нужна экспертная сегментация."}],
+   unresolvedQuestions:["Есть ли независимый клинический эталон?"],summary:"Public research only, not a diagnosis."});
+ assert.equal(parsePublicLLMReview(review,report).rankedFacts[0].factId,"fluid-reference");
+});
+test("task315 public review rejects forged labels, clinical certainty and weight drift",()=>{
+ for(const forged of [
+  {...realTask315,sourceSha256:"0".repeat(64)},
+  {...realTask315,installedCheckpointSha256:"0".repeat(64)},
+  {...realTask315,clinicalValidation:true},
+  {...realTask315,activeCheckpointProven:true},
+  {...realTask315,normalStudyEstablished:true},
+  {...realTask315,fluidClasses:[realTask315.fluidClasses[1],realTask315.fluidClasses[0]]},
+  {...realTask315,fluidClasses:[realTask315.fluidClasses[0],{
+    ...realTask315.fluidClasses[1],modelVoxelCount:9999}]},
+ ])assert.throws(()=>assemblePublicCase("chest-effusion",forged,null));
+});
