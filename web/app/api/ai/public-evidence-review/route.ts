@@ -17,12 +17,12 @@ const FILES:Record<PublicCaseId,[string,string]>={
   "lung-nodule":["luna16-monai-cpu-run-38436406805.json","luna16-monai-expert-center-run-38724788094.json"],
   "head-hemorrhage":["ianpan-ich-real-figshare-run-38734338486.json","ich-genuine-independent-totalseg-ianpan-run-38747034560.json"],
 };
-function localOnly(req:NextRequest){
+function localOnly(req:NextRequest,requireOrigin=true){
   const host=req.headers.get("host")??"";
   const site=req.headers.get("sec-fetch-site");
   return process.env.NODE_ENV==="development"&&LOCAL.test(host)&&
     ["localhost","127.0.0.1"].includes(req.nextUrl.hostname)&&
-    req.headers.get("origin")==="http://"+host&&
+    (!requireOrigin||req.headers.get("origin")==="http://"+host)&&
     (site===null||site==="same-origin")&&!req.nextUrl.search;
 }
 async function caseData(id:PublicCaseId){
@@ -96,7 +96,7 @@ export async function POST(request:NextRequest){
   }finally{release();}
 }
 export async function GET(request:NextRequest){
-  if(!localOnly(request))return failure(404,"Local development public research only");
+  if(!localOnly(request,false))return failure(404,"Local development public research only");
   try{
     const cases=await Promise.all([caseData("lung-nodule"),caseData("head-hemorrhage")]);
     return NextResponse.json({schema:"opus-public-case-index/v1",cases,
