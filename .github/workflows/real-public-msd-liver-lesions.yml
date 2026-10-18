@@ -1,0 +1,101 @@
+name: First REAL pretrained CT liver lesions on MSD expert tumor mask
+on:
+  push:
+    branches:
+      - research/first-real-ct-liver-lesion-detector-msd
+    paths:
+      - .github/workflows/real-public-msd-liver-lesions.yml
+      - scripts/real-public-msd-liver-lesions.py
+permissions:
+  contents: read
+jobs:
+  pretrained-liver-lesion:
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    env:
+      TOTALSEG_HOME_DIR: /tmp/opus-pretrained-liver-lesions
+      PYTHONUNBUFFERED: "1"
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "1"
+      HF_HUB_DISABLE_TELEMETRY: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Admit memory/disk on public Linux worker before downloading CT
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import shutil
+          mem=0
+          for line in Path("/proc/meminfo").read_text().splitlines():
+              if line.startswith("MemAvailable:"):mem=int(line.split()[1])*1024
+          free=shutil.disk_usage(".").free
+          print("free RAM GiB",round(mem/1024**3,2),"disk GiB",round(free/1024**3,2))
+          assert mem>=10*1024**3 and free>=8*1024**3, "Inadequate CPU research worker"
+          PY
+      - name: Install official original pretrained TotalSegmentator and pinned CPU Torch
+        run: |
+          set -euo pipefail
+          python -m pip install --no-cache-dir torch==2.6.0 torchvision==0.21.0 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --no-cache-dir "TotalSegmentator==2.18.0" "nibabel==5.3.2" "numpy==2.2.6" "scipy==1.15.3" "huggingface_hub==0.34.4"
+      - name: Fetch ONE pinned permitted original MSD Liver CT and ORIGINAL expert tumor label
+        run: |
+          python scripts/real-public-msd-liver-lesions.py --mode prepare --dir "$RUNNER_TEMP/public-msd-liver"
+      - name: Provision official pretrained liver_lesions checkpoint and verify its installed SHA
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=15s 460s totalseg_download_weights -t liver_lesions
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,json,os
+          home=Path(os.environ["TOTALSEG_HOME_DIR"])
+          weights=sorted((home/"nnunet/results").rglob("checkpoint_final.pth"))
+          if not weights:raise ValueError("Real official pretrained liver_lesions weights missing")
+          for p in weights:
+              if p.is_symlink() or not 1024<p.stat().st_size<1024**3:raise ValueError("Invalid pretrained checkpoint")
+          h=hashlib.sha256()
+          with weights[0].open("rb") as f:
+              for b in iter(lambda:f.read(1048576),b""):h.update(b)
+          (Path(os.environ["RUNNER_TEMP"])/"liver-model-provenance.json").write_text(json.dumps({
+              "task":"liver_lesions","checkpointSha256":h.hexdigest(),
+              "publisherSignature":False,"observedPretrainedCheckpointCount":len(weights)}))
+          print("Observed official pretrained liver checkpoint SHA",h.hexdigest())
+          PY
+      - name: REAL pretrained liver_lesions CT mask on original annotated MSD scan
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import json,os
+          root=Path(os.environ["TOTALSEG_HOME_DIR"]);root.mkdir(parents=True,exist_ok=True)
+          (root/"config.json").write_text(json.dumps({"send_usage_stats":False,"statistics_disclaimer_shown":True}))
+          PY
+          timeout --signal=TERM --kill-after=25s 2450s \
+            TotalSegmentator \
+            -i "$RUNNER_TEMP/public-msd-liver/source.nii.gz" \
+            -o "$RUNNER_TEMP/real-liver-lesion-mask.nii.gz" \
+            --task liver_lesions --device cpu --ml --quiet
+      - name: Independently compare actual predicted lesion mask with original expert tumor mask
+        run: |
+          python scripts/real-public-msd-liver-lesions.py --mode evaluate \
+            --dir "$RUNNER_TEMP/public-msd-liver" \
+            --mask "$RUNNER_TEMP/real-liver-lesion-mask.nii.gz" \
+            --checkpoint-manifest "$RUNNER_TEMP/liver-model-provenance.json" \
+            --out "/tmp/opus-liver-first-real-numeric.json"
+      - name: Upload ONLY one study's de-identified numeric Dice/TP/FP/FN without images
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-public-ct-liver-lesion-expert-numeric
+          path: /tmp/opus-liver-first-real-numeric.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Delete all original public CT, expert mask, pretrained checkpoint and predictions
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/public-msd-liver" "$RUNNER_TEMP/real-liver-lesion-mask.nii.gz" \
+            "$RUNNER_TEMP/liver-model-provenance.json" \
+            /tmp/opus-liver-first-real-numeric.json "$TOTALSEG_HOME_DIR"
