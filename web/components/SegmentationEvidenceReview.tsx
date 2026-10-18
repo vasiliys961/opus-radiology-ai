@@ -4,6 +4,7 @@ import { type EvidenceDecision, type SegmentationEvidence } from "../lib/segment
 import { changeEvidenceReview, MAX_REVIEW_JSON_BYTES, restoreEvidenceReview, startEvidenceReview } from "../lib/evidence-review-history";
 import type { Point3 } from "../lib/segmentation-mask";
 import EvidenceComparisonReview from "./EvidenceComparisonReview";
+import LocalLungLlmReview from "./LocalLungLlmReview";
 import EvidenceReportDownload from "./EvidenceReportDownload";
 import { latestReviewerNote,MAX_NOTE_CHARS,MAX_NOTE_JSON_BYTES,restoreReviewerNote,reviewerNoteNeedsRecheck,saveReviewerNote,type EvidenceWithNote } from "../lib/evidence-reviewer-note";
 const decisionLabel: Record<EvidenceDecision,string>={unreviewed:"Не проверено врачом",requires_recheck:"На перепроверку",rejected:"Отклонено локально"};
@@ -116,6 +117,7 @@ export default function SegmentationEvidenceReview({evidence,onNavigate,onSample
       <p>SHA-256 исходного объёма: {review.source.inputSha256}<br/>SHA-256 маски: {review.mask.sha256}<br/>SHA-256 весов: {review.producer.model.weightsSha256}</p>
       <ul>{review.limitations.map((s,i)=><li key={i}>{s}</li>)}</ul></details>
     <small>Отметки существуют в памяти страницы и включаются в локальный JSON. Маска сохраняется для сравнения даже при отклонении. Электронной подписи и утверждённого заключения нет. Провайдеры Gemini/Claude не вызываются.</small>
+    <LocalLungLlmReview evidence={review}/>
     <EvidenceComparisonReview evidence={review} onNavigate={onNavigate} onSampleMask={onSampleMask} hasUnsavedReviewerNote={noteDirty}/>
   </section>;
 }
