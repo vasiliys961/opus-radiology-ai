@@ -1,0 +1,73 @@
+name: Real pretrained MONAI on source-bound public LUNA16 (research only)
+on:
+  push:
+    branches: ["test/public-luna16-live-monai-full-ct"]
+    paths:
+      - "scripts/test-monai-bound-public-luna16.py"
+      - "services/imaging-ai/monai_bound_nodule.py"
+      - ".github/workflows/real-monai-bound-public-luna16.yml"
+permissions:
+  contents: read
+jobs:
+  real-public-case:
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    env:
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      PYTHONUNBUFFERED: "1"
+      OMP_NUM_THREADS: "2"
+      TOKENIZERS_PARALLELISM: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pinned REAL pretrained CPU dependencies (no GPU)
+        run: |
+          set -euo pipefail
+          python -m pip install --no-cache-dir torch==2.4.0 torchvision==0.19.0 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --no-cache-dir monai==1.4.0 nibabel==5.2.1 numpy==1.24.4 pytorch-ignite==0.4.11 SimpleITK==2.4.0 huggingface_hub==0.34.4 tensorboard==2.17.0 psutil==6.1.1 itk==5.4.3 fire==0.7.1
+      - name: Preflight real CPU host memory before fetching medical study
+        run: |
+          python - <<'PY'
+          import psutil
+          assert psutil.virtual_memory().available >= 9*1024**3, "Research host needs at least 9GiB RAM"
+          PY
+      - name: Download pinned permitted, publicly shared original LUNA16-positive CT
+        run: |
+          python scripts/prepare-luna16-single-gpu-case.py --download \
+            --external-gpu-confirm PUBLIC-LUNA16-GPU-OK --output "$RUNNER_TEMP/public-ct"
+      - name: Convert exact 3D source HU and original physical affine into bounded NIfTI
+        run: |
+          python scripts/test-monai-bound-public-luna16.py --prepare \
+            --case-dir "$RUNNER_TEMP/public-ct" --out-dir "$RUNNER_TEMP/native-ct"
+      - name: Download pinned official pretrained MONAI weights and verify SHA offline
+        run: |
+          python - <<'PY'
+          from huggingface_hub import snapshot_download
+          import os
+          snapshot_download(repo_id="MONAI/lung_nodule_ct_detection",
+            revision="7226a40a4c3713f7d5469559b7f2fc296fd54825",
+            local_dir=os.environ["RUNNER_TEMP"]+"/monai-official",
+            allow_patterns=["configs/inference.json","configs/metadata.json","scripts/*.py","models/model.pt","LICENSE"])
+          PY
+      - name: Run real official RetinaNet 0.6.9 on NEW source-bound runner and complete public CT
+        run: |
+          python services/imaging-ai/monai_bound_nodule.py \
+            --source "$RUNNER_TEMP/native-ct/original-source.nii" \
+            --admission "$RUNNER_TEMP/native-ct/source-admission.json" \
+            --bundle "$RUNNER_TEMP/monai-official" \
+            --work "$RUNNER_TEMP/monai-process" \
+            --output "$RUNNER_TEMP/live-monai-result.json" \
+            --authorization PUBLIC-CHEST-CT-NODULE-RESEARCH-OK
+      - name: Compare real pretrained result with separately published expert LUNA16 centroid
+        run: |
+          python scripts/test-monai-bound-public-luna16.py --verify \
+            --out-dir "$RUNNER_TEMP/native-ct" \
+            --report "$RUNNER_TEMP/live-monai-result.json"
+      - name: Delete all downloaded CT pixels and checkpoint, including failure
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/public-ct" "$RUNNER_TEMP/native-ct" \
+            "$RUNNER_TEMP/monai-official" "$RUNNER_TEMP/monai-process" \
+            "$RUNNER_TEMP/live-monai-result.json"
