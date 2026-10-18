@@ -108,7 +108,7 @@ export function parseBoundNoduleReport(raw:string,src:NoduleNativeSource):BoundN
  const seen=new Set<number>(),inv=invertAffine(expected);
  for(const candidate of p.candidates){
    const c=object(candidate);
-   if(!Number.isSafeInteger(c.index)||Number(c.index)<0||seen.has(c.index)||
+   if(!Number.isSafeInteger(c.index)||Number(c.index)<0||seen.has(Number(c.index))||
       !finite(c.score)||c.score<0||c.score>1||
       !tuple(c.centerLpsMm,3)||!tuple(c.extentModelMm,3)||
       !(c.extentModelMm as number[]).every(x=>x>0&&x<=100)||
@@ -122,7 +122,7 @@ export function parseBoundNoduleReport(raw:string,src:NoduleNativeSource):BoundN
        Math.hypot(...x.map((n,i)=>n-(v as number[])[i]))>0.02)))
      throw Error("Кандидат не соответствует исходной пространственной сетке.");
  }
- return p as BoundNoduleReport;
+ return p as unknown as BoundNoduleReport;
 }
 /** The actual NIfTI's SHA-256 is checked before ANY report pixels are shown. */
 export async function verifyNoduleSource(file:Blob,sha256Expected:string,signal?:AbortSignal){
