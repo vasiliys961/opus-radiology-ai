@@ -1,5 +1,5 @@
 "use client";
-import {useEffect,useState} from "react";
+import {useState} from "react";
 import {localLungFacts,type LocalLungReview,type LocalLungFacts} from "../lib/local-lung-review";
 import type {SegmentationEvidence} from "../lib/segmentation-evidence";
 
@@ -13,15 +13,19 @@ export default function LocalLungLlmReview({evidence}:{evidence:SegmentationEvid
  const [busy,setBusy]=useState(false);
  let facts:LocalLungFacts|null=null;
  try{facts=localLungFacts(evidence);}catch{facts=null;}
- useEffect(()=>{
-  if(!facts)return;
-  const controller=new AbortController();
-  fetch("/api/ai/local-lung-review",{cache:"no-store",signal:controller.signal})
-   .then(async r=>{if(!r.ok)throw Error("Локальная LM Studio не обнаружена");return r.json() as Promise<{models:{id:string}[]}>;})
-   .then(v=>{if(!controller.signal.aborted){const ids=v.models.map(x=>x.id);setModels(ids);setModel(ids[0]??"");}})
-   .catch(()=>{if(!controller.signal.aborted)setError("Запустите сервер LM Studio на 127.0.0.1:1234. Облачные LLM не вызываются.");});
-  return ()=>controller.abort();
- },[evidence]);
+ const [checking,setChecking]=useState(false);
+ async function checkModels(){
+  if(!facts||checking)return;
+  setChecking(true);setError("");setReview(null);setModels([]);setModel("");
+  try{
+   const response=await fetch("/api/ai/local-lung-review",{cache:"no-store"});
+   if(!response.ok)throw Error("Локальная LM Studio не обнаружена");
+   const value=await response.json() as {models:{id:string}[]};
+   const ids=value.models.map(x=>x.id);setModels(ids);setModel(ids[0]??"");
+   if(!ids.length)throw Error("В LM Studio нет доступных моделей");
+  }catch{setError("Запустите сервер LM Studio на 127.0.0.1:1234 и загрузите текстовую модель. Облачные LLM не вызываются.");}
+  finally{setChecking(false);}
+ }
  if(!facts)return null;
  async function ask(){
   if(!facts||!model||!accepted||busy)return;
@@ -44,6 +48,7 @@ export default function LocalLungLlmReview({evidence}:{evidence:SegmentationEvid
   <summary>Локальная LLM · критическая проверка маски R231 (без облака)</summary>
   <p>Только агрегированные объёмы масок правого и левого лёгкого и число обработанных срезов направляются в LM Studio по 127.0.0.1. Нет изображений, UID, SHA, имён файлов или заметок врача. Модель не диагностирует патологию и не подтверждает полноту КТ.</p>
   <p>R231: правая метка {facts.rightLungMaskMl.toFixed(1)} мл · левая {facts.leftLungMaskMl.toFixed(1)} мл · {facts.frameCount} срезов. Объёмы могут быть частичными.</p>
+  <div className="ora-evidence-actions"><button type="button" disabled={checking||busy} onClick={()=>void checkModels()}>{checking?"Проверяем LM Studio…":"Проверить доступные локальные модели"}</button></div>
   <label>Загруженная локальная модель <select value={model} onChange={e=>{setModel(e.target.value);setReview(null);}} disabled={busy}>
     {models.map(id=><option key={id} value={id}>{id}</option>)}
   </select></label>
