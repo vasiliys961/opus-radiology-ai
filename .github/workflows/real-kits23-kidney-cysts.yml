@@ -1,0 +1,101 @@
+name: Real public KiTS23 renal cyst detector vs expert cyst mask
+on:
+  push:
+    branches:
+      - research/first-real-kidney-cysts-kits23
+    paths:
+      - .github/workflows/real-kits23-kidney-cysts.yml
+      - scripts/real-public-kits23-kidney-cysts.py
+permissions:
+  contents: read
+jobs:
+  genuine-pretrained-kidney-cysts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      TOTALSEG_HOME_DIR: /tmp/opus-kidney-cysts-pretrained
+      HF_HOME: /tmp/opus-kidney-public-hf-cache
+      PYTHONUNBUFFERED: "1"
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "1"
+      HF_HUB_DISABLE_TELEMETRY: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: RAM/disk research host gate
+        run: |
+          python - <<'PY'
+          import shutil
+          available=int(next(x.split()[1] for x in open('/proc/meminfo') if x.startswith('MemAvailable:')))*1024
+          free=shutil.disk_usage('.').free
+          print('Available GiB',round(available/2**30,2),'Disk GiB',round(free/2**30,2))
+          assert available>=10*2**30 and free>=8*2**30, 'insufficient research worker'
+          PY
+      - name: Install official pretrained CPU inference and original CT library
+        run: |
+          set -euo pipefail
+          python -m pip install --no-cache-dir torch==2.6.0 torchvision==0.21.0 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --no-cache-dir "TotalSegmentator==2.18.0" "numpy==2.2.6" "nibabel==5.3.2" "scipy==1.15.3" "huggingface_hub==0.34.4"
+      - name: Obtain original KiTS23 public CT and expert cyst-positive label 3
+        run: |
+          python scripts/real-public-kits23-kidney-cysts.py --mode prepare --dir "$RUNNER_TEMP/kits23-original-positive"
+      - name: Fetch official pretrained renal cyst weights and observe original SHA
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=20s 460s totalseg_download_weights -t kidney_cysts
+          python - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          home=Path(os.environ["TOTALSEG_HOME_DIR"])
+          weights=sorted((home/'nnunet/results').rglob('checkpoint_final.pth'))
+          if not weights:raise ValueError("actual official pretrained kidney_cysts weights missing")
+          h=hashlib.sha256()
+          for model in weights:
+              if model.is_symlink() or not 1024<model.stat().st_size<1024**3:
+                  raise ValueError("untrusted checkpoint path/size")
+              with model.open('rb') as src:
+                  for buf in iter(lambda:src.read(1024*1024),b''):h.update(buf)
+          values={"modelTask":"kidney_cysts","modelPackageVersion":"2.18.0",
+                  "checkpointSha256":h.hexdigest(),"officialCheckpointCount":len(weights),
+                  "publisherSignatureVerified":False}
+          (Path(os.environ["RUNNER_TEMP"])/'kidney-cysts-pretrained-weights.json').write_text(json.dumps(values))
+          print("Official observed original model checkpoint aggregate SHA",values["checkpointSha256"])
+          PY
+      - name: Run REAL trained kidney_cysts model on original full 3D contrast CT
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import json,os
+          home=Path(os.environ["TOTALSEG_HOME_DIR"]);home.mkdir(parents=True,exist_ok=True)
+          (home/'config.json').write_text(json.dumps({"send_usage_stats":False,"statistics_disclaimer_shown":True}))
+          PY
+          timeout --signal=TERM --kill-after=20s 2350s \
+            TotalSegmentator \
+            -i "$RUNNER_TEMP/kits23-original-positive/ct.nii.gz" \
+            -o "$RUNNER_TEMP/real-renal-cyst-model-mask.nii.gz" \
+            --task kidney_cysts --device cpu --ml --quiet
+      - name: Independent physical native-grid expert cyst Dice and renal tumor confusion audit
+        run: |
+          python scripts/real-public-kits23-kidney-cysts.py --mode evaluate \
+            --dir "$RUNNER_TEMP/kits23-original-positive" \
+            --mask "$RUNNER_TEMP/real-renal-cyst-model-mask.nii.gz" \
+            --weights "$RUNNER_TEMP/kidney-cysts-pretrained-weights.json" \
+            --output "/tmp/opus-kits23-real-cysts-numeric.json"
+      - name: Upload ONLY numeric research evaluation, no CT, PHI, or masks
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: genuine-public-kits23-renal-cysts-numeric
+          path: /tmp/opus-kits23-real-cysts-numeric.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Remove public CT, expert masks, downloaded weights, caches regardless of result
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/kits23-original-positive" "$RUNNER_TEMP/real-renal-cyst-model-mask.nii.gz" \
+            "$RUNNER_TEMP/kidney-cysts-pretrained-weights.json" \
+            /tmp/opus-kits23-real-cysts-numeric.json "$TOTALSEG_HOME_DIR" "$HF_HOME"
