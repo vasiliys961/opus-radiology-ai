@@ -139,13 +139,13 @@
       "modality": "MR-4seq",
       "anatomy": "brain",
       "pathology": "glioma tumor subregions",
-      "status": "real_trial_running",
+      "status": "real_case_measured",
       "weights": "MONAI brats_mri_segmentation",
       "source": "https://github.com/Project-MONAI/model-zoo/tree/dev/models/brats_mri_segmentation",
       "reference": "public BraTS2021 four MR sequences with expert regions",
-      "restriction": "BraTS2018 overlap unknown; original source terms require review",
-      "priority": 2,
-      "next": "PR225 TC WT ET masks from real checkpoint"
+      "restriction": "BraTS2018 overlap unknown; original source terms require review; actual research run complete #39171368375 but clinical validation remains false",
+      "priority": 1,
+      "next": "Collect heldout independent full 4-sequence MRI with expert TC WT ET labels; original BraTS2021 single-case Dice TC=.974806 WT=.918428 ET=.935574 run39171368375"
     },
     {
       "id": "renal-neoplasm-3phase-ct",
@@ -256,13 +256,13 @@
       "modality": "CTPA",
       "anatomy": "thorax",
       "pathology": "pulmonary embolism",
-      "status": "weights_unverified",
-      "weights": "RSNA PE detector candidates only",
-      "source": "https://www.rsna.org/education/ai-resources-and-training/ai-image-challenge",
-      "reference": "RSNA STR PE studies with expert location to identify",
-      "restriction": "not yet a verified open checkpoint+location mask",
-      "priority": 4,
-      "next": "find verified public checkpoint and independent CTPA study"
+      "status": "real_checkpoint_candidate",
+      "weights": "Mazurowski Lab / yzluka 2026 PulmonaryEmbolismSegmentation, official nnUNet ResidualEncoderUNet, 566MB public pretrained checkpoint",
+      "source": "https://huggingface.co/yzluka/PulmonaryEmbolismSegmentation",
+      "reference": "Original FUMPE 35 CTPA images and expert segmentations, mirror https://huggingface.co/datasets/MedOtter/FUMPE",
+      "restriction": "CC BY-NC 4.0 model, noncommercial research only; FUMPE subject/date training independence and model preprocessing remain unverified",
+      "priority": 3,
+      "next": "One original expert positive FUMPE CT with licensed official pretrained portable inference and source-native Dice; require CPU resource gate"
     },
     {
       "id": "interstitial-lung-disease-hrct",
