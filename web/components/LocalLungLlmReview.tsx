@@ -12,15 +12,17 @@ export default function LocalLungLlmReview({evidence}:{evidence:SegmentationEvid
  const [error,setError]=useState("");
  const [busy,setBusy]=useState(false);
  let facts:LocalLungFacts|null=null;
- try{facts=localLungFacts(evidence);}catch{return null;}
+ try{facts=localLungFacts(evidence);}catch{facts=null;}
  useEffect(()=>{
+  if(!facts)return;
   const controller=new AbortController();
   fetch("/api/ai/local-lung-review",{cache:"no-store",signal:controller.signal})
    .then(async r=>{if(!r.ok)throw Error("Локальная LM Studio не обнаружена");return r.json() as Promise<{models:{id:string}[]}>;})
    .then(v=>{if(!controller.signal.aborted){const ids=v.models.map(x=>x.id);setModels(ids);setModel(ids[0]??"");}})
    .catch(()=>{if(!controller.signal.aborted)setError("Запустите сервер LM Studio на 127.0.0.1:1234. Облачные LLM не вызываются.");});
   return ()=>controller.abort();
- },[]);
+ },[evidence]);
+ if(!facts)return null;
  async function ask(){
   if(!facts||!model||!accepted||busy)return;
   setBusy(true);setError("");setReview(null);
