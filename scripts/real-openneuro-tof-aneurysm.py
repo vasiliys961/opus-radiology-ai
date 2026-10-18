@@ -194,6 +194,19 @@ def evaluate(folder,model_mask,weights_manifest,out):
             "Voxel Dice on one case does not establish detection sensitivity or patient-specific diagnosis."
         ]
     }
+    protocol_path=folder/"model-protocol.json"
+    if not protocol_path.is_file():
+        raise ValueError("trained_model_input_resolution_metadata_missing")
+    protocol=json.loads(protocol_path.read_text())
+    if (protocol.get("protocol")!="whole_field_downsampled_to_1point5mm" or
+        protocol.get("originalTOFSha256")!=meta["TOFSha256"] or
+        protocol.get("resampledModelInputSha256") is None or
+        protocol.get("trainedPredictionRegriddedToFullSourceGrid") is not True):
+        raise ValueError("not_verified_lowres_inference_source_protocol")
+    report["modelInputProtocol"]=protocol
+    report["modelInferenceUsedFullOriginalVoxelResolution"]=False
+    report["researchLowResolutionMayMissSmallAneurysm"]=True
+    report["clinicalValidation"]=False
     out.write_text(json.dumps(report,indent=2))
     print(json.dumps({k:report[k] for k in [
         "task","expertReferenceVoxels","predictedAneurysmLabel1Voxels",
