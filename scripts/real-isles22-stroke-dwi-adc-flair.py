@@ -9,12 +9,12 @@ No fake MRI, no source data/masks or voxel coordinates uploaded as artifacts.
 from __future__ import annotations
 import argparse,hashlib,json,math,shutil
 from pathlib import Path
-DS="MedOtter/isles2022"
+DS="shaohao011/BrainMVP-ds"
 WEIGHTS="akifkaradag/isles22-nnunetv2-stroke-segmentation"
-CASE="sub-strokecase0106"
+CASE="sub-strokecase0032"
 SESSION="ses-0001"
-ROOT=f"ISLES/dataset/rawdata/{CASE}/{SESSION}"
-LABEL=f"ISLES/dataset/derivatives/{CASE}/{SESSION}/{CASE}_{SESSION}_msk.nii.gz"
+ROOT=f"ISLES2022/ISLES2022-Training/{CASE}_{SESSION}"
+LABEL=f"{ROOT}/{CASE}_{SESSION}_msk.nii.gz"
 SCHEMA="opus-real-isles22-pretrained-ischemic-stroke-expert-mask/v1"
 
 def sha(f):
@@ -53,7 +53,7 @@ def prepare(path):
     if len(ds.sha)!=40 or len(model.sha)!=40:raise ValueError("unverifiable_original_public_MRI_or_weights_revision")
     path.mkdir(mode=0o700,parents=True)
     for name in ("dwi","adc","flair"):
-        source=f"{ROOT}/{CASE}_{SESSION}_{name}.nii.gz"
+        source=f"{ROOT}/{CASE}_{SESSION}_{name.upper() if name=='flair' else name}.nii.gz"
         f=Path(hf_hub_download(repo_id=DS,repo_type="dataset",revision=ds.sha,
                                filename=source,token=False))
         if f.stat().st_size>80*1024**2:raise ValueError("oversize_public_ischemia_MRI")
