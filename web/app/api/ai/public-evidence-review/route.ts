@@ -13,9 +13,10 @@ const MODEL="anthropic/claude-sonnet-5.5";
 const HEADERS={"Cache-Control":"no-store","X-Content-Type-Options":"nosniff","Referrer-Policy":"no-referrer"};
 const LOCAL=/^(?:localhost|127\.0\.0\.1)(?::[0-9]{1,5})?$/;
 const limiter=createSyntheticTrialLimiter(2,10*60_000);
-const FILES:Record<PublicCaseId,[string,string]>={
+const FILES:Record<PublicCaseId,[string,string|null]>={
   "lung-nodule":["luna16-monai-cpu-run-38436406805.json","luna16-monai-expert-center-run-38724788094.json"],
   "head-hemorrhage":["ianpan-ich-real-figshare-run-38734338486.json","ich-genuine-independent-totalseg-ianpan-run-38747034560.json"],
+  "chest-effusion":["task315-real-public-lctsc-run-39152510396.json",null],
 };
 function localOnly(req:NextRequest,requireOrigin=true){
   const host=req.headers.get("host")??"";
@@ -32,7 +33,7 @@ async function caseData(id:PublicCaseId){
     if(raw.length>128*1024)throw Error("public_evidence_too_large");
     return JSON.parse(raw) as unknown;
   };
-  const [a,b]=await Promise.all([read(left),read(right)]);
+  const [a,b]=await Promise.all([read(left),right?read(right):Promise.resolve(null)]);
   return assemblePublicCase(id,a,b);
 }
 function failure(status:number,message:string){
@@ -98,7 +99,7 @@ export async function POST(request:NextRequest){
 export async function GET(request:NextRequest){
   if(!localOnly(request,false))return failure(404,"Local development public research only");
   try{
-    const cases=await Promise.all([caseData("lung-nodule"),caseData("head-hemorrhage")]);
+    const cases=await Promise.all([caseData("lung-nodule"),caseData("head-hemorrhage"),caseData("chest-effusion")]);
     return NextResponse.json({schema:"opus-public-case-index/v1",cases,
       paidLlmEnabled:process.env.RADIOLOGY_ENABLE_PUBLIC_EVIDENCE_LLM==="1",model:MODEL},
       {headers:HEADERS});
