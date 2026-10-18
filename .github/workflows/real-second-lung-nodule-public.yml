@@ -1,0 +1,115 @@
+name: Real second pretrained lung-nodule detector on public LUNA16 CT
+on:
+  push:
+    branches:
+      - research/real-totalseg-lung-nodules-luna16
+    paths:
+      - .github/workflows/real-second-lung-nodule-public.yml
+      - scripts/audit-real-totalseg-lung-nodules-public.py
+permissions:
+  contents: read
+jobs:
+  official-lung-nodules:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      TOTALSEG_HOME_DIR: /tmp/opus-lung-nodules-pretrained
+      PYTHONUNBUFFERED: "1"
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "1"
+      HF_HUB_DISABLE_TELEMETRY: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Preflight public-research CPU RAM and disk
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import shutil
+          available=0
+          for line in Path("/proc/meminfo").read_text().splitlines():
+              if line.startswith("MemAvailable:"):
+                  available=int(line.split()[1])*1024
+          disk=shutil.disk_usage(".").free
+          print("Available GiB",round(available/1024**3,2),"disk GiB",round(disk/1024**3,2))
+          assert available>=10*1024**3 and disk>=8*1024**3, "No suitable isolated public research worker"
+          PY
+      - name: Install actual pinned CPU model and data dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --no-cache-dir torch==2.6.0 torchvision==0.21.0 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --no-cache-dir "TotalSegmentator==2.18.0" "numpy==2.2.6" "nibabel==5.3.2" "scipy==1.15.3" "huggingface_hub==0.34.4" "psutil==6.1.1"
+      - name: Download exact original published positive LUNA16 CT source
+        run: |
+          python scripts/prepare-luna16-single-gpu-case.py --download \
+            --external-gpu-confirm PUBLIC-LUNA16-GPU-OK --output "$RUNNER_TEMP/public-ct"
+          python scripts/test-monai-bound-public-luna16.py --prepare \
+            --case-dir "$RUNNER_TEMP/public-ct" --out-dir "$RUNNER_TEMP/verified-source"
+      - name: Download and separately SHA-verify official pretrained lung_nodules weights
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=20s 460s totalseg_download_weights -t lung_nodules
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,json,os
+          home=Path(os.environ["TOTALSEG_HOME_DIR"])
+          models=sorted((home/"nnunet/results").rglob("checkpoint_final.pth"))
+          if not models:raise RuntimeError("Official lung_nodules checkpoint not found; no synthetic fallback")
+          out=[]
+          for p in models:
+              if p.is_symlink() or not 1024<p.stat().st_size<1024**3:raise RuntimeError("Unexpected checkpoint")
+              h=hashlib.sha256()
+              with p.open("rb") as src:
+                  for chunk in iter(lambda:src.read(1048576),b""):h.update(chunk)
+              out.append({"relativePath":str(p.relative_to(home)),"sha256":h.hexdigest(),"bytes":p.stat().st_size})
+          (Path(os.environ["RUNNER_TEMP"])/"lung-nodules-model-manifest.json").write_text(json.dumps(out))
+          print("Pinned pretrained checkpoint count",len(out),"SHA",out[0]["sha256"])
+          PY
+      - name: Run REAL official pretrained lung_nodules on full original 109-slice CT
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import json,os
+          home=Path(os.environ["TOTALSEG_HOME_DIR"]);home.mkdir(exist_ok=True,parents=True)
+          (home/"config.json").write_text(json.dumps({"send_usage_stats":False,"statistics_disclaimer_shown":True}))
+          PY
+          timeout --signal=TERM --kill-after=20s 2100s \
+            TotalSegmentator \
+            -i "$RUNNER_TEMP/verified-source/original-source.nii" \
+            -o "$RUNNER_TEMP/real-second-lung-nodule-mask.nii.gz" \
+            --task lung_nodules --device cpu --ml --quiet
+      - name: Validate real model's native mask against original CT and published expert center
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os,subprocess,sys
+          from pathlib import Path
+          tmp=Path(os.environ["RUNNER_TEMP"])
+          models=json.loads((tmp/"lung-nodules-model-manifest.json").read_text())
+          args=[sys.executable,"scripts/audit-real-totalseg-lung-nodules-public.py",
+             "--source",str(tmp/"verified-source/original-source.nii"),
+             "--reference","web/public/examples/luna16-monai-expert-center-run-38724788094.json",
+             "--mask",str(tmp/"real-second-lung-nodule-mask.nii.gz"),
+             "--weights-sha256",models[0]["sha256"],
+             "--output","/tmp/opus-second-nodule-evidence.json"]
+          subprocess.run(args,check=True)
+          PY
+      - name: Upload numeric research evidence only including false negatives
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: genuine-second-lung-nodule-public-numeric
+          path: /tmp/opus-second-nodule-evidence.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Delete original image pixels and checkpoint even if inference fails
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/public-ct" "$RUNNER_TEMP/verified-source" \
+            "$RUNNER_TEMP/real-second-lung-nodule-mask.nii.gz" \
+            "$RUNNER_TEMP/lung-nodules-model-manifest.json" \
+            /tmp/opus-second-nodule-evidence.json "$TOTALSEG_HOME_DIR"
