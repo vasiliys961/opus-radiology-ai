@@ -1,0 +1,19 @@
+name: Clinical research detector coverage registry check
+on:
+  push:
+    branches:
+      - research/clinically-prioritized-pathology-detector-coverage
+    paths:
+      - docs/clinical-detector-coverage.json
+      - scripts/check-clinical-detector-coverage.py
+      - .github/workflows/check-clinical-detector-coverage.yml
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check unique pathology coverage and license boundaries
+        run: python3 scripts/check-clinical-detector-coverage.py
