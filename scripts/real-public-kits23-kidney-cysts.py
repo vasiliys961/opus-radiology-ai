@@ -31,12 +31,23 @@ def load_verified_pair(ct,expert,*,must_contain_cyst):
             raise ValueError("not_ordinary_bounded_public_source")
     image=nib.load(str(ct));truth=nib.load(str(expert))
     shape=image.shape
+    scan_units=image.header.get_xyzt_units()[0]
+    expert_units=truth.header.get_xyzt_units()[0]
+    print(json.dumps({"sourceShape":list(shape),
+         "expertShape":list(truth.shape),
+         "sourceUnit":scan_units,"expertUnit":expert_units,
+         "imageHeaderDatatype":str(image.header.get_data_dtype()),
+         "expertHeaderDatatype":str(truth.header.get_data_dtype()),
+         "maxAffineElementDelta":float(np.max(np.abs(image.affine-truth.affine)))}))
+    # KiTS23 NIfTI axes are often (slices, row, column), not (x,y,slices).
+    # Validate per-axis physical grid, not a preferred array-axis order.
+    # Upstream files can omit NIfTI xyzt_unit: do NOT claim verified mm then.
     if (image.ndim!=3 or truth.ndim!=3 or
         shape!=truth.shape or len(shape)!=3 or
-        any(not 32<=v<=limit for v,limit in zip(shape,(512,512,700))) or
+        min(shape)<8 or max(shape)>1059 or
         np.prod(shape)>MAX_VOXELS or
-        image.header.get_xyzt_units()[0]!="mm" or
-        truth.header.get_xyzt_units()[0]!="mm" or
+        scan_units not in ("mm","unknown") or
+        expert_units!=scan_units or
         not np.isfinite(image.affine).all() or
         abs(np.linalg.det(image.affine[:3,:3]))<0.0001):
         raise ValueError("unsupported_original_kits23_image_geometry")
@@ -165,6 +176,7 @@ def evaluate(folder,model_mask,weights,out):
       "modelMaskSha256":checksum(model_mask),
       "observedInstalledModelCheckpointSha256":wt["checkpointSha256"],
       "originalNativeSourceGridVerified":True,
+      "sourceNiftiSpatialUnitMmVerified":source.header.get_xyzt_units()[0]=="mm",
       "originalDimensions":list(source.shape),
       "modelKidneyCystLeftLabel1Voxels":int(np.count_nonzero(model==1)),
       "modelKidneyCystRightLabel2Voxels":int(np.count_nonzero(model==2)),
