@@ -3,13 +3,15 @@
 import {useState} from "react";
 import {sha256} from "@noble/hashes/sha2.js";
 import {parseRealPlethoraHumanReference,type PlethoraHumanReference} from "../lib/plethora-real-reference";
-import {parseEffusionResearchReport,type EffusionResearchReport} from "../lib/chest-effusion-research";
+import type {EffusionResearchReport} from "../lib/chest-effusion-research";
+import {parseImportedTask315,type ImportedTask315} from "../lib/chest-effusion-execution";
 
 /** Pure browser import of independently generated original model evidence.
  * This does not run AI, deidentify DICOM or prove clinical pathology.
  */
 export default function ChestEffusionResearchResults({isChestCT}:{isChestCT:boolean}){
   const [report,setReport]=useState<EffusionResearchReport|null>(null);
+  const [execution,setExecution]=useState<ImportedTask315["execution"]|null>(null);
   const [error,setError]=useState("");
   const [humanReference,setHumanReference]=useState<PlethoraHumanReference|null>(null);
   const [humanBusy,setHumanBusy]=useState(false);
@@ -73,11 +75,12 @@ export default function ChestEffusionResearchResults({isChestCT}:{isChestCT:bool
       <input type="file" accept=".json,application/json"
         onChange={async e=>{
           const f=e.currentTarget.files?.[0];e.currentTarget.value="";
-          setError("");setReport(null);
+          setError("");setReport(null);setExecution(null);
           if(!f)return;
           try{
             if(f.size<64||f.size>512*1024)throw Error("Отчёт должен быть не больше 512 КиБ.");
-            setReport(parseEffusionResearchReport(await f.text()));
+            const checked=parseImportedTask315(await f.text());
+            setReport(checked.evidence);setExecution(checked.execution);
             setSelectedClass(2);
           }catch(err){setError(err instanceof Error?err.message:"Ошибка импорта КТ-отчёта.");}
         }}/>
@@ -86,6 +89,8 @@ export default function ChestEffusionResearchResults({isChestCT}:{isChestCT:bool
     {!report?<p><small>Подтверждённого реального вывода task 315 для публичной КТ
       грудной клетки пока нет. Из существующей анатомической маски или
       результата другой модели нельзя построить фиктивный отчёт о выпоте.</small></p>:<>
+      {execution==="reported-pretrained-execution"&&<p role="status"><strong>Есть отчёт о вызове предобученной task315.</strong> Исходный NIfTI, выходная маска и исследовательские числа сопоставлены по SHA. Сам файл checkpoint хеширован, но независимого подтверждения фактически загруженных весов и точности модели пока нет.</p>}
+      {execution==="source-mask-only"&&<p role="note">Импортирована только маска/числовой паспорт. Он сам по себе не подтверждает, что нейросеть действительно запускалась.</p>}
       <p><strong>Исходная КТ:</strong> {report.originalCTDimensionsXYZ.join(" × ")}
         {" "}вокселей. Маска связана SHA-256 и проверкой пространственных
         координат (0,05 мм), но происхождение предобученных весов независимо
@@ -123,7 +128,7 @@ export default function ChestEffusionResearchResults({isChestCT}:{isChestCT:bool
         не удостоверяет реальный запуск весов, точность сегментации, диагноз
         или наличие/отсутствие выпота. Не выполняется DICOM SOP-привязка;
         данные относятся к отдельному NIfTI и не переносятся на пациента.</p>
-      <button type="button" onClick={()=>{setReport(null);setError("");}}>
+      <button type="button" onClick={()=>{setReport(null);setExecution(null);setError("");}}>
         Удалить исследовательский отчёт из просмотра
       </button>
     </>}
