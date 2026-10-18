@@ -117,7 +117,7 @@ def prepare_monai_source(path,source,work):
         "BinaryDataByteOrderMSB = False","CompressedData = False",
         "TransformMatrix = "+" ".join(f"{d[i][j]:.12g}" for i in range(3) for j in range(3)),
         "Offset = "+" ".join(f"{source['affineLps'][i*4+3]:.12g}" for i in range(3)),
-        "CenterOfRotation = 0 0 0","AnatomicalOrientation = LPS",
+        "CenterOfRotation = 0 0 0",
         "ElementSpacing = "+" ".join(f"{n:.12g}" for n in source["spacing"]),
         "DimSize = "+" ".join(map(str,dims)),
         "ElementType = "+source["elementType"],"ElementDataFile = "+name+".raw",
