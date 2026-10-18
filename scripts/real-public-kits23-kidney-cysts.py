@@ -141,9 +141,20 @@ def evaluate(folder,model_mask,weights,out):
         model_mask.stat().st_size>MAX_BYTES):
         raise ValueError("real_kidney_cyst_model_mask_missing")
     result=nib.load(str(model_mask))
+    source_units=source.header.get_xyzt_units()[0]
+    mask_units=result.header.get_xyzt_units()[0]
+    print(json.dumps({
+        "trainedPredictionShape":list(result.shape),
+        "originalShape":list(source.shape),
+        "trainedPredictionUnit":mask_units,
+        "originalUnit":source_units,
+        "trainedPredictionDatatype":str(result.header.get_data_dtype()),
+        "trainedPredictionMaxAffineDelta":float(np.max(np.abs(result.affine-source.affine)))}))
+    # Original KiTS23 may omit the NIfTI spatial unit code. Reject
+    # mismatches, but do not manufacture verified millimetres from unknown.
     if (result.ndim!=3 or result.shape!=source.shape or
-        result.header.get_xyzt_units()[0]!="mm" or
-        result.header.get_data_dtype().kind not in ("i","u")):
+        mask_units!=source_units or mask_units not in ("mm","unknown") or
+        result.header.get_data_dtype().kind not in ("i","u","f")):
         raise ValueError("real_cyst_model_output_wrong_geometry_or_labels")
     for x in (0,source.shape[0]-1):
       for y in (0,source.shape[1]-1):
