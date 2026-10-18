@@ -79,6 +79,8 @@ export default function ViewerPage() {
       <div className="cs-source-mode" aria-label="Формат исходной серии">
         <button type="button" className={sourceMode==="dicom"?"active":""}
           onClick={()=>setSourceMode("dicom")}>DICOM · исходные серии</button>
+        <button type="button" className={sourceMode==="nodules"?"active":""}
+          onClick={()=>setSourceMode("nodules")}>MONAI · узлы КТ</button>
         <button type="button" className={sourceMode==="nifti"?"active":""}
           onClick={()=>setSourceMode("nifti")}>NIfTI · КТ брюшной полости</button>
       </div>
