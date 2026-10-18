@@ -1,0 +1,106 @@
+name: Genuine task315 on verified public LCTSC chest CT (research)
+on:
+  push:
+    branches:
+      - test/real-public-lctsc-task315-effusion
+    paths:
+      - .github/workflows/real-task315-public-lctsc.yml
+      - scripts/test-real-task315-public-lctsc.py
+      - services/imaging-ai/effusion_inference.py
+permissions:
+  contents: read
+jobs:
+  public-original-ct:
+    runs-on: ubuntu-latest
+    timeout-minutes: 58
+    env:
+      TOTALSEG_HOME_DIR: /tmp/opus-task315-weights
+      PYTHONUNBUFFERED: "1"
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "1"
+      HF_HUB_DISABLE_TELEMETRY: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Gate CPU host RAM/disk before model download
+        run: |
+          python - <<'PY'
+          import os,shutil
+          def mem_free():
+              for line in open("/proc/meminfo"):
+                  if line.startswith("MemAvailable:"):return int(line.split()[1])*1024
+          avail=mem_free()
+          print("Free RAM GiB",round(avail/2**30,2))
+          assert avail>=10*2**30 and shutil.disk_usage(".").free>=8*2**30
+          PY
+      - name: Install actual pinned task315 torch/TotalSegmentator runtime on Linux only
+        run: |
+          python -m pip install --no-cache-dir torch==2.6.0 torchvision==0.21.0 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --no-cache-dir "TotalSegmentator==2.18.0" "numpy==2.2.6" "nibabel==5.3.2" "pydicom==3.0.1" "psutil==6.1.1"
+      - name: Obtain 103 genuine original legally published TCIA LCTSC DICOM frames
+        run: |
+          python scripts/download-r231-browser-reference.py --download-public-reference --full-series --output "$RUNNER_TEMP/lctsc-source"
+          python scripts/package-totalseg-lctsc-reference.py --reference "$RUNNER_TEMP/lctsc-source" --output "$RUNNER_TEMP/lctsc-native.nii" > "$RUNNER_TEMP/lctsc-manifest.json"
+          python scripts/test-real-task315-public-lctsc.py --mode prepare --source "$RUNNER_TEMP/lctsc-native.nii" --manifest "$RUNNER_TEMP/lctsc-manifest.json" --admission "$RUNNER_TEMP/task315-admission.json"
+      - name: Install OFFICIAL pretrained task315 weights before inference
+        run: |
+          timeout --signal=TERM --kill-after=15s 480s totalseg_download_weights -t pleural_pericard_effusion
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,json
+          root=Path("/tmp/opus-task315-weights/nnunet/results")
+          models=sorted(p for p in root.rglob("checkpoint_final.pth") if any("315" in part for part in p.relative_to(root).parts[:-1]))
+          if not models:raise RuntimeError("official_dataset315_pretrained_checkpoint_missing")
+          model=models[0]
+          if not 1024<model.stat().st_size<1024**3:raise RuntimeError("checkpoint_size_refused")
+          h=hashlib.sha256()
+          with model.open("rb") as f:
+              for block in iter(lambda:f.read(1048576),b""):h.update(block)
+          import os
+          Path(os.environ["RUNNER_TEMP"]).joinpath("task315-installed-weights.json").write_text(json.dumps({"file":str(model),"sha256":h.hexdigest()}))
+          print("Observed original downloaded task315 checkpoint SHA",h.hexdigest())
+          PY
+      - name: REAL pretrained TotalSegmentator task315 inference on original whole supplied CT
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json,os,subprocess
+          tmp=Path(os.environ["RUNNER_TEMP"])
+          manifest=json.loads((tmp/"task315-installed-weights.json").read_text())
+          home=Path(os.environ["TOTALSEG_HOME_DIR"]);home.mkdir(exist_ok=True,parents=True)
+          (home/"config.json").write_text(json.dumps({"send_usage_stats":False,"statistics_disclaimer_shown":True}))
+          args=["python","services/imaging-ai/effusion_inference.py",
+               "--source",str(tmp/"lctsc-native.nii"),
+               "--output-mask",str(tmp/"task315-model-output.nii.gz"),
+               "--output-json",str(tmp/"task315-model-report.json"),
+               "--checkpoint",manifest["file"],"--checkpoint-sha256",manifest["sha256"],
+               "--source-admission",str(tmp/"task315-admission.json"),
+               "--authorization","PUBLIC-CT-RESEARCH-TASK315-OK"]
+          subprocess.run(["timeout","--signal=TERM","--kill-after=15s","2400s",*args],check=True)
+          PY
+      - name: Verify native source/mask physical registration and preserve only numeric results
+        run: |
+          python scripts/test-real-task315-public-lctsc.py --mode verify \
+            --source "$RUNNER_TEMP/lctsc-native.nii" \
+            --admission "$RUNNER_TEMP/task315-admission.json" \
+            --report "$RUNNER_TEMP/task315-model-report.json" \
+            --summary "/tmp/opus-task315-public-report.json"
+      - name: Upload ONLY 103-slice nonpatient numeric research summary
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-task315-real-pretrained-numeric
+          path: /tmp/opus-task315-public-report.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Delete every downloaded DICOM/NIfTI/model/mask regardless of outcome
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/lctsc-source" "$RUNNER_TEMP/lctsc-native.nii" \
+            "$RUNNER_TEMP/lctsc-manifest.json" "$RUNNER_TEMP/task315-admission.json" \
+            "$RUNNER_TEMP/task315-installed-weights.json" \
+            "$RUNNER_TEMP/task315-model-output.nii.gz" "$RUNNER_TEMP/task315-model-report.json" \
+            /tmp/opus-task315-public-report.json /tmp/opus-task315-weights
