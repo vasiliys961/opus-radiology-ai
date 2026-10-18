@@ -234,3 +234,19 @@
 .cs-nifti-review .cs-nifti-caution{border-top:1px solid #d9e6e5;
   padding-top:14px;margin-top:18px;color:#995a42}
 @media(max-width:1000px){.cs-nifti-planes{grid-template-columns:1fr}.cs-nifti-organs{grid-template-columns:1fr}}
+
+
+/* Real pretrained nodule results, source-hash-bound NIfTI CPU research only. */
+.cs-nodule-bound{max-width:1250px;margin:auto}.cs-nodule-controls{display:grid;gap:12px;max-width:860px;padding:19px;background:#fff;border:1px solid #dce7e4;border-radius:12px}
+.cs-nodule-controls label{display:grid;gap:6px;color:#526c61;font-size:12px}
+.cs-nodule-controls input[type=file]{font-size:12px}.cs-nodule-controls button{background:#117c68;color:#fff;border:0;border-radius:8px;padding:11px 17px;font-weight:700;cursor:pointer}
+.cs-nodule-controls p{margin:0;color:#60786b;font-size:12px}.cs-nodule-error{padding:12px 16px;color:#9c2424;background:#fff0ef;border-radius:8px}
+.cs-nodule-stats{display:flex;flex-wrap:wrap;gap:12px;margin:14px 0;color:#315347;font-size:12px}
+.cs-nodule-view{display:grid;grid-template-columns:minmax(0,2fr) minmax(255px,1fr);gap:17px;margin:15px 0}
+.cs-nodule-image{border-radius:12px;background:#111f23;padding:16px;text-align:center;color:#bddbd0;min-width:0}
+.cs-nodule-image canvas{display:block;margin:0 auto;max-height:68vh;object-fit:contain}.cs-nodule-image small{display:block;margin-top:10px}
+.cs-nodule-list{border-radius:12px;border:1px solid #dbe7e0;background:#fff;padding:16px}
+.cs-nodule-list label{display:grid;gap:5px;margin:12px 0;color:#34584d;font-size:12px}
+.cs-nodule-candidates{max-height:310px;overflow:auto;display:grid;gap:7px}.cs-nodule-candidates button{border:1px solid #bdd9ce;background:#f5faf8;border-radius:9px;padding:10px;text-align:left;display:grid;gap:5px;color:#245348;cursor:pointer}
+.cs-nodule-candidates button span,.cs-nodule-candidates button small{font-size:11px}
+@media(max-width:780px){.cs-nodule-view{grid-template-columns:1fr}}

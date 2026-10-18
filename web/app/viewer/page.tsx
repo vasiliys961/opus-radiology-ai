@@ -6,6 +6,8 @@ import { groupDicomSeries, readDicomSeriesHeader, type DicomSeries } from "../..
 import { validateViewerFileSelection } from "../../lib/viewer-limits";
 import "./viewer.css";
 
+const NoduleBoundResearchView = dynamic(() => import("../../components/NoduleBoundResearchView"), {ssr:false});
+
 const NiftiCtResearchView = dynamic(() => import("../../components/NiftiCtResearchView"), {
   ssr: false,
   loading: () => <div className="cs-placeholder">Загрузка локального NIfTI CT review…</div>,
@@ -26,7 +28,7 @@ type Indexed = { id: string; file: File; header: Awaited<ReturnType<typeof readD
 
 export default function ViewerPage() {
   const folderPicker = useRef<HTMLInputElement>(null);
-  const [sourceMode,setSourceMode] = useState<"dicom"|"nifti">("dicom");
+  const [sourceMode,setSourceMode] = useState<"dicom"|"nifti"|"nodules">("dicom");
   const [indexed, setIndexed] = useState<Indexed[]>([]);
   const [currentSeriesKey, setCurrentSeriesKey] = useState("");
   const [message, setMessage] = useState("Выберите папку с DICOM-файлами или набор отдельных файлов.");
@@ -80,7 +82,7 @@ export default function ViewerPage() {
         <button type="button" className={sourceMode==="nifti"?"active":""}
           onClick={()=>setSourceMode("nifti")}>NIfTI · КТ брюшной полости</button>
       </div>
-      {sourceMode==="nifti" ? <NiftiCtResearchView/> : <>
+      {sourceMode==="nodules" ? <NoduleBoundResearchView/> : sourceMode==="nifti" ? <NiftiCtResearchView/> : <>
       <div className="cs-intro"><div><div className="cs-kicker">IMAGING LAB / 2D STACK</div><h1>DICOM Viewer <em>β</em></h1><p>Просмотр локальных DICOM-серий с декодированием Cornerstone3D. Без облака, без анализа ИИ.</p></div><span className="cs-watermark">ИССЛЕДОВАТЕЛЬСКИЙ ПРОТОТИП · НЕ ДЛЯ ДИАГНОСТИКИ</span></div>
       <div className="cs-layout">
         <aside className="cs-sidebar">

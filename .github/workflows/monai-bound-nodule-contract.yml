@@ -1,0 +1,30 @@
+name: Live source-bound MONAI integration contract
+on:
+  pull_request:
+    paths:
+      - "services/imaging-ai/monai_bound_nodule.py"
+      - "services/imaging-ai/test_monai_bound_nodule.py"
+      - ".github/workflows/monai-bound-nodule-contract.yml"
+  push:
+    paths:
+      - "services/imaging-ai/monai_bound_nodule.py"
+      - "services/imaging-ai/test_monai_bound_nodule.py"
+      - ".github/workflows/monai-bound-nodule-contract.yml"
+permissions:
+  contents: read
+jobs:
+  technical-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install coordinate-math dependency only (NO checkpoint / MONAI)
+        run: python -m pip install numpy==2.2.6
+      - name: Validate exact original NIfTI to MetaImage mapping and candidate source bounds
+        working-directory: services/imaging-ai
+        run: |
+          python -m py_compile monai_bound_nodule.py test_monai_bound_nodule.py
+          python test_monai_bound_nodule.py
