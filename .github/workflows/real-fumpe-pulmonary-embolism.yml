@@ -1,0 +1,114 @@
+name: REAL pulmonary embolism pretrained CTPA versus FUMPE expert 3D mask
+on:
+  push:
+    branches:
+      - research/real-pulmonary-embolism-public-fumpe
+    paths:
+      - .github/workflows/real-fumpe-pulmonary-embolism.yml
+      - scripts/real-public-fumpe-pulmonary-embolism.py
+permissions:
+  contents: read
+jobs:
+  true-pretrained-embolism:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      HF_HOME: /tmp/opus-real-FUMPE-hf-cache
+      PYTHONUNBUFFERED: "1"
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "1"
+      HF_HUB_DISABLE_TELEMETRY: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Check real public CTPA full-volume research host RAM and disk
+        run: |
+          python - <<'PY'
+          import shutil
+          from pathlib import Path
+          mem=int(next(s.split()[1] for s in Path("/proc/meminfo").read_text().splitlines() if s.startswith("MemAvailable:")))*1024
+          disk=shutil.disk_usage(".").free
+          print("Usable RAM GiB",round(mem/2**30,2),"Disk GiB",round(disk/2**30,2))
+          assert mem>=10*2**30 and disk>=8*2**30,"No safe full CTPA 3D isolated CPU"
+          PY
+      - name: Install pinned official portable PE model PyTorch CPU and NIfTI dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --no-cache-dir torch==2.6.0 torchvision==0.21.0 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --no-cache-dir "transformers==4.51.3" "numpy==1.26.4" "scipy==1.15.3" "scikit-image==0.25.2" "huggingface_hub==0.34.4" "nibabel==5.3.2"
+          git clone -q https://github.com/mazurowski-lab/PulmonaryEmbolismSegmentation.git "$RUNNER_TEMP/official-vendor-PE-code"
+          git -C "$RUNNER_TEMP/official-vendor-PE-code" checkout -q --detach b4c50008bbbf825282ccf10767f819276e320fb9
+          test "$(git -C "$RUNNER_TEMP/official-vendor-PE-code" rev-parse HEAD)" = b4c50008bbbf825282ccf10767f819276e320fb9
+          python -m pip install --no-cache-dir --no-deps "$RUNNER_TEMP/official-vendor-PE-code"
+      - name: Download original pinned open FUMPE CTPA and matched expert PE 3D mask
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=15s 480s \
+            python scripts/real-public-fumpe-pulmonary-embolism.py --mode prepare \
+              --dir "$RUNNER_TEMP/public-FUMPE-real-CTPA"
+      - name: Fetch exact official 2026 pretrained pulmonary embolism model, compute installed weight SHA
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          from huggingface_hub import HfApi,snapshot_download
+          revision=HfApi(token=False).model_info(
+              "yzluka/PulmonaryEmbolismSegmentation",revision="7ce235f",token=False).sha
+          if not revision.startswith("7ce235f"):raise RuntimeError("Not official published model revision")
+          dest=Path(os.environ["RUNNER_TEMP"])/"official-published-PE-model"
+          snapshot_download(repo_id="yzluka/PulmonaryEmbolismSegmentation",
+              revision=revision,local_dir=dest,
+              allow_patterns=["config.json","pytorch_model.bin"],token=False,
+              max_workers=2)
+          weights=dest/"pytorch_model.bin"
+          if not weights.is_file() or not 300*1024**2<weights.stat().st_size<900*1024**2:
+              raise RuntimeError("Original model pretrained weights unavailable or wrong size")
+          h=hashlib.sha256()
+          with weights.open("rb") as f:
+              for block in iter(lambda:f.read(1048576),b""):h.update(block)
+          info={"sourceModelRevision":revision,"publishedModelBinSha256":h.hexdigest(),
+                "modelLicense":"CC BY-NC 4.0 research only",
+                "publishedPytorchModelBytes":weights.stat().st_size}
+          (Path(os.environ["RUNNER_TEMP"])/"real-pe-weights-manifest.json").write_text(json.dumps(info))
+          print("Original pretrained PE checkpoint bytes",weights.stat().st_size,
+                "observedSha256",h.hexdigest())
+          PY
+      - name: ACTUAL pretrained 3D pulmonary embolism segmentation over full CTPA volume (CPU, small tiles)
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=25s 2270s \
+            python "$RUNNER_TEMP/official-vendor-PE-code/scripts/run_inference.py" \
+              --model-dir "$RUNNER_TEMP/official-published-PE-model" \
+              --input "$RUNNER_TEMP/public-FUMPE-real-CTPA/ct.nii.gz" \
+              --output "$RUNNER_TEMP/actual-full-PE-mask.npz" \
+              --device cpu --no-amp --tile-size 64,128,128 \
+              --min-tile-size 64,128,128 --overlap 0.1
+      - name: Validate original native geometry and expert PE overlap numbers
+        run: |
+          set -euo pipefail
+          python scripts/real-public-fumpe-pulmonary-embolism.py --mode evaluate \
+            --dir "$RUNNER_TEMP/public-FUMPE-real-CTPA" \
+            --prediction "$RUNNER_TEMP/actual-full-PE-mask.npz" \
+            --checkpoint "$RUNNER_TEMP/real-pe-weights-manifest.json" \
+            --output "/tmp/opus-real-public-embolism-numeric.json"
+      - name: Upload ONLY actual nonimage numeric research evidence
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: genuine-PE-pretrained-public-FUMPE-expert-CTPA-numeric
+          path: /tmp/opus-real-public-embolism-numeric.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Always erase any original public CTPA, annotated lesion masks, model weights and cache
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/public-FUMPE-real-CTPA" \
+             "$RUNNER_TEMP/actual-full-PE-mask.npz" \
+             "$RUNNER_TEMP/official-published-PE-model" \
+             "$RUNNER_TEMP/official-vendor-PE-code" \
+             "$RUNNER_TEMP/real-pe-weights-manifest.json" \
+             /tmp/opus-real-public-embolism-numeric.json "$HF_HOME"
