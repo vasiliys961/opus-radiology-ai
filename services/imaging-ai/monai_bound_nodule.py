@@ -154,7 +154,7 @@ def parse_candidates(raw_json,source):
     if not isinstance(prediction,dict) or not all(k in prediction for k in ("box","label","label_scores")):
         raise ValueError("invalid_pretrained_output")
     boxes,labels,scores=(prediction[k] for k in ("box","label","label_scores"))
-    if not all(isinstance(v,list) for v in (boxes,labels,scores)) or
+    if (not all(isinstance(v,list) for v in (boxes,labels,scores)) or
             len(boxes)!=len(labels) or len(boxes)!=len(scores) or len(boxes)>300):
         raise ValueError("invalid_model_candidate_count")
     candidates=[]
@@ -250,8 +250,9 @@ def run(source_path,admission_path,bundle_path,work_path,output_path,authorizati
                 time.sleep(2)
             if proc.returncode!=0:raise RuntimeError("monai_real_pretrained_inference_failed")
         except BaseException:
-            os.killpg(proc.pid,signal.SIGKILL)
-            proc.wait(timeout=10)
+            if proc.poll() is None:
+                os.killpg(proc.pid,signal.SIGKILL)
+                proc.wait(timeout=10)
             raise
         candidates=parse_candidates(work/"model-output/result.json",source)
         report={
