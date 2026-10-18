@@ -69,7 +69,7 @@ def prepare(folder):
         name=f"pancreas_{case}.nii.gz"
         for key,category in (("ct","imagesTr"),("expert","labelsTr")):
             source=Path(hf_hub_download(repo_id=DATASET,repo_type="dataset",
-                           revision=dataset.sha,filename=f"{CASE_ROOT}/{category}/{name}",
+                           revision=dataset.sha,filename=f"{category}/{name}",
                            token=False))
             if source.stat().st_size>MAX_ORIGINAL_SIZE:raise ValueError("oversize_MSD_CT")
             shutil.copyfile(source,folder/f"{key}.nii.gz")
