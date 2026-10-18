@@ -1,0 +1,67 @@
+name: TRUE four-modality BraTS MRI tumor segmentation versus public expert masks
+on:
+  push:
+    branches:
+      - research/real-brats-mri-brain-tumor-monai
+    paths:
+      - .github/workflows/real-brats-mri-tumor-monai.yml
+      - scripts/real-brats-mri-tumor-monai.py
+permissions:
+  contents: read
+jobs:
+  real-brain-glioma:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      HF_HOME: /tmp/opus-brats-public-hf-cache
+      PYTHONUNBUFFERED: "1"
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "1"
+      HF_HUB_DISABLE_TELEMETRY: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Only a research Linux host with sufficient memory
+        run: |
+          python - <<'PY'
+          import shutil
+          from pathlib import Path
+          mem=int(next(s.split()[1] for s in Path("/proc/meminfo").read_text().splitlines() if s.startswith("MemAvailable:")))*1024
+          disk=shutil.disk_usage(".").free
+          print("RAM GiB",round(mem/2**30,2),"disk GiB",round(disk/2**30,2))
+          assert mem>=10*2**30 and disk>=7*2**30, "insufficient isolated inference resources"
+          PY
+      - name: Install pinned real MONAI pretrained CPU model runtime and NIfTI libraries
+        run: |
+          set -euo pipefail
+          python -m pip install --no-cache-dir torch==2.6.0 torchvision==0.21.0 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --no-cache-dir "monai==1.4.0" "numpy==1.26.4" "nibabel==5.3.2" "huggingface_hub==0.34.4"
+      - name: Download actual four public MRI sequences and expert tumor mask, plus official pretrained checkpoint
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=15s 420s \
+            python scripts/real-brats-mri-tumor-monai.py \
+              --mode prepare --dir "$RUNNER_TEMP/public-brats-glioma"
+      - name: Inference with actual pretrained MONAI SegResNet on four original MRI sequences
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=25s 1700s \
+            python scripts/real-brats-mri-tumor-monai.py \
+              --mode infer --dir "$RUNNER_TEMP/public-brats-glioma" \
+              --output /tmp/opus-public-brats-real-numeric.json
+      - name: Upload only voxel numeric research score for three expert tumor subregions
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: actual-four-sequence-brats-mri-expert-tumor-numbers
+          path: /tmp/opus-public-brats-real-numeric.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Always erase original public MRI, expert segmentation, pretrained model and cache
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/public-brats-glioma" \
+            /tmp/opus-public-brats-real-numeric.json "$HF_HOME"
