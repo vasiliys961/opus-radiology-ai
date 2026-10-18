@@ -64,7 +64,17 @@ jobs:
                checkpoint_name="checkpoint_best.pth")
           dest=Path(os.environ["RUNNER_TEMP"])/"predicted-stroke"
           dest.mkdir(mode=0o700)
-          predictor.predict_from_files(str(root),str(dest),
+          # Keep only nnU-Net-required stroke_000{0,1,2} files in the
+          # input directory. Passing the source folder also includes original
+          # dwi/adc/flair/expert NIfTI and generates empty pseudo-cases.
+          import shutil
+          model_input=root/"nnunet-prediction-input"
+          model_input.mkdir(mode=0o700)
+          for i in range(3):
+              source=root/("stroke_000"+str(i)+".nii.gz")
+              if not source.is_file():raise ValueError("real_registered_MRI_channel_missing")
+              shutil.copy2(source,model_input/source.name)
+          predictor.predict_from_files(str(model_input),str(dest),
              save_probabilities=False,overwrite=True,
              num_processes_preprocessing=1,num_processes_segmentation_export=1)
           assert (dest/"stroke.nii.gz").is_file(),"nnUNet original pretrained model produced no stroke mask"
