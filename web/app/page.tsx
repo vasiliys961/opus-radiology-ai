@@ -255,7 +255,7 @@ export default function Home() {
       <div className="ora-nav-heading">РАБОЧЕЕ ПРОСТРАНСТВО</div>
       <div className="ora-nav-current"><Icon name="grid" size={19}/> Обзор исследования <span className="ora-nav-dot" /></div>
       <div className="ora-nav-muted"><Icon name="folder" size={19}/> Архив исследований <span>Скоро</span></div>
-      <div className="ora-nav-muted"><Icon name="brain" size={19}/> Центр AI-анализа <span>Скоро</span></div>
+      <a className="ora-nav-muted" href="/clinical-lab"><Icon name="brain" size={19}/> Центр AI-анализа <span>Детекторы</span></a>
       <div className="ora-nav-muted"><Icon name="layers" size={19}/> 3D-лаборатория <span>Скоро</span></div>
       <div className="ora-nav-heading ora-nav-spaced">ПЛАТФОРМА</div>
       <div className="ora-nav-muted"><Icon name="clipboard" size={19}/> Отчёты <span>Скоро</span></div>
