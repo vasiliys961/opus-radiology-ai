@@ -3,15 +3,19 @@
 import {useEffect,useRef,useState} from "react";
 import type {VisionPrivacyPacket} from "../lib/vision-privacy";
 import type {SanitizedModelReview} from "../lib/sanitized-cloud-review";
+import {bindLocalSanitizedReview,sourceFileForObservation,perFrameModelCoverage} from "../lib/local-cloud-source-navigation";
 
 type Props={
   enabledByLocalChecks:boolean;
   exactReviewedHashes:readonly {imageId:string;sha256:string}[];
   prepareReviewedPacket:()=>VisionPrivacyPacket;
+  originalLocalFileIds:readonly string[];
+  onOpenOriginalSlice:(localFileId:string)=>void;
 };
 type Ready={schema:string;enabled:boolean;productionPatientCloudRelease:false};
 export default function DeidentifiedOpenRouterPanel({
   enabledByLocalChecks,exactReviewedHashes,prepareReviewedPacket,
+  originalLocalFileIds,onOpenOriginalSlice,
 }:Props){
   const [server,setServer]=useState<Ready|null>(null),[token,setToken]=useState("");
   const [clinician,setClinician]=useState(false),[providerRights,setProviderRights]=useState(false);
@@ -64,6 +68,8 @@ export default function DeidentifiedOpenRouterPanel({
          doc.sourceFrames.some((f,i)=>f.imageId!==exactReviewedHashes[i].imageId||
            f.reviewedPixelSha256!==exactReviewedHashes[i].sha256))
         throw Error("Неверный паспорт облачного ответа.");
+      // An unbound or changed source makes ALL clinical navigation unavailable.
+      bindLocalSanitizedReview(doc,exactReviewedHashes.map(f=>({imageId:f.imageId,reviewedPixelSha256:f.sha256})),originalLocalFileIds);
       setResult(doc);
       setToken("");
     }catch(e){
@@ -127,13 +133,36 @@ export default function DeidentifiedOpenRouterPanel({
       <p><strong>Ответ моделей получен.</strong> Это черновые визуальные
         наблюдения по отдельным срезам, не полноценный анализ исследования
         и не диагноз. Врач сверяет их с исходным DICOM локально.</p>
+      <h4>Покадровое сопоставление · без голосования моделей</h4>
+      <p>Числа ниже — количество текстовых наблюдений, не вероятность заболевания
+        и не доказательство согласия Gemini и Opus.</p>
+      <ul>{perFrameModelCoverage(result).map(row=><li key={row.imageId}>
+        Кадр {row.imageId}: Gemini — {row.geminiFindings}; Opus — {row.opusFindings}.
+        <button type="button" onClick={()=>{
+          try{
+            const id=sourceFileForObservation(result,
+              exactReviewedHashes.map(f=>({imageId:f.imageId,reviewedPixelSha256:f.sha256})),
+              originalLocalFileIds,row.imageId);
+            onOpenOriginalSlice(id);setError("");
+          }catch{setError("Срез больше не совпадает с проверенным исходным DICOM. Повторите локальную привязку.");}
+        }}>Открыть исходный DICOM-срез</button>
+      </li>)}</ul>
       {result.results.map(r=><article key={r.reviewer}
         style={{border:"1px solid #8c9b95",padding:12,borderRadius:8,marginTop:8}}>
         <h4>{r.reviewer==="gemini"?"Gemini Vision":"Opus Vision"} — {r.model}</h4>
         <p>Изучено кадров: {r.review.reviewedImageIds.join(", ")}</p>
         {r.review.observations.length?<ul>{r.review.observations.map(o=><li key={o.id}>
           <strong>{o.imageId} · {o.anatomy}:</strong> {o.sign}
-          <small> · Ограничение: {o.uncertainty}</small></li>)}</ul>:
+          <small> · Ограничение: {o.uncertainty}</small>
+          <button type="button" onClick={()=>{
+            try{
+              const id=sourceFileForObservation(result,
+                exactReviewedHashes.map(f=>({imageId:f.imageId,reviewedPixelSha256:f.sha256})),
+                originalLocalFileIds,o.imageId);
+              onOpenOriginalSlice(id);setError("");
+            }catch{setError("Источник наблюдения изменился или не найден. Переход заблокирован.");}
+          }}>Показать исходный срез</button>
+        </li>)}</ul>:
           <p>Наблюдений нет; это не исключает патологию.</p>}
         <ul>{r.review.limitations.map((t,i)=><li key={i}>{t}</li>)}</ul>
       </article>)}
