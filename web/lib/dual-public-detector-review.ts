@@ -6,7 +6,7 @@
  * patient or DICOM cloud release. Never infer diagnosis or vote away conflict.
  */
 import {parsePublicLLMReview,type PublicResearchCase,type PublicLLMReview} from "./public-case-evidence.ts";
-import {readCompletionText,parseStrictObject} from "./vision-orchestra.ts";
+import {readCompletionText} from "./vision-orchestra.ts";
 import type {AiProvider,AiGatewayRequest} from "./ai-gateway.ts";
 
 export const GEMINI_MODEL="google/gemini-3.8-flash";
