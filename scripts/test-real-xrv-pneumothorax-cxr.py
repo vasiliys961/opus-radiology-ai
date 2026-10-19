@@ -28,6 +28,19 @@ class TestResearchXRV(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError,"output|score"):
                     app.validate_model_output(["Pneumothorax"],[s])
 
+    def test_other_two_genuinely_trained_NIH_heads(self):
+        labels=["Pneumothorax","Cardiomegaly","Effusion","Emphysema"]
+        got=app.additional_trained_nih_scores(
+            labels,[0.12,0.33,0.29,0.5],labels[:3])
+        self.assertEqual(got,{"Cardiomegaly":0.33,"Effusion":0.29})
+
+    def test_untrained_NIH_head_must_not_be_exposed(self):
+        labels=["Pneumothorax","Cardiomegaly","Effusion"]
+        with self.assertRaisesRegex(ValueError,"untrained_or_ambiguous"):
+            app.additional_trained_nih_scores(labels,[.1,.4,.7],["Pneumothorax","Cardiomegaly"])
+        with self.assertRaisesRegex(ValueError,"unbounded"):
+            app.additional_trained_nih_scores(labels,[.1,.4,float("nan")],labels)
+
     def test_hash_binding_rejects_wrong_pretrained_checkpoint(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder)
