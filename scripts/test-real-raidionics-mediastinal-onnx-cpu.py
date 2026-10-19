@@ -17,7 +17,7 @@ class OfficialOriginalONNX(unittest.TestCase):
   self.assertEqual(m.MODEL_SHA256,"922c0e99cb637a872d18b83300a648eb0d782b1ef874c5d33a551285e52ccb08")
   self.assertEqual(m.SAMPLE_SHA256,"3bc452580051dbea0f67caa52c4eb09c75eafdde9e8e7ff60c3a143ec94dce1f")
   self.assertIn("Raidionics-CT_LymphNodes-v13.zip",m.MODEL_URL)
-  self.assertEqual(m.MODEL_LIBRARY_VERSION,"1.5.3")
+  self.assertEqual(m.MODEL_LIBRARY_VERSION,"1.5.2")
   self.assertLessEqual(m.CPU_RSS_BUDGET,4800*1024**2)
  def test_model_asset_MD5_or_fake_SHA_cannot_be_accepted(self):
   import hashlib
