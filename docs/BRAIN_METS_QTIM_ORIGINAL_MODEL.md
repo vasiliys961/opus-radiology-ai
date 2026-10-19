@@ -17,9 +17,7 @@ Published source Dockerfile fetches five model-specific checkpoint pairs
 NIfTI volumes. It expects skull-stripped, registered, N4-bias-corrected,
 z-normalized 1 mm isotropic **T1 with contrast**, not any unspecified brain MR.
 
-**No downloaded original trained checkpoint, GPU forward or positive MRI scan
-has yet been checked for this new task inside Opus.** Merely having code or
-a published download URL does not count as a new measured detector.
+**Genuine publisher checkpoints obtained and measured:** [Actions #39233861758](https://github.com/vasiliys961/opus-radiology-ai/actions/runs/39233861758) successfully downloaded **15 original TensorFlow files, all five fold checkpoints, 1,248,034,031 bytes**. The model part SHA256 values are pinned in `scripts/verify-brain-mets-original-qtim-fivefold.py`; the original weights were deleted from the ephemeral CI filesystem after hashing. The weights have **not** been loaded into a TensorFlow network or used for a real T1CE MRI forward pass. This is trained-weight provenance, **not** medical model inference or clinical validation.
 
 ## What the Opus adapter does
 
@@ -115,10 +113,11 @@ that statement does **not** establish independent validation in Opus.
 
 | Acceptance | Status |
 |---|---|
-| Actual upstream code commit and published pretrained five-fold weights located | YES — code & official download links |
+| Actual upstream code commit and published pretrained five-fold weights located | YES — all 15 weight files actually downloaded and SHA-pinned in successful GitHub Actions #39233861758 |
 | Exact security-restricted GPU adapter and study-grid lesion measurements | IMPLEMENTED |
 | Independent numeric and source/mask checks | TECHNICAL FIXTURES ONLY |
-| Real downloaded checkpoint verified and model inference run by Opus | **NO** |
+| All five genuine original trained fold checkpoint files SHA verified by Opus | **YES** (1,248,034,031 bytes; no publisher signature) |
+| TensorFlow original model initialized and inference run by Opus | **NO** |
 | Real source-positive metastatic lesion localized, expert Dice | **NO** |
 | Expert reader clinical verification / Mac/browser patient mode | **NO** |
 

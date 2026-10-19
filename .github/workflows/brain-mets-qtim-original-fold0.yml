@@ -1,0 +1,39 @@
+name: Original QTIM brain metastases publisher fold0 checkpoint
+on:
+  push:
+    branches:
+      - research/brain-mets-qtim-real-checkpoint-fetch
+    paths:
+      - .github/workflows/brain-mets-qtim-original-fold0.yml
+      - scripts/verify-brain-mets-original-vendor-fold0.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  fetch-actual-trained-vendor-files:
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Download publisher fold 0 original TensorFlow checkpoint and measure SHA256
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/verify-brain-mets-original-vendor-fold0.py
+          timeout --signal=TERM --kill-after=20s 1020s \
+            python scripts/verify-brain-mets-original-vendor-fold0.py \
+              --model-dir "$RUNNER_TEMP/opus-brain-mets-vendor-fold0" \
+              --output /tmp/opus-brain-mets-vendor-fold0-numeric.json
+      - name: Publish only numeric checkpoint provenance (no model or MRI files)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: original-brain-mets-qtim-fold0-numeric
+          path: /tmp/opus-brain-mets-vendor-fold0-numeric.json
+          retention-days: 7
+          if-no-files-found: error
+      - name: Delete temporary numeric file
+        if: always()
+        run: rm -f /tmp/opus-brain-mets-vendor-fold0-numeric.json
