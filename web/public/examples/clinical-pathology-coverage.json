@@ -360,13 +360,13 @@
       "modality": "MR-mp",
       "anatomy": "pelvis",
       "pathology": "prostate cancer",
-      "status": "weights_unverified",
-      "weights": "prostate_mri_anatomy is only anatomy, not a cancer model",
-      "source": "https://github.com/Project-MONAI/model-zoo/tree/dev/models/prostate_mri_anatomy",
-      "reference": "PI-CAI verified expert tumor marks when allowed",
-      "restriction": "no licensed runnable disease checkpoint verified",
-      "priority": 4,
-      "next": "source lesion-trained model with ADC/DWI/T2 protocol"
+      "status": "real_checkpoint_candidate",
+      "weights": "Original PI-CAI 5-fold nnU-Net csPCa lesion-specific trained algorithm publicly described / available through Grand Challenge; licensed offline checkpoint/image NOT YET ACQUIRED or SHA-verified",
+      "source": "https://github.com/DIAGNijmegen/picai_nnunet_gc_algorithm",
+      "reference": "Official PI-CAI 1500-case public bpMRI training dataset and csPCa lesion labels; independent holdout not run",
+      "restriction": "Offline source-bound GPU executor, T2/ADC/high-b sequence checking and original-T2 lesion-map localisation are implemented. Original licensed Docker image/weights not obtained or tested in this repo. No positive MRI inference, external accuracy, clinical use or patient cloud; vendor image hash cannot prove internal checkpoint provenance.",
+      "priority": 2,
+      "next": "Acquire lawful original pretrained PI-CAI container, pin actual image and individual model checkpoint SHA, run one licensed positive 3-series bpMRI with expert lesion mask, record Dice/lesion FROC; only then promote observed status."
     },
     {
       "id": "pelvic-fractures-ct",
