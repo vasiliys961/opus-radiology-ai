@@ -18,7 +18,7 @@ const regionLabels:Record<string,string>={
  heart:"Сердце",vascular:"Сосуды",breast:"Молочная железа",
  retina:"Сетчатка",histology:"Патоморфология"
 };
-const isStatus=(s:unknown):s is Status=>typeof s==="string"&&Object.hasOwn(statuses,s);
+const isStatus=(s:unknown):s is Status=>typeof s==="string"&&Object.prototype.hasOwnProperty.call(statuses,s);
 function isEntry(item:unknown):item is Entry{
  if(!item||typeof item!=="object")return false;
  const x=item as Partial<Entry>;
