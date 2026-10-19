@@ -1,0 +1,29 @@
+name: Independent Gemini Opus public CPU detector evidence contract
+on:
+  pull_request:
+    paths:
+      - web/lib/dual-public-detector-review.ts
+      - web/lib/dual-public-detector-review.test.ts
+      - web/lib/pinned-public-detector-case.ts
+      - web/components/DualPublicDetectorReview.tsx
+      - web/components/PathologyCoverageResearch.tsx
+      - web/app/api/ai/dual-public-detector-review/route.ts
+      - docs/CPU_DETECTORS_GEMINI_OPUS_PRIVACY.md
+      - .github/workflows/dual-public-cpu-detector-llm-contract.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  strictly-pinned-source-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify independent LLM evidence and no patient transfer contract
+        working-directory: web
+        run: node --disable-warning=ExperimentalWarning --experimental-strip-types --test lib/dual-public-detector-review.test.ts
+      # No provider API calls, real patient images, tokens or GPU in CI.
+      # Existing Web checks verify full UI production build and contracts.
