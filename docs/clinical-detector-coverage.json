@@ -386,13 +386,25 @@
       "modality": "XR",
       "anatomy": "thorax",
       "pathology": "pneumothorax",
-      "status": "weights_unverified",
-      "weights": "TorchXRayVision classifiers candidate",
-      "source": "https://github.com/mlmed/torchxrayvision",
-      "reference": "SIIM-ACR expert pneumothorax masks",
-      "restriction": "classification score not a localized CT detector",
-      "priority": 4,
-      "next": "confirm weights/labels and pixel mask, not only image-level AUC"
+      "status": "real_case_measured",
+      "weights": "TorchXRayVision 1.5.7 original NIH DenseNet121 publisher pretrained checkpoint; 28,382,096 bytes, SHA256 31a5475c6b1383a7edbfcaf96af9ce302eb9969cfe28b6b8b5859afc6f274fdf",
+      "source": "https://github.com/mlmed/torchxrayvision/releases/tag/v1",
+      "reference": "Original publisher test/00000001_000.png (source SHA256 c8cbe59e6b9b186060dc68e63965658fa6b5b3ada6648d25c189b8b69b43cd4c); independent expert pathology unknown",
+      "restriction": "Original model actually inferred on 1 public original CXR: uncalibrated Pneumothorax score 0.172315. Label unknown, NIH training overlap possible, no expert positive/negative reference, no radiographic localisation, AUROC/sensitivity/specificity unavailable, no patient or cloud mode.",
+      "priority": 2,
+      "next": "Evaluate genuinely independent public radiologist-verified pneumothorax-positive/negative radiographs; separate true spatial detector for pleural-air localisation; do not infer clinical diagnosis from a single score.",
+      "observedResearchEvidence": {
+        "run": "https://github.com/vasiliys961/opus-radiology-ai/actions/runs/39242605402",
+        "originalCheckpointSHA256": "31a5475c6b1383a7edbfcaf96af9ce302eb9969cfe28b6b8b5859afc6f274fdf",
+        "originalRadiographSHA256": "c8cbe59e6b9b186060dc68e63965658fa6b5b3ada6648d25c189b8b69b43cd4c",
+        "realModelForwardCompleted": true,
+        "caseCount": 1,
+        "uncalibratedPneumothoraxScore": 0.172315,
+        "expertGroundTruthAvailable": false,
+        "independentHoldout": false,
+        "clinicallyValidated": false,
+        "spatiallyLocalized": false
+      }
     },
     {
       "id": "cardiomegaly-xray",
