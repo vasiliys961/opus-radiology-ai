@@ -1,0 +1,48 @@
+name: Original Bouget UNet SW32 genuine positive LyNoS CT (CPU)
+on:
+  pull_request:
+    paths:
+      - scripts/real-bouget-sw32-lynos-ct-cpu.py
+      - scripts/test-real-bouget-sw32-lynos-ct-cpu.py
+      - .github/workflows/real-bouget-sw32-lynos-cpu.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/real-bouget-sw32-lynos-ct-cpu.py
+      - .github/workflows/real-bouget-sw32-lynos-cpu.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  original-cpu-runner-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python3 -m unittest discover -s scripts -p 'test-real-bouget-sw32-lynos-ct-cpu.py'
+  real-positive-original-model:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Dependencies for reference geometry and public source download
+        run: python3 -m pip install 'gdown==5.2.0' 'huggingface_hub==0.35.3' 'nibabel==5.3.2' 'numpy==1.26.4'
+      - name: Original CPU forward on one source-licensed LyNoS CT with published checkpoint
+        run: |
+          python3 scripts/real-bouget-sw32-lynos-ct-cpu.py \
+            --workdir "$RUNNER_TEMP/bouget-research" \
+            --report "$RUNNER_TEMP/bouget-research-result.json"
+      - name: Upload NUMERIC metrics only when original model and geometry succeeded
+        uses: actions/upload-artifact@v4
+        with:
+          name: original-bouget-lynos-single-case-voxels-only
+          path: ${{ runner.temp }}/bouget-research-result.json
+          retention-days: 7
+          if-no-files-found: error
