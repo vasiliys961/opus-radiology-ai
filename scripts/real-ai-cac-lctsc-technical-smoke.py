@@ -37,7 +37,7 @@ def true_linux_cgroup_ram_limit():
         caps.append(mem_total)
     return min(caps) if caps else 0
 
-def run(source,model_dir,output):
+def run(source,model_dir,output,whole=False):
     import numpy as np
     import torch
     import pydicom
@@ -77,52 +77,87 @@ def run(source,model_dir,output):
     model.load_state_dict({k[7:]:v for k,v in sd.items()},strict=True)
     del loaded,sd
     model.eval()
-    # Select one authentic source slice; NO source pixels or filename in report.
-    slice_index=len(orig["files"])//2
-    d=pydicom.dcmread(str(orig["files"][slice_index]))
-    hu=d.pixel_array.astype(np.float32)*float(d.RescaleSlope)+float(d.RescaleIntercept)
-    if hu.shape!=(512,512) or not np.isfinite(hu).all():
-        raise ValueError("not_original_unmodified_CT_quantitative_pixels")
+    # In whole-series mode run every unchanged original DICOM slice. This
+    # output remains NOT clinically valid for AI-CAC because LCTSC protocol
+    # suitability and a coronary calcium reference are NOT established.
+    native_shape=orig["shape"]
+    chosen=range(native_shape[2]) if whole else [native_shape[2]//2]
+    mask=np.zeros(native_shape,dtype=np.uint8) if whole else None
+    positive=0
+    observed_min=float("inf")
+    observed_max=float("-inf")
     with torch.inference_mode():
-        output_tensor=model(torch.from_numpy(hu[None,None]))
-        if (output_tensor.shape!=(1,1,512,512)
-            or not torch.isfinite(output_tensor).all()):
-            raise ValueError("actual_AI_CAC_pretrained_output_invalid")
-        positive=int(torch.count_nonzero(output_tensor>0).item())
-        min_logit=float(output_tensor.min().item())
-        max_logit=float(output_tensor.max().item())
+        for index in chosen:
+            d=pydicom.dcmread(str(orig["files"][index]))
+            hu=d.pixel_array.astype(np.float32)*float(d.RescaleSlope)+float(d.RescaleIntercept)
+            if hu.shape!=(512,512) or not np.isfinite(hu).all():
+                raise ValueError("not_original_unmodified_CT_quantitative_pixels")
+            output_tensor=model(torch.from_numpy(hu[None,None]))
+            if (output_tensor.shape!=(1,1,512,512)
+                or not torch.isfinite(output_tensor).all()):
+                raise ValueError("actual_AI_CAC_pretrained_output_invalid")
+            observed_min=min(observed_min,float(output_tensor.min().item()))
+            observed_max=max(observed_max,float(output_tensor.max().item()))
+            classified=(output_tensor[0,0]>0).to(dtype=torch.uint8).cpu().numpy()
+            positive+=int(np.count_nonzero(classified))
+            if whole:
+                mask[:,:,index]=classified
+            del output_tensor,classified,hu,d
+    components=[]
+    if whole:
+        from scipy import ndimage
+        # This is a spatial *model candidate* only: without compatible source
+        # protocol and expert annotations, no disease assertion is permitted.
+        labeled,count=ndimage.label(mask!=0)
+        for label_id,sl in enumerate(ndimage.find_objects(labeled),1):
+            if sl is None:
+                continue
+            n=int(np.count_nonzero(labeled[sl]==label_id))
+            if n<2:
+                continue
+            components.append({
+                "nativeVoxelCount":n,
+                "sourceVoxelBoxRowColumnZ":[[int(k.start),int(k.stop-1)] for k in sl]})
+        components.sort(key=lambda x:x["nativeVoxelCount"],reverse=True)
     result={
-      "schema":"opus-ai-cac-real-publisher-lctsc-one-slice-smoke/v1",
+      "schema":("opus-ai-cac-real-publisher-lctsc-full-series/v1" if whole
+                else "opus-ai-cac-real-publisher-lctsc-one-slice-smoke/v1"),
       "model":"Raffi-Hagopian/AI-CAC",
       "officialVersion":"v1.0.0",
       "officialCheckpointSha256":manifest["checkpointSha256Observed"],
       "originalTCIACollection":"LCTSC","originalCTLicense":"CC BY 3.0",
       "originalFullSourceSeriesHashChainSha256":orig["sourceSha256"],
-      "fullNativeCTSliceCount":103,"actualOriginalSliceInferredCount":1,
+      "fullNativeCTSliceCount":103,
+      "actualOriginalSliceInferredCount":103 if whole else 1,
       "originalSliceDimensions":[512,512],
       "truePublishedPretrainedCheckpointInferenceCompleted":True,
       "outputShape":[1,1,512,512],
-      "predictedPositivePixelsSingleSlice":positive,
-      "observedOutputRange":[round(min_logit,5),round(max_logit,5)],
+      "predictedPositivePixelsSingleSlice":None if whole else positive,
+      "predictedPositiveMaskVoxelsWholeVolume":positive if whole else None,
+      "threeDimensionalCandidateCount":len(components) if whole else None,
+      "threeDimensionalSourceVoxelCandidateBoxes":components[:100] if whole else None,
+      "candidateCoordinatesOnlyNotConfirmedCalcium":True,
+      "observedOutputRange":[round(observed_min,5),round(observed_max,5)],
       "elapsedSeconds":round(time.monotonic()-start,3),
       "maxResidentSetKiB":resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
-      "fullDICOMSeriesCACScore":None,"native3DLesionLocations":None,
+      "fullDICOMSeriesCACScore":None,
       "originalSourceProtocolConfirmedSuitableForCAC":False,
       "expertCoronaryCalciumReference":False,
       "clinicalDetectionAccuracyProven":False,
       "patientUseAllowed":False,
       "limitations":[
-        "Actual publisher weights and real public LCTSC CT slice, but unknown contrast/protocol suitability.",
-        "Single slice is only an execution smoke, NOT a complete CAC CT scan analysis.",
-        "No expert coronary calcium mask; not Dice, sensitivity, Agatston or negative study.",
-        "Host performance does not establish Mac M1 8 GiB safety."
+        "True pretrained AI-CAC inference on actual public LCTSC CT pixels.",
+        "LCTSC contrast/non-gating protocol suitability for AI-CAC is not proven.",
+        "No expert coronary calcium reference; voxel candidates are not verified disease.",
+        "Do not report normality, Agatston, sensitivity, Dice or clinical validity.",
+        "Host performance does not establish Mac M1 8 GiB acceptance."
       ]
     }
     output.write_text(json.dumps(result,indent=2)+"\n")
     print(json.dumps({k:result[k] for k in
         ("officialVersion","truePublishedPretrainedCheckpointInferenceCompleted",
         "fullNativeCTSliceCount","actualOriginalSliceInferredCount",
-        "predictedPositivePixelsSingleSlice","elapsedSeconds",
+        "predictedPositiveMaskVoxelsWholeVolume","elapsedSeconds",
         "maxResidentSetKiB","clinicalDetectionAccuracyProven")}))
     
 def main():
@@ -130,8 +165,9 @@ def main():
     parser.add_argument("--source",type=Path,required=True)
     parser.add_argument("--models",type=Path,required=True)
     parser.add_argument("--output",type=Path,required=True)
+    parser.add_argument("--whole",action="store_true")
     a=parser.parse_args()
-    run(a.source,a.models,a.output)
+    run(a.source,a.models,a.output,whole=a.whole)
 
 if __name__=="__main__":
     main()
