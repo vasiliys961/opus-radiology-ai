@@ -61,7 +61,7 @@ test("Tampered cloud source hashes, forged extra frame and unknown observations 
 test("LLM output that was never assessed on this source is not navigable",()=>{
  const r=report();
  const forged={...r,results:[
-  {...r.results[0],review:{...r.results[0].review,reviewedImageIds:["frame-1"]}},
+  {...r.results[0],review:{...r.results[0].review,reviewedImageIds:["frame-2"]}},
   r.results[1],
  ]} as SanitizedModelReview;
  assert.throws(()=>bindLocalSanitizedReview(forged,local,ids),/not_bound/);
