@@ -8,6 +8,11 @@ on:
       - web/lib/ct-hu-calibration.test.ts
       - web/lib/cpu-lung-laa950.ts
       - web/lib/cpu-lung-laa950.test.ts
+      - web/lib/same-series-laa950-review.ts
+      - web/lib/same-series-laa950-review.test.ts
+      - web/components/VisionFramePlanningPanel.tsx
+      - web/components/VisionPrivacyPreparation.tsx
+      - web/components/DeidentifiedOpenRouterPanel.tsx
       - web/components/CornerstoneMPR.tsx
       - web/components/SegmentationControls.tsx
       - web/app/page.tsx
@@ -28,5 +33,5 @@ jobs:
         working-directory: web
       - name: Real DICOM reader + source-bound HU acceptance contracts (synthetic headers)
         working-directory: web
-        run: node --disable-warning=ExperimentalWarning --experimental-strip-types --test lib/dicom-series.test.ts lib/ct-hu-calibration.test.ts lib/cpu-lung-laa950.test.ts
+        run: node --disable-warning=ExperimentalWarning --experimental-strip-types --test lib/dicom-series.test.ts lib/ct-hu-calibration.test.ts lib/cpu-lung-laa950.test.ts lib/same-series-laa950-review.test.ts
       # No real patient DICOM or model inference; never claim decoded HU checked here.

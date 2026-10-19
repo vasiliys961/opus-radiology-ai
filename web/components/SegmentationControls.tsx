@@ -15,7 +15,7 @@ export type MaskDisplay = { visible: boolean; opacity: number; label: number | n
 type Summary = { name: string; labels: LabelMask["labels"]; result?: SegmentationResult; evidence?: SegmentationEvidence; evidenceRevision?: number; fullCtDerived?:boolean; research?:AnatomyProof; researchRegions?:LobeRegion[]; researchSourceVerified?:boolean };
 type DownloadPackage = { request: AnalysisRequest; volumeUrl: string; manifestUrl: string };
 
-export default function SegmentationControls({ ready, onPrepare, onPrepareStream, onImport, onDisplay, onClear, onNavigatePoint, onSampleMask,onFullCtLoad,onVerifyResearchSource,onEvidenceChange,onQuantifyLaa950 }: {
+export default function SegmentationControls({ ready, onPrepare, onPrepareStream, onImport, onDisplay, onClear, onNavigatePoint, onSampleMask,onFullCtLoad,onVerifyResearchSource,onEvidenceChange,onQuantifyLaa950,onLaa950Change }: {
   ready: boolean;
   onPrepare: (signal: AbortSignal) => Promise<AnalysisPackage>;
   onPrepareStream: (signal: AbortSignal) => Promise<AnalysisStream>;
@@ -27,6 +27,7 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
   onFullCtLoad?: (signal:AbortSignal)=>Promise<LabelMask>;
   onEvidenceChange?: (evidence:SegmentationEvidence|null)=>void;
   onQuantifyLaa950?: (evidence:SegmentationEvidence,operatorConfirmed:boolean,signal:AbortSignal)=>Promise<Laa950CpuResearch>;
+  onLaa950Change?: (report:Laa950CpuResearch|null)=>void;
   onVerifyResearchSource?: (passportJson:string,proof:AnatomyProof,signal:AbortSignal)=>Promise<void>;
 }) {
   const input = useRef<HTMLInputElement>(null);
@@ -36,8 +37,8 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
   const preparation = useRef<AbortController | null>(null);
   const researchController=useRef<AbortController|null>(null);
   const packageRef = useRef<DownloadPackage | null>(null);
-  const callbacks = useRef({ onPrepare, onPrepareStream, onImport, onDisplay, onClear, onNavigatePoint,onVerifyResearchSource,onEvidenceChange });
-  callbacks.current = { onPrepare, onPrepareStream, onImport, onDisplay, onClear, onNavigatePoint,onVerifyResearchSource,onEvidenceChange };
+  const callbacks = useRef({ onPrepare, onPrepareStream, onImport, onDisplay, onClear, onNavigatePoint,onVerifyResearchSource,onEvidenceChange,onLaa950Change });
+  callbacks.current = { onPrepare, onPrepareStream, onImport, onDisplay, onClear, onNavigatePoint,onVerifyResearchSource,onEvidenceChange,onLaa950Change };
   const [summary, setSummary] = useState<Summary | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -55,6 +56,7 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
   useEffect(()=>{
     laaController.current?.abort();
     setLaaResult(null);setLaaError("");setLaaConfirmed(false);setLaaBusy(false);
+    callbacks.current.onLaa950Change?.(null);
   },[summary?.evidenceRevision,summary?.name,ready]);
   const quantifyLaa=async()=>{
     if(!onQuantifyLaa950||!summary?.evidence||!laaConfirmed||laaBusy||!ready)return;
@@ -63,7 +65,7 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
     setLaaBusy(true);setLaaError("");setLaaResult(null);
     try{
       const measured=await onQuantifyLaa950(evidence,true,controller.signal);
-      if(!controller.signal.aborted)setLaaResult(measured);
+      if(!controller.signal.aborted){setLaaResult(measured);callbacks.current.onLaa950Change?.(measured);}
     }catch(e){
       if(!controller.signal.aborted)setLaaError(e instanceof Error?e.message:"Расчёт HU остановлен");
     }finally{
@@ -305,7 +307,7 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
           маски R231. Модель не диагностирует эмфизему или ХОБЛ.
           Полнота обоих лёгких не доказана; результаты зависят от протокола КТ.</p>
         <label><input type="checkbox" checked={laaConfirmed} disabled={laaBusy}
-          onChange={e=>{setLaaConfirmed(e.target.checked);setLaaResult(null);}}/>
+          onChange={e=>{setLaaConfirmed(e.target.checked);setLaaResult(null);callbacks.current.onLaa950Change?.(null);}}/>
           Я проверил исходное исследование: инспираторная КТ без внутривенного контраста,
           реконструкция подходит для денситометрии; понимаю, что выборка может быть неполной.
         </label>

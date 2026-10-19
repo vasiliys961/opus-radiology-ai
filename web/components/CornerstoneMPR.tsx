@@ -53,7 +53,7 @@ const captions: Record<Plane,string> = { axial:"АКСИАЛЬНАЯ", coronal:"
  * All input stays in the browser and is gated by checkMprEligibility upstream.
  * This is NOT a calibrated diagnostic viewer or a measurement instrument.
  */
-export default function CornerstoneMPR({ files, sourceSeries, fullCt, quality, show3D, onShow3DChange,onEvidenceChange }: { files: File[]; sourceSeries: DicomSeries; fullCt?:FullCtTicket; quality: MprQuality; show3D: boolean; onShow3DChange: (enabled: boolean) => void; onEvidenceChange?: (evidence:SegmentationEvidence|null)=>void }) {
+export default function CornerstoneMPR({ files, sourceSeries, fullCt, quality, show3D, onShow3DChange,onEvidenceChange,onLaa950Change }: { files: File[]; sourceSeries: DicomSeries; fullCt?:FullCtTicket; quality: MprQuality; show3D: boolean; onShow3DChange: (enabled: boolean) => void; onEvidenceChange?: (evidence:SegmentationEvidence|null)=>void; onLaa950Change?: (report:Laa950CpuResearch|null)=>void }) {
   const axial = useRef<HTMLDivElement>(null);
   const coronal = useRef<HTMLDivElement>(null);
   const sagittal = useRef<HTMLDivElement>(null);
@@ -574,7 +574,7 @@ export default function CornerstoneMPR({ files, sourceSeries, fullCt, quality, s
       </div>
       <small>{interpolation === "linear" ? "Линейная интерполяция сглаживает границы между вокселями." : "Ближайший сосед показывает ступенчатость дискретных данных, но не добавляет деталей."}</small>
     </div>
-    <SegmentationControls ready={ready} onEvidenceChange={onEvidenceChange}
+    <SegmentationControls ready={ready} onEvidenceChange={onEvidenceChange} onLaa950Change={onLaa950Change}
       onQuantifyLaa950={(evidence,confirmed,signal)=>{
         if(!runtime.current)throw new Error("Нужен активный локальный MPR.");
         return runtime.current.quantifyLaa950(evidence,confirmed,signal);
