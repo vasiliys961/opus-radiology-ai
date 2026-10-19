@@ -497,6 +497,19 @@
       "restriction": "All real pretrained original weights acquired; trained MRI inference not yet tested on public T1CE. Requires original vendor GPU environment, explicit study/preprocessing provenance, exact-grid expert mask, no patient/cloud authorization.",
       "priority": 2,
       "next": "Run original fivefold trained TensorFlow inference using SHA-verified offline checkpoints on permitted source-positive T1CE with expert voxels; measure lesion-wise recall/FROC and native-grid TP/FP/FN/Dice, rule out training overlap."
+    },
+    {
+      "id": "aortic-dilatation-ct-morphometry",
+      "modality": "CT",
+      "anatomy": "vascular",
+      "pathology": "aortic dilatation / possible abdominal aortic aneurysm",
+      "status": "real_checkpoint_candidate",
+      "weights": "TotalSegmentator 2.18.0 total task aorta (pretrained ANATOMY; not an aneurysm detector)",
+      "source": "https://github.com/wasserth/TotalSegmentator/tree/v2.18.0",
+      "reference": "Public licensed abdominal CT with expert perpendicular aortic diameter: not yet obtained",
+      "restriction": "Only source-grid axial Feret review-candidate postprocessor implemented; pretrained aorta model not executed on positive AAA in this workstream. No infrarenal localisation, orthogonal external-wall caliper, model weight SHA or diagnostic validation. No patient mode.",
+      "priority": 2,
+      "next": "Run genuine model on lawful positive AAA CT; independently compare centerline-orthogonal expert calipers and 3D localisation; no diagnosis before that."
     }
   ],
   "selectionRule": "Prioritize uncovered CT/MR diseases with legal checkpoints, independently usable real image/mask pair and host RAM budget, in that order."
