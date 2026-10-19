@@ -66,7 +66,8 @@ class EvansResearchContracts(unittest.TestCase):
                 path=root/name
                 path.parent.mkdir(parents=True)
                 path.write_bytes(bytes([i+1])*2048)
-                files.append({"path":name,"sha256":app.file_hash(path)})
+                files.append({"path":name,"sha256":app.file_hash(path),
+                              "family":"brain_skull" if i == 0 else "ventricle_parts"})
             manifest=root/"weights.json"
             manifest.write_text(json.dumps({"files":files}))
             got=app.preflight_weights(root,manifest)
@@ -85,13 +86,13 @@ class EvansResearchContracts(unittest.TestCase):
             link.symlink_to(orig)
             manifest=root/"manifest.json"
             manifest.write_text(json.dumps({"files":[
-                {"path":"real.pth","sha256":app.file_hash(orig)},
-                {"path":"symlink.pth","sha256":app.file_hash(orig)}]}))
+                {"path":"real.pth","sha256":app.file_hash(orig),"family":"brain_skull"},
+                {"path":"symlink.pth","sha256":app.file_hash(orig),"family":"ventricle_parts"}]}))
             with self.assertRaisesRegex(ValueError, "missing_or_untrusted"):
                 app.preflight_weights(root,manifest)
             manifest.write_text(json.dumps({"files":[
-                {"path":"../out.pth","sha256":"a"*64},
-                {"path":"real.pth","sha256":app.file_hash(orig)}]}))
+                {"path":"../out.pth","sha256":"a"*64,"family":"brain_skull"},
+                {"path":"real.pth","sha256":app.file_hash(orig),"family":"ventricle_parts"}]}))
             with self.assertRaisesRegex(ValueError,"unsafe_or_duplicate"):
                 app.preflight_weights(root,manifest)
 
