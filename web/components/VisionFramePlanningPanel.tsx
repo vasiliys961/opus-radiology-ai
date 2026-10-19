@@ -73,11 +73,12 @@ export default function VisionFramePlanningPanel({
     <div className="ora-vision-plan-head">
       <div><h2>Gemini Orchestra · подготовка кадров</h2>
         <p>v1.8 · локальный предварительный этап</p></div>
-      <span>БЕЗ ОБЛАКА</span>
+      <span>ЛОКАЛЬНАЯ ПОДГОТОВКА</span>
     </div>
     <p className="ora-vision-plan-lead">
-      Сформируем технический список отдельных DICOM-срезов для будущего Vision-анализа.
-      Это не диагностика, не проверка всей КТ/МРТ и не передача изображений.
+      Сформируем технический список отдельных DICOM-срезов для Vision-анализа.
+      На этом этапе DICOM остаётся в браузере. Отправка обезличенных копий через OpenRouter
+      возможна только после локальных проверок и отдельного разрешения исследовательского сервера.
     </p>
     <div className="ora-vision-plan-controls">
       <label htmlFor="ora-frame-count">Кадров в выборке
@@ -115,7 +116,9 @@ export default function VisionFramePlanningPanel({
       </div>
       <p>Охват: только отдельные кадры. Количественные измерения, диагнозы и
         отсутствие патологий этим планом не устанавливаются.</p>
-      <p>Загрузка изображений в AI: <strong>заблокирована</strong>. Обезличивание: не подтверждено.</p>
+      <p>Исходные DICOM в облако не отправляются. Платная передача отдельных
+        проверенных PNG возможна только после обезличивания, OCR, подтверждения
+        врача и допуска локального OpenRouter-пилота.</p>
       <VisionPrivacyPreparation key={JSON.stringify(report.frames.map(f=>f.fileId))+requested}
         previews={report.frames.map(f=>thumbnails[f.fileId]?.url)}
         modality={series.find(s=>s.key===report.seriesKey)?.modality??""}/>
