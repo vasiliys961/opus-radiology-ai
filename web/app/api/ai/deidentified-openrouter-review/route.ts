@@ -1,7 +1,7 @@
 import {NextRequest,NextResponse} from "next/server";
 import {timingSafeEqual} from "node:crypto";
 import {callAiGateway} from "../../../../lib/ai-gateway";
-import {readLimitedText,HttpBodyTooLarge} from "../../../../lib/limited-body";
+import {HttpBodyTooLarge} from "../../../../lib/limited-body";
 import {reviewSanitizedSamples} from "../../../../lib/sanitized-cloud-review";
 import {createSyntheticTrialLimiter} from "../../../../lib/synthetic-live-research";
 
@@ -12,6 +12,27 @@ const HEADERS={"Cache-Control":"no-store","X-Content-Type-Options":"nosniff","Re
 const LOCAL_HOST=/^(?:localhost|127\.0\.0\.1)(?::[0-9]{1,5})?$/;
 const BODY_LIMIT=2_350_000;
 const limiter=createSyntheticTrialLimiter(2,20*60_000);
+/** Separate pixel-sized bounded reader. Global readLimitedText is intentionally
+ * capped at 64 KiB for clinical metadata and must not be weakened for images. */
+async function readPixelJson(req:NextRequest):Promise<unknown>{
+  const reader=req.body?.getReader();
+  if(!reader)throw Error("missing");
+  const parts:Uint8Array[]=[];let length=0;
+  try{
+    while(true){
+      const {value,done}=await reader.read();
+      if(done)break;
+      if(value){
+        length+=value.byteLength;
+        if(length>BODY_LIMIT)throw new HttpBodyTooLarge();
+        parts.push(value);
+      }
+    }
+  }finally{await reader.cancel().catch(()=>{});reader.releaseLock();}
+  const bytes=new Uint8Array(length);let at=0;
+  for(const part of parts){bytes.set(part,at);at+=part.byteLength;}
+  return JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(bytes));
+}
 const reply=(status:number,error:string)=>NextResponse.json({error},{status,headers:HEADERS});
 
 function allowedLocalBrowser(req:NextRequest,post=false):boolean {
@@ -59,7 +80,7 @@ export async function POST(req:NextRequest){
   if(!Number.isSafeInteger(announced)||announced<0||announced>BODY_LIMIT)
     return reply(413,"Image sample too large");
   let raw:unknown;
-  try{raw=JSON.parse(await readLimitedText(req,BODY_LIMIT));}
+  try{raw=await readPixelJson(req);}
   catch(e){return reply(e instanceof HttpBodyTooLarge?413:400,"Invalid or oversized data");}
   if(!raw||typeof raw!=="object"||Array.isArray(raw))return reply(400,"Invalid request");
   const v=raw as Record<string,unknown>;
