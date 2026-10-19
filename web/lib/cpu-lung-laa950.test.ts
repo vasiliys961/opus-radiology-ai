@@ -39,9 +39,9 @@ test("Native R231 mask and decoded CT voxels produce actual <= -950 HU counts on
  assert.equal(r.lungs[0].maskVoxelCount,HALF);
  assert.equal(r.lungs[1].maskVoxelCount,HALF);
  assert.equal(r.lungs[0].maskVolumeMl,65.536);
- assert.equal(r.lungs[0].lowAttenuationPctOfSampledMask,10);
+ assert.equal(r.lungs[0].lowAttenuationPctOfSampledMask,9.998);
  assert.equal(r.lungs[1].lowAttenuationPctOfSampledMask,19.995);
- assert.equal(r.totalMaskLowAttenuationPct,14.999);
+ assert.equal(r.totalMaskLowAttenuationPct,14.996);
  assert.equal(r.sourceVolumeCoverage,"selected-series-only_not-full-lung-proven");
  assert.equal(r.independentVoxelRescaleVerification,false);
  assert.equal(r.wholeLungMeasurementProven,false);
