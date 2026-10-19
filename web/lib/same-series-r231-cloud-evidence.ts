@@ -12,6 +12,7 @@ import type {DicomSeries} from "./dicom-series.ts";
 
 export type CapturedLocalSpecialist={
   seriesKey:string;
+  sourceMemberIds:readonly string[];
   evidence:SegmentationEvidence;
 };
 
@@ -31,7 +32,10 @@ export function sameSeriesR231Facts(
 ):LocalLungFacts|null{
   if(!currentSeries||!captured||captured.seriesKey!==currentSeries.key)return null;
   const evidence=captured.evidence;
-  if(currentSeries.modality!=="CT"||!currentSeries.volumeReady||
+  if(captured.sourceMemberIds.length!==currentSeries.members.length||
+     captured.sourceMemberIds.some((id,i)=>id!==currentSeries.members[i]?.id)||
+     new Set(captured.sourceMemberIds).size!==captured.sourceMemberIds.length||
+     currentSeries.modality!=="CT"||!currentSeries.volumeReady||
      !currentSeries.spatiallySorted||currentSeries.members.length<3||
      evidence.source.modality!==currentSeries.modality ||
      evidence.source.frameCount!==currentSeries.members.length ||
