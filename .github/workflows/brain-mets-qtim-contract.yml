@@ -1,0 +1,31 @@
+name: Brain metastases original T1CE ensemble contract
+on:
+  pull_request:
+    paths:
+      - scripts/real-brain-mets-t1ce-qtim.py
+      - scripts/test-real-brain-mets-t1ce-qtim.py
+      - docs/BRAIN_METS_QTIM_ORIGINAL_MODEL.md
+      - .github/workflows/brain-mets-qtim-contract.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  original-t1ce-source-and-spatial-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install numerical spatial geometry libraries
+        run: |
+          python -m pip install --no-cache-dir \
+            "numpy==1.26.4" "nibabel==5.3.2" "scipy==1.15.3"
+      - name: Check genuine ensemble invocation contract and numeric geometry
+        run: |
+          python -m py_compile scripts/real-brain-mets-t1ce-qtim.py
+          python scripts/test-real-brain-mets-t1ce-qtim.py
+      # Explicitly NO trained-model inference in this CPU CI job.
+      # Original QTIM 5-fold Tensorflow ensemble requires NVIDIA GPU
+      # and real, licensed preprocessed contrast-enhanced MRI.
