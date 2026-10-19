@@ -1,0 +1,33 @@
+name: Pelvic fracture fragment geometry and expert comparison research
+on:
+  pull_request:
+    paths:
+      - scripts/real-pelvic-fracsegnet-fragment-evidence.py
+      - scripts/test-real-pelvic-fracsegnet-fragment-evidence.py
+      - .github/workflows/pelvic-fracsegnet-fragments-contract.yml
+      - docs/PELVIС_FRACSEGNET_RESEARCH.md
+      - docs/PELVIC_FRACSEGNET_RESEARCH.md
+      - docs/clinical-detector-coverage.json
+      - web/public/examples/clinical-pathology-coverage.json
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-mask-geometry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Minimal geometry dependencies only
+        run: python -m pip install numpy==2.2.6 scipy==1.15.3 nibabel==5.3.2 SimpleITK==2.5.2
+      - name: Independent numeric and source safety contracts
+        run: |
+          python -m py_compile scripts/real-pelvic-fracsegnet-fragment-evidence.py
+          python scripts/test-real-pelvic-fracsegnet-fragment-evidence.py
+          python scripts/check-clinical-detector-coverage.py
+          python scripts/check-web-pathology-coverage.py
+      # Synthetic evidence contracts do NOT prove that genuine vendor pretrained
+      # weights have been downloaded or that pathological fractures were found.
