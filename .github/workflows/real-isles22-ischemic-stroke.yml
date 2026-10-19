@@ -1,0 +1,78 @@
+name: REAL pretrained ISLES22 DWI ADC FLAIR stroke MRI versus expert lesion
+on:
+  push:
+    branches:
+      - research/real-isles22-ischemic-stroke-dwi-adc-flair
+    paths:
+      - .github/workflows/real-isles22-ischemic-stroke.yml
+      - scripts/real-isles22-stroke-dwi-adc-flair.py
+permissions:
+  contents: read
+jobs:
+  genuine-ischemic-stroke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      HF_HOME: /tmp/opus-public-ISLES22-hf-cache
+      PYTHONUNBUFFERED: "1"
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "1"
+      nnUNet_raw: /tmp/opus-public-stroke-nnunet-raw
+      nnUNet_preprocessed: /tmp/opus-public-stroke-nnunet-pre
+      nnUNet_results: /tmp/opus-public-stroke-nnunet-results
+      HF_HUB_DISABLE_TELEMETRY: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Bound true 3D public ISLES source RAM and scratch disk
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import shutil
+          mem=int(next(s.split()[1] for s in Path("/proc/meminfo").read_text().splitlines() if s.startswith("MemAvailable:")))*1024
+          disk=shutil.disk_usage(".").free
+          print("Available RAM GiB",round(mem/2**30,2),"Disk GiB",round(disk/2**30,2))
+          assert mem>=10*2**30 and disk>=8*2**30,"insufficient isolated CPU ISLES worker"
+          PY
+      - name: Install true public official nnU-Net model CPU inference
+        run: |
+          set -euo pipefail
+          python -m pip install --no-cache-dir torch==2.6.0 torchvision==0.21.0 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --no-cache-dir "nnunetv2==2.8.1" "numpy==2.2.6" "nibabel==5.3.2" "scipy==1.15.3" "huggingface_hub==0.34.4"
+      - name: Fetch authentic original three ISLES MRI modalities, expert stroke mask and released trained checkpoint
+        run: |
+          timeout --signal=TERM --kill-after=20s 650s python scripts/real-isles22-stroke-dwi-adc-flair.py \
+            --mode prepare --dir "$RUNNER_TEMP/original-real-ISLES22"
+      - name: REAL pretrained ischemia nnUNet 3D model full DWI ADC FLAIR CPU inference
+        run: |
+          set -euo pipefail
+          # nnUNet uses multiprocessing spawn and MUST run from a real guarded
+          # script file, not a Python stdin/heredoc command.
+          timeout --signal=TERM --kill-after=30s 2150s \
+            python scripts/real-isles22-stroke-dwi-adc-flair.py --mode infer \
+              --dir "$RUNNER_TEMP/original-real-ISLES22" \
+              --output "$RUNNER_TEMP/predicted-stroke"
+      - name: Compare ORIGINAL native expert ischemic lesion to actual pretrained prediction
+        run: |
+          python scripts/real-isles22-stroke-dwi-adc-flair.py --mode evaluate \
+            --dir "$RUNNER_TEMP/original-real-ISLES22" \
+            --prediction "$RUNNER_TEMP/predicted-stroke/stroke.nii.gz" \
+            --output /tmp/opus-real-ischemic-stroke-numeric.json
+      - name: Upload ONLY public deidentified numeric model evidence, not original MRI or voxel masks
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: original-three-MRI-ischemic-stroke-pretrained-expert-numeric
+          path: /tmp/opus-real-ischemic-stroke-numeric.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Delete actual MRI, original expert mask, trained weights, HF cache even on failures
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/original-real-ISLES22" \
+             "$RUNNER_TEMP/predicted-stroke" "$HF_HOME" \
+             /tmp/opus-real-ischemic-stroke-numeric.json \
+             "$nnUNet_raw" "$nnUNet_preprocessed" "$nnUNet_results"
