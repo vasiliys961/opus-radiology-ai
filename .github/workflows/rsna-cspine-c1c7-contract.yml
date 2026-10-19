@@ -1,0 +1,32 @@
+name: Cervical fracture C1-C7 source-bound research evidence
+on:
+  pull_request:
+    paths:
+      - scripts/real-rsna-cspine-c1c7-evidence.py
+      - scripts/test-real-rsna-cspine-c1c7-evidence.py
+      - docs/RSNA_CSPINE_C1C7_RESEARCH.md
+      - docs/clinical-detector-coverage.json
+      - web/public/examples/clinical-pathology-coverage.json
+      - .github/workflows/rsna-cspine-c1c7-contract.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-spine-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install minimal spatial dependencies, not trained model
+        run: python -m pip install numpy==2.2.6 scipy==1.15.3 nibabel==5.3.2
+      - name: Source-grid geometry, bound scores and offline checkpoint contract
+        run: |
+          python -m py_compile scripts/real-rsna-cspine-c1c7-evidence.py
+          python scripts/test-real-rsna-cspine-c1c7-evidence.py
+          python scripts/check-clinical-detector-coverage.py
+          python scripts/check-web-pathology-coverage.py
+      # Synthetic NIfTI, manifest and scoring fixtures only.
+      # No original RSNA 3rd-place GPU checkpoint inference is executed by this CI.

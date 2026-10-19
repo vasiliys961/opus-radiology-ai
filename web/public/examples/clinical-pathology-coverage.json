@@ -321,13 +321,13 @@
       "modality": "CT",
       "anatomy": "spine",
       "pathology": "vertebral fracture",
-      "status": "weights_unverified",
-      "weights": "RSNA 2022 cervical fracture 3rd-place public code",
-      "source": "https://github.com/darraghdog/Spine22",
-      "reference": "RSNA cervical vertebral fracture expert labels",
-      "restriction": "public code != pretrained weights; pretrained source needed",
-      "priority": 4,
-      "next": "acquire permitted checkpoint then C1-C7 real CT inference"
+      "status": "real_checkpoint_candidate",
+      "weights": "RSNA 2022 Darragh 3rd-place pretrained cervical fracture classifier checkpoints published as Kaggle model by zixuanh, not yet downloaded/SHA verified; separate source-registered C1-C7 anatomy-bound postprocessor implemented",
+      "source": "https://github.com/zxjasonhu/cspine-2022-challenge-inference-collection",
+      "reference": "RSNA 2022 C1-C7 fracture labels; original competition dataset noncommercial research-only, official 2024 source-reported external AUC (not independently reproduced)",
+      "restriction": "No original pretrained forward in this PR; C1-C7 anatomy boxes are NOT cortical fracture-line localization. Requires genuine validated original model score file, externally executed checkpoint, source SHA and anatomical TotalSegmentator label map with verified NIfTI geometry; no patient/cloud use.",
+      "priority": 2,
+      "next": "Acquire lawful publisher checkpoint with original hashes, run actual original third-place Darragh forward on permitted public cervical CT in isolated GPU, validate source scores and external expert lesion marks."
     },
     {
       "id": "spinal-metastases-mri",
