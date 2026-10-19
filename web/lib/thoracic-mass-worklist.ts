@@ -93,8 +93,9 @@ export function interpretThoracicMasses(
    throw Error("too_many_unverified_thoracic_observations");
  const findings:ThoracicFindingReview[]=[];
  for(const raw of observations){
-   if(!raw||!Object.hasOwn(compartments,raw.kind)||
-      !isKnown(raw.compartment,compartments[raw.kind])||
+   const kind=raw?.kind as ThoracicMassKind;
+   if(!raw||!Object.hasOwn(compartments,kind)||
+      !isKnown(raw.compartment,compartments[kind])||
       !isKnown(raw.side,["left","right","midline","unknown"])||
       !isKnown(raw.contrast,["contrast","noncontrast","unknown"])||
       !isKnown(raw.attenuation,["soft_tissue","ground_glass","mixed","fat","calcified","unknown"])||
