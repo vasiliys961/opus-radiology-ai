@@ -78,16 +78,21 @@ def run_case(work:Path):
         selected=[]
         for info in zipf.infolist():
             parts=PurePosixPath(info.filename).parts
-            if "UNet-SW32" in parts and not info.is_dir():
+            if ("UNet-SW32" in parts or "CT_Lungs" in parts) and not info.is_dir():
                 if ".." in parts or PurePosixPath(info.filename).is_absolute():
                     raise ValueError("invalid_checkpoint_member")
-                idx=parts.index("UNet-SW32")
+                model_dir="UNet-SW32" if "UNet-SW32" in parts else "CT_Lungs"
+                idx=parts.index(model_dir)
                 relative=Path(*parts[idx:])
                 if len(relative.parts)>4:
                     raise ValueError("checkpoint_excessive_depth")
                 selected.append((info,relative))
-        if not selected or not any(name.name.endswith((".h5",".hdf5",".hdf",".hd5",".ckpt")) for _,name in selected):
-            raise ValueError("official_UNet_SW32_model_not_in_verified_archive")
+        for model_name in ("UNet-SW32","CT_Lungs"):
+            match=[name for _,name in selected if name.parts[0]==model_name]
+            if not any(name.name.endswith((".h5",".hdf5",".hdf",".hd5",".ckpt")) for name in match):
+                raise ValueError("required_publisher_"+model_name+"_checkpoint_missing")
+            if not any(name.name=="pre_processing.ini" for name in match):
+                raise ValueError("required_publisher_"+model_name+"_preprocessing_missing")
         for info,name in selected:
             guarded_copy_member(zipf,info,models/name,2*1024**3)
     from huggingface_hub import hf_hub_download
