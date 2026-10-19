@@ -124,3 +124,18 @@ Original public release:
 https://github.com/raidionics/Raidionics-models/releases/tag/v1.3.0-rc
 Original CPU engine:
 https://github.com/dbouget/raidionics_seg_lib
+
+
+### VERIFIED original CPU ONNX run (19 October 2026)
+
+The research run **actually completed** with original release archives and matching SHA-256:
+
+- [GitHub Actions run 39311359233](https://github.com/vasiliys961/opus-radiology-ai/actions/runs/39311359233)
+- [Numeric-only real model evidence artifact 12216651101](https://github.com/vasiliys961/opus-radiology-ai/actions/runs/39311359233/artifacts/12216651101)
+- Model original release ZIP SHA-256: `922c0e99cb637a872d18b83300a648eb0d782b1ef874c5d33a551285e52ccb08`.
+- Original vendor CT sample archive SHA-256: `3bc452580051dbea0f67caa52c4eb09c75eafdde9e8e7ff60c3a143ec94dce1f`.
+- True inference `raidionicsseg==1.5.2`, ONNX CPU: **20.01 seconds**, peak original main process RSS **3,999,629,312 bytes (~3.73 GiB)**, **81,490** positive label voxels, computed output mask volume **233.145 mL**, native affine and CT image shape consistent.
+- **NOT** an expert-positive LyNoS CT, lesion-level sensitivity, oncologic staging or any clinically validated accuracy number. Output label voxel volume does not establish true pathologic node burden.
+- Original legacy TF1.14 model archive also successfully downloaded and checksum verified on [run 39309786383](https://github.com/vasiliys961/opus-radiology-ai/actions/runs/39309786383), but LyNoS Pat1 CT exceeded the research runner 200M voxel limit; no original TF forward, no independent expert Dice from that run.
+
+**Promotion condition:** next independent manually annotated positive CT with provenance, verify native affine, calculate voxel TP/FP/FN/Dice plus connected lesion recall and FP/CT; only then discuss clinic-oriented sensitivity. Current research evidence remains restricted to one vendor sample. Never copy the ONNX model into web browser bundle or onto the 8GB Mac by default; use optional isolated CPU worker after resource measurements.
