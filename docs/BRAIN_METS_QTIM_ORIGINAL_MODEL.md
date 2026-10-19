@@ -95,6 +95,38 @@ automatically substituted for an unregistered full-brain MR or DICOM series.
 No diagnosis, RANO response category, or treatment recommendations are
 issued by this wrapper.
 
+
+## Offline execution using verified original publisher weights
+
+The trained ensemble's **15 original checkpoint files** have been downloaded,
+hashed and pinned in the repository; total bytes **1,248,034,031**, original
+[ACTIONS #39233861758](https://github.com/vasiliys961/opus-radiology-ai/actions/runs/39233861758).
+This is **not** an authenticated vendor signature or a successful MRI forward.
+
+On an authorized private high-memory GPU worker, download original trained
+checkpoints into a new secure offline directory with:
+
+\`\`\`bash
+python scripts/verify-brain-mets-original-qtim-fivefold.py \
+  --model-dir /scratch/qtim-original-fivefold \
+  --output /scratch/original-fold-checksum-report.json \
+  --keep-weights
+\`\`\`
+
+The downloader verifies every file SHA256 against independently recorded
+original publisher bytes. The full QTIM inference command above additionally
+accepts \`--checkpoints-dir /scratch/qtim-original-fivefold\`.
+Opus will hash-verify all 15 files again and mount the checked directory
+**read-only** over the model checkpoint location in the isolated NVIDIA Docker
+executor, without internet access or a second Dropbox download. This also
+allows a vendor image built without downloading original weights (if the
+original pinned QTIM source can be built that way).
+
+The model execution still requires the exact author's TensorFlow/NVIDIA
+environment, verified GPU support and permitted real positive T1CE MRI.
+No clinical accuracy, DICOM mapping, independent dataset held-out status,
+TensorFlow checkpoint loading or safe patient inference is yet established.
+
 ## Public expert research source
 
 [UCSF-BMSR](https://registry.opendata.aws/ucsf-bmsr/) is a public-access-
