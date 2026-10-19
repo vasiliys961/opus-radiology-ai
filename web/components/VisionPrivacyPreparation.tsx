@@ -17,11 +17,12 @@ const actionLabels:Record<PrivacyAction["kind"],string>={redacted:"Скрыти�
   "text-retained":"Надписи оставлены по ручной отметке","review-set":"Ручная проверка","copy-restored":"Копия восстановлена · проверки сняты"};
 
 /** OCR reads same-origin fixed assets only. No image upload or recognized-text export. */
-export default function VisionPrivacyPreparation({previews,modality,originalLocalFileIds,onOpenOriginalSlice,specialistFacts}:{
+export default function VisionPrivacyPreparation({previews,modality,originalLocalFileIds,onOpenOriginalSlice,specialistFacts,specialistLocalBinding}:{
   previews:readonly (string|undefined)[];modality:string;
   originalLocalFileIds:readonly string[];
   onOpenOriginalSlice:(localFileId:string)=>void;
   specialistFacts?:LocalLungFacts|null;
+  specialistLocalBinding?:string;
 }) {
   const [frames,setFrames]=useState<PrivacyFrame[]>([]),[selected,setSelected]=useState(0);
   const [error,setError]=useState(""),[busy,setBusy]=useState(false);
@@ -214,6 +215,7 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
       prepareReviewedPacket={makePilotPacket}
       originalLocalFileIds={originalLocalFileIds}
       specialistFacts={specialistFacts}
+      specialistLocalBinding={specialistLocalBinding}
       onOpenOriginalSlice={onOpenOriginalSlice}
     />}
     <p>Ручная проверка и OCR не удостоверяют полную анонимизацию. Работа с
