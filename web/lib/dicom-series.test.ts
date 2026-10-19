@@ -252,3 +252,22 @@ test('complex SQ parser also rejects empty DS components (not just fast Part-10 
   const good = await readDicomSeriesHeader(valid);
   assert.deepEqual(good.imagePositionPatient, [-2,0,4.5]);
 });
+
+test("CT HU rescale tags are recorded as numeric metadata, never decoded pixels",()=>{
+ const x=parseDicomSeriesHeader(syntheticHeader({slope:"1",intercept:"-1024",unit:"HU"}));
+ assert.equal(x.rescaleSlope,1);
+ assert.equal(x.rescaleIntercept,-1024);
+ assert.equal(x.rescaleUnit,"HU");
+});
+test("Invalid or absent DICOM CT rescale cannot silently default to 1/0",()=>{
+ const missing=parseDicomSeriesHeader(syntheticHeader());
+ assert.equal(missing.rescaleSlope,null);
+ assert.equal(missing.rescaleIntercept,null);
+ assert.equal(missing.rescaleUnit,"UNSPECIFIED");
+ for(const input of ["","NaN","Infinity","-1","0","123oops","1e309"]){
+   const x=parseDicomSeriesHeader(syntheticHeader({slope:input,intercept:"-1024",unit:"HU"}));
+   assert.equal(x.rescaleSlope,null,input);
+ }
+ const alternative=parseDicomSeriesHeader(syntheticHeader({slope:"1",intercept:"-1024",unit:"SUV"}));
+ assert.equal(alternative.rescaleUnit,"OTHER");
+});
