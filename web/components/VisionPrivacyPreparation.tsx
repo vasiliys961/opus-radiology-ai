@@ -9,6 +9,7 @@ import { appendPrivacyEvent,buildPrivacyReviewBundle,createPrivacyJournal,export
 import { acquireBrowserCompute } from "../lib/browser-compute-slot";
 import VisionPrivacyReadiness from "./VisionPrivacyReadiness";
 import DeidentifiedOpenRouterPanel from "./DeidentifiedOpenRouterPanel";
+import type {LocalLungFacts} from "../lib/local-lung-review";
 import { buildPrivacyReadinessReport } from "../lib/privacy-readiness";
 
 const actionLabels:Record<PrivacyAction["kind"],string>={redacted:"Скрытие областей", "ocr-started":"OCR начат",
@@ -16,10 +17,11 @@ const actionLabels:Record<PrivacyAction["kind"],string>={redacted:"Скрыти�
   "text-retained":"Надписи оставлены по ручной отметке","review-set":"Ручная проверка","copy-restored":"Копия восстановлена · проверки сняты"};
 
 /** OCR reads same-origin fixed assets only. No image upload or recognized-text export. */
-export default function VisionPrivacyPreparation({previews,modality,originalLocalFileIds,onOpenOriginalSlice}:{
+export default function VisionPrivacyPreparation({previews,modality,originalLocalFileIds,onOpenOriginalSlice,specialistFacts}:{
   previews:readonly (string|undefined)[];modality:string;
   originalLocalFileIds:readonly string[];
   onOpenOriginalSlice:(localFileId:string)=>void;
+  specialistFacts?:LocalLungFacts|null;
 }) {
   const [frames,setFrames]=useState<PrivacyFrame[]>([]),[selected,setSelected]=useState(0);
   const [error,setError]=useState(""),[busy,setBusy]=useState(false);
@@ -211,6 +213,7 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
       exactReviewedHashes={frames.map(f=>({imageId:f.frameId,sha256:f.sha256}))}
       prepareReviewedPacket={makePilotPacket}
       originalLocalFileIds={originalLocalFileIds}
+      specialistFacts={specialistFacts}
       onOpenOriginalSlice={onOpenOriginalSlice}
     />}
     <p>Ручная проверка и OCR не удостоверяют полную анонимизацию. Работа с
