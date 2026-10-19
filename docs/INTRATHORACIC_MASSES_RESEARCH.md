@@ -139,3 +139,32 @@ The research run **actually completed** with original release archives and match
 - Original legacy TF1.14 model archive also successfully downloaded and checksum verified on [run 39309786383](https://github.com/vasiliys961/opus-radiology-ai/actions/runs/39309786383), but LyNoS Pat1 CT exceeded the research runner 200M voxel limit; no original TF forward, no independent expert Dice from that run.
 
 **Promotion condition:** next independent manually annotated positive CT with provenance, verify native affine, calculate voxel TP/FP/FN/Dice plus connected lesion recall and FP/CT; only then discuss clinic-oriented sensitivity. Current research evidence remains restricted to one vendor sample. Never copy the ONNX model into web browser bundle or onto the 8GB Mac by default; use optional isolated CPU worker after resource measurements.
+
+## Переход к настоящим весам Bouget · отдельная CPU-проверка
+
+Добавлен `scripts/bouget-official-checkpoint-preflight.py` и
+[GitHub Actions `bouget-mediastinal-cpu-weights.yml`](../.github/workflows/bouget-mediastinal-cpu-weights.yml).
+Они используют **единственный публичный адрес оригинала, объявленный автором**:
+Google Drive ID `1DBIl8JyXEo6YdM9uNyo3vrv5T2WsYSXT` и MD5
+`434775bebd64910e01f4198eab251666`, проверяют точное совпадение
+архива, ограничения размера/архивных имён, пересчитывают SHA-256 каждого
+контрольного файла. Вывод содержит только идентификатор оригинальной
+модели, размеры и криптографические дайджесты — ни КТ, ни UID.
+
+По умолчанию PR запускает только синтетические offline-тесты. Реальную
+загрузку нужно отдельно разрешить через ручной `workflow_dispatch` с
+`fetch_official_weights=true` в GitHub Actions. Это сохраняет
+непреднамеренные мегабайтные скачивания и сетевые обращения выключенными.
+
+**Контроль честности:** такой запуск **не является** инференсом. В
+оригинальном репозитории TensorFlow 1.14, его зависимости несовместимы с
+современным Python/Mac M1 без отдельного исследовательского окружения.
+Для настоящего forward потребуются проверенные веса, рабочий изолированный
+CPU TensorFlow-1.14-контейнер с лимитом ресурсов и разрешённая CT из LyNoS
+с отдельной экспертной маской. Сам файл набора имеется на
+https://huggingface.co/datasets/andreped/LyNoS
+(15 КТ плюс экспертные маски узлов), но обучение Bouget тоже происходило на
+родственном наборе, так что **независимый holdout не доказан**.
+Только после реального оригинального forward, проверки source geometry,
+численной маски и памяти можно подключать результаты детектора в Opus.
+
