@@ -66,3 +66,15 @@ In the same genuine original model inference on publisher sample tests/00000001_
 - Original sample SHA-256: c8cbe59e6b9b186060dc68e63965658fa6b5b3ada6648d25c189b8b69b43cd4c
 
 These numbers are the **raw uncalibrated model outputs on the publisher sample**, not a 66.7% verified clinical probability of cardiomegaly or a 56.6% verified probability of pleural effusion. No expert truth/independent holdout, disease localization, sensitivity, specificity, or clinical use has been established.
+
+
+## Multi-label extension: pneumonia, pulmonary edema, lung mass
+
+The same **original trained** NIH DenseNet121 also publishes class-specific heads for **Pneumonia**, **Edema** and **Mass**. The standalone research-only source-registered classifier exposes all three on the SAME exact original CXR with no second model, and explicitly refuses non-publisher or untrained class names. Original head list source: https://github.com/mlmed/torchxrayvision/blob/main/torchxrayvision/models.py
+
+These outputs are image-level **uncalibrated classifier scores**, not diagnosis or localizing lesion segmentations. In particular:
+- Pneumonia head does **not** prove infectious pneumonia (viral vs bacterial, etc.); radiographic opacity needs expert interpretation.
+- Edema head is not a quantitative measure of lung water, nor proof of cardiogenic edema.
+- Mass head is not confirmed lung cancer or a bounded tumor and has no source coordinates.
+
+Original sample may overlap training, no expert positive labels or independent validation; no patient/cloud. Record actual numbers only after the updated official pretrained Actions forward completes.
