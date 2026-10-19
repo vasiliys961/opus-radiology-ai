@@ -17,6 +17,11 @@ export type TechnicalDicomMetadata = {
   imagePositionPatient: [number, number, number] | null;
   imageOrientationPatient: [number, number, number, number, number, number] | null;
   pixelSpacing: [number, number] | null;
+  /** Technical pixel value transformation; never assume absent values are 1/0. */
+  rescaleSlope?:number|null;
+  rescaleIntercept?:number|null;
+  /** Only code HU is retained; other known rescale units become OTHER. */
+  rescaleUnit?: "HU"|"OTHER"|"UNSPECIFIED";
   transferSyntax: string;
   /** Only exact allowlisted anatomical codes. Never store raw DICOM free text. */
   bodyRegion?: "HEAD" | "NECK" | "CHEST" | "ABDOMEN" | "PELVIS" | "SPINE" | "EXTREMITY" | null;
@@ -118,6 +123,18 @@ function numericVector(str: string, length: number): number[] | null {
   }
   return values;
 }
+/** Allowlist only numerical HU calibration, reject missing, overflow, zero-slope. */
+function ctTransformNumber(value:string|null,kind:"slope"|"intercept"):number|null{
+  if(value===null)return null;
+  const parsed=numericVector(value,1)?.[0];
+  if(parsed===undefined||!Number.isFinite(parsed))return null;
+  return kind==="slope"?
+    parsed>0 && parsed<=1024?parsed:null:
+    Math.abs(parsed)<=65536?parsed:null;
+}
+function rescaleUnit(raw:string|null):"HU"|"OTHER"|"UNSPECIFIED"{
+  return raw===null?"UNSPECIFIED":raw.toUpperCase()==="HU"?"HU":"OTHER";
+}
 
 export function parseDicomSeriesHeader(buffer: ArrayBuffer): TechnicalDicomMetadata {
   const bytes = new Uint8Array(buffer);
@@ -130,7 +147,7 @@ export function parseDicomSeriesHeader(buffer: ArrayBuffer): TechnicalDicomMetad
     sopInstanceUid: null, studyUid: null, seriesUid: null, frameOfReferenceUid: null,
     modality: '', instanceNumber: null, numberOfFrames: null, rows: null, columns: null,
     imagePositionPatient: null, imageOrientationPatient: null,
-    pixelSpacing: null, transferSyntax: '',
+    pixelSpacing: null, rescaleSlope:null,rescaleIntercept:null,rescaleUnit:'UNSPECIFIED',transferSyntax: '',
     bodyRegion: null, imageRole: "UNKNOWN", mrSequenceCodes: [],
     repetitionTimeMs:null, echoTimeMs:null, inversionTimeMs:null, sliceThicknessMm:null,
     contrastAgentDeclared:false,
@@ -189,6 +206,9 @@ export function parseDicomSeriesHeader(buffer: ArrayBuffer): TechnicalDicomMetad
       case 0x00180082: result.inversionTimeMs = boundedDs(getText()); break;
       case 0x00180050: result.sliceThicknessMm = boundedDs(getText()); break;
       case 0x00180010: result.contrastAgentDeclared = length > 0 && getText().length > 0; break;
+      case 0x00281052: result.rescaleIntercept=ctTransformNumber(getText(),"intercept"); break;
+      case 0x00281053: result.rescaleSlope=ctTransformNumber(getText(),"slope"); break;
+      case 0x00281054: result.rescaleUnit=rescaleUnit(getText()); break;
       case 0x00280301: result.burnedInAnnotation = privacyFlag(getText()); break;
       case 0x00280302: result.recognizableVisualFeatures = privacyFlag(getText()); break;
       case 0x00120062: result.patientIdentityRemoved = privacyFlag(getText()); break;
@@ -280,6 +300,9 @@ async function parseComplexDicomHeader(buffer: ArrayBuffer): Promise<TechnicalDi
     imagePositionPatient: vector('x00200032', 3) as TechnicalDicomMetadata['imagePositionPatient'],
     imageOrientationPatient: vector('x00200037', 6) as TechnicalDicomMetadata['imageOrientationPatient'],
     pixelSpacing: spacing?.every((v) => v > 0) ? spacing as [number, number] : null,
+    rescaleSlope:ctTransformNumber(str('x00281053'),"slope"),
+    rescaleIntercept:ctTransformNumber(str('x00281052'),"intercept"),
+    rescaleUnit:rescaleUnit(str('x00281054')),
     transferSyntax: str('x00020010') ?? (hasPart10 ? '' : rawSyntax),
     imageRole: imageRole(str('x00080008')),
     bodyRegion: allowedRegion(str('x00180015')),
