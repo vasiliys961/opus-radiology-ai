@@ -138,6 +138,8 @@ export default function VisionFramePlanningPanel({
         previews={report.frames.map(f=>thumbnails[f.fileId]?.url)}
         modality={series.find(s=>s.key===report.seriesKey)?.modality??""}
         specialistFacts={specialistFacts}
+        specialistLocalBinding={specialistFacts&&capturedSpecialist?
+          capturedSpecialist.evidence.source.inputSha256+":"+capturedSpecialist.evidence.mask.sha256:""}
         originalLocalFileIds={report.frames.map(f=>f.fileId)}
         onOpenOriginalSlice={onOpenSlice}/>
     </div>}
