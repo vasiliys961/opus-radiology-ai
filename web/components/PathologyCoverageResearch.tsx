@@ -1,6 +1,7 @@
 "use client";
 
 import {useEffect,useMemo,useState} from "react";
+import DualPublicDetectorReview from "./DualPublicDetectorReview";
 
 type Status="real_case_measured"|"real_trial_running"|"real_checkpoint_candidate"|"license_blocked"|"weights_unverified";
 type Entry={id:string;modality:string;anatomy:string;pathology:string;status:Status;weights:string;source:string;reference:string;restriction:string;priority:number;next:string};
@@ -123,5 +124,6 @@ export default function PathologyCoverageResearch(){
    </div>
    {visible.length===0&&<p>В выбранной области нет зарегистрированных задач с заданным статусом.</p>}
   </>}
+  <DualPublicDetectorReview/>
  </section>;
 }
