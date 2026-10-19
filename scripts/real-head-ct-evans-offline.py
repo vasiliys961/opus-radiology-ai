@@ -66,16 +66,20 @@ def preflight_weights(root: Path, manifest_path: Path) -> dict:
     if not isinstance(files, list) or not 2 <= len(files) <= 100:
         raise ValueError("both_original_trained_brain_and_ventricle_checkpoints_required")
     seen = set()
+    families = set()
     summaries = []
     for item in files:
-        if not isinstance(item, dict) or set(item) != {"path", "sha256"}:
+        if not isinstance(item, dict) or set(item) != {"path", "sha256", "family"}:
             raise ValueError("invalid_model_checkpoint_manifest")
-        name, expected = item["path"], item["sha256"]
+        name, expected, family = item["path"], item["sha256"], item["family"]
+        if family not in {"brain_skull", "ventricle_parts"}:
+            raise ValueError("invalid_model_family_manifest")
         if (not isinstance(name, str) or not name or len(name) > 240 or name in seen or
             Path(name).is_absolute() or ".." in Path(name).parts or
             not isinstance(expected, str) or not SHA_PATTERN.fullmatch(expected)):
             raise ValueError("unsafe_or_duplicate_checkpoint_manifest_entry")
         seen.add(name)
+        families.add(family)
         checkpoint = root / name
         if (checkpoint.is_symlink() or not checkpoint.is_file() or
             not 1024 <= checkpoint.stat().st_size <= 3 * 1024**3 or
@@ -84,8 +88,10 @@ def preflight_weights(root: Path, manifest_path: Path) -> dict:
         found = file_hash(checkpoint)
         if found != expected:
             raise ValueError("original_pretrained_checkpoint_SHA256_mismatch")
-        summaries.append({"relativeModelAsset": name, "sha256": found,
+        summaries.append({"relativeModelAsset": name, "family": family, "sha256": found,
                           "bytes": checkpoint.stat().st_size})
+    if families != {"brain_skull", "ventricle_parts"}:
+        raise ValueError("both_original_brain_and_ventricle_model_families_required")
     return {"manifestSHA256": file_hash(manifest_path), "verifiedInstalledAssets": summaries,
             "publisherHashesIndependentlyVerified": False}
 
