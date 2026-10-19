@@ -14,6 +14,7 @@ import AiWorkflowPanel from "../components/AiWorkflowPanel";
 import AiEvidenceReview from "../components/AiEvidenceReview";
 import StudyIntelligencePanel from "../components/StudyIntelligencePanel";
 import VisionFramePlanningPanel from "../components/VisionFramePlanningPanel";
+import type {CapturedLocalSpecialist} from "../lib/same-series-r231-cloud-evidence";
 import CtSlabSelection from "../components/CtSlabSelection";
 import FullCtPanel from "../components/FullCtPanel";
 import type {FullCtTicket} from "../lib/full-ct-worker";
@@ -86,6 +87,7 @@ export default function Home() {
   const [slab,setSlab]=useState<{parent:DicomSeries;series:DicomSeries}|null>(null);
   const [fullBusy,setFullBusy]=useState(false);
   const [fullCt,setFullCt]=useState<{parent:DicomSeries;ticket:FullCtTicket}|null>(null);
+  const [specialistCapture,setSpecialistCapture]=useState<CapturedLocalSpecialist|null>(null);
   const [dicomPreview, setDicomPreview] = useState<{ id: string; url: string; metadata: DicomPreviewMetadata } | null>(null);
   const [dicomLoading, setDicomLoading] = useState(false);
   const [indexing, setIndexing] = useState(false);
@@ -127,6 +129,8 @@ export default function Home() {
   const showMpr = hasCornerstone && viewMode !== "2d" && mprCheck.eligible&&(!slab||slab.parent===activeSeries);
   // Reset MPR on series changes and preserve normal 2D stack as the fallback.
   useEffect(() => { setViewMode("2d");setSlab(null); }, [activeSeries]);
+  const currentSourceMembers=volumeSeries?.members.map(member=>member.id).join("|")??"";
+  useEffect(()=>{setSpecialistCapture(null);},[volumeSeries?.key,currentSourceMembers]);
   const sliceIndex = activeSeries?.members.findIndex((m) => m.id === activeId) ?? -1;
   const selectSlice = (index: number) => {
     if (!activeSeries) return;
@@ -349,7 +353,10 @@ export default function Home() {
               {hasCornerstone ?
                 <div className="ora-cornerstone-host">{showMpr
                   ? <CornerstoneMPR key={`mpr-${volumeSeries!.key}`} files={volumeFiles} sourceSeries={volumeSeries!}
-                    fullCt={fullCt?.parent===activeSeries?fullCt.ticket:undefined} quality={mprQuality} show3D={viewMode === "3d"} onShow3DChange={enabled => setViewMode(enabled ? "3d" : "mpr")}/>
+                    fullCt={fullCt?.parent===activeSeries?fullCt.ticket:undefined} quality={mprQuality} show3D={viewMode === "3d"} onShow3DChange={enabled => setViewMode(enabled ? "3d" : "mpr")}
+                     onEvidenceChange={evidence=>setSpecialistCapture(evidence?{
+                       seriesKey:volumeSeries!.key,sourceMemberIds:volumeSeries!.members.map(m=>m.id),evidence,
+                     }:null)}/>
                   : <CornerstoneStack key={activeSeries!.key} files={cornerstoneFiles} selectedIndex={sliceIndex >= 0 ? sliceIndex : 0} modality={activeSeries!.modality} onSliceChange={(index) => { const member = activeSeries!.members[index]; if (member) setActiveId(member.id); }}/>}</div>
                 : <>
                   <div className="ora-viewer-body" tabIndex={0}>
@@ -365,6 +372,7 @@ export default function Home() {
               series={series}
               activeSeriesKey={activeSeries?.key ?? null}
               fileById={localDicomById}
+              capturedSpecialist={specialistCapture}
               onOpenSlice={(memberId) => {
                 if (series.some(group => group.members.some(m => m.id === memberId))) {
                   setViewMode("2d"); setActiveId(memberId); setZoom(1);
