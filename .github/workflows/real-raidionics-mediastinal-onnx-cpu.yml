@@ -31,11 +31,11 @@ jobs:
       - name: Install pinned true publisher ONNX CPU runtime, not TensorFlow, GPU or PyTorch
         run: |
           set -euo pipefail
-          python -m pip install --no-cache-dir "numpy==1.26.4" "raidionicsseg==1.5.3" "psutil==6.1.1" "requests==2.32.3"
+          python -m pip install --no-cache-dir "numpy==1.26.4" "raidionicsseg==1.5.2" "psutil==6.1.1" "requests==2.32.3"
           python - <<'PY'
           import importlib.metadata as m
           import onnxruntime as ort
-          assert m.version("raidionicsseg")=="1.5.3"
+          assert m.version("raidionicsseg")=="1.5.2"
           assert "CPUExecutionProvider" in ort.get_available_providers()
           print("Original ONNX CPU runtime:",ort.__version__,ort.get_available_providers())
           PY
