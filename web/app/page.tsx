@@ -9,6 +9,7 @@ import { readDicomSeriesHeader, groupDicomSeries, type TechnicalDicomMetadata } 
 import { validateViewerFileSelection, MAX_DICOM_FILES } from "../lib/viewer-limits";
 import { checkMprEligibility } from "../lib/mpr-eligibility";
 import { assessMprQuality } from "../lib/mpr-quality";
+import {assessCtHuCalibration} from "../lib/ct-hu-calibration";
 import { uniqueNewFiles } from "../lib/study-files";
 import AiWorkflowPanel from "../components/AiWorkflowPanel";
 import AiEvidenceReview from "../components/AiEvidenceReview";
@@ -117,6 +118,7 @@ export default function Home() {
     [selectedSlab,localDicomById,cornerstoneFiles]);
   const mprCheck = useMemo(() => checkMprEligibility(volumeSeries, volumeFiles.map(f => f.size)), [volumeSeries, volumeFiles]);
   const mprQuality = useMemo(() => assessMprQuality(volumeSeries), [volumeSeries]);
+  const huCalibration=useMemo(()=>assessCtHuCalibration(activeSeries),[activeSeries]);
   // Every series is checked independently. A 40-slice sequence from the same
   // study can have a different acquisition geometry from a valid 20-slice one.
   const compatibleSeries = useMemo(() => {
@@ -324,6 +326,12 @@ export default function Home() {
                       : activeSeries.warning ?? "MPR/3D недоступны без подтверждённого объёма"}
                   </p>
                   <p className={mprCheck.eligible ? "ora-series-ok" : "ora-series-warning"}>MPR: {mprCheck.reason}</p>
+                  {activeSeries.modality==="CT"&&<p className={huCalibration.status==="metadata-ready"?"ora-series-ok":"ora-series-warning"}
+                    role="status">Калибровка КТ (HU): {huCalibration.reason}
+                    {huCalibration.status==="metadata-ready"&&
+                      <> Slope {huCalibration.slope}; Intercept {huCalibration.intercept}.
+                        LAA−950 заблокирован до проверки фактических значений вокселей, вдоха и протокола.</>}
+                  </p>}
                   <CtSlabSelection series={activeSeries} fileSizes={cornerstoneFiles.map(f=>f.size)} selected={selectedSlab}
                     disabled={viewMode!=="2d"||indexing||fullBusy} onSelect={selection=>{
                       setSlab(selection?{parent:activeSeries,series:selection}:null);setViewMode(selection?"mpr":"2d");
