@@ -52,7 +52,8 @@ def regions(ct_hu, lungmask, affine, min_lung_ml=700):
         if volume_ml < min_lung_ml / 2:
             raise ValueError("partial_lung_mask_not_valid_for_whole_lung_metric")
         hu = ct[region]
-        if float(np.min(hu)) < -1100 or float(np.max(hu)) > 1500:
+        if (float(np.min(hu)) < -1100 or float(np.max(hu)) > 1500 or
+            not -1050 <= float(np.median(hu)) <= -250):
             raise ValueError("invalid_or_uncalibrated_lung_HU")
         low = region & (ct <= -950)
         positions = np.where(low)
