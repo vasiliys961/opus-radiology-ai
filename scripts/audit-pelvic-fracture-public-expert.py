@@ -26,7 +26,7 @@ def sha256(path: Path) -> str:
 def checked_nifti(path: Path):
     import nibabel as nib
     import numpy as np
-    if path.is_symlink() or not path.is_file() or not 1024 <= path.stat().st_size <= MAX_BYTES:
+    if path.is_symlink() or not path.is_file() or not 64 <= path.stat().st_size <= MAX_BYTES:
         raise ValueError("missing_or_oversize_original_public_nifti")
     image = nib.load(str(path))
     if (image.ndim != 3 or min(image.shape) < 8 or
