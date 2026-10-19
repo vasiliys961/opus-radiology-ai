@@ -5,6 +5,7 @@ import type {VisionPrivacyPacket} from "../lib/vision-privacy";
 import type {SanitizedModelReview} from "../lib/sanitized-cloud-review";
 import {buildLocalDualReviewDraft,findingReviewKey,type LocalObservationAssessment} from "../lib/local-dual-vision-physician-draft";
 import type {LocalLungFacts} from "../lib/local-lung-review";
+import type {LocalSameSeriesLaa950} from "../lib/same-series-laa950-review";
 import {bindLocalSanitizedReview,sourceFileForObservation,perFrameModelCoverage} from "../lib/local-cloud-source-navigation";
 
 type Props={
@@ -12,6 +13,7 @@ type Props={
   exactReviewedHashes:readonly {imageId:string;sha256:string}[];
   prepareReviewedPacket:()=>VisionPrivacyPacket;
   specialistFacts?:LocalLungFacts|null;
+  localLaa950?:LocalSameSeriesLaa950|null;
   specialistLocalBinding?:string;
   originalLocalFileIds:readonly string[];
   onOpenOriginalSlice:(localFileId:string)=>void;
@@ -19,7 +21,7 @@ type Props={
 type Ready={schema:string;enabled:boolean;productionPatientCloudRelease:false};
 export default function DeidentifiedOpenRouterPanel({
   enabledByLocalChecks,exactReviewedHashes,prepareReviewedPacket,
-  originalLocalFileIds,onOpenOriginalSlice,specialistFacts,specialistLocalBinding,
+  originalLocalFileIds,onOpenOriginalSlice,specialistFacts,specialistLocalBinding,localLaa950,
 }:Props){
   const [server,setServer]=useState<Ready|null>(null),[token,setToken]=useState("");
   const [clinician,setClinician]=useState(false),[providerRights,setProviderRights]=useState(false);
@@ -200,6 +202,17 @@ export default function DeidentifiedOpenRouterPanel({
         <p>Маски — анатомические, не очаги болезни. Подлинность происхождения
           чисел дополнительно не проверялась сервером OpenRouter;
           сопоставление с исходной КТ сделано локально.</p>
+      </section>}
+      {localLaa950&&<section aria-label="Локальная HU-денситометрия того же CT без облака">
+        <h4>LAA−950 · отдельное локальное измерение текущей КТ</h4>
+        <p>Внутри обработанного фрагмента маски R231:
+          всего {localLaa950.lowAttenuationPctOfSampledMask.toFixed(2)}%,
+          справа {localLaa950.rightLungPct.toFixed(2)}%,
+          слева {localLaa950.leftLungPct.toFixed(2)}% вокселей ≤−950 HU.</p>
+        <p>Этот показатель вычислен только на CPU и
+          <strong> не направлялся Gemini или Opus</strong>.
+          Это не независимое подтверждение LLM и не диагноз эмфиземы или ХОБЛ.
+          Точная калибровка декодера и полнота лёгких ещё не доказаны.</p>
       </section>}
       {result.results.map(r=><article key={r.reviewer}
         style={{border:"1px solid #8c9b95",padding:12,borderRadius:8,marginTop:8}}>
