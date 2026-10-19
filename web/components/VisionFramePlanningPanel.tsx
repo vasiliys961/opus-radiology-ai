@@ -8,20 +8,29 @@ import { useAnalysisSound } from "./AnalysisSoundProvider";
 import { decodeDicomPreview } from "../lib/dicom-lite";
 import { MAX_PRIVACY_PIXELS } from "../lib/vision-privacy";
 import VisionPrivacyPreparation from "./VisionPrivacyPreparation";
+import {sameSeriesR231Facts,type CapturedLocalSpecialist} from "../lib/same-series-r231-cloud-evidence";
 
 export default function VisionFramePlanningPanel({
-  series, activeSeriesKey, fileById, onOpenSlice,
+  series, activeSeriesKey, fileById, onOpenSlice,capturedSpecialist,
 }: {
   series: readonly DicomSeries[];
   activeSeriesKey: string | null;
   fileById: ReadonlyMap<string, File>;
   onOpenSlice: (fileId: string) => void;
+  capturedSpecialist?:CapturedLocalSpecialist|null;
 }) {
   const [requested, setRequested] = useState(4);
   const [report, setReport] = useState<VisionFramePlan | null>(null);
   const [notice, setNotice] = useState("");
   const [thumbnails, setThumbnails] = useState<Record<string, { url?: string; error?: string }>>({});
   const { completionChime } = useAnalysisSound();
+  let specialistFacts=null, specialistWarning="";
+  if(capturedSpecialist){
+    try{
+      const selected=series.find(s=>s.key===activeSeriesKey);
+      specialistFacts=sameSeriesR231Facts(selected,capturedSpecialist);
+    }catch{specialistWarning="Результат CPU R231 не совпадает с текущей DICOM-серией. Численные данные не будут переданы."}
+  }
   const choice = useMemo(() => {
     // Never silently choose some other series when a specific series is selected.
     return planVisionFrameSamples(series, activeSeriesKey, requested);
@@ -120,9 +129,17 @@ export default function VisionFramePlanningPanel({
         Исходные DICOM в облако не отправляются. Платная передача отдельных
         проверенных PNG возможна только после обезличивания, OCR, подтверждения
         врача и допуска локального OpenRouter-пилота.</p>
+      {specialistFacts&&<p role="status">Локальный R231: правая маска {specialistFacts.rightLungMaskMl.toFixed(1)} мл,
+        левая {specialistFacts.leftLungMaskMl.toFixed(1)} мл. Это сегментация анатомии,
+        не детекция заболевания. Числа можно передать в дополнительный анализ
+        вместе с кадрами только по явному разрешению.</p>}
+      {specialistWarning&&<p role="status">{specialistWarning}</p>}
       <VisionPrivacyPreparation key={JSON.stringify(report.frames.map(f=>f.fileId))+requested}
         previews={report.frames.map(f=>thumbnails[f.fileId]?.url)}
         modality={series.find(s=>s.key===report.seriesKey)?.modality??""}
+        specialistFacts={specialistFacts}
+        specialistLocalBinding={specialistFacts&&capturedSpecialist?
+          capturedSpecialist.evidence.source.inputSha256+":"+capturedSpecialist.evidence.mask.sha256:""}
         originalLocalFileIds={report.frames.map(f=>f.fileId)}
         onOpenOriginalSlice={onOpenSlice}/>
     </div>}

@@ -14,7 +14,7 @@ export type MaskDisplay = { visible: boolean; opacity: number; label: number | n
 type Summary = { name: string; labels: LabelMask["labels"]; result?: SegmentationResult; evidence?: SegmentationEvidence; evidenceRevision?: number; fullCtDerived?:boolean; research?:AnatomyProof; researchRegions?:LobeRegion[]; researchSourceVerified?:boolean };
 type DownloadPackage = { request: AnalysisRequest; volumeUrl: string; manifestUrl: string };
 
-export default function SegmentationControls({ ready, onPrepare, onPrepareStream, onImport, onDisplay, onClear, onNavigatePoint, onSampleMask,onFullCtLoad,onVerifyResearchSource }: {
+export default function SegmentationControls({ ready, onPrepare, onPrepareStream, onImport, onDisplay, onClear, onNavigatePoint, onSampleMask,onFullCtLoad,onVerifyResearchSource,onEvidenceChange }: {
   ready: boolean;
   onPrepare: (signal: AbortSignal) => Promise<AnalysisPackage>;
   onPrepareStream: (signal: AbortSignal) => Promise<AnalysisStream>;
@@ -24,6 +24,7 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
   onNavigatePoint: (point: Point3) => void;
   onSampleMask: (point: Point3) => number | null;
   onFullCtLoad?: (signal:AbortSignal)=>Promise<LabelMask>;
+  onEvidenceChange?: (evidence:SegmentationEvidence|null)=>void;
   onVerifyResearchSource?: (passportJson:string,proof:AnatomyProof,signal:AbortSignal)=>Promise<void>;
 }) {
   const input = useRef<HTMLInputElement>(null);
@@ -33,8 +34,8 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
   const preparation = useRef<AbortController | null>(null);
   const researchController=useRef<AbortController|null>(null);
   const packageRef = useRef<DownloadPackage | null>(null);
-  const callbacks = useRef({ onPrepare, onPrepareStream, onImport, onDisplay, onClear, onNavigatePoint,onVerifyResearchSource });
-  callbacks.current = { onPrepare, onPrepareStream, onImport, onDisplay, onClear, onNavigatePoint,onVerifyResearchSource };
+  const callbacks = useRef({ onPrepare, onPrepareStream, onImport, onDisplay, onClear, onNavigatePoint,onVerifyResearchSource,onEvidenceChange });
+  callbacks.current = { onPrepare, onPrepareStream, onImport, onDisplay, onClear, onNavigatePoint,onVerifyResearchSource,onEvidenceChange };
   const [summary, setSummary] = useState<Summary | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -46,7 +47,7 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
   const [workerBusy, setWorkerBusy] = useState(false);
   useEffect(()=>{
     if(!onFullCtLoad){version.current++;preparation.current?.abort();researchController.current?.abort();setBusy(false);
-      setSummary(current=>{if(current?.fullCtDerived){callbacks.current.onClear();return null;}return current;});}
+      setSummary(current=>{if(current?.fullCtDerived){callbacks.current.onClear();callbacks.current.onEvidenceChange?.(null);return null;}return current;});}
   },[Boolean(onFullCtLoad)]);
   const localOnnxCommand = packet ? [
     'cd "$HOME/Desktop/opus-radiology-ai-github"',
@@ -72,6 +73,7 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
     if (!ready) {
       version.current++;preparation.current?.abort();researchController.current?.abort();releasePackage();
       setPacket(null);setExportBusy(false);setExportError("");setSummary(null);setBusy(false);setError("");
+      callbacks.current.onEvidenceChange?.(null);
     }
   }, [ready]);
 
@@ -107,6 +109,7 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
       // Runtime validates physical geometry before replacing an existing overlay.
       callbacks.current.onImport(mask,next);
       setSummary({name:file.name,labels:mask.labels}); setDisplay(next);
+       callbacks.current.onEvidenceChange?.(null);
     } catch(cause) {
       if (request === version.current) setError(cause instanceof Error ? cause.message : String(cause));
     } finally { if (request === version.current) setBusy(false); }
@@ -139,6 +142,7 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
       callbacks.current.onImport(mask,next);
       setSummary({name:masks[0].name,labels:mask.labels,research,researchRegions,researchSourceVerified:true});
       setDisplay(next);
+       callbacks.current.onEvidenceChange?.(null);
     } catch(cause){
       if(revision===version.current)setError(cause instanceof Error?cause.message:String(cause));
     } finally {if(revision===version.current){setBusy(false);researchController.current=null;}}
@@ -163,6 +167,7 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
       const next={visible:true,opacity:0.4,label:mask.labels[0]?.id??null};
       callbacks.current.onImport(mask,next);
       setSummary({name:masks[0].name,labels:mask.labels,result,evidence,evidenceRevision:request});setDisplay(next);
+      callbacks.current.onEvidenceChange?.(evidence);
     } catch(cause) {
       if (request===version.current) setError(cause instanceof Error?cause.message:String(cause));
     } finally {if (request===version.current) setBusy(false);}
@@ -178,6 +183,7 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
     try{const mask=await onFullCtLoad(controller.signal);if(revision!==version.current||controller.signal.aborted)return;
       const next={visible:true,opacity:0.4,label:null};callbacks.current.onImport(mask,next);
       setSummary({name:"R231 · привязанный фрагмент полного задания (Evidence — в полной КТ)",labels:mask.labels,fullCtDerived:true});setDisplay(next);
+      callbacks.current.onEvidenceChange?.(null);
     }catch(e){if(revision===version.current)setError(e instanceof Error?e.message:"Ошибка фрагмента полной маски.");}
     finally{if(revision===version.current){setBusy(false);preparation.current=null;}}
   };
@@ -193,6 +199,7 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
         const next={visible:true,opacity:0.4,label:null};
         callbacks.current.onImport(mask,next);
         setSummary({name:"Lungmask R231 · локальный worker",labels:mask.labels,result,evidence,evidenceRevision:++version.current});setDisplay(next);setError("");
+        callbacks.current.onEvidenceChange?.(evidence);
       }}/>
     <div className="ora-mask-actions">
       <button type="button" disabled={!ready||busy||exportBusy||workerBusy} onClick={()=>input.current?.click()}>{busy ? "Проверка маски…" : summary ? "Заменить маску .nii / .nii.gz" : "Загрузить маску .nii / .nii.gz"}</button>
@@ -204,6 +211,7 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
       }}/>
       {summary && <button type="button" disabled={exportBusy||workerBusy} onClick={()=>{
         version.current++; researchController.current?.abort();callbacks.current.onClear();setSummary(null);setBusy(false);setError("");
+        callbacks.current.onEvidenceChange?.(null);
       }}>Удалить маску</button>}
       <input ref={input} type="file" accept=".nii,.nii.gz" hidden onChange={event=>{
         const file=event.target.files?.[0];event.target.value="";

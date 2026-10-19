@@ -3,30 +3,35 @@
 import {useEffect,useRef,useState} from "react";
 import type {VisionPrivacyPacket} from "../lib/vision-privacy";
 import type {SanitizedModelReview} from "../lib/sanitized-cloud-review";
+import type {LocalLungFacts} from "../lib/local-lung-review";
 import {bindLocalSanitizedReview,sourceFileForObservation,perFrameModelCoverage} from "../lib/local-cloud-source-navigation";
 
 type Props={
   enabledByLocalChecks:boolean;
   exactReviewedHashes:readonly {imageId:string;sha256:string}[];
   prepareReviewedPacket:()=>VisionPrivacyPacket;
+  specialistFacts?:LocalLungFacts|null;
+  specialistLocalBinding?:string;
   originalLocalFileIds:readonly string[];
   onOpenOriginalSlice:(localFileId:string)=>void;
 };
 type Ready={schema:string;enabled:boolean;productionPatientCloudRelease:false};
 export default function DeidentifiedOpenRouterPanel({
   enabledByLocalChecks,exactReviewedHashes,prepareReviewedPacket,
-  originalLocalFileIds,onOpenOriginalSlice,
+  originalLocalFileIds,onOpenOriginalSlice,specialistFacts,specialistLocalBinding,
 }:Props){
   const [server,setServer]=useState<Ready|null>(null),[token,setToken]=useState("");
   const [clinician,setClinician]=useState(false),[providerRights,setProviderRights]=useState(false);
   const [pixelReview,setPixelReview]=useState(false),[paid,setPaid]=useState(false);
   const [working,setWorking]=useState(false),[error,setError]=useState("");
   const [readinessNote,setReadinessNote]=useState("");
+  const [includeSpecialist,setIncludeSpecialist]=useState(false);
   const [result,setResult]=useState<SanitizedModelReview|null>(null);
   const ctl=useRef<AbortController|null>(null);
   // Never probe even localhost without a clinician/operator click.
   // This is essential for offline DICOM review and fail-closed browser tests.
   useEffect(()=>()=>{ctl.current?.abort();},[]);
+  useEffect(()=>{setResult(null);setIncludeSpecialist(false);},[specialistLocalBinding]);
   async function checkReadiness(){
     if(working)return;
     setReadinessNote("");setError("");setServer(null);
@@ -50,12 +55,14 @@ export default function DeidentifiedOpenRouterPanel({
       if(packet.frames.some((f,i)=>f.frameId!==exactReviewedHashes[i]?.imageId||
          f.sha256!==exactReviewedHashes[i]?.sha256))
         throw Error("Проверенная копия изменилась: повторите проверку.");
+      const sentSpecialist=includeSpecialist&&specialistFacts?specialistFacts:null;
       const response=await fetch("/api/ai/deidentified-openrouter-review",{
         method:"POST",cache:"no-store",signal:controller.signal,
         headers:{"Content-Type":"application/json","X-Opus-Local-Operator-Token":token},
         body:JSON.stringify({packet,acknowledgeClinicianLawfulDisclosure:true,
           acknowledgeProviderHealthDataTerms:true,acknowledgePixelIdentityReviewed:true,
-          acknowledgeTwoPaidCalls:true}),
+          acknowledgeTwoPaidCalls:true,
+          ...(sentSpecialist?{specialistFacts:sentSpecialist}:{})}),
       });
       const body:unknown=await response.json();
       if(!response.ok)throw Error((body as {error?:string}).error??"OpenRouter недоступен");
@@ -68,6 +75,17 @@ export default function DeidentifiedOpenRouterPanel({
          doc.sourceFrames.some((f,i)=>f.imageId!==exactReviewedHashes[i].imageId||
            f.reviewedPixelSha256!==exactReviewedHashes[i].sha256))
         throw Error("Неверный паспорт облачного ответа.");
+      if(sentSpecialist &&
+         (!doc.specialistEvidence||
+          doc.specialistEvidence.model!=="lungmask-R231"||
+          doc.specialistEvidence.frameCount!==sentSpecialist.frameCount||
+          doc.specialistEvidence.rightLungMaskMl!==sentSpecialist.rightLungMaskMl||
+          doc.specialistEvidence.leftLungMaskMl!==sentSpecialist.leftLungMaskMl||
+          doc.specialistEvidence.clinicalProvenanceServerVerified!==false||
+          doc.specialistEvidence.findingOfPathologyEstablished!==false))
+        throw Error("Источник численных данных R231 не подтверждён.");
+      if(!sentSpecialist&&doc.specialistEvidence)
+        throw Error("Непредусмотренные данные модели в ответе.");
       // An unbound or changed source makes ALL clinical navigation unavailable.
       bindLocalSanitizedReview(doc,exactReviewedHashes.map(f=>({imageId:f.imageId,reviewedPixelSha256:f.sha256})),originalLocalFileIds);
       setResult(doc);
@@ -116,6 +134,13 @@ export default function DeidentifiedOpenRouterPanel({
       onChange={e=>setPixelReview(e.target.checked)}/>
       Проверил все исходящие изображения: нет имён, дат рождения, ID,
       надписей учреждения, лиц или других узнаваемых признаков.</label>
+    {specialistFacts&&<label><input type="checkbox" disabled={working}
+      checked={includeSpecialist} onChange={e=>{setIncludeSpecialist(e.target.checked);setResult(null);}}/>
+      Дополнительно передать обеим LLM только измерения из локального R231
+      той же КТ: правая маска {specialistFacts.rightLungMaskMl.toFixed(1)} мл,
+      левая {specialistFacts.leftLungMaskMl.toFixed(1)} мл, {specialistFacts.frameCount} срезов.
+      Маска, UID и путь исходных DICOM не передаются. Модель R231 размечает
+      лёгкие, но не детектирует патологию.</label>}
     <label><input type="checkbox" disabled={working} checked={paid}
       onChange={e=>setPaid(e.target.checked)}/>
       Разрешаю два платных вызова: Gemini 3.8 Flash и Claude Opus 5.5
@@ -147,6 +172,16 @@ export default function DeidentifiedOpenRouterPanel({
           }catch{setError("Срез больше не совпадает с проверенным исходным DICOM. Повторите локальную привязку.");}
         }}>Открыть исходный DICOM-срез</button>
       </li>)}</ul>
+      {result.specialistEvidence&&<section aria-label="Объединённые локальные данные R231 и Gemini Opus">
+        <h4>Локальный CPU-детектор · Lungmask R231</h4>
+        <p>Объёмы сегментации той же выбранной КТ:
+          справа {result.specialistEvidence.rightLungMaskMl.toFixed(1)} мл,
+          слева {result.specialistEvidence.leftLungMaskMl.toFixed(1)} мл,
+          {result.specialistEvidence.frameCount} срезов.</p>
+        <p>Маски — анатомические, не очаги болезни. Подлинность происхождения
+          чисел дополнительно не проверялась сервером OpenRouter;
+          сопоставление с исходной КТ сделано локально.</p>
+      </section>}
       {result.results.map(r=><article key={r.reviewer}
         style={{border:"1px solid #8c9b95",padding:12,borderRadius:8,marginTop:8}}>
         <h4>{r.reviewer==="gemini"?"Gemini Vision":"Opus Vision"} — {r.model}</h4>
