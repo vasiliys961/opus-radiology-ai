@@ -1,0 +1,30 @@
+name: Intrarenal CT hyperdense candidate source/space contract
+on:
+  pull_request:
+    paths:
+      - scripts/real-renal-calculus-ncct-candidates.py
+      - scripts/test-real-renal-calculus-ncct-candidates.py
+      - .github/workflows/renal-calculus-ncct-contract.yml
+      - docs/RENAL_CALCULUS_NCCT_RESEARCH.md
+      - docs/clinical-detector-coverage.json
+      - web/public/examples/clinical-pathology-coverage.json
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-ct-geometry-and-density:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install minimal numerical dependencies, NOT trained weights
+        run: python -m pip install numpy==2.2.6 scipy==1.15.3 nibabel==5.3.2
+      - name: Synthetic spatial contract only, not genuine stone inference
+        run: |
+          python -m py_compile scripts/real-renal-calculus-ncct-candidates.py
+          python scripts/test-real-renal-calculus-ncct-candidates.py
+          python scripts/check-clinical-detector-coverage.py
+          python scripts/check-web-pathology-coverage.py
