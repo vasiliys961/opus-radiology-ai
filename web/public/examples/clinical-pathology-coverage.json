@@ -411,13 +411,25 @@
       "modality": "XR",
       "anatomy": "heart",
       "pathology": "cardiomegaly",
-      "status": "weights_unverified",
-      "weights": "TorchXRayVision chest X-ray classifier candidate",
-      "source": "https://github.com/mlmed/torchxrayvision",
-      "reference": "NIH chest X-ray expert positive labels",
-      "restriction": "XR proxy cardiothoracic ratio may not imply CT pathology",
-      "priority": 4,
-      "next": "licensed published weights + prospective source verification"
+      "status": "real_case_measured",
+      "weights": "Genuine original NIH-trained TorchXRayVision 1.5.7 DenseNet121 checkpoint SHA256 31a5475c6b1383a7edbfcaf96af9ce302eb9969cfe28b6b8b5859afc6f274fdf; trained Cardiomegaly output",
+      "source": "https://huggingface.co/torchxrayvision/densenet121-res224-nih",
+      "reference": "Publisher example CXR 00000001_000.png, SHA256 c8cbe59e6b9b186060dc68e63965658fa6b5b3ada6648d25c189b8b69b43cd4c; no independent expert reference",
+      "restriction": "Real image-level model score 0.667162 observed on one publisher public CXR, not validated clinical probability. Sample may overlap NIH training; no independent expert confirmed disease, no localization/measurements, AUROC or sensitivity/specificity, no patient/cloud.",
+      "priority": 2,
+      "next": "Obtain truly independent radiologist-labelled Cardiomegaly-positive and negative source-licensed CXR; assess case AUROC/threshold calibration, patient-level overlap, and separate spatial findings before clinical use.",
+      "observedResearchEvidence": {
+        "run": "https://github.com/vasiliys961/opus-radiology-ai/actions/runs/39243434172",
+        "originalCheckpointSHA256": "31a5475c6b1383a7edbfcaf96af9ce302eb9969cfe28b6b8b5859afc6f274fdf",
+        "originalRadiographSHA256": "c8cbe59e6b9b186060dc68e63965658fa6b5b3ada6648d25c189b8b69b43cd4c",
+        "realModelForwardCompleted": true,
+        "caseCount": 1,
+        "uncalibratedImageLevelScore": 0.667162,
+        "expertGroundTruthAvailable": false,
+        "independentHoldout": false,
+        "clinicallyValidated": false,
+        "spatiallyLocalized": false
+      }
     },
     {
       "id": "coronary-calcification-ct",
@@ -535,6 +547,31 @@
       "restriction": "Only source-registered HU-calibrated thin-slice full-inspiratory noncontrast CT; research-only postprocessor. Prior R231 trained-model research is not real LAA-950 measurement. No expert pathology/PFT reference, scanner/kernel harmonisation, patient mode or cloud.",
       "priority": 2,
       "next": "Execute real R231 full-inspiration deidentified public chest CT with native HU, LAA-950 source evidence, expert verification and independent cases; do not stage COPD or assert diagnosis."
+    },
+    {
+      "id": "pleural-effusion-cxr",
+      "modality": "CR/DX",
+      "anatomy": "thorax",
+      "pathology": "pleural effusion image-level X-ray candidate",
+      "status": "real_case_measured",
+      "weights": "Genuine original NIH-trained TorchXRayVision 1.5.7 DenseNet121 checkpoint SHA256 31a5475c6b1383a7edbfcaf96af9ce302eb9969cfe28b6b8b5859afc6f274fdf; trained Effusion output",
+      "source": "https://huggingface.co/torchxrayvision/densenet121-res224-nih",
+      "reference": "Publisher example CXR 00000001_000.png, SHA256 c8cbe59e6b9b186060dc68e63965658fa6b5b3ada6648d25c189b8b69b43cd4c; no independent expert reference",
+      "restriction": "Real image-level model score 0.566473 observed on one publisher public CXR, not validated clinical probability. Sample may overlap NIH training; no independent expert confirmed disease, no localization/measurements, AUROC or sensitivity/specificity, no patient/cloud.",
+      "priority": 2,
+      "next": "Obtain truly independent radiologist-labelled Effusion-positive and negative source-licensed CXR; assess case AUROC/threshold calibration, patient-level overlap, and separate spatial findings before clinical use.",
+      "observedResearchEvidence": {
+        "run": "https://github.com/vasiliys961/opus-radiology-ai/actions/runs/39243434172",
+        "originalCheckpointSHA256": "31a5475c6b1383a7edbfcaf96af9ce302eb9969cfe28b6b8b5859afc6f274fdf",
+        "originalRadiographSHA256": "c8cbe59e6b9b186060dc68e63965658fa6b5b3ada6648d25c189b8b69b43cd4c",
+        "realModelForwardCompleted": true,
+        "caseCount": 1,
+        "uncalibratedImageLevelScore": 0.566473,
+        "expertGroundTruthAvailable": false,
+        "independentHoldout": false,
+        "clinicallyValidated": false,
+        "spatiallyLocalized": false
+      }
     }
   ],
   "selectionRule": "Prioritize uncovered CT/MR diseases with legal checkpoints, independently usable real image/mask pair and host RAM budget, in that order."

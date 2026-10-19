@@ -15,7 +15,8 @@ import shutil
 import sys
 import tempfile
 
-SCHEMA="opus-xrv-pneumothorax-cxr-pretrained/v1"
+SCHEMA="opus-xrv-nih-cxr-multitask-pretrained/v2"
+ADDITIONAL_TARGETS=("Cardiomegaly","Effusion")
 VERSION="1.5.7"
 MODEL="densenet121-res224-nih"
 FILENAME="nih-densenet121-d121-tw-lr001-rot45-tr15-sc15-seed0-best.pt"
@@ -60,6 +61,22 @@ def validate_model_output(model_pathologies,scores):
         raise ValueError("model_pneumothorax_score_not_in_0_1")
     return float(a[idx])
 
+def additional_trained_nih_scores(model_labels,values,publisher_labels):
+    """Never expose an NIH model output not explicitly trained for this target."""
+    import numpy as np
+    out=np.asarray(values,dtype=float)
+    if out.ndim!=1 or out.size!=len(model_labels):
+        raise ValueError("invalid_multitask_model_output_shape")
+    result={}
+    for name in ADDITIONAL_TARGETS:
+        if publisher_labels.count(name)!=1 or model_labels.count(name)!=1:
+            raise ValueError("untrained_or_ambiguous_NIH_pathology_head")
+        score=float(out[model_labels.index(name)])
+        if not np.isfinite(score) or not 0<=score<=1:
+            raise ValueError("nonfinite_or_unbounded_NIH_pathology_score")
+        result[name]=round(score,6)
+    return result
+
 def run(image,weights,output,expected_sha,source_url,source_terms):
     import numpy as np
     import torch
@@ -71,7 +88,7 @@ def run(image,weights,output,expected_sha,source_url,source_terms):
     if importlib.metadata.version("torchxrayvision")!=VERSION:
         raise ValueError("unsupported_torchxrayvision_upstream_version")
     reference=xrv.models.model_urls[MODEL]
-    if ("Pneumothorax" not in reference["labels"]
+    if (any(reference["labels"].count(name)!=1 for name in ("Pneumothorax",*ADDITIONAL_TARGETS))
         or reference["weights_url"].rsplit("/",1)[-1]!=FILENAME):
         raise ValueError("original_NIH_pretrained_labels_or_weights_changed")
     x=io.imread(str(image))
@@ -109,6 +126,7 @@ def run(image,weights,output,expected_sha,source_url,source_terms):
         if pred.shape!=(1,len(model.pathologies)):
             raise ValueError("unexpected_genuine_model_output_shape")
         score=validate_model_output(model.pathologies,pred[0])
+        additional_scores=additional_trained_nih_scores(model.pathologies,pred[0],reference["labels"])
     report={
         "schema":SCHEMA,
         "modality":"CR/DX",
@@ -121,6 +139,10 @@ def run(image,weights,output,expected_sha,source_url,source_terms):
         "originalSourceURL":source_url,"sourceTerms":source_terms,
         "actualPretrainedModelForwardCompleted":True,
         "uncalibratedPneumothoraxImageLevelScore":round(score,6),
+        "uncalibratedAdditionalPublisherTrainedImageLevelScores":additional_scores,
+        "cardiomegalySpatialLocalization":None,
+        "pleuralEffusionSpatialLocalization":None,
+        "cardiomegalyDiagnosis":None,"pleuralEffusionDiagnosis":None,
         "pneumothoraxSpatialLocalization":None,
         "radiologistReferenceDiagnosisAvailable":False,
         "expertAccuracyMetrics":None,
@@ -130,7 +152,8 @@ def run(image,weights,output,expected_sha,source_url,source_terms):
         "limitations":[
             "Model trained on NIH ChestXray: publisher sample may overlap model training.",
             "Score is an uncalibrated image-level model output, not pathology probability.",
-            "No pneumothorax spatial coordinates, pleural line or extent from classifier.",
+            "No spatial coordinates/measurements for pneumothorax, cardiomegaly or effusion.",
+            "Cardiomegaly and pleural effusion scores are also uncalibrated NIH model outputs, not diagnoses.",
             "No original independent expert-positive validation, sensitivity or specificity.",
             "Original pretrained PyTorch checkpoint uses legacy pickle: trusted isolated Linux only.",
             "No patient images, DICOM identifiers or cloud LLM transmission."
@@ -152,6 +175,7 @@ def main():
         p.error("Research only: legally usable deidentified public image, never patient input")
     r=run(a.image,a.weights,a.output,a.weights_sha256,a.source_url,a.source_terms)
     print(json.dumps({"schema":SCHEMA,
+                      "additionalPublisherTrainedTargets":list(r["uncalibratedAdditionalPublisherTrainedImageLevelScores"]),
                       "realPretrainedInference":r["actualPretrainedModelForwardCompleted"],
                       "researchOnly":True}))
 

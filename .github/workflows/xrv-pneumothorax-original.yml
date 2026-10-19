@@ -72,6 +72,9 @@ jobs:
           print('REAL pretrained model forward: successful. Weight SHA256:', v['originalTrainedCheckpointSHA256'])
           print('Original image SHA256:', v['originalSourceRadiographSHA256'])
           print('Image-level uncalibrated pneumothorax score:', v['uncalibratedPneumothoraxImageLevelScore'])
+          print('Additional original NIH-trained image-level scores:', v['uncalibratedAdditionalPublisherTrainedImageLevelScores'])
+          assert sorted(v['uncalibratedAdditionalPublisherTrainedImageLevelScores']) == ['Cardiomegaly','Effusion']
+          assert v['cardiomegalySpatialLocalization'] is None and v['pleuralEffusionSpatialLocalization'] is None
           print('NO expert disease validation; NO pneumothorax localization.')
           PY
           rm -rf /tmp/opus-xrv-public
