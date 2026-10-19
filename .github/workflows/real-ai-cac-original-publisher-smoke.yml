@@ -44,10 +44,20 @@ jobs:
       - name: Obtain original TCIA LCTSC full 103-slice DICOM source, hash-verified
         run: |
           set -euo pipefail
-          timeout --signal=TERM --kill-after=15s 600s \
-            python scripts/download-r231-browser-reference.py \
-              --download-public-reference --full-series \
-              --output "$RUNNER_TEMP/opus-original-lctsc"
+          success=0
+          for attempt in 1 2 3; do
+            rm -rf "$RUNNER_TEMP/opus-original-lctsc"
+            if timeout --signal=TERM --kill-after=15s 600s \
+              python scripts/download-r231-browser-reference.py \
+                --download-public-reference --full-series \
+                --output "$RUNNER_TEMP/opus-original-lctsc"; then
+              success=1
+              break
+            fi
+            echo "Public TCIA reference download failed (attempt $attempt)"
+            sleep 5
+          done
+          test "$success" = 1
       - name: Fetch genuine AI-CAC 1.2GB published checkpoint with pinned SHA256
         run: |
           timeout --signal=TERM --kill-after=20s 850s \
