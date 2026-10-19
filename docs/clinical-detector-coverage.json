@@ -126,13 +126,26 @@
       "modality": "CT",
       "anatomy": "abdomen",
       "pathology": "pancreatic tumor",
-      "status": "real_trial_running",
+      "status": "real_case_measured",
       "weights": "MONAI pancreas_ct_dints_segmentation",
       "source": "https://github.com/Project-MONAI/model-zoo/tree/dev/models/pancreas_ct_dints_segmentation",
       "reference": "public original MSD Task07 tumor mask",
-      "restriction": "source from model training; CPU overlap differs from published",
+      "restriction": "One original MSD Task07 training-pool CT: voxel Dice 0.199821, TP 6817, FP 0, FN 54597; inference used CPU overlap 0.25 (publisher 0.625). No independent holdout, not validated.",
       "priority": 2,
-      "next": "PR224 one public CT expert label2"
+      "next": "Test a source-independent expert-masked case; keep trained model in research-only isolated CPU workflow.",
+      "observedResearchEvidence": {
+        "run": "https://github.com/vasiliys961/opus-radiology-ai/actions/runs/39171121798",
+        "source": "MSD Task07 Pancreas",
+        "caseCount": 1,
+        "modelRunCompleted": true,
+        "expertReferenceAvailable": true,
+        "voxelTP": 6817,
+        "voxelFP": 0,
+        "voxelFN": 54597,
+        "voxelDice": 0.199821,
+        "independentHoldout": false,
+        "clinicallyValidated": false
+      }
     },
     {
       "id": "glioma-4sequences-mri",
@@ -247,22 +260,48 @@
       "weights": "Author genuine ISLES22 nnU-Net v2 fold0 pretrained 3D DWI+ADC+FLAIR weights sha256 f9023888c7fe616ff271559acb82addd2496581fddd0a94e2d3c80bada5bb7e9",
       "source": "https://huggingface.co/akifkaradag/isles22-nnunetv2-stroke-segmentation",
       "reference": "ISLES22 original public DWI/ADC/FLAIR with expert mask, case strokecase0032: TP39 FP19 FN8 expert47 voxels",
-      "restriction": "One original training-pool case Dice=0.742857 (#39173426498); training overlap not excluded; no clinical validation or SOP UID mapping; reused MRI public CC BY 4.0",
+      "restriction": "One original ISLES22 public study: voxel Dice 0.742857, TP 39, FP 19, FN 8; same upstream training-pool, not independently held out or clinically validated.",
       "priority": 1,
-      "next": "Independently test multiple held-out DWI ADC FLAIR lesions and native-space error localization; no patient release"
+      "next": "Evaluate external independent stroke-positive MR, including false-positive and lesion-level measures.",
+      "observedResearchEvidence": {
+        "run": "https://github.com/vasiliys961/opus-radiology-ai/actions/runs/39173426498",
+        "source": "ISLES22 DWI/ADC/FLAIR",
+        "caseCount": 1,
+        "modelRunCompleted": true,
+        "expertReferenceAvailable": true,
+        "voxelTP": 39,
+        "voxelFP": 19,
+        "voxelFN": 8,
+        "voxelDice": 0.742857,
+        "independentHoldout": false,
+        "clinicallyValidated": false
+      }
     },
     {
       "id": "pulmonary-embolism-ctpa",
       "modality": "CTPA",
       "anatomy": "thorax",
       "pathology": "pulmonary embolism",
-      "status": "real_checkpoint_candidate",
+      "status": "real_case_measured",
       "weights": "Mazurowski Lab / yzluka 2026 PulmonaryEmbolismSegmentation, official nnUNet ResidualEncoderUNet, 566MB public pretrained checkpoint",
       "source": "https://huggingface.co/yzluka/PulmonaryEmbolismSegmentation",
       "reference": "Original FUMPE 35 CTPA images and expert segmentations, mirror https://huggingface.co/datasets/MedOtter/FUMPE",
-      "restriction": "CC BY-NC 4.0 model, noncommercial research only; FUMPE subject/date training independence and model preprocessing remain unverified",
+      "restriction": "One original FUMPE positive CTPA, vendor original pretrained model: voxel Dice 0.038119, TP 372, FP 92, FN 18682. Very low voxel recall; CC BY-NC 4.0 weights, no commercial patient use or proven holdout.",
       "priority": 3,
-      "next": "One original expert positive FUMPE CT with licensed official pretrained portable inference and source-native Dice; require CPU resource gate"
+      "next": "Improve source-bound genuine positive-case research detection; measure lesion-level recall on independent cases, without claiming clinical usability.",
+      "observedResearchEvidence": {
+        "run": "https://github.com/vasiliys961/opus-radiology-ai/actions/runs/39172296346",
+        "source": "FUMPE",
+        "caseCount": 1,
+        "modelRunCompleted": true,
+        "expertReferenceAvailable": true,
+        "voxelTP": 372,
+        "voxelFP": 92,
+        "voxelFN": 18682,
+        "voxelDice": 0.038119,
+        "independentHoldout": false,
+        "clinicallyValidated": false
+      }
     },
     {
       "id": "interstitial-lung-disease-hrct",
