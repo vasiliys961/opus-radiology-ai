@@ -17,6 +17,7 @@ export default function DeidentifiedOpenRouterPanel({
   const [clinician,setClinician]=useState(false),[providerRights,setProviderRights]=useState(false);
   const [pixelReview,setPixelReview]=useState(false),[paid,setPaid]=useState(false);
   const [working,setWorking]=useState(false),[error,setError]=useState("");
+  const [readinessNote,setReadinessNote]=useState("");
   const [result,setResult]=useState<SanitizedModelReview|null>(null);
   const ctl=useRef<AbortController|null>(null);
   useEffect(()=>{
@@ -27,7 +28,7 @@ export default function DeidentifiedOpenRouterPanel({
       if(x.schema!=="opus-deidentified-openrouter-pilot-readiness/v1"||
          x.productionPatientCloudRelease!==false)throw Error();
       if(live)setServer(x);
-    }).catch(()=>{if(live)setError("Локальный облачный пилот недоступен.");});
+    }).catch(()=>{if(live)setReadinessNote("Локальный облачный пилот недоступен.");});
     return()=>{live=false;ctl.current?.abort();};
   },[]);
   async function send(){
@@ -110,6 +111,7 @@ export default function DeidentifiedOpenRouterPanel({
         "Отправить проверенные кадры Gemini + Opus"}</button>
       {working&&<button type="button" onClick={()=>ctl.current?.abort()}>Отменить</button>}
     </div>
+    {readinessNote&&<p role="status">{readinessNote}</p>}
     {error&&<p role="alert">{error}</p>}
     {result&&<div aria-live="polite">
       <p><strong>Ответ моделей получен.</strong> Это черновые визуальные
