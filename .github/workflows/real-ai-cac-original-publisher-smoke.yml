@@ -1,0 +1,78 @@
+name: Genuine AI-CAC publisher inference on one original TCIA CT slice
+on:
+  push:
+    branches:
+      - research/ai-cac-authentic-publisher-public-ct-smoke
+    paths:
+      - scripts/real-ai-cac-lctsc-technical-smoke.py
+      - .github/workflows/real-ai-cac-original-publisher-smoke.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-one-slice-cpu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "1"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Check host physical and container memory limits
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import shutil
+          print("Host Memory:",next(x for x in Path("/proc/meminfo").read_text().splitlines() if x.startswith("MemTotal:")))
+          p=Path("/sys/fs/cgroup/memory.max")
+          print("cgroup memory:",p.read_text().strip() if p.is_file() else "unknown")
+          print("Disk GiB free:",round(shutil.disk_usage("/tmp").free/2**30,2))
+          assert shutil.disk_usage("/tmp").free >= 5*2**30
+          PY
+      - name: Install original research inference framework in isolated runner
+        run: |
+          set -euo pipefail
+          python -m pip install --no-cache-dir "torch==2.6.0" "torchvision==0.21.0" \
+             --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --no-cache-dir "monai==1.4.0" "numpy==1.26.4" \
+             "pydicom==2.4.4" "scipy==1.15.3" "nibabel==5.3.2"
+      - name: Obtain original TCIA LCTSC full 103-slice DICOM source, hash-verified
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=15s 600s \
+            python scripts/download-r231-browser-reference.py \
+              --download-public-reference --full-series \
+              --output "$RUNNER_TEMP/opus-original-lctsc"
+      - name: Fetch genuine AI-CAC 1.2GB published checkpoint with pinned SHA256
+        run: |
+          timeout --signal=TERM --kill-after=20s 850s \
+            python scripts/real-ai-cac-public-ct.py \
+              --mode fetch-weights --model-dir "$RUNNER_TEMP/opus-original-ai-cac" \
+              --public-research-consent
+      - name: Genuine original pretrained checkpoint forward on one original CT slice
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=30s 950s \
+            python scripts/real-ai-cac-lctsc-technical-smoke.py \
+              --source "$RUNNER_TEMP/opus-original-lctsc" \
+              --models "$RUNNER_TEMP/opus-original-ai-cac" \
+              --output /tmp/opus-ai-cac-real-one-slice-numeric.json
+      - name: Upload numeric technical evidence only (no scans/UIDs/predicted masks)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-cac-original-one-slice-real-numeric
+          path: /tmp/opus-ai-cac-real-one-slice-numeric.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Erase source DICOM, weights and ephemeral metrics
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/opus-original-lctsc" \
+                 "$RUNNER_TEMP/opus-original-ai-cac" \
+                 /tmp/opus-ai-cac-real-one-slice-numeric.json
