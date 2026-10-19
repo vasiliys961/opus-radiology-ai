@@ -78,3 +78,16 @@ These outputs are image-level **uncalibrated classifier scores**, not diagnosis 
 - Mass head is not confirmed lung cancer or a bounded tumor and has no source coordinates.
 
 Original sample may overlap training, no expert positive labels or independent validation; no patient/cloud. Record actual numbers only after the updated official pretrained Actions forward completes.
+
+
+## True original NIH-trained pneumonia / edema / mass forward — observed 2026-10-19
+
+Original pretrained publisher-model Actions run: https://github.com/vasiliys961/opus-radiology-ai/actions/runs/39244193666. Genuine original NIH DenseNet121 checkpoint SHA256: 31a5475c6b1383a7edbfcaf96af9ce302eb9969cfe28b6b8b5859afc6f274fdf; publisher CXR sample SHA256: c8cbe59e6b9b186060dc68e63965658fa6b5b3ada6648d25c189b8b69b43cd4c.
+
+Actual trained model raw/un-calibrated image-level scores:
+- Pneumonia = **0.501093**
+- Edema = **0.501593**
+- Mass = **0.532159**
+- Existing outputs reproduced: Pneumothorax 0.172315; Cardiomegaly 0.667162; Effusion 0.566473.
+
+All six scores arose from **ONE public publisher CXR**, not six positive pathologic examinations; no expert truth or independent held-out cohort exists. These values are NOT verified clinical disease probabilities. No lesion spatial coordinates, radiological confirmation, sensitivity or specificity, patient clinical authorization.
