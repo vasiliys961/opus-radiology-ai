@@ -34,7 +34,7 @@ def digest(path: Path) -> str:
 
 
 def bounded_file(path: Path, max_size: int) -> None:
-    if path.is_symlink() or not path.is_file() or not 128 <= path.stat().st_size <= max_size:
+    if path.is_symlink() or not path.is_file() or not 32 <= path.stat().st_size <= max_size:
         raise ValueError("untrusted_missing_or_oversized_local_research_asset")
 
 
