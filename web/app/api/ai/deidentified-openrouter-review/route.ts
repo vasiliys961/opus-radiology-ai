@@ -86,7 +86,11 @@ export async function POST(req:NextRequest){
   const v=raw as Record<string,unknown>;
   const allowed=["packet","acknowledgeClinicianLawfulDisclosure","acknowledgeProviderHealthDataTerms",
     "acknowledgePixelIdentityReviewed","acknowledgeTwoPaidCalls"];
-  if(Object.keys(v).length!==allowed.length||!allowed.every(k=>Object.hasOwn(v,k))||
+  const keys=Object.keys(v);
+  const specialistProvided=Object.hasOwn(v,"specialistFacts");
+  if(keys.length!==allowed.length+(specialistProvided?1:0)||
+     !keys.every(k=>allowed.includes(k)||(specialistProvided&&k==="specialistFacts"))||
+     !allowed.every(k=>Object.hasOwn(v,k))||
      v.acknowledgeClinicianLawfulDisclosure!==true||
      v.acknowledgeProviderHealthDataTerms!==true||
      v.acknowledgePixelIdentityReviewed!==true||
@@ -99,7 +103,8 @@ export async function POST(req:NextRequest){
   if(!release)return reply(429,"One active request; maximum two starts in twenty minutes");
   try{
     const result=await reviewSanitizedSamples(
-      v.packet,callAiGateway,AbortSignal.any([req.signal,AbortSignal.timeout(75_000)]));
+      v.packet,callAiGateway,AbortSignal.any([req.signal,AbortSignal.timeout(75_000)]),
+      specialistProvided?v.specialistFacts:null);
     return NextResponse.json(result,{headers:HEADERS});
   }catch{
     // Never expose model replies, base64 images, user headers, tokens or PHI.
