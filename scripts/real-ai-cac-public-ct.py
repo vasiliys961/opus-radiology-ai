@@ -18,6 +18,8 @@ MODEL_CODE_COMMIT = "5f33f2419d60774f8a160200a70bd057b4d61b2a"
 MODEL_RELEASE = "v1.0.0"
 MODEL_NAME = "va_non_gated_ai_cac_model.pth"
 MODEL_BYTES = 1205817465
+# SHA256 observed on real publisher release download in GitHub Actions #39216540464.
+MODEL_SHA256 = "cfded8253e64b81b963a314cb5adc90d30a1f21574638366b80c783676c1733d"
 MODEL_URL = f"https://github.com/{MODEL_REPO}/releases/download/{MODEL_RELEASE}/{MODEL_NAME}"
 SCHEMA = "opus-ai-cac-original-public-ct/v1"
 MAX_SLICES = 384
@@ -54,8 +56,8 @@ def fetch_published_model(folder):
                     raise ValueError("unexpected_publisher_weights_size")
                 f.write(buf)
                 digest.update(buf)
-        if size != MODEL_BYTES:
-            raise ValueError("incomplete_or_changed_publisher_checkpoint")
+        if size != MODEL_BYTES or digest.hexdigest() != MODEL_SHA256:
+            raise ValueError("original_published_checkpoint_digest_not_matching_pinned_real_release")
         temp.replace(target)
         manifest.write_text(json.dumps({
             "schema": "opus-ai-cac-official-release/v1",
@@ -65,7 +67,7 @@ def fetch_published_model(folder):
             "releaseAssetUrl": MODEL_URL,
             "releaseAssetBytes": MODEL_BYTES,
             "checkpointSha256Observed": digest.hexdigest(),
-            "independentlyPublishedExpectedSha256": None,
+            "repositoryPinnedObservedSha256": MODEL_SHA256,
             "checkpointSignatureVerified": False,
             "publicResearchOnly": True
         }, indent=2) + "\n")
@@ -90,7 +92,9 @@ def verify_weights(folder):
         or manifest.get("releaseAssetUrl") != MODEL_URL
         or manifest.get("releaseAssetBytes") != MODEL_BYTES
         or manifest.get("publicResearchOnly") is not True
-        or manifest.get("checkpointSha256Observed") != checksum(weight)):
+        or manifest.get("repositoryPinnedObservedSha256") != MODEL_SHA256
+        or manifest.get("checkpointSha256Observed") != MODEL_SHA256
+        or checksum(weight) != MODEL_SHA256):
         raise ValueError("original_official_checkpoint_integrity_failed")
     return weight, manifest
 
