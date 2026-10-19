@@ -198,7 +198,7 @@ def evaluate(folder,model_mask,weights_manifest,out):
     if not protocol_path.is_file():
         raise ValueError("trained_model_input_resolution_metadata_missing")
     protocol=json.loads(protocol_path.read_text())
-    if (protocol.get("protocol")!="whole_field_downsampled_to_1point5mm" or
+    if (protocol.get("protocol")!="whole_field_downsampled_to_2point0mm" or
         protocol.get("originalTOFSha256")!=meta["TOFSha256"] or
         protocol.get("resampledModelInputSha256") is None or
         protocol.get("trainedPredictionRegriddedToFullSourceGrid") is not True):
