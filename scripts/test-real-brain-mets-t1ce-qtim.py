@@ -64,6 +64,17 @@ class TestOriginalBrainMetsContract(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"preprocessing"):
             m.parse_public_manifest(meta,source)
 
+    def test_original_fivefold_weights_missing_refused(self):
+        with self.assertRaisesRegex(ValueError,"original_vendor_model_dir"):
+            m.verify_original_offline_checkpoints(self.dir/"nonexistent")
+
+    def test_changed_official_checkpoint_refused_by_pinned_sha(self):
+        folder=self.dir/"original-qtim-weights"
+        (folder/"Model_0").mkdir(parents=True)
+        (folder/"Model_0"/"checkpoint").write_bytes(b"pretend vendor checkpoint")
+        with self.assertRaisesRegex(ValueError,"SHA256_mismatch"):
+            m.verify_original_offline_checkpoints(folder)
+
     def test_registered_numeric_metrics_are_study_grid_bound(self):
         vol=self.img(np.ones(self.shape,np.float32))
         segmentation=np.zeros(self.shape,np.uint8)

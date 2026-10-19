@@ -491,12 +491,12 @@
       "anatomy": "brain",
       "pathology": "enhancing brain metastases on T1CE MRI",
       "status": "real_checkpoint_candidate",
-      "weights": "QTIM-Lab Brain-Mets-Seg original 5-fold TensorFlow nnU-Net checkpoints published via vendor Dockerfile/Dropbox; actual pretrained download and Opus GPU inference not yet verified",
+      "weights": "QTIM-Lab original five trained TensorFlow nnU-Net folds: all 15 official Dropbox files downloaded in public CI, 1,248,034,031 bytes, all SHA256 pinned; TensorFlow checkpoint loading and positive MRI inference NOT YET VERIFIED",
       "source": "https://github.com/QTIM-Lab/Brain-Mets-Seg",
       "reference": "UCSF-BMSR expert metastasis annotations, controlled-access noncommercial source; exact case and training overlap not verified",
-      "restriction": "Requires original five trained TensorFlow checkpoints and isolated NVIDIA GPU, vendor preprocessing (T1CE/N4/skull strip/isotropic/normalized), exact grid and legally accessed public reference. Not tested on true positive Opus case, not patient-ready.",
+      "restriction": "All real pretrained original weights acquired; trained MRI inference not yet tested on public T1CE. Requires original vendor GPU environment, explicit study/preprocessing provenance, exact-grid expert mask, no patient/cloud authorization.",
       "priority": 2,
-      "next": "download and hash original 5 QTIM checkpoints, run actual 5-fold model inference on permitted T1CE MRI, independently compare source-bound native mask to expert metastasis annotation"
+      "next": "Run original fivefold trained TensorFlow inference using SHA-verified offline checkpoints on permitted source-positive T1CE with expert voxels; measure lesion-wise recall/FROC and native-grid TP/FP/FN/Dice, rule out training overlap."
     }
   ],
   "selectionRule": "Prioritize uncovered CT/MR diseases with legal checkpoints, independently usable real image/mask pair and host RAM budget, in that order."
