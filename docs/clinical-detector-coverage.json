@@ -411,13 +411,13 @@
       "modality": "XR",
       "anatomy": "heart",
       "pathology": "cardiomegaly",
-      "status": "weights_unverified",
-      "weights": "TorchXRayVision chest X-ray classifier candidate",
-      "source": "https://github.com/mlmed/torchxrayvision",
-      "reference": "NIH chest X-ray expert positive labels",
-      "restriction": "XR proxy cardiothoracic ratio may not imply CT pathology",
-      "priority": 4,
-      "next": "licensed published weights + prospective source verification"
+      "status": "real_checkpoint_candidate",
+      "weights": "Original published NIH-trained TorchXRayVision 1.5.7 DenseNet121 checkpoint SHA256 31a5475c6b1383a7edbfcaf96af9ce302eb9969cfe28b6b8b5859afc6f274fdf; specific Cardiomegaly trained label; real multitask output CI not yet completed",
+      "source": "https://huggingface.co/torchxrayvision/densenet121-res224-nih",
+      "reference": "Publisher CXR sample original; no expert confirmed cardiomegaly",
+      "restriction": "Research image-level score only. No cardiothoracic ratio or heart segmentation, AP/PA correction, expert-positive outcome, case-independent accuracy, radiographic localization, cloud or patient mode.",
+      "priority": 2,
+      "next": "Require actual original-model multi-head CI numeric result, then external labeled CXR and standardized CTR/PA/AP evaluation; no clinical diagnosis."
     },
     {
       "id": "coronary-calcification-ct",
@@ -535,6 +535,19 @@
       "restriction": "Only source-registered HU-calibrated thin-slice full-inspiratory noncontrast CT; research-only postprocessor. Prior R231 trained-model research is not real LAA-950 measurement. No expert pathology/PFT reference, scanner/kernel harmonisation, patient mode or cloud.",
       "priority": 2,
       "next": "Execute real R231 full-inspiration deidentified public chest CT with native HU, LAA-950 source evidence, expert verification and independent cases; do not stage COPD or assert diagnosis."
+    },
+    {
+      "id": "pleural-effusion-cxr",
+      "modality": "CR/DX",
+      "anatomy": "thorax",
+      "pathology": "pleural effusion image-level X-ray candidate",
+      "status": "real_checkpoint_candidate",
+      "weights": "Original TorchXRayVision 1.5.7 NIH pretrained DenseNet121 'Effusion' trained output; same 28-MB SHA-pinned original model as Pneumothorax",
+      "source": "https://huggingface.co/torchxrayvision/densenet121-res224-nih",
+      "reference": "One publisher-hosted original CXR sample; no independent radiologist fluid label or localization mask",
+      "restriction": "Image-level uncalibrated score, no pleural fluid bounding box, laterality, volume or differentiation from other CXR opacities, no expert validation and no patient/cloud mode. Multitask real inference not yet verified.",
+      "priority": 2,
+      "next": "Verify genuine multi-head forward in public research Actions and compare externally labeled CXR with expert radiologist pleural effusion findings."
     }
   ],
   "selectionRule": "Prioritize uncovered CT/MR diseases with legal checkpoints, independently usable real image/mask pair and host RAM budget, in that order."
