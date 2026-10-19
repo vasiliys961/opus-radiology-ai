@@ -1,0 +1,88 @@
+name: REAL Bouget mediastinal lymph nodes vs expert-positive LyNoS CT (CPU)
+on:
+  pull_request:
+    paths:
+      - .github/workflows/real-mediastinal-lynos-original-cpu.yml
+      - scripts/real-mediastinal-lynos-ct-cpu.py
+      - scripts/test-real-mediastinal-lynos-ct-cpu.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-publisher-lynos-cpu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 52
+    env:
+      PYTHONUNBUFFERED: "1"
+      OMP_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "2"
+      TF_NUM_INTEROP_THREADS: "1"
+      TF_NUM_INTRAOP_THREADS: "2"
+      DO_NOT_DOWNLOAD_PATIENT_DATA: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Original trained model and LyNoS reference static provenance
+        run: |
+          python scripts/real-mediastinal-lynos-ct-cpu.py --mode contract
+          python -m unittest discover -s scripts -p 'test-real-mediastinal-lynos-ct-cpu.py' -v
+      - name: Install only small source extraction tools; DO NOT install TensorFlow on host
+        run: |
+          set -euo pipefail
+          python -m pip install --no-cache-dir "numpy==1.26.4" "nibabel==5.2.1" "gdown==5.2.0" "remotezip==0.12.3" "requests==2.32.3"
+      - name: Admit public research runner memory and disk BEFORE model weights
+        run: |
+          set -euo pipefail
+          mkdir "$RUNNER_TEMP/opus-lynos-source"
+          python - <<'PY'
+          from pathlib import Path
+          import shutil
+          root=Path("/proc/meminfo").read_text()
+          avail=int(next(x.split()[1] for x in root.splitlines() if x.startswith("MemAvailable:")))*1024
+          free=shutil.disk_usage(".").free
+          print(f"AVAILABLE RAM GiB: {avail/1024**3:.2f} DISK GiB: {free/1024**3:.2f}")
+          assert avail>=6*1024**3 and free>=6*1024**3, "bounded CPU job cannot fit"
+          PY
+      - name: Fetch ORIGINAL pretrained model zip with author MD5 and ONE LyNoS human-positive pair via RANGE
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=20s 850s \
+            python scripts/real-mediastinal-lynos-ct-cpu.py \
+              --mode prepare --work "$RUNNER_TEMP/opus-lynos-source"
+      - name: Pull original publisher TF1.14 CPU Docker; never install legacy TF inside main app
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=15s 400s docker pull dbouget/ct_mediastinal_structures_segmentation:v1
+      - name: Genuine vendor original UNet-SW32 + CT_Lungs CPU forward on positive CT with network OFF
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=25s 1650s \
+            python scripts/real-mediastinal-lynos-ct-cpu.py \
+              --mode docker --work "$RUNNER_TEMP/opus-lynos-source" \
+            | tee "$RUNNER_TEMP/lynos-docker-evidence.txt"
+          grep -E '^DOCKER_DIGEST dbouget/ct_mediastinal_structures_segmentation@sha256:[a-f0-9]{64}$' "$RUNNER_TEMP/lynos-docker-evidence.txt" \
+            | tail -1 | cut -d' ' -f2 > "$RUNNER_TEMP/original-docker-digest.txt"
+      - name: Compare TRUE original expert node mask to TRUE pretrained prediction in native CT
+        run: |
+          set -euo pipefail
+          ORIGINAL_DIGEST="$(cat "$RUNNER_TEMP/original-docker-digest.txt")"
+          python scripts/real-mediastinal-lynos-ct-cpu.py --mode evaluate \
+            --work "$RUNNER_TEMP/opus-lynos-source" \
+            --docker-digest "$ORIGINAL_DIGEST" \
+            --output "$RUNNER_TEMP/mediastinal-original-pretrained-lynos-numeric.json"
+      - name: Upload numerical research provenance only (not CT, masks or pretrained weights)
+        uses: actions/upload-artifact@v4
+        with:
+          name: actual-bouget-mediastinal-lynos-case1-numeric
+          path: ${{ runner.temp }}/mediastinal-original-pretrained-lynos-numeric.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Always securely remove source CT, expert masks and original weight files
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/opus-lynos-source" \
+            "$RUNNER_TEMP/mediastinal-original-pretrained-lynos-numeric.json" \
+            "$RUNNER_TEMP/lynos-docker-evidence.txt" "$RUNNER_TEMP/original-docker-digest.txt"
