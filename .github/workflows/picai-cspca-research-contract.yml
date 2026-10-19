@@ -1,0 +1,30 @@
+name: Dedicated prostate csPCa MRI model offline executor contract
+on:
+  pull_request:
+    paths:
+      - scripts/real-picai-cspca-offline.py
+      - scripts/test-real-picai-cspca-offline.py
+      - .github/workflows/picai-cspca-research-contract.yml
+      - docs/PI_CAI_CSPCA_GPU_RESEARCH.md
+      - docs/clinical-detector-coverage.json
+      - web/public/examples/clinical-pathology-coverage.json
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-geometry-and-vendor-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install minimal numerical dependencies, not model weights
+        run: python -m pip install numpy==2.2.6 scipy==1.15.3
+      - name: Offline source/lesion geometry tests (NO pretrained inference)
+        run: |
+          python -m py_compile scripts/real-picai-cspca-offline.py
+          python scripts/test-real-picai-cspca-offline.py
+          python scripts/check-clinical-detector-coverage.py
+          python scripts/check-web-pathology-coverage.py
