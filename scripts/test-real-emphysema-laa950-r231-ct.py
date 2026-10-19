@@ -40,6 +40,12 @@ class TestDensitometry(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "uncalibrated"):
             app.regions(x, seg, affine)
 
+    def test_pixel_values_without_original_HU_offset_refused(self):
+        x, seg, affine = self.data()
+        x += 1024
+        with self.assertRaisesRegex(ValueError, "uncalibrated"):
+            app.regions(x, seg, affine)
+
     def test_missing_lung_label_refused(self):
         x, seg, affine = self.data()
         seg[:, :, :] = 0
