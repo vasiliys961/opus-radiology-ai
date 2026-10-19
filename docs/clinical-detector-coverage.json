@@ -243,13 +243,13 @@
       "modality": "MR-DWI",
       "anatomy": "brain",
       "pathology": "acute ischemic stroke",
-      "status": "weights_unverified",
-      "weights": "ISLES task model family, verified usable checkpoint required",
-      "source": "https://www.isles-challenge.org/",
-      "reference": "ISLES expert ischemic infarct masks",
-      "restriction": "no specific runnable licensed checkpoint confirmed in repo",
-      "priority": 4,
-      "next": "source independent publicly licensed model and DWI/ADC sample"
+      "status": "real_case_measured",
+      "weights": "Author genuine ISLES22 nnU-Net v2 fold0 pretrained 3D DWI+ADC+FLAIR weights sha256 f9023888c7fe616ff271559acb82addd2496581fddd0a94e2d3c80bada5bb7e9",
+      "source": "https://huggingface.co/akifkaradag/isles22-nnunetv2-stroke-segmentation",
+      "reference": "ISLES22 original public DWI/ADC/FLAIR with expert mask, case strokecase0032: TP39 FP19 FN8 expert47 voxels",
+      "restriction": "One original training-pool case Dice=0.742857 (#39173426498); training overlap not excluded; no clinical validation or SOP UID mapping; reused MRI public CC BY 4.0",
+      "priority": 1,
+      "next": "Independently test multiple held-out DWI ADC FLAIR lesions and native-space error localization; no patient release"
     },
     {
       "id": "pulmonary-embolism-ctpa",
@@ -308,13 +308,13 @@
       "modality": "CT",
       "anatomy": "abdomen",
       "pathology": "primary colon cancer",
-      "status": "weights_unverified",
-      "weights": "MSD Task10 Colon labels only; model not confirmed",
-      "source": "https://medicaldecathlon.com/",
-      "reference": "MSD Task10 Colon expert masks",
-      "restriction": "dataset alone is not a detector",
-      "priority": 4,
-      "next": "find third party pretrained weights and run true inference"
+      "status": "real_checkpoint_candidate",
+      "weights": "Original MONAI VISTA3D publisher pretrained model, explicit colon cancer primaries label 27; 872MB genuine checkpoint",
+      "source": "https://huggingface.co/MONAI/vista3d",
+      "reference": "MSD Task10 Colon original positive CT and expert primary tumor label; source-bound inference pipeline in main #230",
+      "restriction": "NVIDIA model WEIGHTS noncommercial research-only; PR230 source-bound GPU inference scaffold exists but no actual inference or measured Dice, possible overlap",
+      "priority": 2,
+      "next": "Run actual pinned original VISTA3D class 27 on permitted expert-positive MSD Task10 CT and independently inspect native-grid Dice; keep patient/cloud OFF"
     },
     {
       "id": "prostate-cancer-mpmri",
