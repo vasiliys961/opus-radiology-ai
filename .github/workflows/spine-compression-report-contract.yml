@@ -1,0 +1,25 @@
+name: Spine compression-report adapter contract
+on:
+  pull_request:
+    paths:
+      - scripts/real-spine-vertebral-compression-report.py
+      - scripts/test-real-spine-vertebral-compression-report.py
+      - .github/workflows/spine-compression-report-contract.yml
+      - docs/SPINE_COMPRESSION_RESEARCH.md
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-and-evidence-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Python syntax and isolated evidence contract
+        run: |
+          python -m py_compile scripts/real-spine-vertebral-compression-report.py
+          python scripts/test-real-spine-vertebral-compression-report.py
+      # No model downloaded. This job cannot be cited as pretrained inference.
