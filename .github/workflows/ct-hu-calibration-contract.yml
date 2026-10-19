@@ -6,6 +6,10 @@ on:
       - web/lib/dicom-series.test.ts
       - web/lib/ct-hu-calibration.ts
       - web/lib/ct-hu-calibration.test.ts
+      - web/lib/cpu-lung-laa950.ts
+      - web/lib/cpu-lung-laa950.test.ts
+      - web/components/CornerstoneMPR.tsx
+      - web/components/SegmentationControls.tsx
       - web/app/page.tsx
       - .github/workflows/ct-hu-calibration-contract.yml
   workflow_dispatch:
@@ -24,5 +28,5 @@ jobs:
         working-directory: web
       - name: Real DICOM reader + source-bound HU acceptance contracts (synthetic headers)
         working-directory: web
-        run: node --disable-warning=ExperimentalWarning --experimental-strip-types --test lib/dicom-series.test.ts lib/ct-hu-calibration.test.ts
+        run: node --disable-warning=ExperimentalWarning --experimental-strip-types --test lib/dicom-series.test.ts lib/ct-hu-calibration.test.ts lib/cpu-lung-laa950.test.ts
       # No real patient DICOM or model inference; never claim decoded HU checked here.
