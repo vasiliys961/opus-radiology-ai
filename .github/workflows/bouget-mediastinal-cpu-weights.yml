@@ -1,5 +1,11 @@
 name: Official Bouget mediastinal lymph node weights gate (CPU)
 on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/bouget-official-checkpoint-preflight.py
+      - scripts/test-bouget-official-checkpoint-preflight.py
+      - .github/workflows/bouget-mediastinal-cpu-weights.yml
   pull_request:
     paths:
       - scripts/bouget-official-checkpoint-preflight.py
@@ -25,7 +31,7 @@ jobs:
           python-version: '3.11'
       - run: python3 -m unittest discover -s scripts -p 'test-bouget-official-checkpoint-preflight.py'
   fetch-original-weights:
-    if: github.event_name == 'workflow_dispatch' && inputs.fetch_official_weights == true
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.fetch_official_weights == true)
     runs-on: ubuntu-latest
     timeout-minutes: 18
     steps:
