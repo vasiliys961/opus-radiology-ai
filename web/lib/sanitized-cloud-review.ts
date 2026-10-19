@@ -9,6 +9,7 @@ import {buildVisionPrivacyPacket,type VisionPrivacyPacket} from "./vision-privac
 import {parseRoleResponse,parseStrictObject,readCompletionText,
   type RoleResponse} from "./vision-orchestra.ts";
 import type {AiGatewayRequest} from "./ai-gateway.ts";
+import {parseLocalLungFacts,type LocalLungFacts} from "./local-lung-review.ts";
 
 export const CLOUD_PILOT_MAX_IMAGE_BASE64=2_000_000;
 export const CLOUD_PILOT_MAX_FRAMES=4;
@@ -33,6 +34,12 @@ export type SanitizedModelReview={
   patientDataCanStillBeSensitive:true;
   researchOnly:true;
   diagnosticAccuracyValidated:false;
+  specialistEvidence?:{
+    model:"lungmask-R231";frameCount:number;
+    rightLungMaskMl:number;leftLungMaskMl:number;
+    clinicalProvenanceServerVerified:false;
+    findingOfPathologyEstablished:false;
+  };
 };
 type Completion={choices?:unknown};
 export type SanitizedReviewCaller=(request:AiGatewayRequest,signal?:AbortSignal)=>Promise<Completion>;
@@ -59,7 +66,7 @@ export function normalizeReviewedCloudPilot(value:unknown):NormalizedCloudPilot{
     imageId:f.frameId,reviewedPixelSha256:f.sha256,
   }))};
 }
-function reviewMessages(data:NormalizedCloudPilot):AiGatewayRequest["messages"] {
+function reviewMessages(data:NormalizedCloudPilot,specialist:LocalLungFacts|null):AiGatewayRequest["messages"] {
   const frameIds=data.frames.map(f=>f.imageId);
   return [
     {role:"system",content:
@@ -76,7 +83,15 @@ function reviewMessages(data:NormalizedCloudPilot):AiGatewayRequest["messages"] 
       "Use exclusively provided image IDs."},
     {role:"user",content:[
       {type:"text",text:"Modality "+data.modality+". Sampled frames only: "+frameIds.join(", ")+
-        ". Each image has no original DICOM metadata or source file name. Review each independently."},
+        ". Each image has no original DICOM metadata or source file name. Review each independently."+
+        (specialist?" On the SAME study, a clinician's LOCAL CPU Lungmask R231 "+
+          "anatomy segmentation report states right mask volume="+specialist.rightLungMaskMl.toFixed(2)+
+          " mL, left mask volume="+specialist.leftLungMaskMl.toFixed(2)+
+          " mL, total analyzed source frames="+specialist.frameCount+
+          ". These are unverified SOURCE-BOUND anatomical mask measurements, "+
+          "not pathology detection or quantitative normal ranges. "+
+          "Do not claim this validates visual findings or excludes lung disease. "+
+          "Flag mismatch or possible segmentation failure as uncertainty.":"")},
       ...data.frames.flatMap(f=>[
         {type:"text",text:"Synthetic image ID: "+f.imageId},
         {type:"image_url",image_url:{url:"data:image/png;base64,"+f.base64}},
@@ -86,10 +101,14 @@ function reviewMessages(data:NormalizedCloudPilot):AiGatewayRequest["messages"] 
 }
 export async function reviewSanitizedSamples(
   packet:unknown,call:SanitizedReviewCaller,signal?:AbortSignal,
+  localSpecialist:unknown=null,
 ):Promise<SanitizedModelReview>{
   const checked=normalizeReviewedCloudPilot(packet);
   const ids=checked.frames.map(f=>f.imageId);
-  const messages=reviewMessages(checked);
+  const specialist=localSpecialist===null?null:parseLocalLungFacts(localSpecialist);
+  if(specialist&&checked.modality!=="CT")
+    throw Error("R231_CT_only_no_MR_model");
+  const messages=reviewMessages(checked,specialist);
   const [gemini,opus]=await Promise.all([
     call({provider:"openrouter",role:"vision",model:PILOT_GEMINI,maxTokens:850,messages},signal),
     call({provider:"openrouter",role:"vision",model:PILOT_OPUS,maxTokens:850,messages},signal),
@@ -105,5 +124,12 @@ export async function reviewSanitizedSamples(
     callsAttempted:2,originalDicomSent:false,sourceDicomIdentifiersSent:false,
     clinicalReviewRequired:true,deidentificationIndependentlyCertified:false,
     patientDataCanStillBeSensitive:true,researchOnly:true,diagnosticAccuracyValidated:false,
+    ...(specialist?{specialistEvidence:{
+      model:"lungmask-R231" as const,frameCount:specialist.frameCount,
+      rightLungMaskMl:specialist.rightLungMaskMl,
+      leftLungMaskMl:specialist.leftLungMaskMl,
+      clinicalProvenanceServerVerified:false as const,
+      findingOfPathologyEstablished:false as const,
+    }}:{}),
   };
 }
