@@ -9,6 +9,7 @@ import { applyVolumeDisplay, buildVolumeTransfer, getVolumeSampling, getVolumeSc
 import { createAsyncViewportToggle } from "../lib/async-viewport";
 import SegmentationControls, { type MaskDisplay } from "./SegmentationControls";
 import type {SegmentationEvidence} from "../lib/segmentation-evidence";
+import {measureSampledR231Laa950,type Laa950CpuResearch} from "../lib/cpu-lung-laa950";
 import { assertMaskMatchesSource, renderMaskPlane, sampleMaskLabel, sourceGeometry, type LabelMask, type Point3 } from "../lib/segmentation-mask";
 import { prepareAnalysisPackage, type AnalysisPackage } from "../lib/analysis-package";
 import { prepareAnalysisStream, type AnalysisStream } from "../lib/analysis-stream";
@@ -40,6 +41,7 @@ type Runtime = {
   sampleMaskPoint: (point: Point3) => number | null;
   prepareStream: (signal: AbortSignal) => Promise<AnalysisStream>;
   preparePackage: (signal: AbortSignal) => Promise<AnalysisPackage>;
+  quantifyLaa950: (evidence:SegmentationEvidence,operatorConfirmed:boolean,signal:AbortSignal)=>Promise<Laa950CpuResearch>;
 };
 
 const emptyReadouts = (): Readouts => ({ axial:{index:0,total:1}, coronal:{index:0,total:1}, sagittal:{index:0,total:1} });
@@ -418,6 +420,19 @@ export default function CornerstoneMPR({ files, sourceSeries, fullCt, quality, s
           },
           setMaskDisplay: display => {if(maskState&&!cancelled){maskState.display=display;scheduleMask();}},
           clearMask: () => {maskState=null;scheduleMask();},
+          quantifyLaa950: (evidence,operatorConfirmed,signal)=>{
+            if(cancelled||!maskState)throw new Error("Нет текущей маски исходной КТ.");
+            const currentMask=maskState.mask;
+            const manager=volume.voxelManager;
+            if(!manager||manager.numberOfComponents!==1)
+              throw new Error("Нет активного скалярного HU-объёма.");
+            return measureSampledR231Laa950(sourceSeries,evidence,currentMask,i=>{
+              if(cancelled||signal.aborted)throw new Error("Измерение остановлено.");
+              const value=manager.getAtIndex(i);
+              if(typeof value!=="number")throw new Error("Некорректный HU-воксель.");
+              return value;
+            },{operatorConfirmedNoncontrastInspiratoryCT:operatorConfirmed,signal});
+          },
           sampleMaskPoint: point => !cancelled && maskState ? sampleMaskLabel(maskState.mask, point) : null,
           focusPoint: world => {
             if(cancelled || world.length!==3 || !world.every(Number.isFinite))throw new Error("Точка Evidence недоступна.");
@@ -560,6 +575,10 @@ export default function CornerstoneMPR({ files, sourceSeries, fullCt, quality, s
       <small>{interpolation === "linear" ? "Линейная интерполяция сглаживает границы между вокселями." : "Ближайший сосед показывает ступенчатость дискретных данных, но не добавляет деталей."}</small>
     </div>
     <SegmentationControls ready={ready} onEvidenceChange={onEvidenceChange}
+      onQuantifyLaa950={(evidence,confirmed,signal)=>{
+        if(!runtime.current)throw new Error("Нужен активный локальный MPR.");
+        return runtime.current.quantifyLaa950(evidence,confirmed,signal);
+      }}
       onVerifyResearchSource={async(passport,proof,signal)=>{
         if(!runtime.current)throw Error("Выбранная серия MPR уже закрыта.");
         await verifyResearchCurrentDicom(passport,proof,sourceSeries,files,signal);
