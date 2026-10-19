@@ -49,6 +49,14 @@ The only additional data sent with the already-authorized OpenRouter Vision PNG 
 
 **Clinical limitation:** This is same-browser-session **source scoping**, not server-verifiable clinical source attestation. The OpenRouter server never receives private DICOM identifiers, so it cannot prove that a malicious browser has not fabricated the numeric R231 statement; its response explicitly reports `clinicalProvenanceServerVerified:false`. The masks and findings are research only, patient processing remains opt-in and subject to terms and legal authorization, and full-study diagnostic accuracy has NOT been established. No new GPU, external weights or model training is introduced. Neither Gemini nor Opus can substitute for a real pathology-specific pretrained detector.
 
+## Physician adjudication of BOTH AI reviewers + local R231 (no additional API calls)
+
+The exact-slice-bound cloud result now exposes an independent **local clinician review** on each Gemini/Opus observation. The clinician can mark an observation for original-source recheck or locally reject it, optionally write a bounded local note, and compile a cross-model unsigned research draft. Existing `Показать исходный срез` buttons navigate to the true DICOM while the internal frame→file mapping remains only in React state. **No extra GPU, cloud request, model download, or external audit service** runs during these actions.
+
+`web/lib/local-dual-vision-physician-draft.ts` verifies the **current** outgoing reviewed PNG SHA-256, current source ordering, source-bound LLM observation IDs and every assessment before exporting a structured JSON. It includes both AI reviewers' separate observations, immutable frame counts, selected review statuses, optional R231 anatomy measurements (if explicitly included), and an optional clinician synthesis. It does not include original DICOM UID, original file ID, raw CT/MR pixels, image content or complete source volumes. However, any clinician free text or AI observations may still contain sensitive medical data; export ONLY locally.
+
+Every document is `digitallySigned:false`, `clinicianIdentityVerified:false`, `automaticDiagnosis:false`, `absenceOfDiseaseEstablished:false` and `externalTransmission:false`. A rejected LLM observation is a **local reviewer judgment**, not a validated negative diagnosis. Per-frame matching numeric observation counts do **not** prove clinical agreement.
+
 ## Boundaries, not hidden exceptions
 
 - This is an **opt-in localhost research pilot**, not the general deployed clinical cloud API. \`PATIENT_CLOUD_TRANSMISSION_RELEASED=false\` and the old \`/api/ai/route.ts\` unsafe upload prohibition remain intact.
