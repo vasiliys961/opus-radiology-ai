@@ -109,7 +109,7 @@ def run_case(work:Path):
     command=["docker","run","--rm","--network","none","--memory","5g",
              "--memory-swap","5g","--cpus","2","--pids-limit","128",
              "--security-opt","no-new-privileges","-v",f"{root.resolve()}:/home/ubuntu/resources",
-             DOCKER_IMAGE,"python3","main.py","-i","./resources/data/"+ct_path.name,
+             DOCKER_IMAGE,"-i","./resources/data/"+ct_path.name,
              "-o","./resources/output/lynos-pat3","-m","UNet-SW32"]
     subprocess.run(command,check=True,timeout=1200)
     candidates=sorted((root/"output").glob("lynos-pat3*.nii.gz"))
