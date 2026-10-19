@@ -413,12 +413,12 @@
       "anatomy": "heart",
       "pathology": "coronary calcification",
       "status": "real_checkpoint_candidate",
-      "weights": "AI-CAC v1.0.0 original published SwinUNETR non-gated noncontrast chest CT checkpoint (1,205,817,465 bytes); research executor added but NO REAL INFERENCE YET",
+      "weights": "Original AI-CAC v1.0.0 pretrained SwinUNETR checkpoint, SHA256 pinned; real model execution demonstrated on all 103 native LCTSC CT slices, but clinical CAC protocol not established",
       "source": "https://github.com/Raffi-Hagopian/AI-CAC/releases/tag/v1.0.0",
-      "reference": "Stanford COCA non-gated chest CT calcium scores; datadoc1/COCASegmentations 203 expert-reviewed calcium labels, exact series match not yet verified",
-      "restriction": "Official weight release located but original checkpoint not yet downloaded/verified in Opus runtime; no real model CT inference or independent Dice, published scoring differs from standard gated Agatston; patient/cloud disabled; weights commercial license to review",
+      "reference": "103/103 original public TCIA LCTSC CT frames: 74 model-positive voxels in 9 3D components; see docs/AI_CAC_LCTSC_REAL_FULL_103.md and GitHub Actions #39220436954. No expert coronary calcium mask",
+      "restriction": "Published genuine model inference verified on LCTSC (protocol compatibility unconfirmed); 74 positive voxels and 9 spatial candidates are NOT verified CAC lesions. No expert Dice, sensitivity, FROC or Agatston; independent holdout, commercial rights and patient use unverified",
       "priority": 2,
-      "next": "run original v1.0.0 pretrained weights on a licensed COCA non-gated 512x512 CT and independently register expert coronary-only mask; publish real Dice/score numbers"
+      "next": "Run identical pinned model on lawful Stanford COCA non-gated noncontrast CT with correctly matched expert coronary-only mask; establish protocol, independent heldout, native-voxel TP/FP/FN/Dice and calcium-score agreement"
     },
     {
       "id": "breast-tumor-mammography",
