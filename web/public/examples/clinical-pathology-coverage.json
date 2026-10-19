@@ -412,13 +412,13 @@
       "modality": "CT",
       "anatomy": "heart",
       "pathology": "coronary calcification",
-      "status": "weights_unverified",
-      "weights": "no verified lesion-specific weights in repo",
-      "source": "https://github.com/wasserth/TotalSegmentator/tree/v2.18.0",
-      "reference": "expert noncontrast calcium lesion masks",
-      "restriction": "coronary artery anatomy segmentation is not calcification detection",
-      "priority": 4,
-      "next": "source calcification-specific model and ECG-gated CT tests"
+      "status": "real_checkpoint_candidate",
+      "weights": "AI-CAC v1.0.0 original published SwinUNETR non-gated noncontrast chest CT checkpoint (1,205,817,465 bytes); research executor added but NO REAL INFERENCE YET",
+      "source": "https://github.com/Raffi-Hagopian/AI-CAC/releases/tag/v1.0.0",
+      "reference": "Stanford COCA non-gated chest CT calcium scores; datadoc1/COCASegmentations 203 expert-reviewed calcium labels, exact series match not yet verified",
+      "restriction": "Official weight release located but original checkpoint not yet downloaded/verified in Opus runtime; no real model CT inference or independent Dice, published scoring differs from standard gated Agatston; patient/cloud disabled; weights commercial license to review",
+      "priority": 2,
+      "next": "run original v1.0.0 pretrained weights on a licensed COCA non-gated 512x512 CT and independently register expert coronary-only mask; publish real Dice/score numbers"
     },
     {
       "id": "breast-tumor-mammography",

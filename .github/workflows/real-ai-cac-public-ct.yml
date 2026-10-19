@@ -1,0 +1,31 @@
+name: Original AI-CAC public CT research contract
+on:
+  pull_request:
+    paths:
+      - "scripts/real-ai-cac-public-ct.py"
+      - "scripts/test-real-ai-cac-public-ct.py"
+      - "docs/AI_CAC_ORIGINAL_NON_GATED_RESEARCH.md"
+      - ".github/workflows/real-ai-cac-public-ct.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  nonpatient-ct-and-pretrained-model-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Bounded numeric and original DICOM parsing dependencies only
+        run: |
+          python -m pip install --disable-pip-version-check --no-cache-dir \
+            "numpy==1.26.4" "pydicom==2.4.4" "scipy==1.15.3" "nibabel==5.3.2"
+      - name: Original non-gated CT admission, source-grid and score regressions
+        run: |
+          python -m py_compile scripts/real-ai-cac-public-ct.py
+          python scripts/test-real-ai-cac-public-ct.py
+      # Medical weights are ~1.2 GiB, and real full-resolution SwinUNETR
+      # requires a separate >=18 GiB RAM GPU/CPU research host. We do not
+      # load random/synthetic weights or claim real inference from this job.
