@@ -1,0 +1,31 @@
+name: Browser reviewed PNG OpenRouter safety contracts
+on:
+  pull_request:
+    paths:
+      - web/lib/sanitized-cloud-review.ts
+      - web/lib/sanitized-cloud-review.test.ts
+      - web/app/api/ai/deidentified-openrouter-review/route.ts
+      - web/components/DeidentifiedOpenRouterPanel.tsx
+      - web/components/VisionPrivacyPreparation.tsx
+      - web/components/VisionFramePlanningPanel.tsx
+      - docs/BROWSER_DEIDENTIFIED_OPENROUTER_REVIEW.md
+      - .github/workflows/browser-deidentified-openrouter-review.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  pixel-only-patient-pilot-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install existing Next/PNG dependencies
+        working-directory: web
+        run: npm ci --no-audit --no-fund
+      - name: Strict exact-byte image, metadata, auth and dual-LLM contract
+        working-directory: web
+        run: node --disable-warning=ExperimentalWarning --experimental-strip-types --test lib/sanitized-cloud-review.test.ts
+      # Fake completion callbacks ONLY. No OpenRouter token or patient image in CI.

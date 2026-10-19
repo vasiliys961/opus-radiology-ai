@@ -6,7 +6,7 @@ export default function VisionPrivacyReadiness(props:PrivacyReadinessInputs) {
   return <section aria-label="Готовность локальных копий к проверке">
     <h4>Статус подготовки · {status.frames.filter(f=>f.localReviewDone).length}/{status.frames.length} кадров проверено вручную</h4>
     <p role="status">{props.busy?"Локальная операция выполняется; дождитесь завершения.":status.localReviewDone?
-      "Локальные отметки заполнены. Облачная передача всё ещё заблокирована.":"Подготовка не завершена: осмотрите каждую точную копию и поставьте обе ручные отметки."}</p>
+      "Локальные отметки заполнены, но это не удостоверяет обезличивание. Отдельный пилот OpenRouter требует OCR, разрешённого провайдера и подтверждения врача.":"Подготовка не завершена: осмотрите каждую точную копию и поставьте обе ручные отметки."}</p>
     {status.frames.length>0&&<div className="ora-v17-table-wrap"><table className="ora-v17-table">
       <caption>Выбранные копии · локальные неподтверждённые отметки</caption>
       <thead><tr><th>Кадр</th><th>OCR · помощь, не проверка</th><th>Надписи</th><th>Узнаваемые признаки</th><th>Скрыто областей</th></tr></thead>
