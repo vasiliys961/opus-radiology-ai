@@ -106,9 +106,12 @@ def run_case(work:Path):
     if mod.digest_file(ct_path,"sha256")!=PINNED_IMAGE_SHA256:
         raise ValueError("public_LyNoS_CT_SHA256_mismatch")
     (root/"data"/"runtime_config.ini").write_text(
-        "[Predictions]\nnon_overlapping=true\nreconstruction_method=thresholding\n"
+        "[Predictions]\nnon_overlapping=true\nreconstruction_method=probabilities\n"
         "reconstruction_order=resample_first\nprobability_threshold=0.4\n")
     (root/"output").mkdir(exist_ok=True)
+    # This directory alone must be writable by the publisher container's
+    # unprivileged UID, which differs from GitHub's host runner UID.
+    (root/"output").chmod(0o1777)
     subprocess.run(["docker","pull",DOCKER_IMAGE],check=True,timeout=600)
     # Source volume and original trained models only. No network in Docker.
     command=["docker","run","--rm","--network","none","--memory","5g",
