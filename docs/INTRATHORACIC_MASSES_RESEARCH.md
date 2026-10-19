@@ -102,7 +102,7 @@ The official vendor public inference test sample
 (27,321,314 bytes, SHA-256
 `3bc452580051dbea0f67caa52c4eb09c75eafdde9e8e7ff60c3a143ec94dce1f`)
 contains a CT and an original lung mask to provide source geometry to the
-model's preprocessing. We use the **original** author `raidionicsseg==1.5.3`
+model's preprocessing. We use the **original** author `raidionicsseg==1.5.2`
 with ONNX Runtime CPU, no TensorFlow, torch, GPU, browser inference or Mac
 processing; original model preprocessing and 3D output are not imitated.
 `--mode prepare` checks both published exact archive sizes and SHA-256,
