@@ -40,7 +40,7 @@ jobs:
           python -m pip install --no-cache-dir "torch==2.6.0" "torchvision==0.21.0" \
              --index-url https://download.pytorch.org/whl/cpu
           python -m pip install --no-cache-dir "monai==1.4.0" "numpy==1.26.4" \
-             "pydicom==2.4.4" "scipy==1.15.3" "nibabel==5.3.2"
+             "pydicom==2.4.4" "scipy==1.15.3" "nibabel==5.3.2" "einops==0.8.1"
       - name: Obtain original TCIA LCTSC full 103-slice DICOM source, hash-verified
         run: |
           set -euo pipefail
