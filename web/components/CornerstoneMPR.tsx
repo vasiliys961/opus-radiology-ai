@@ -8,6 +8,7 @@ import { orbitCamera } from "../lib/mpr-orbit";
 import { applyVolumeDisplay, buildVolumeTransfer, getVolumeSampling, getVolumeScalarRange, type VolumeDisplayActor, type VolumePalette, type VolumeRenderMode, type VolumeRenderQuality } from "../lib/volume-rendering";
 import { createAsyncViewportToggle } from "../lib/async-viewport";
 import SegmentationControls, { type MaskDisplay } from "./SegmentationControls";
+import type {SegmentationEvidence} from "../lib/segmentation-evidence";
 import { assertMaskMatchesSource, renderMaskPlane, sampleMaskLabel, sourceGeometry, type LabelMask, type Point3 } from "../lib/segmentation-mask";
 import { prepareAnalysisPackage, type AnalysisPackage } from "../lib/analysis-package";
 import { prepareAnalysisStream, type AnalysisStream } from "../lib/analysis-stream";
@@ -50,7 +51,7 @@ const captions: Record<Plane,string> = { axial:"АКСИАЛЬНАЯ", coronal:"
  * All input stays in the browser and is gated by checkMprEligibility upstream.
  * This is NOT a calibrated diagnostic viewer or a measurement instrument.
  */
-export default function CornerstoneMPR({ files, sourceSeries, fullCt, quality, show3D, onShow3DChange }: { files: File[]; sourceSeries: DicomSeries; fullCt?:FullCtTicket; quality: MprQuality; show3D: boolean; onShow3DChange: (enabled: boolean) => void }) {
+export default function CornerstoneMPR({ files, sourceSeries, fullCt, quality, show3D, onShow3DChange,onEvidenceChange }: { files: File[]; sourceSeries: DicomSeries; fullCt?:FullCtTicket; quality: MprQuality; show3D: boolean; onShow3DChange: (enabled: boolean) => void; onEvidenceChange?: (evidence:SegmentationEvidence|null)=>void }) {
   const axial = useRef<HTMLDivElement>(null);
   const coronal = useRef<HTMLDivElement>(null);
   const sagittal = useRef<HTMLDivElement>(null);
@@ -558,7 +559,7 @@ export default function CornerstoneMPR({ files, sourceSeries, fullCt, quality, s
       </div>
       <small>{interpolation === "linear" ? "Линейная интерполяция сглаживает границы между вокселями." : "Ближайший сосед показывает ступенчатость дискретных данных, но не добавляет деталей."}</small>
     </div>
-    <SegmentationControls ready={ready}
+    <SegmentationControls ready={ready} onEvidenceChange={onEvidenceChange}
       onVerifyResearchSource={async(passport,proof,signal)=>{
         if(!runtime.current)throw Error("Выбранная серия MPR уже закрыта.");
         await verifyResearchCurrentDicom(passport,proof,sourceSeries,files,signal);
