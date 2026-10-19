@@ -411,13 +411,25 @@
       "modality": "XR",
       "anatomy": "heart",
       "pathology": "cardiomegaly",
-      "status": "real_checkpoint_candidate",
-      "weights": "Original published NIH-trained TorchXRayVision 1.5.7 DenseNet121 checkpoint SHA256 31a5475c6b1383a7edbfcaf96af9ce302eb9969cfe28b6b8b5859afc6f274fdf; specific Cardiomegaly trained label; real multitask output CI not yet completed",
+      "status": "real_case_measured",
+      "weights": "Genuine original NIH-trained TorchXRayVision 1.5.7 DenseNet121 checkpoint SHA256 31a5475c6b1383a7edbfcaf96af9ce302eb9969cfe28b6b8b5859afc6f274fdf; trained Cardiomegaly output",
       "source": "https://huggingface.co/torchxrayvision/densenet121-res224-nih",
-      "reference": "Publisher CXR sample original; no expert confirmed cardiomegaly",
-      "restriction": "Research image-level score only. No cardiothoracic ratio or heart segmentation, AP/PA correction, expert-positive outcome, case-independent accuracy, radiographic localization, cloud or patient mode.",
+      "reference": "Publisher example CXR 00000001_000.png, SHA256 c8cbe59e6b9b186060dc68e63965658fa6b5b3ada6648d25c189b8b69b43cd4c; no independent expert reference",
+      "restriction": "Real image-level model score 0.667162 observed on one publisher public CXR, not validated clinical probability. Sample may overlap NIH training; no independent expert confirmed disease, no localization/measurements, AUROC or sensitivity/specificity, no patient/cloud.",
       "priority": 2,
-      "next": "Require actual original-model multi-head CI numeric result, then external labeled CXR and standardized CTR/PA/AP evaluation; no clinical diagnosis."
+      "next": "Obtain truly independent radiologist-labelled Cardiomegaly-positive and negative source-licensed CXR; assess case AUROC/threshold calibration, patient-level overlap, and separate spatial findings before clinical use.",
+      "observedResearchEvidence": {
+        "run": "https://github.com/vasiliys961/opus-radiology-ai/actions/runs/39243434172",
+        "originalCheckpointSHA256": "31a5475c6b1383a7edbfcaf96af9ce302eb9969cfe28b6b8b5859afc6f274fdf",
+        "originalRadiographSHA256": "c8cbe59e6b9b186060dc68e63965658fa6b5b3ada6648d25c189b8b69b43cd4c",
+        "realModelForwardCompleted": true,
+        "caseCount": 1,
+        "uncalibratedImageLevelScore": 0.667162,
+        "expertGroundTruthAvailable": false,
+        "independentHoldout": false,
+        "clinicallyValidated": false,
+        "spatiallyLocalized": false
+      }
     },
     {
       "id": "coronary-calcification-ct",
@@ -541,13 +553,25 @@
       "modality": "CR/DX",
       "anatomy": "thorax",
       "pathology": "pleural effusion image-level X-ray candidate",
-      "status": "real_checkpoint_candidate",
-      "weights": "Original TorchXRayVision 1.5.7 NIH pretrained DenseNet121 'Effusion' trained output; same 28-MB SHA-pinned original model as Pneumothorax",
+      "status": "real_case_measured",
+      "weights": "Genuine original NIH-trained TorchXRayVision 1.5.7 DenseNet121 checkpoint SHA256 31a5475c6b1383a7edbfcaf96af9ce302eb9969cfe28b6b8b5859afc6f274fdf; trained Effusion output",
       "source": "https://huggingface.co/torchxrayvision/densenet121-res224-nih",
-      "reference": "One publisher-hosted original CXR sample; no independent radiologist fluid label or localization mask",
-      "restriction": "Image-level uncalibrated score, no pleural fluid bounding box, laterality, volume or differentiation from other CXR opacities, no expert validation and no patient/cloud mode. Multitask real inference not yet verified.",
+      "reference": "Publisher example CXR 00000001_000.png, SHA256 c8cbe59e6b9b186060dc68e63965658fa6b5b3ada6648d25c189b8b69b43cd4c; no independent expert reference",
+      "restriction": "Real image-level model score 0.566473 observed on one publisher public CXR, not validated clinical probability. Sample may overlap NIH training; no independent expert confirmed disease, no localization/measurements, AUROC or sensitivity/specificity, no patient/cloud.",
       "priority": 2,
-      "next": "Verify genuine multi-head forward in public research Actions and compare externally labeled CXR with expert radiologist pleural effusion findings."
+      "next": "Obtain truly independent radiologist-labelled Effusion-positive and negative source-licensed CXR; assess case AUROC/threshold calibration, patient-level overlap, and separate spatial findings before clinical use.",
+      "observedResearchEvidence": {
+        "run": "https://github.com/vasiliys961/opus-radiology-ai/actions/runs/39243434172",
+        "originalCheckpointSHA256": "31a5475c6b1383a7edbfcaf96af9ce302eb9969cfe28b6b8b5859afc6f274fdf",
+        "originalRadiographSHA256": "c8cbe59e6b9b186060dc68e63965658fa6b5b3ada6648d25c189b8b69b43cd4c",
+        "realModelForwardCompleted": true,
+        "caseCount": 1,
+        "uncalibratedImageLevelScore": 0.566473,
+        "expertGroundTruthAvailable": false,
+        "independentHoldout": false,
+        "clinicallyValidated": false,
+        "spatiallyLocalized": false
+      }
     }
   ],
   "selectionRule": "Prioritize uncovered CT/MR diseases with legal checkpoints, independently usable real image/mask pair and host RAM budget, in that order."
