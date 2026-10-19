@@ -16,7 +16,7 @@ import sys
 import tempfile
 
 SCHEMA="opus-xrv-nih-cxr-multitask-pretrained/v2"
-ADDITIONAL_TARGETS=("Cardiomegaly","Effusion")
+ADDITIONAL_TARGETS=("Cardiomegaly","Effusion","Pneumonia","Edema","Mass")
 VERSION="1.5.7"
 MODEL="densenet121-res224-nih"
 FILENAME="nih-densenet121-d121-tw-lr001-rot45-tr15-sc15-seed0-best.pt"
@@ -142,7 +142,11 @@ def run(image,weights,output,expected_sha,source_url,source_terms):
         "uncalibratedAdditionalPublisherTrainedImageLevelScores":additional_scores,
         "cardiomegalySpatialLocalization":None,
         "pleuralEffusionSpatialLocalization":None,
+        "pneumoniaSpatialLocalization":None,
+        "pulmonaryEdemaSpatialLocalization":None,
+        "lungMassSpatialLocalization":None,
         "cardiomegalyDiagnosis":None,"pleuralEffusionDiagnosis":None,
+        "pneumoniaDiagnosis":None,"pulmonaryEdemaDiagnosis":None,"lungMassDiagnosis":None,
         "pneumothoraxSpatialLocalization":None,
         "radiologistReferenceDiagnosisAvailable":False,
         "expertAccuracyMetrics":None,
@@ -153,7 +157,8 @@ def run(image,weights,output,expected_sha,source_url,source_terms):
             "Model trained on NIH ChestXray: publisher sample may overlap model training.",
             "Score is an uncalibrated image-level model output, not pathology probability.",
             "No spatial coordinates/measurements for pneumothorax, cardiomegaly or effusion.",
-            "Cardiomegaly and pleural effusion scores are also uncalibrated NIH model outputs, not diagnoses.",
+            "Cardiomegaly, effusion, pneumonia, pulmonary edema and mass scores are uncalibrated NIH model outputs, not diagnoses.",
+            "Image-level scores cannot resolve a mass from consolidation, classify diffuse edema or spatially localize a lesion.",
             "No original independent expert-positive validation, sensitivity or specificity.",
             "Original pretrained PyTorch checkpoint uses legacy pickle: trusted isolated Linux only.",
             "No patient images, DICOM identifiers or cloud LLM transmission."

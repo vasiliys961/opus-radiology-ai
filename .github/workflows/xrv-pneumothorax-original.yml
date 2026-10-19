@@ -73,8 +73,8 @@ jobs:
           print('Original image SHA256:', v['originalSourceRadiographSHA256'])
           print('Image-level uncalibrated pneumothorax score:', v['uncalibratedPneumothoraxImageLevelScore'])
           print('Additional original NIH-trained image-level scores:', v['uncalibratedAdditionalPublisherTrainedImageLevelScores'])
-          assert sorted(v['uncalibratedAdditionalPublisherTrainedImageLevelScores']) == ['Cardiomegaly','Effusion']
-          assert v['cardiomegalySpatialLocalization'] is None and v['pleuralEffusionSpatialLocalization'] is None
+          assert sorted(v['uncalibratedAdditionalPublisherTrainedImageLevelScores']) == ['Cardiomegaly','Edema','Effusion','Mass','Pneumonia']
+          assert all(v[key] is None for key in ('cardiomegalySpatialLocalization','pleuralEffusionSpatialLocalization','pneumoniaSpatialLocalization','pulmonaryEdemaSpatialLocalization','lungMassSpatialLocalization'))
           print('NO expert disease validation; NO pneumothorax localization.')
           PY
           rm -rf /tmp/opus-xrv-public

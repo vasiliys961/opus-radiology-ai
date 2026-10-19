@@ -572,6 +572,81 @@
         "clinicallyValidated": false,
         "spatiallyLocalized": false
       }
+    },
+    {
+      "id": "pneumonia-cxr",
+      "modality": "CR/DX",
+      "anatomy": "thorax",
+      "pathology": "pneumonia-like CXR airspace opacity image-level score",
+      "status": "real_case_measured",
+      "weights": "Original NIH-trained TorchXRayVision DenseNet121 1.5.7 trained Pneumonia head; weight SHA256 31a5475c6b1383a7edbfcaf96af9ce302eb9969cfe28b6b8b5859afc6f274fdf",
+      "source": "https://github.com/mlmed/torchxrayvision/releases/tag/v1",
+      "reference": "One public TorchXRayVision publisher demo CXR SHA256 c8cbe59e6b9b186060dc68e63965658fa6b5b3ada6648d25c189b8b69b43cd4c; NO independent expert disease label",
+      "restriction": "Actual original NIH pretrained image-level Pneumonia raw score 0.501093 on one public CXR. No confirmed Pneumonia pathology, no localization, may overlap NIH training, no AUROC, sensitivity/specificity, calibration, patient use or cloud.",
+      "priority": 2,
+      "next": "Independently test source-licensed expert-annotated Pneumonia-positive and -negative CXR with patient-level exclusion and calibration; localizing lesion model separately.",
+      "observedResearchEvidence": {
+        "run": "https://github.com/vasiliys961/opus-radiology-ai/actions/runs/39244193666",
+        "originalCheckpointSHA256": "31a5475c6b1383a7edbfcaf96af9ce302eb9969cfe28b6b8b5859afc6f274fdf",
+        "originalRadiographSHA256": "c8cbe59e6b9b186060dc68e63965658fa6b5b3ada6648d25c189b8b69b43cd4c",
+        "realModelForwardCompleted": true,
+        "caseCount": 1,
+        "uncalibratedImageLevelScore": 0.501093,
+        "expertGroundTruthAvailable": false,
+        "independentHoldout": false,
+        "clinicallyValidated": false,
+        "spatiallyLocalized": false
+      }
+    },
+    {
+      "id": "pulmonary-edema-cxr",
+      "modality": "CR/DX",
+      "anatomy": "thorax",
+      "pathology": "pulmonary edema-like CXR appearance image-level score",
+      "status": "real_case_measured",
+      "weights": "Original NIH-trained TorchXRayVision DenseNet121 1.5.7 trained Edema head; weight SHA256 31a5475c6b1383a7edbfcaf96af9ce302eb9969cfe28b6b8b5859afc6f274fdf",
+      "source": "https://github.com/mlmed/torchxrayvision/releases/tag/v1",
+      "reference": "One public TorchXRayVision publisher demo CXR SHA256 c8cbe59e6b9b186060dc68e63965658fa6b5b3ada6648d25c189b8b69b43cd4c; NO independent expert disease label",
+      "restriction": "Actual original NIH pretrained image-level Edema raw score 0.501593 on one public CXR. No confirmed Edema pathology, no localization, may overlap NIH training, no AUROC, sensitivity/specificity, calibration, patient use or cloud.",
+      "priority": 2,
+      "next": "Independently test source-licensed expert-annotated Edema-positive and -negative CXR with patient-level exclusion and calibration; localizing lesion model separately.",
+      "observedResearchEvidence": {
+        "run": "https://github.com/vasiliys961/opus-radiology-ai/actions/runs/39244193666",
+        "originalCheckpointSHA256": "31a5475c6b1383a7edbfcaf96af9ce302eb9969cfe28b6b8b5859afc6f274fdf",
+        "originalRadiographSHA256": "c8cbe59e6b9b186060dc68e63965658fa6b5b3ada6648d25c189b8b69b43cd4c",
+        "realModelForwardCompleted": true,
+        "caseCount": 1,
+        "uncalibratedImageLevelScore": 0.501593,
+        "expertGroundTruthAvailable": false,
+        "independentHoldout": false,
+        "clinicallyValidated": false,
+        "spatiallyLocalized": false
+      }
+    },
+    {
+      "id": "lung-mass-cxr",
+      "modality": "CR/DX",
+      "anatomy": "thorax",
+      "pathology": "lung mass-like CXR opacity image-level score",
+      "status": "real_case_measured",
+      "weights": "Original NIH-trained TorchXRayVision DenseNet121 1.5.7 trained Mass head; weight SHA256 31a5475c6b1383a7edbfcaf96af9ce302eb9969cfe28b6b8b5859afc6f274fdf",
+      "source": "https://github.com/mlmed/torchxrayvision/releases/tag/v1",
+      "reference": "One public TorchXRayVision publisher demo CXR SHA256 c8cbe59e6b9b186060dc68e63965658fa6b5b3ada6648d25c189b8b69b43cd4c; NO independent expert disease label",
+      "restriction": "Actual original NIH pretrained image-level Mass raw score 0.532159 on one public CXR. No confirmed Mass pathology, no localization, may overlap NIH training, no AUROC, sensitivity/specificity, calibration, patient use or cloud.",
+      "priority": 2,
+      "next": "Independently test source-licensed expert-annotated Mass-positive and -negative CXR with patient-level exclusion and calibration; localizing lesion model separately.",
+      "observedResearchEvidence": {
+        "run": "https://github.com/vasiliys961/opus-radiology-ai/actions/runs/39244193666",
+        "originalCheckpointSHA256": "31a5475c6b1383a7edbfcaf96af9ce302eb9969cfe28b6b8b5859afc6f274fdf",
+        "originalRadiographSHA256": "c8cbe59e6b9b186060dc68e63965658fa6b5b3ada6648d25c189b8b69b43cd4c",
+        "realModelForwardCompleted": true,
+        "caseCount": 1,
+        "uncalibratedImageLevelScore": 0.532159,
+        "expertGroundTruthAvailable": false,
+        "independentHoldout": false,
+        "clinicallyValidated": false,
+        "spatiallyLocalized": false
+      }
     }
   ],
   "selectionRule": "Prioritize uncovered CT/MR diseases with legal checkpoints, independently usable real image/mask pair and host RAM budget, in that order."
