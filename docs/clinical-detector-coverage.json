@@ -386,13 +386,13 @@
       "modality": "XR",
       "anatomy": "thorax",
       "pathology": "pneumothorax",
-      "status": "weights_unverified",
-      "weights": "TorchXRayVision classifiers candidate",
-      "source": "https://github.com/mlmed/torchxrayvision",
-      "reference": "SIIM-ACR expert pneumothorax masks",
-      "restriction": "classification score not a localized CT detector",
-      "priority": 4,
-      "next": "confirm weights/labels and pixel mask, not only image-level AUC"
+      "status": "real_checkpoint_candidate",
+      "weights": "Original published TorchXRayVision 1.5.7 DenseNet121 densenet121-res224-nih pretrained NIH checkpoint (28,382,096 bytes), official publisher release; original model smoke Actions added, result pending",
+      "source": "https://github.com/mlmed/torchxrayvision/releases/tag/v1",
+      "reference": "Original publisher public NIH radiograph sample, not an independent expert-confirmed positive pneumothorax study",
+      "restriction": "New actual pretrained CPU image-level inference code only for separately licensed public CXR; no localizing lesion mask or reference diagnosis, may overlap NIH training, no sensitivity/specificity, patient use or cloud. Real Actions smoke status must be verified before promotion.",
+      "priority": 2,
+      "next": "Verify true publisher checkpoint/image SHA256 and completed GitHub Actions forward on public radiograph; then source independent expert-labelled pneumothorax-positive CXR and assess external AUROC/sensitivity; separately obtain spatial model."
     },
     {
       "id": "cardiomegaly-xray",
