@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import LocalLungmaskPanel from "./LocalLungmaskPanel";
 import SegmentationEvidenceReview from "./SegmentationEvidenceReview";
 import { buildSegmentationEvidence, type SegmentationEvidence } from "../lib/segmentation-evidence";
+import type {Laa950CpuResearch} from "../lib/cpu-lung-laa950";
 import type { AnalysisStream } from "../lib/analysis-stream";
 import {parseResearchAnatomy, type AnatomyProof} from "../lib/totalseg-abdomen-import";
 import {buildResearchAnatomyRegions, type LobeRegion} from "../lib/totalseg-lobe-navigation";
@@ -14,7 +15,7 @@ export type MaskDisplay = { visible: boolean; opacity: number; label: number | n
 type Summary = { name: string; labels: LabelMask["labels"]; result?: SegmentationResult; evidence?: SegmentationEvidence; evidenceRevision?: number; fullCtDerived?:boolean; research?:AnatomyProof; researchRegions?:LobeRegion[]; researchSourceVerified?:boolean };
 type DownloadPackage = { request: AnalysisRequest; volumeUrl: string; manifestUrl: string };
 
-export default function SegmentationControls({ ready, onPrepare, onPrepareStream, onImport, onDisplay, onClear, onNavigatePoint, onSampleMask,onFullCtLoad,onVerifyResearchSource,onEvidenceChange }: {
+export default function SegmentationControls({ ready, onPrepare, onPrepareStream, onImport, onDisplay, onClear, onNavigatePoint, onSampleMask,onFullCtLoad,onVerifyResearchSource,onEvidenceChange,onQuantifyLaa950 }: {
   ready: boolean;
   onPrepare: (signal: AbortSignal) => Promise<AnalysisPackage>;
   onPrepareStream: (signal: AbortSignal) => Promise<AnalysisStream>;
@@ -25,6 +26,7 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
   onSampleMask: (point: Point3) => number | null;
   onFullCtLoad?: (signal:AbortSignal)=>Promise<LabelMask>;
   onEvidenceChange?: (evidence:SegmentationEvidence|null)=>void;
+  onQuantifyLaa950?: (evidence:SegmentationEvidence,operatorConfirmed:boolean,signal:AbortSignal)=>Promise<Laa950CpuResearch>;
   onVerifyResearchSource?: (passportJson:string,proof:AnatomyProof,signal:AbortSignal)=>Promise<void>;
 }) {
   const input = useRef<HTMLInputElement>(null);
@@ -45,6 +47,29 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
   const [exportError, setExportError] = useState("");
   const [localCommandCopied, setLocalCommandCopied] = useState(false);
   const [workerBusy, setWorkerBusy] = useState(false);
+  const [laaConfirmed,setLaaConfirmed]=useState(false);
+  const [laaBusy,setLaaBusy]=useState(false);
+  const [laaError,setLaaError]=useState("");
+  const [laaResult,setLaaResult]=useState<Laa950CpuResearch|null>(null);
+  const laaController=useRef<AbortController|null>(null);
+  useEffect(()=>{
+    laaController.current?.abort();
+    setLaaResult(null);setLaaError("");setLaaConfirmed(false);setLaaBusy(false);
+  },[summary?.evidenceRevision,summary?.name,ready]);
+  const quantifyLaa=async()=>{
+    if(!onQuantifyLaa950||!summary?.evidence||!laaConfirmed||laaBusy||!ready)return;
+    const evidence=summary.evidence,controller=new AbortController();
+    laaController.current?.abort();laaController.current=controller;
+    setLaaBusy(true);setLaaError("");setLaaResult(null);
+    try{
+      const measured=await onQuantifyLaa950(evidence,true,controller.signal);
+      if(!controller.signal.aborted)setLaaResult(measured);
+    }catch(e){
+      if(!controller.signal.aborted)setLaaError(e instanceof Error?e.message:"Расчёт HU остановлен");
+    }finally{
+      if(laaController.current===controller){laaController.current=null;setLaaBusy(false);}
+    }
+  };
   useEffect(()=>{
     if(!onFullCtLoad){version.current++;preparation.current?.abort();researchController.current?.abort();setBusy(false);
       setSummary(current=>{if(current?.fullCtDerived){callbacks.current.onClear();callbacks.current.onEvidenceChange?.(null);return null;}return current;});}
@@ -272,6 +297,41 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
         <small>Объём рассчитан по меткам и геометрии маски; это не оценка точности модели. Названия из паспорта заявлены поставщиком результата. Маска отображается поверх MPR, без 3D-поверхностей.</small>
       </> : <p>Маска не содержит ненулевых меток. Это не подтверждает отсутствие патологических изменений.</p>}
     </>}
+    {summary?.evidence?.producer.model.id==="lungmask-R231"&&
+      summary.evidence.producer.executionMode==="local"&&onQuantifyLaa950&&
+      <details className="ora-mask-provenance">
+        <summary>CPU: LAA−950 в маске R231 · только фрагмент КТ</summary>
+        <p>Подсчёт настоящих декодированных КТ-вокселей ≤−950 HU внутри исходной
+          маски R231. Модель не диагностирует эмфизему или ХОБЛ.
+          Полнота обоих лёгких не доказана; результаты зависят от протокола КТ.</p>
+        <label><input type="checkbox" checked={laaConfirmed} disabled={laaBusy}
+          onChange={e=>{setLaaConfirmed(e.target.checked);setLaaResult(null);}}/>
+          Я проверил исходное исследование: инспираторная КТ без внутривенного контраста,
+          реконструкция подходит для денситометрии; понимаю, что выборка может быть неполной.
+        </label>
+        <div className="ora-mask-actions">
+          <button type="button" disabled={!laaConfirmed||!ready||laaBusy||busy}
+            onClick={()=>void quantifyLaa()}>
+            {laaBusy?"Идёт подсчёт HU…":"Измерить LAA−950 локально на CPU"}
+          </button>
+          {laaBusy&&<button type="button" onClick={()=>laaController.current?.abort()}>Отменить</button>}
+        </div>
+        {laaError&&<p role="alert" className="ora-mask-error">{laaError}</p>}
+        {laaResult&&<div role="status">
+          <p><strong>Результат только по обработанному фрагменту:</strong>
+            {" "}{laaResult.totalMaskLowAttenuationPct.toFixed(2)}% маски имеют плотность ≤−950 HU.
+            Не экстраполировать на лёгкие целиком.</p>
+          <ul>{laaResult.lungs.map(x=><li key={x.label}>
+            {x.anatomy==="right"?"Правое лёгкое":"Левое лёгкое"}:
+            {" "}{x.lowAttenuationPctOfSampledMask.toFixed(2)}%,
+            {" "}{x.lowAttenuationVolumeMl.toFixed(2)} мл из {x.maskVolumeMl.toFixed(2)} мл маски
+            ({x.maskVoxelCount.toLocaleString("ru-RU")} вокселей)
+          </li>)}</ul>
+          <small>Результат не подтверждает полноценность КТ и точность HU-трансформации.
+            Отсутствие низкоплотных вокселей в фрагменте не исключает болезнь.
+            Расчёт полностью локальный, не добавляет вызовов Gemini/Opus.</small>
+        </div>}
+      </details>}
     {summary?.evidence&&<SegmentationEvidenceReview key={summary.evidenceRevision}
       evidence={summary.evidence} onSampleMask={onSampleMask} onNavigate={(point,labelId)=>{
         callbacks.current.onNavigatePoint(point);
