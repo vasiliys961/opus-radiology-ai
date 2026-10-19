@@ -116,9 +116,11 @@ def summarize_prediction(reference,mask,prob,unc,expert=None):
             continue
         local=labels[block]==idx
         count=int(local.sum())
-        coords=np.argwhere(local)
-        origin=np.array([s.start for s in block])
-        center=(coords.mean(axis=0)+origin) if len(coords) else origin
+        # Centroid by reductions, not a potentially enormous coordinate
+        # matrix for large enhancing volumes on a RAM-bounded worker.
+        from scipy import ndimage
+        origin=np.array([sl.start for sl in block],dtype=np.float64)
+        center=np.asarray(ndimage.center_of_mass(local),dtype=np.float64)+origin
         mm=(reference.affine @ np.r_[center,1.])[:3]
         lesions.append({
             "nativeConnectedComponentId":idx,
