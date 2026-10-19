@@ -1,0 +1,23 @@
+name: Clinical pathology coverage UI integrity
+
+on:
+  pull_request:
+    paths:
+      - 'docs/clinical-detector-coverage.json'
+      - 'web/public/examples/clinical-pathology-coverage.json'
+      - 'web/components/PathologyCoverageResearch.tsx'
+      - 'web/app/viewer/page.tsx'
+      - 'scripts/check-web-pathology-coverage.py'
+      - '.github/workflows/clinical-pathology-coverage-ui.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Source-bound local research evidence
+        run: python3 scripts/check-web-pathology-coverage.py
