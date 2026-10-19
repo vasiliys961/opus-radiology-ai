@@ -9,15 +9,17 @@ import { decodeDicomPreview } from "../lib/dicom-lite";
 import { MAX_PRIVACY_PIXELS } from "../lib/vision-privacy";
 import VisionPrivacyPreparation from "./VisionPrivacyPreparation";
 import {sameSeriesR231Facts,type CapturedLocalSpecialist} from "../lib/same-series-r231-cloud-evidence";
+import {sameSeriesLaa950ForReview,type CapturedLocalLaa950} from "../lib/same-series-laa950-review";
 
 export default function VisionFramePlanningPanel({
-  series, activeSeriesKey, fileById, onOpenSlice,capturedSpecialist,
+  series, activeSeriesKey, fileById, onOpenSlice,capturedSpecialist,capturedLaa950,
 }: {
   series: readonly DicomSeries[];
   activeSeriesKey: string | null;
   fileById: ReadonlyMap<string, File>;
   onOpenSlice: (fileId: string) => void;
   capturedSpecialist?:CapturedLocalSpecialist|null;
+  capturedLaa950?:CapturedLocalLaa950|null;
 }) {
   const [requested, setRequested] = useState(4);
   const [report, setReport] = useState<VisionFramePlan | null>(null);
@@ -30,6 +32,12 @@ export default function VisionFramePlanningPanel({
       const selected=series.find(s=>s.key===activeSeriesKey);
       specialistFacts=sameSeriesR231Facts(selected,capturedSpecialist);
     }catch{specialistWarning="Результат CPU R231 не совпадает с текущей DICOM-серией. Численные данные не будут переданы."}
+  }
+  let localLaa950=null, laaWarning="";
+  if(capturedLaa950){
+    try{localLaa950=sameSeriesLaa950ForReview(
+      series.find(x=>x.key===activeSeriesKey),capturedSpecialist,capturedLaa950);
+    }catch{laaWarning="Показатель LAA−950 не совпадает с текущей КТ и маской R231; не использовать.";}
   }
   const choice = useMemo(() => {
     // Never silently choose some other series when a specific series is selected.
@@ -134,10 +142,18 @@ export default function VisionFramePlanningPanel({
         не детекция заболевания. Числа можно передать в дополнительный анализ
         вместе с кадрами только по явному разрешению.</p>}
       {specialistWarning&&<p role="status">{specialistWarning}</p>}
+      {localLaa950&&<p role="status">Локальный LAA−950 для этой КТ:
+        {localLaa950.lowAttenuationPctOfSampledMask.toFixed(2)}% обработанной маски
+        (справа {localLaa950.rightLungPct.toFixed(2)}%,
+        слева {localLaa950.leftLungPct.toFixed(2)}%).
+        Только локальный исследовательский контекст: эти цифры не отправляются в OpenRouter
+        и не подтверждают диагноз эмфиземы.</p>}
+      {laaWarning&&<p role="status">{laaWarning}</p>
       <VisionPrivacyPreparation key={JSON.stringify(report.frames.map(f=>f.fileId))+requested}
         previews={report.frames.map(f=>thumbnails[f.fileId]?.url)}
         modality={series.find(s=>s.key===report.seriesKey)?.modality??""}
         specialistFacts={specialistFacts}
+        localLaa950={localLaa950}
         specialistLocalBinding={specialistFacts&&capturedSpecialist?
           capturedSpecialist.evidence.source.inputSha256+":"+capturedSpecialist.evidence.mask.sha256:""}
         originalLocalFileIds={report.frames.map(f=>f.fileId)}
