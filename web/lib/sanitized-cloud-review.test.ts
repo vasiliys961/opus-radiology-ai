@@ -104,3 +104,43 @@ test("Normalization exposes only synthetic frame IDs, exact hashes and image byt
   assert.equal(result.frames[0].imageId,"frame-1");
   assert.equal(result.localFrameHashes[0].reviewedPixelSha256,p.frames[0].sha256);
 });
+
+
+test("Bounded same-study R231 anatomical measurements reach BOTH LLMs with reviewed CT images",async()=>{
+  const facts={schema:"opus-local-r231-facts/v1" as const,model:"lungmask-R231" as const,
+    frameCount:32,rightLungMaskMl:1320.25,leftLungMaskMl:1240.75,
+    coverage:"not-clinically-verified" as const,masksAreNotPathologyDetectors:true as const};
+  const calls:AiGatewayRequest[]=[];
+  const doc=await reviewSanitizedSamples(packet("CT"),async req=>{
+    calls.push(req);return answer(req.model===PILOT_GEMINI?"gemini":"opus");
+  },undefined,facts);
+  assert.equal(calls.length,2);
+  for(const call of calls){
+    const text=JSON.stringify(call.messages);
+    assert.match(text,/1320.25/);assert.match(text,/1240.75/);
+    assert.match(text,/not pathology detection/);
+    assert.doesNotMatch(text,/sourceIdentitySha256|inputSha256|patientName|SOPInstanceUID|patientUid/i);
+  }
+  assert.deepEqual(doc.specialistEvidence,{
+    model:"lungmask-R231",frameCount:32,rightLungMaskMl:1320.25,
+    leftLungMaskMl:1240.75,clinicalProvenanceServerVerified:false,
+    findingOfPathologyEstablished:false,
+  });
+});
+test("Patient text and forged R231 labels never reach provider; MR cannot reuse CT facts",async()=>{
+  const good={schema:"opus-local-r231-facts/v1",model:"lungmask-R231",
+    frameCount:32,rightLungMaskMl:1320,leftLungMaskMl:1240,
+    coverage:"not-clinically-verified",masksAreNotPathologyDetectors:true};
+  for(const [data,input] of [
+    [packet("CT"),{...good,patientName:"Not for cloud"}],
+    [packet("CT"),{...good,model:"untrusted-pathology-model"}],
+    [packet("CT"),{...good,rightLungMaskMl:Infinity}],
+    [packet("MR"),good],
+  ]as const){
+    let calls=0;
+    await assert.rejects(reviewSanitizedSamples(data,async()=>{
+      calls++;return answer("bad");
+    },undefined,input));
+    assert.equal(calls,0);
+  }
+});
