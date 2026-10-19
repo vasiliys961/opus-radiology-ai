@@ -24,6 +24,8 @@ class RealOriginalForwardSafety(unittest.TestCase):
   self.assertIn('DOCKER_IMAGE,"-i"',NAME.read_text())
   self.assertIn('"CT_Lungs" in parts',NAME.read_text())
   self.assertIn('"pre_processing.ini"',NAME.read_text())
+  self.assertIn("reconstruction_method=probabilities",NAME.read_text())
+  self.assertIn('(root/"output").chmod(0o1777)',NAME.read_text())
  def test_file_export_requires_actual_model_forward_not_test_mock(self):
   with tempfile.TemporaryDirectory() as d:
    # No public original data: do NOT fabricate a true result.
