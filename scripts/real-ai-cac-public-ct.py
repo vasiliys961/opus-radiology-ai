@@ -120,6 +120,8 @@ def select_public_ct_slices(root):
             or len(getattr(ds, "ImageOrientationPatient", [])) != 6
             or len(getattr(ds, "PixelSpacing", [])) != 2
             or not hasattr(ds, "SeriesInstanceUID")
+            or not hasattr(ds, "StudyInstanceUID")
+            or int(getattr(ds, "NumberOfFrames", 1)) != 1
             or not hasattr(ds, "FrameOfReferenceUID")
             or not hasattr(ds, "SOPInstanceUID")
             or not hasattr(ds, "RescaleSlope") or not hasattr(ds, "RescaleIntercept")
@@ -144,7 +146,8 @@ def select_public_ct_slices(root):
         if str(ds.SOPInstanceUID) in uids:
             raise ValueError("duplicate_DICOM_SOP")
         uids.add(str(ds.SOPInstanceUID))
-        orientations.append((str(ds.SeriesInstanceUID), str(ds.FrameOfReferenceUID),
+        orientations.append((str(ds.StudyInstanceUID), str(ds.SeriesInstanceUID),
+                             str(ds.FrameOfReferenceUID),
                              tuple(spacing), thickness, float(ds.RescaleSlope),
                              float(ds.RescaleIntercept), str(getattr(ds,"ConvolutionKernel",""))))
         pos = np.asarray(ds.ImagePositionPatient, dtype=np.float64)
@@ -160,13 +163,13 @@ def select_public_ct_slices(root):
         or not 2 <= float(np.median(dz)) <= 6
         or not np.allclose(positions[:, :2], positions[0, :2], atol=0.25, rtol=0)):
         raise ValueError("irregular_or_oblique_original_CT_slice_stack")
-    if abs(float(np.median(dz)) - orientations[0][3]) > 0.5:
+    if abs(float(np.median(dz)) - orientations[0][4]) > 0.5:
         raise ValueError("slice_spacing_does_not_match_thickness")
     src = hashlib.sha256()
     for _, path, _ in rows:
         src.update(bytes.fromhex(checksum(path)))
     # Output array coordinates are (DICOM row, column, ascending slice).
-    row_mm, col_mm = orientations[0][2]
+    row_mm, col_mm = orientations[0][3]
     origin = positions[0]
     affine_lps = np.eye(4)
     affine_lps[:3,0] = [0,row_mm,0]
@@ -179,7 +182,8 @@ def select_public_ct_slices(root):
         "shape": (512,512,len(rows)),
         "voxelSpacingMm": [row_mm,col_mm,float(np.median(dz))],
         "affineLPS": affine_lps,
-        "seriesProtocolVerified": True
+        "seriesProtocolMetadataConsistencyVerified": True,
+        "noncontrastAndNongatedProtocolIndependentlyVerified": False
     }
 
 def agatston_like(hounsfield, binary_mask, spacing):
@@ -299,6 +303,7 @@ def infer(a):
            "sourceDICOMSeriesSha256":info["sourceSha256"],
            "originalNativeShape":list(info["shape"]),
            "nativeVoxelSpacingMm":info["voxelSpacingMm"],
+           "noncontrastAndNongatedProtocolIndependentlyVerified":False,
            "nativeAffineLPS": info["affineLPS"].round(5).tolist(),
            "predictedMaskVoxelCount":int(mask.sum()),
            "publisherStyleThicknessNormalizedCACScore":score,
