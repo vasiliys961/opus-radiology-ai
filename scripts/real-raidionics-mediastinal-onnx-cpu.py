@@ -161,6 +161,13 @@ def prepare(work:Path):
  print("ORIGINAL ONNX AND ORIGINAL VENDOR PUBLIC CT VERIFIED",flush=True)
  print(json.dumps({k:v for k,v in meta.items() if k!="originalModelFilesSHA256"},indent=2))
 
+def original_ct_file(inputs:Path)->Path:
+ candidates=[p for p in inputs.glob("*input0*.nii.gz") if
+             "label" not in p.name.lower() and "mask" not in p.name.lower()]
+ if len(candidates)!=1:
+  raise ValueError("one_original_CT_required_no_lung_mask_confusion")
+ return candidates[0]
+
 def inference(work:Path):
  import psutil
  import importlib.metadata
@@ -172,7 +179,7 @@ def inference(work:Path):
  cfg=work/"original-model-config.ini"
  config=configparser.ConfigParser();config.read(cfg)
  model=Path(config["System"]["model_folder"])
- source=next(Path(config["System"]["inputs_folder"]).glob("*input0*.nii.gz"))
+ source=original_ct_file(Path(config["System"]["inputs_folder"]))
  if sha(source)!=manifest["sourceSha256"]:
   raise ValueError("original_CT_source_drift")
  for name,value in manifest["originalModelFilesSHA256"].items():
@@ -209,7 +216,7 @@ def evaluate(work:Path,out:Path):
   raise ValueError("publisher_LymphNodes_native_prediction_missing")
  cfg=configparser.ConfigParser();cfg.read(work/"original-model-config.ini")
  inputs=Path(cfg["System"]["inputs_folder"])
- source=next(p for p in inputs.glob("*.nii.gz") if "label" not in p.name.lower())
+ source=original_ct_file(inputs)
  volume=nib.load(str(source));pred=nib.load(str(predictions[0]))
  if sha(source)!=manifest["sourceSha256"]:
   raise ValueError("source_changed_after_forward")
