@@ -20,6 +20,8 @@ class RealOriginalForwardSafety(unittest.TestCase):
   self.assertEqual(mod.PINNED_PUBLISHER_ZIP_SHA256,
    "e00d3c83aed6ba7fc0cd376e20e4aa3ec8a672d1737a0fc41becc8d217449d72")
   self.assertEqual(mod.DOCKER_IMAGE, "dbouget/ct_mediastinal_structures_segmentation:v1")
+  self.assertNotIn('DOCKER_IMAGE,"python3","main.py"',NAME.read_text())
+  self.assertIn('DOCKER_IMAGE,"-i"',NAME.read_text())
  def test_file_export_requires_actual_model_forward_not_test_mock(self):
   with tempfile.TemporaryDirectory() as d:
    # No public original data: do NOT fabricate a true result.
