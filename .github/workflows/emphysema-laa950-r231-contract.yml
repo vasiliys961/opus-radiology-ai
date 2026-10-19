@@ -1,0 +1,30 @@
+name: Inspiratory chest CT low attenuation (R231) contract
+on:
+  pull_request:
+    paths:
+      - scripts/real-emphysema-laa950-r231-ct.py
+      - scripts/test-real-emphysema-laa950-r231-ct.py
+      - .github/workflows/emphysema-laa950-r231-contract.yml
+      - docs/EMPHYSEMA_LAA950_RESEARCH.md
+      - docs/clinical-detector-coverage.json
+      - web/public/examples/clinical-pathology-coverage.json
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-measurement-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install minimal numeric libraries
+        run: python -m pip install numpy==2.2.6 nibabel==5.3.2
+      - name: Technical shape/HU/source safety only (no disease inference)
+        run: |
+          python -m py_compile scripts/real-emphysema-laa950-r231-ct.py
+          python scripts/test-real-emphysema-laa950-r231-ct.py
+          python scripts/check-clinical-detector-coverage.py
+          python scripts/check-web-pathology-coverage.py
