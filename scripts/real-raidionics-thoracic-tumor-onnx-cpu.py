@@ -33,7 +33,7 @@ MODEL_LIBRARY_VERSION="1.5.2"
 MAX_FILE=600*1024**2
 MAX_TOTAL_EXPANDED=1250*1024**2
 MAX_VOXELS=115_000_000
-CPU_RSS_BUDGET=4800*1024**2
+CPU_RSS_BUDGET=10*1024**3
 TIME_LIMIT=1100
 
 def sha(path:Path):
@@ -90,7 +90,7 @@ def require_linux_admission(work:Path):
   raise ValueError("CPU_worker_insufficient_disk")
  with open("/proc/meminfo",encoding="ascii") as f:
   mem=int(next(x.split()[1] for x in f if x.startswith("MemAvailable:")))*1024
- if mem<5500*1024**2:raise ValueError("CPU_worker_insufficient_RAM")
+ if mem<12*1024**3:raise ValueError("isolated_tumor_CPU_worker_requires_at_least_12GiB_free_RAM")
 
 def find_model(root:Path):
  ini=list(root.rglob("pre_processing.ini"))
@@ -194,7 +194,7 @@ def inference(work:Path):
  try:
   while proc.poll() is None:
    peak=max(peak,psutil.Process(proc.pid).memory_info().rss)
-   if peak>CPU_RSS_BUDGET:raise MemoryError("publisher_ONNX_cpu_process_RSS_over_4_8GiB")
+   if peak>CPU_RSS_BUDGET:raise MemoryError("publisher_ONNX_cpu_process_RSS_over_10GiB")
    if time.monotonic()-now>TIME_LIMIT:raise TimeoutError("publisher_ONNX_CPU_time_cap")
    time.sleep(1)
   if proc.returncode:raise RuntimeError("original_raidionicsseg_CPU_inference_failed")
