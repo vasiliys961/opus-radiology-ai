@@ -1,0 +1,53 @@
+name: Official Bouget mediastinal lymph node weights gate (CPU)
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/bouget-official-checkpoint-preflight.py
+      - scripts/test-bouget-official-checkpoint-preflight.py
+      - .github/workflows/bouget-mediastinal-cpu-weights.yml
+  pull_request:
+    paths:
+      - scripts/bouget-official-checkpoint-preflight.py
+      - scripts/test-bouget-official-checkpoint-preflight.py
+      - .github/workflows/bouget-mediastinal-cpu-weights.yml
+  workflow_dispatch:
+    inputs:
+      fetch_official_weights:
+        description: 'Fetch author public weights and verify pinned MD5; no forward or patients'
+        required: true
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  offline-checkpoint-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python3 -m unittest discover -s scripts -p 'test-bouget-official-checkpoint-preflight.py'
+  fetch-original-weights:
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.fetch_official_weights == true)
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python3 -m pip install 'gdown==5.2.0'
+      - name: Publisher archive digest verification; NO INFERENCE
+        run: |
+          python3 scripts/bouget-official-checkpoint-preflight.py \
+            --fetch-official --archive "$RUNNER_TEMP/bouget/models.zip" \
+            --manifest "$RUNNER_TEMP/bouget/model-checkpoints.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verified-bouget-original-checkpoints
+          path: ${{ runner.temp }}/bouget/model-checkpoints.json
+          retention-days: 7
+          if-no-files-found: error
