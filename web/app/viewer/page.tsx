@@ -20,6 +20,7 @@ const IldGgoExpertResearch = dynamic(() => import("../../components/IldGgoExpert
 const IldPatternResearch = dynamic(() => import("../../components/IldPatternResearch"), {ssr:false});
 const ChestExtraPulmonaryResearch = dynamic(() => import("../../components/ChestExtraPulmonaryResearch"), {ssr:false});
 const ColonCancerResearchResults = dynamic(() => import("../../components/ColonCancerResearchResults"), {ssr:false});
+const PathologyCoverageResearch = dynamic(() => import("../../components/PathologyCoverageResearch"), {ssr:false});
 
 const CornerstoneStack = dynamic(() => import("../../components/CornerstoneStack"), {
   ssr: false,
@@ -30,7 +31,7 @@ type Indexed = { id: string; file: File; header: Awaited<ReturnType<typeof readD
 
 export default function ViewerPage() {
   const folderPicker = useRef<HTMLInputElement>(null);
-  const [sourceMode,setSourceMode] = useState<"dicom"|"nifti"|"nodules"|"colon">("dicom");
+  const [sourceMode,setSourceMode] = useState<"dicom"|"nifti"|"nodules"|"colon"|"coverage">("dicom");
   const [indexed, setIndexed] = useState<Indexed[]>([]);
   const [currentSeriesKey, setCurrentSeriesKey] = useState("");
   const [message, setMessage] = useState("Выберите папку с DICOM-файлами или набор отдельных файлов.");
@@ -87,8 +88,10 @@ export default function ViewerPage() {
           onClick={()=>setSourceMode("nifti")}>NIfTI · КТ брюшной полости</button>
         <button type="button" className={sourceMode==="colon"?"active":""}
           onClick={()=>setSourceMode("colon")}>VISTA3D · опухоль толстой кишки</button>
+        <button type="button" className={sourceMode==="coverage"?"active":""}
+          onClick={()=>setSourceMode("coverage")}>Покрытие патологий · доказательства</button>
       </div>
-      {sourceMode==="nodules" ? <NoduleBoundResearchView/> : sourceMode==="nifti" ? <NiftiCtResearchView/> : sourceMode==="colon" ? <ColonCancerResearchResults/> : <>
+      {sourceMode==="nodules" ? <NoduleBoundResearchView/> : sourceMode==="nifti" ? <NiftiCtResearchView/> : sourceMode==="colon" ? <ColonCancerResearchResults/> : sourceMode==="coverage" ? <PathologyCoverageResearch/> : <>
       <div className="cs-intro"><div><div className="cs-kicker">IMAGING LAB / 2D STACK</div><h1>DICOM Viewer <em>β</em></h1><p>Просмотр локальных DICOM-серий с декодированием Cornerstone3D. Без облака, без анализа ИИ.</p></div><span className="cs-watermark">ИССЛЕДОВАТЕЛЬСКИЙ ПРОТОТИП · НЕ ДЛЯ ДИАГНОСТИКИ</span></div>
       <div className="cs-layout">
         <aside className="cs-sidebar">
