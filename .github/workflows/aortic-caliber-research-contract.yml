@@ -1,0 +1,31 @@
+name: Research CT aortic caliber source-geometry contract
+on:
+  pull_request:
+    paths:
+      - scripts/real-aortic-axial-caliber-ct.py
+      - scripts/test-real-aortic-axial-caliber-ct.py
+      - .github/workflows/aortic-caliber-research-contract.yml
+      - docs/AORTIC_CALIBER_RESEARCH.md
+      - docs/clinical-detector-coverage.json
+      - web/public/examples/clinical-pathology-coverage.json
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  numerical-and-physical-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install minimal numerical dependencies (no pretrained weights)
+        run: python -m pip install numpy==2.2.6 scipy==1.15.3 nibabel==5.3.2
+      - name: Syntax and synthetic-grid research contracts
+        run: |
+          python -m py_compile scripts/real-aortic-axial-caliber-ct.py
+          python scripts/test-real-aortic-axial-caliber-ct.py
+          python scripts/check-clinical-detector-coverage.py
+          python scripts/check-web-pathology-coverage.py
+      # These contracts verify no actual disease detection, pretrained model or expert reference.
