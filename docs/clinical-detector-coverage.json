@@ -373,13 +373,13 @@
       "modality": "CT",
       "anatomy": "pelvis",
       "pathology": "pelvic ring fractures",
-      "status": "weights_unverified",
-      "weights": "no current verified pretrained pathology detector",
-      "source": "https://github.com/wasserth/TotalSegmentator/tree/v2.18.0",
-      "reference": "expert pelvic fracture CT localization",
-      "restriction": "TotalSegmentator bone masks do not confirm fracture",
-      "priority": 4,
-      "next": "verify fracture-specific weights and reference CT"
+      "status": "real_checkpoint_candidate",
+      "weights": "FracSegNet original 2-stage pelvic fracture fragment nnU-Net 1.7 pretrained models linked by YzzLiu (Google Drive); model files and publisher SHA not yet verified",
+      "source": "https://github.com/YzzLiu/FracSegNet",
+      "reference": "PENGWIN 2024 public 100-case expert annotated fragment masks (Zenodo 10927452); training overlap, no independent holdout",
+      "restriction": "Original model code and pretrained download links exist; NEW executable numeric native CT fragment localization and expert instance matching, NOT actual original model inference. Check dataset's conflicting commercial use terms and checkpoint rights. No pathology accuracy/patient use.",
+      "priority": 2,
+      "next": "Acquire and SHA-pin all genuine FracSegNet checkpoints; in isolated GPU worker run vendor actual pretrained two-stage inference on approved CT, verify output instance-label encoding, compare expert matched voxels and independent holdout."
     },
     {
       "id": "pulmonary-pneumothorax-xray",
