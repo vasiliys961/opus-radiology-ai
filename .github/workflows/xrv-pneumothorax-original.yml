@@ -1,0 +1,76 @@
+name: Original pretrained NIH CXR pneumothorax research inference
+on:
+  pull_request:
+    paths:
+      - scripts/real-xrv-pneumothorax-cxr.py
+      - scripts/test-real-xrv-pneumothorax-cxr.py
+      - .github/workflows/xrv-pneumothorax-original.yml
+      - docs/XRV_PNEUMOTHORAX_CXR_RESEARCH.md
+      - docs/clinical-detector-coverage.json
+      - web/public/examples/clinical-pathology-coverage.json
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  technical-source-and-model-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install NumPy only for isolated tests
+        run: python -m pip install numpy==2.2.6
+      - name: Model/source/score contract (synthetic, not disease evidence)
+        run: |
+          python -m py_compile scripts/real-xrv-pneumothorax-cxr.py
+          python scripts/test-real-xrv-pneumothorax-cxr.py
+          python scripts/check-clinical-detector-coverage.py
+          python scripts/check-web-pathology-coverage.py
+  real-original-public-model-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install CPU-only Torch and original XRV package (separate Linux research runner)
+        run: |
+          python -m pip install torch==2.6.0 torchvision==0.21.0 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install torchxrayvision==1.5.7 scikit-image
+      - name: Fetch publisher sample and original pretrained NIH weights (public only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/opus-xrv-public
+          curl -fLsS --retry 2 --max-time 90 'https://raw.githubusercontent.com/mlmed/torchxrayvision/main/tests/00000001_000.png' -o /tmp/opus-xrv-public/00000001_000.png
+          curl -fLsS --retry 2 --max-time 180 'https://github.com/mlmed/torchxrayvision/releases/download/v1/nih-densenet121-d121-tw-lr001-rot45-tr15-sc15-seed0-best.pt' -o /tmp/opus-xrv-public/nih-densenet121-d121-tw-lr001-rot45-tr15-sc15-seed0-best.pt
+          test "$(stat -c %s /tmp/opus-xrv-public/nih-densenet121-d121-tw-lr001-rot45-tr15-sc15-seed0-best.pt)" -gt 10000000
+          echo 'Actual public research input and publisher trained weights downloaded; NOT an independent expert-positive radiograph'
+      - name: Execute TRUE pretrained NIH model on original publisher CXR sample
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHA="$(sha256sum /tmp/opus-xrv-public/nih-densenet121-d121-tw-lr001-rot45-tr15-sc15-seed0-best.pt | cut -d' ' -f1)"
+          python scripts/real-xrv-pneumothorax-cxr.py \
+            --image /tmp/opus-xrv-public/00000001_000.png \
+            --weights /tmp/opus-xrv-public/nih-densenet121-d121-tw-lr001-rot45-tr15-sc15-seed0-best.pt \
+            --weights-sha256 "$SHA" \
+            --source-url 'https://github.com/mlmed/torchxrayvision/tree/main/tests' \
+            --source-terms 'NIH Clinical Center ChestXray FAQ' \
+            --output /tmp/opus-xrv-public/opus-xrv-numeric.json \
+            --public-deidentified-licensed-research-only
+          python - <<'PY'
+          import json
+          v=json.load(open('/tmp/opus-xrv-public/opus-xrv-numeric.json'))
+          assert v['actualPretrainedModelForwardCompleted'] and not v['patientUseAllowed']
+          print('REAL pretrained model forward: successful. Weight SHA256:', v['originalTrainedCheckpointSHA256'])
+          print('Original image SHA256:', v['originalSourceRadiographSHA256'])
+          print('Image-level uncalibrated pneumothorax score:', v['uncalibratedPneumothoraxImageLevelScore'])
+          print('NO expert disease validation; NO pneumothorax localization.')
+          PY
+          rm -rf /tmp/opus-xrv-public
+      # Public original sample and publisher weights are downloaded as temporary
+      # runtime inputs only. No images, model files or PHI uploaded as CI artifacts.
