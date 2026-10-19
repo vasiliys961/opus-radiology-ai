@@ -10,6 +10,7 @@ instead of comparing existing lung model versions.
 - Official release: \`v1.0.0\`, \`va_non_gated_ai_cac_model.pth\`
 - Official URL: https://github.com/Raffi-Hagopian/AI-CAC/releases/download/v1.0.0/va_non_gated_ai_cac_model.pth
 - Official GitHub release asset listed size: **1,205,817,465 bytes**.
+- **Actually downloaded from original publisher in [GitHub Actions #39216540464](https://github.com/vasiliys961/opus-radiology-ai/actions/runs/39216540464) (success).** Observed full-file SHA256 `cfded8253e64b81b963a314cb5adc90d30a1f21574638366b80c783676c1733d` is now pinned and enforced before loading. No pretrained inference in this job.
 - Upstream repository LICENSE: MIT. Clinical/commercial rights of the separately
   distributed weights require independent review; do not silently infer them from
   source-code license.
@@ -18,9 +19,9 @@ instead of comparing existing lung model versions.
   thresholds raw output at \`>0\` in its scoring step and uses a 3D component calculation
   normalized by \`slice thickness / 3 mm\` with connected components of >1 voxels.
 - Model release does **not** publish a separate SHA256/signature in release metadata.
-  \`fetch-weights\` obtains original bytes directly from GitHub, enforces exact
-  asset size and records an observed SHA256. This is a local checksum, **not**
-  cryptographically authenticated vendor provenance.
+  \`fetch-weights\` obtains original bytes directly from GitHub, enforces exact asset size and the
+  verified-by-us original release SHA256. The observed digest is not a
+  separate publisher signature, and only demonstrates release-byte identity.
 
 ## What this PR adds
 
@@ -96,7 +97,7 @@ publisher is excluded, rights reviewed, and actual metrics measured.
 ## Evidence/status after this increment
 
 - Source-backed original checkpoint and release identified: **YES**
-- Downloaded and SHA-observed on GPU worker: **NOT YET VERIFIED**
+- Downloaded and SHA-observed in public GitHub Actions runner: **YES, run #39216540464** (CPU/GPU model inference not executed).
 - Real original checkpoint inference on a public original CT: **NOT YET VERIFIED**
 - Native source-bound positive lesion localized: **NOT YET VERIFIED**
 - Independent public expert mask TP/FP/FN/Dice: **NOT YET VERIFIED**
