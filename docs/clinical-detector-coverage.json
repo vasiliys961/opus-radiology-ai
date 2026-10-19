@@ -572,6 +572,45 @@
         "clinicallyValidated": false,
         "spatiallyLocalized": false
       }
+    },
+    {
+      "id": "pneumonia-cxr",
+      "modality": "CR/DX",
+      "anatomy": "thorax",
+      "pathology": "pneumonia-like CXR airspace opacity image-level score",
+      "status": "real_checkpoint_candidate",
+      "weights": "Original 28-MB SHA256-pinned NIH DenseNet121 XRV trained Pneumonia head; reuse already measured pretrained model; new multihead forward pending CI",
+      "source": "https://github.com/mlmed/torchxrayvision/releases/tag/v1",
+      "reference": "Publisher public original example CXR; original radiologist expert diagnosis for each target unknown",
+      "restriction": "Original NIH-trained model image-level uncalibrated score only, not disease probability or spatial diagnosis. No expert confirmed reference, may overlap original training, no sensitivity/specificity or patient/cloud mode.",
+      "priority": 2,
+      "next": "Observe real NIH-trained Pneumonia forward, then independent positive/negative expert annotated CXR and calibration/localization studies."
+    },
+    {
+      "id": "pulmonary-edema-cxr",
+      "modality": "CR/DX",
+      "anatomy": "thorax",
+      "pathology": "pulmonary edema-like CXR appearance image-level score",
+      "status": "real_checkpoint_candidate",
+      "weights": "Original 28-MB SHA256-pinned NIH DenseNet121 XRV trained Edema head; reuse already measured pretrained model; new multihead forward pending CI",
+      "source": "https://github.com/mlmed/torchxrayvision/releases/tag/v1",
+      "reference": "Publisher public original example CXR; original radiologist expert diagnosis for each target unknown",
+      "restriction": "Original NIH-trained model image-level uncalibrated score only, not disease probability or spatial diagnosis. No expert confirmed reference, may overlap original training, no sensitivity/specificity or patient/cloud mode.",
+      "priority": 2,
+      "next": "Observe real NIH-trained Edema forward, then independent positive/negative expert annotated CXR and calibration/localization studies."
+    },
+    {
+      "id": "lung-mass-cxr",
+      "modality": "CR/DX",
+      "anatomy": "thorax",
+      "pathology": "lung mass-like CXR opacity image-level score",
+      "status": "real_checkpoint_candidate",
+      "weights": "Original 28-MB SHA256-pinned NIH DenseNet121 XRV trained Mass head; reuse already measured pretrained model; new multihead forward pending CI",
+      "source": "https://github.com/mlmed/torchxrayvision/releases/tag/v1",
+      "reference": "Publisher public original example CXR; original radiologist expert diagnosis for each target unknown",
+      "restriction": "Original NIH-trained model image-level uncalibrated score only, not disease probability or spatial diagnosis. No expert confirmed reference, may overlap original training, no sensitivity/specificity or patient/cloud mode.",
+      "priority": 2,
+      "next": "Observe real NIH-trained Mass forward, then independent positive/negative expert annotated CXR and calibration/localization studies."
     }
   ],
   "selectionRule": "Prioritize uncovered CT/MR diseases with legal checkpoints, independently usable real image/mask pair and host RAM budget, in that order."
