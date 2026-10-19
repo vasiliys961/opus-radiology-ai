@@ -20,17 +20,22 @@ export default function DeidentifiedOpenRouterPanel({
   const [readinessNote,setReadinessNote]=useState("");
   const [result,setResult]=useState<SanitizedModelReview|null>(null);
   const ctl=useRef<AbortController|null>(null);
-  useEffect(()=>{
-    let live=true;
-    void fetch("/api/ai/deidentified-openrouter-review",{cache:"no-store"}).then(async r=>{
+  // Never probe even localhost without a clinician/operator click.
+  // This is essential for offline DICOM review and fail-closed browser tests.
+  useEffect(()=>()=>{ctl.current?.abort();},[]);
+  async function checkReadiness(){
+    if(working)return;
+    setReadinessNote("");setError("");setServer(null);
+    try{
+      const r=await fetch("/api/ai/deidentified-openrouter-review",{cache:"no-store"});
       if(!r.ok)throw Error();
       const x=await r.json() as Ready;
       if(x.schema!=="opus-deidentified-openrouter-pilot-readiness/v1"||
          x.productionPatientCloudRelease!==false)throw Error();
-      if(live)setServer(x);
-    }).catch(()=>{if(live)setReadinessNote("Локальный облачный пилот недоступен.");});
-    return()=>{live=false;ctl.current?.abort();};
-  },[]);
+      setServer(x);
+      if(!x.enabled)setReadinessNote("Локальный пилот не включён администратором.");
+    }catch{setReadinessNote("Локальный облачный пилот недоступен.");}
+  }
   async function send(){
     if(working||!enabledByLocalChecks||!server?.enabled||token.length<24||
        !clinician||!providerRights||!pixelReview||!paid)return;
@@ -76,6 +81,11 @@ export default function DeidentifiedOpenRouterPanel({
     <p role="status"><strong>Режим исследования, не клиническая система.</strong> Даже
       обезличенные изображения остаются медицинскими данными; удаление метаданных
       и OCR не гарантируют анонимность. Ключ OpenRouter остаётся на сервере.</p>
+    <div className="ora-evidence-actions">
+      <button type="button" disabled={working} onClick={()=>void checkReadiness()}>
+        Проверить локальное разрешение OpenRouter
+      </button>
+    </div>
     {!server?.enabled&&<p>Серверный доступ по умолчанию выключен. Нужны
       <code> RADIOLOGY_ENABLE_DEIDENTIFIED_OPENROUTER_PILOT=1</code>,
       <code> RADIOLOGY_OPENROUTER_HEALTH_DATA_APPROVED=1</code>,
