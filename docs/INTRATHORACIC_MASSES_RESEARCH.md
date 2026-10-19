@@ -139,3 +139,30 @@ The research run **actually completed** with original release archives and match
 - Original legacy TF1.14 model archive also successfully downloaded and checksum verified on [run 39309786383](https://github.com/vasiliys961/opus-radiology-ai/actions/runs/39309786383), but LyNoS Pat1 CT exceeded the research runner 200M voxel limit; no original TF forward, no independent expert Dice from that run.
 
 **Promotion condition:** next independent manually annotated positive CT with provenance, verify native affine, calculate voxel TP/FP/FN/Dice plus connected lesion recall and FP/CT; only then discuss clinic-oriented sensitivity. Current research evidence remains restricted to one vendor sample. Never copy the ONNX model into web browser bundle or onto the 8GB Mac by default; use optional isolated CPU worker after resource measurements.
+
+
+## Original Raidionics CT_Tumor 233MB pretrained ONNX (second independent pathology target)
+
+Alongside genuine CT_LymphNodes, the original authors published a **separate**
+CT_Tumor checkpoint: `Raidionics-CT_Tumor-v13.zip`,
+233,395,992 bytes, release SHA256
+`46bb7d2af527eb76a964df536c7faee527ec5e6da3fb4b6abca2451c23f88f86`.
+The source is the same publisher's original
+https://github.com/raidionics/Raidionics-models/releases/tag/v1.3.0-rc.
+
+The independent CPU-only research executor is
+`scripts/real-raidionics-thoracic-tumor-onnx-cpu.py` and its corresponding
+GitHub Actions workflow. It reuses the **published 27MB original mediastinum
+CT test source**, not an invented CT or mock model. All original checkpoint
+and source bytes must satisfy pinned SHA256. The publisher's
+`raidionicsseg==1.5.2` ONNX CPU preprocessing and actual 3D forward are
+required, then predicted `labels_Tumor.nii.gz` must match source native shape
+and affine before any numeric volumetry.
+
+**Important:** task name `CT_Tumor` does not establish histological
+malignancy, precise primary organ, metastasis or independent cancer detection.
+A vendor test CT may overlap the developer's testing population and no
+independent expert tumor mask is yet proven. Do not report Dice, FROC,
+sensitivity or specificity until an independent licensed expert tumor-positive
+case is evaluated. Do not deploy this in the browser, on patient's CT or in
+cloud LLM requests before real runtime plus independent validation.
