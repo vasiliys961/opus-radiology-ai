@@ -159,6 +159,33 @@ def summarize_prediction(reference,mask,prob,unc,expert=None):
         }
     return result
 
+def verify_original_offline_checkpoints(folder):
+    """Check ALL publisher checkpoint hashes observed from genuine original files."""
+    import importlib.util
+    if folder.is_symlink() or not folder.is_dir():
+        raise ValueError("offline_original_vendor_model_dir_required")
+    source=Path(__file__).with_name("verify-brain-mets-original-qtim-fivefold.py")
+    spec=importlib.util.spec_from_file_location("original_qtim_sha_lock",source)
+    module=importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    expected=module.EXPECTED_FULL_FIVEFOLD_SHA256
+    if len(expected)!=15:
+        raise ValueError("original_fivefold_registry_incomplete")
+    total=0
+    for name,digest in expected.items():
+        relative=Path(name)
+        if len(relative.parts)!=2 or not re.fullmatch(r"Model_[0-4]",relative.parts[0]):
+            raise ValueError("invalid_pinned_vendor_checkpoint_path")
+        file=folder/relative
+        if file.is_symlink() or not file.is_file() or file.stat().st_size>1200*1024**2:
+            raise ValueError("original_checkpoint_missing_or_unsafe")
+        if sha(file)!=digest:
+            raise ValueError("trained_original_QTIM_checkpoint_SHA256_mismatch")
+        total+=file.stat().st_size
+    if total!=1248034031:
+        raise ValueError("original_fivefold_expected_total_bytes_mismatch")
+    return total
+
 def docker_call(argv,timeout):
     try:
         res=subprocess.run(argv,timeout=timeout,check=False,
@@ -185,6 +212,8 @@ def run(args):
     if args.expert:
         expert=nib.load(str(args.expert))
         same_grid(nib.load(str(source)),expert)
+    offline_total=(verify_original_offline_checkpoints(args.checkpoints_dir)
+                   if args.checkpoints_dir else None)
     if not shutil.which("docker"):
         raise RuntimeError("isolated_Docker_GPU_worker_not_available")
     image_id=subprocess.run(["docker","image","inspect",args.publisher_image,
@@ -201,9 +230,10 @@ def run(args):
         f"test -n \"$(find /workspace/brain_mets_seg/trained_models/Model_{i} "
         f"-maxdepth 1 -name '*.data-*' -size +1M -print -quit)\""
         for i in range(5))
-    docker_call(["docker","run","--rm","--network","none","--read-only",
-                 "--cap-drop","ALL","--security-opt","no-new-privileges",
-                 "--entrypoint","/bin/sh",args.publisher_image,"-c",verify],90)
+    if offline_total is None:
+        docker_call(["docker","run","--rm","--network","none","--read-only",
+                     "--cap-drop","ALL","--security-opt","no-new-privileges",
+                     "--entrypoint","/bin/sh",args.publisher_image,"-c",verify],90)
     with tempfile.TemporaryDirectory(prefix="opus-qtim-brain-mets-") as d:
         path=Path(d)
         shutil.copyfile(source,path/INPUT_NAME)
@@ -221,6 +251,13 @@ def run(args):
                  "--mount",f"type=bind,source={path.resolve()},target=/workspace/brain_mets_seg/data",
                  "--workdir","/workspace/brain_mets_seg",
                  args.publisher_image,"python","predict.py"]
+        if offline_total is not None:
+            if "," in str(args.checkpoints_dir.resolve()):
+                raise ValueError("unsafe_original_weight_mount_path")
+            # A read-only pinned host folder overlays the publisher's
+            # unpinned Docker-image checkpoint directory, without network.
+            command[command.index("--workdir"):command.index("--workdir")] = [
+                "--mount",f"type=bind,source={args.checkpoints_dir.resolve()},target=/workspace/brain_mets_seg/trained_models,readonly"]
         docker_call(command,args.timeout_seconds)
         artifacts=[path/z for z in (OUTPUT_MASK,OUTPUT_PROB,OUTPUT_UNCERTAINTY)]
         if any(not z.is_file() or z.is_symlink() for z in artifacts):
@@ -239,6 +276,8 @@ def run(args):
             "publisherCodeAndWeightsLicense":MODEL_LICENSE,
             "localOriginalFiveFoldDockerImageSha256":args.publisher_image_id,
             "trainedFiveFoldOriginalPublisherEnsembleExecutionCompleted":True,
+            "offlineFiveFoldOriginalWeightsShaVerified":offline_total is not None,
+            "offlineOriginalWeightBytes":offline_total,
             "sourcePreprocessedMRI_SHA256":sha(source),
             "sourcePublicLicense":provenance["publicLicense"],
             "sourceInputImageOriginalMetadataProvenanceVerifiedByOpus":False,
@@ -275,6 +314,7 @@ def main():
     p.add_argument("--output",required=True,type=Path)
     p.add_argument("--publisher-image",required=True)
     p.add_argument("--publisher-image-id",required=True)
+    p.add_argument("--checkpoints-dir",type=Path,help="Optional 15 original QTIM weights SHA pinned in private offline directory")
     p.add_argument("--timeout-seconds",type=int,default=2400)
     p.add_argument("--license-acknowledged",action="store_true")
     p.add_argument("--public-research-consent",action="store_true")
