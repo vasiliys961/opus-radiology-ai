@@ -484,6 +484,19 @@
       "restriction": "Research-only; original model may overlap cases, model-weights commercial rights unverified, genuine GPU case-run not yet completed",
       "priority": 2,
       "next": "Run the source/weights SHA-bound original publisher pipeline on a permitted paired ConvCT VMI40 expert-positive TCIA study; report source-native lesion Dice, spatial error and no independent holdout claim"
+    },
+    {
+      "id": "brain-metastases-t1ce-qtim",
+      "modality": "MRI",
+      "anatomy": "brain",
+      "pathology": "enhancing brain metastases on T1CE MRI",
+      "status": "real_checkpoint_candidate",
+      "weights": "QTIM-Lab Brain-Mets-Seg original 5-fold TensorFlow nnU-Net checkpoints published via vendor Dockerfile/Dropbox; actual pretrained download and Opus GPU inference not yet verified",
+      "source": "https://github.com/QTIM-Lab/Brain-Mets-Seg",
+      "reference": "UCSF-BMSR expert metastasis annotations, controlled-access noncommercial source; exact case and training overlap not verified",
+      "restriction": "Requires original five trained TensorFlow checkpoints and isolated NVIDIA GPU, vendor preprocessing (T1CE/N4/skull strip/isotropic/normalized), exact grid and legally accessed public reference. Not tested on true positive Opus case, not patient-ready.",
+      "priority": 2,
+      "next": "download and hash original 5 QTIM checkpoints, run actual 5-fold model inference on permitted T1CE MRI, independently compare source-bound native mask to expert metastasis annotation"
     }
   ],
   "selectionRule": "Prioritize uncovered CT/MR diseases with legal checkpoints, independently usable real image/mask pair and host RAM budget, in that order."
