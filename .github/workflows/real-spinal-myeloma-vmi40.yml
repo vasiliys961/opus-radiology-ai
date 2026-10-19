@@ -1,0 +1,43 @@
+name: Real spinal myeloma VMI40 pretrained research contract
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/real-spine-myeloma-vmi40-expert.py'
+      - 'scripts/test-real-spine-myeloma-vmi40-expert.py'
+      - 'docs/SPINAL_MYELOMA_REAL_MODEL.md'
+      - '.github/workflows/real-spinal-myeloma-vmi40.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Fail-closed lesion-vs-anatomy/model/geometry contract
+        run: |
+          python -m pip install --disable-pip-version-check "numpy>=1.26,<3"
+          python -m py_compile scripts/real-spine-myeloma-vmi40-expert.py
+          python scripts/test-real-spine-myeloma-vmi40-expert.py
+      - name: Prove exact upstream v1.0.2 publisher script identity (no models downloaded)
+        run: |
+          python - <<'PY'
+          import hashlib,urllib.request
+          from pathlib import Path
+          raw="https://raw.githubusercontent.com/MISAG-BUT/Spinal-Multiple-Myeloma-SEG/502978885a765b6aa5db9da345bf2c3855bc73f6/run_prediction_of_nnUNet_networks_on_new_data.py"
+          script=urllib.request.urlopen(raw,timeout=20).read()
+          assert 5_000 <len(script)<100_000
+          actual=hashlib.sha1(b"blob "+str(len(script)).encode()+b"\0"+script).hexdigest()
+          assert actual=="f48a665f1fcb8c891ca9d79304d9a4d1c89654ce",actual
+          print("Original author inference script immutable identity verified",actual)
+          PY
+      # Genuine model archive 3.7GB and TCIA paired ConvCT/VMI40 study require
+      # separate authorized GPU and are NOT present in ordinary GitHub Actions.
+      # No data or output is fabricated; synthetic contract checks are not Dice.
