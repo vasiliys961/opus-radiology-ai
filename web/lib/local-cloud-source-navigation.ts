@@ -37,7 +37,7 @@ export function bindLocalSanitizedReview(
   for(let i=0;i<exactLocalFrames.length;i++){
     const local=exactLocalFrames[i],remote=review.sourceFrames[i];
     const file=originalLocalFileIds[i];
-    if(!local||!remote||!FRAME.test(local.imageId)||local.imageId!==`frame-\${i+1}`||
+    if(!local||!remote||!FRAME.test(local.imageId)||local.imageId!==("frame-"+(i+1))||
        imageIds.has(local.imageId)||
        !HASH.test(local.reviewedPixelSha256)||
        remote.imageId!==local.imageId||
