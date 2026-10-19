@@ -1,0 +1,36 @@
+name: Intrathoracic masses and node source contract
+on:
+  pull_request:
+    paths:
+      - web/lib/thoracic-mass-worklist.ts
+      - web/lib/thoracic-mass-worklist.test.ts
+      - web/components/ThoracicMassResearch.tsx
+      - web/app/viewer/page.tsx
+      - docs/clinical-detector-coverage.json
+      - web/public/examples/clinical-pathology-coverage.json
+      - docs/INTRATHORACIC_MASSES_RESEARCH.md
+      - .github/workflows/intrathoracic-masses-contract.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-bound-mass-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Typecheck new source-scoped thoracic worklist
+        run: npm run typecheck
+      - name: No unrelated CT, invented metastasis or private DICOM IDs
+        run: node --disable-warning=ExperimentalWarning --experimental-strip-types --test lib/thoracic-mass-worklist.test.ts lib/chest-extra-pulmonary.test.ts
+      - name: Coverage must still state genuine vs unverified detectors
+        run: python3 ../scripts/check-clinical-detector-coverage.py
