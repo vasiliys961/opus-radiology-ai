@@ -8,6 +8,7 @@ import { appendPrivacyEvent,buildPrivacyReviewBundle,createPrivacyJournal,export
   MAX_PRIVACY_BUNDLE_BYTES,restorePrivacyReviewBundle,type PrivacyAction,type PrivacyJournal } from "../lib/privacy-review-journal";
 import { acquireBrowserCompute } from "../lib/browser-compute-slot";
 import VisionPrivacyReadiness from "./VisionPrivacyReadiness";
+import DeidentifiedOpenRouterPanel from "./DeidentifiedOpenRouterPanel";
 import { buildPrivacyReadinessReport } from "../lib/privacy-readiness";
 
 const actionLabels:Record<PrivacyAction["kind"],string>={redacted:"Скрытие областей", "ocr-started":"OCR начат",
@@ -32,6 +33,19 @@ export default function VisionPrivacyPreparation({previews,modality}:{previews:r
   const unresolvedText=!!currentOcr?.regions.length&&keptText[frame.frameId]!==frame.sha256;
   let validRectangle=false;try{if(frame){validatePrivacyRectangle(rectangle,frame.width,frame.height);validRectangle=true;}}catch{}
   const reviewed=frames.length>0&&frames.every(f=>f.pixelReviewSha256===f.sha256&&f.visualReviewSha256===f.sha256);
+  const allOcrChecked=frames.length>0&&frames.every(f=>{
+    const output=ocr[f.frameId];
+    return output?.sha256===f.sha256&&
+      (output.regions.length===0||keptText[f.frameId]===f.sha256);
+  });
+  const pilotReady=reviewed&&allOcrChecked&&!busy&&!ocrBusy&&!importBusy;
+  const makePilotPacket=()=>{
+    if(!pilotReady||!journalRef.current)throw new Error("Повторите проверку всех точных копий.");
+    const packet=buildVisionPrivacyPacket(frames,crypto.randomUUID());
+    // Source frame IDs and action SHA remain local; never send this journal.
+    exportPrivacyJournal(journalRef.current,packet.frames);
+    return packet;
+  };
   const record=(target:PrivacyFrame,action:PrivacyAction)=>{
     if(!journalRef.current)throw new Error("Сначала создайте копии и локальный журнал.");
     const next=appendPrivacyEvent(journalRef.current,target.frameId,target.sha256,action,new Date().toISOString());
@@ -187,6 +201,15 @@ export default function VisionPrivacyPreparation({previews,modality}:{previews:r
         <p>Сохранение только по вашей команде. Новый набор копий заменит текущий журнал и проверки; сохраните нужный файл заранее. Журнал содержит привязки SHA, но не слова OCR и не оригинальные UID. Пакет с копиями содержит чувствительные пиксели. Это локальные неподписанные записи, не разрешение на облачную передачу.</p>
       </section>}
     </>}
-    <p>Это ручная локальная проверка, не автоматическое подтверждение обезличивания. Пакет может содержать чувствительные пиксели; храните локально. Отправка ещё недоступна: серверная проверка защиты и авторизованный cloud-контур не подключены.</p>
+    {frames.length>0&&<DeidentifiedOpenRouterPanel
+      key={frames.map(f=>f.sha256).join(":")}
+      enabledByLocalChecks={pilotReady}
+      exactReviewedHashes={frames.map(f=>({imageId:f.frameId,sha256:f.sha256}))}
+      prepareReviewedPacket={makePilotPacket}
+    />}
+    <p>Ручная проверка и OCR не удостоверяют полную анонимизацию. Работа с
+      медицинскими данными и передача в OpenRouter допустимы только при
+      подтверждённых правах и настройках локального исследовательского сервера.
+      Основной клинический cloud-доступ по-прежнему закрыт.</p>
   </section>;
 }
