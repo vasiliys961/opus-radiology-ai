@@ -71,7 +71,7 @@ jobs:
           (Path(os.environ["RUNNER_TEMP"])/"original-brain-aneurysm-model.json").write_text(json.dumps(manifest))
           print("Observed licensed pretrained model SHA",manifest["observedCheckpointSha256"])
           PY
-      - name: REAL pretrained whole-field TOF aneurysm at disclosed 1.5mm research resolution
+      - name: REAL pretrained whole-field TOF aneurysm at disclosed 2.0mm research resolution
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -84,15 +84,15 @@ jobs:
             "statistics_disclaimer_shown":True}))
           folder=Path(os.environ["RUNNER_TEMP"])/"original-positive-openneuro-tof"
           original=nib.load(str(folder/"tof.nii.gz"))
-          research=resample_to_output(original,voxel_sizes=(1.5,1.5,1.5),order=1)
+          research=resample_to_output(original,voxel_sizes=(2.0,2.0,2.0),order=1)
           assert research.ndim==3 and research.shape != original.shape
           assert abs(float(research.affine[:3,:3].diagonal().min()))>0.0001
-          nib.save(research,str(folder/"tof-model-1point5mm.nii.gz"))
+          nib.save(research,str(folder/"tof-model-2point0mm.nii.gz"))
           print("Original full TOF",original.shape,"research whole-field resampling",research.shape)
           PY
-          timeout --signal=TERM --kill-after=25s 1600s \
+          timeout --signal=TERM --kill-after=25s 1350s \
             TotalSegmentator \
-              -i "$RUNNER_TEMP/original-positive-openneuro-tof/tof-model-1point5mm.nii.gz" \
+              -i "$RUNNER_TEMP/original-positive-openneuro-tof/tof-model-2point0mm.nii.gz" \
               -o "$RUNNER_TEMP/actual-brain-aneurysm-lowres-mask.nii.gz" \
               --task brain_aneurysm --device cpu --ml --quiet
           python - <<'PY'
@@ -121,12 +121,12 @@ jobs:
           nib.save(nib.Nifti1Image(values.astype(np.uint8),original.affine,h),
                    str(Path(os.environ["RUNNER_TEMP"])/"actual-brain-aneurysm-mask.nii.gz"))
           protocol={
-             "protocol":"whole_field_downsampled_to_1point5mm",
+             "protocol":"whole_field_downsampled_to_2point0mm",
              "originalTOFSha256":admission["TOFSha256"],
              "sourceOriginalWholeFieldShape":list(original.shape),
-             "modelInputVoxelSizesMm":[1.5,1.5,1.5],
+             "modelInputVoxelSizesMm":[2.0,2.0,2.0],
              "modelInputShape":list(lowmask.shape),
-             "resampledModelInputSha256":digest(root/"tof-model-1point5mm.nii.gz"),
+             "resampledModelInputSha256":digest(root/"tof-model-2point0mm.nii.gz"),
              "trainedModelLowresMaskSha256":digest(Path(os.environ["RUNNER_TEMP"])/"actual-brain-aneurysm-lowres-mask.nii.gz"),
              "trainedPredictionRegriddedToFullSourceGrid":True,
              "notOriginalFullResolutionInference":True,
