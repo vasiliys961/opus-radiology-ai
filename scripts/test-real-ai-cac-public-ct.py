@@ -26,6 +26,7 @@ class CACResearchContract(unittest.TestCase):
         self.ctdir=self.root/"DICOM"
         self.ctdir.mkdir()
         self.series=generate_uid()
+        self.study=generate_uid()
         self.frame=generate_uid()
         self.paths=[]
         for i in range(16):
@@ -39,7 +40,7 @@ class CACResearchContract(unittest.TestCase):
             ds.Modality="CT"
             ds.SeriesInstanceUID=self.series
             ds.FrameOfReferenceUID=self.frame
-            ds.StudyInstanceUID=generate_uid()
+            ds.StudyInstanceUID=self.study
             ds.Rows=ds.Columns=512
             ds.PixelSpacing=[0.7,0.7]
             ds.SliceThickness=3.0
@@ -78,6 +79,10 @@ class CACResearchContract(unittest.TestCase):
     def test_duplicate_slice_or_mixed_series_rejected(self):
         ds=pydicom.dcmread(str(self.paths[0]))
         self.mutate(1,"SOPInstanceUID",ds.SOPInstanceUID)
+        with self.assertRaises(ValueError):m.select_public_ct_slices(self.ctdir)
+
+    def test_mixed_studies_refused_even_when_series_uid_same(self):
+        self.mutate(5,"StudyInstanceUID",generate_uid())
         with self.assertRaises(ValueError):m.select_public_ct_slices(self.ctdir)
 
     def test_irregular_slice_geometry_rejected(self):
