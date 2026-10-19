@@ -41,6 +41,15 @@ class OfficialOriginalONNX(unittest.TestCase):
    with zipfile.ZipFile(zip_path,"w") as z:z.writestr(entry,b"oops")
    with self.assertRaisesRegex(ValueError,"symlink"):
     m.safe_extract(zip_path,root/"out2")
+ def test_ct_file_selection_cannot_resolve_original_lung_mask(self):
+  with tempfile.TemporaryDirectory() as temp:
+   folder=Path(temp)
+   (folder/"input0_label_lungs.nii.gz").write_bytes(b"mask")
+   (folder/"input0.nii.gz").write_bytes(b"ct")
+   self.assertEqual(m.original_ct_file(folder).name,"input0.nii.gz")
+   (folder/"input0.nii.gz").unlink()
+   with self.assertRaisesRegex(ValueError,"one_original_CT_required"):
+    m.original_ct_file(folder)
  def test_no_networked_patient_inference_or_false_clinical_promotion(self):
   source=MODULE.read_text()
   for v in ("originalONNXFileSha256","clinicallyUsable","voxelDiceVsIndependentExpert",
