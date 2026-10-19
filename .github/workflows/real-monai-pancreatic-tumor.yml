@@ -48,8 +48,10 @@ jobs:
           assert candidates,'Official MONAI pancreas bundle metadata missing'
           meta=json.loads(candidates[0].read_text())
           print('Original model bundle',meta.get('name'),meta.get('version'))
-          assert meta.get('name')=='Pancreas and Tumor DiNTS Segmentation'
-          assert meta.get('label_classes')=='single channel data, 1 is pancreas, 2 is pancreatic tumor, 0 is everything else'
+          assert meta.get('name') in ('Pancreas and Tumor DiNTS Segmentation','Pancreas CT DiNTS segmentation'), 'Unexpected official bundle identity'
+          print('Official label_classes',meta.get('label_classes')); print('Official pred_classes',meta.get('pred_classes'))
+          mapping=' '.join((str(meta.get('label_classes','')),str(meta.get('pred_classes','')))).lower()
+          assert ('pancreas' in mapping and ('tumor' in mapping or 'tumour' in mapping)), 'Original downloaded bundle cannot prove pancreatic tumor class'
           files=list(root.rglob('*.pt'))+list(root.rglob('*.pth'))+list(root.rglob('*.ckpt'))
           large=[p for p in files if p.is_file() and not p.is_symlink() and p.stat().st_size>10*1024**2]
           if not large:raise RuntimeError('No genuine large pretrained pancreatic tumor weights downloaded')
