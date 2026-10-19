@@ -1,0 +1,47 @@
+name: All five original QTIM brain-metastasis checkpoint folds
+on:
+  push:
+    branches:
+      - research/brain-mets-qtim-real-checkpoint-fetch
+    paths:
+      - scripts/verify-brain-mets-original-qtim-fivefold.py
+      - .github/workflows/brain-mets-qtim-original-fivefold.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  actual-published-fivefold-download:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Check disk capacity before authentic publisher download
+        run: |
+          python - <<'PY'
+          import shutil
+          v=shutil.disk_usage("/tmp").free
+          print("Free GiB",round(v/2**30,3))
+          assert v>=3*2**30, "must have ephemeral disk for 5 authentic checkpoints"
+          PY
+      - name: Fetch all original five-fold TensorFlow checkpoints from QTIM publisher
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/verify-brain-mets-original-qtim-fivefold.py
+          timeout --signal=TERM --kill-after=25s 1250s \
+            python scripts/verify-brain-mets-original-qtim-fivefold.py \
+              --model-dir "$RUNNER_TEMP/qtim-original-fivefold" \
+              --output /tmp/opus-original-qtim-5fold-numbers.json
+      - name: Save only metadata and SHA256, never checkpoint bytes
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: all-original-qtim-5fold-numeric-sha256
+          path: /tmp/opus-original-qtim-5fold-numbers.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Remove numeric artifact file
+        if: always()
+        run: rm -f /tmp/opus-original-qtim-5fold-numbers.json
