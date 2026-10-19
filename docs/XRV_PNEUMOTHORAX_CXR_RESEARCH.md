@@ -32,3 +32,13 @@ XRV pretrained model card: https://huggingface.co/torchxrayvision/densenet121-re
 NIH Clinical Center ChestXray FAQ supplies **custom terms, not a CC0 or CC BY statement**, requiring proper attribution, acknowledgement and original dataset link. Confirm the publisher sample's rights and training-set overlap before any reuse outside this bounded research workflow.
 
 Outstanding: independently confirmed positive and negative licensed external chest X-rays, manual expert labels or pneumothorax localization mask, sensitivity, specificity, AUROC, FROC (for a separate localizing model), calibration and prospective physician review. Original source sample model score does not prove diagnosis. Code supports only isolated research, no patient mode.
+
+
+## Observed TRUE pretrained model research run — 19 October 2026
+
+- GitHub Actions real public publisher smoke: https://github.com/vasiliys961/opus-radiology-ai/actions/runs/39242605402 ; original model forward completed **successfully** (not a synthetic contract).
+- Genuine publisher-trained NIH DenseNet121 checkpoint SHA-256: `31a5475c6b1383a7edbfcaf96af9ce302eb9969cfe28b6b8b5859afc6f274fdf` (28,382,096 bytes per publisher).
+- Original publisher demo CXR tests/00000001_000.png SHA-256: `c8cbe59e6b9b186060dc68e63965658fa6b5b3ada6648d25c189b8b69b43cd4c`.
+- Actual NIH pretrained Pneumothorax **model output 0.172315**, uncalibrated original model score for this image. Not a 17.2% clinical probability, not a negative screen. The sample's pneumothorax disease state is not established.
+- Both original downloaded files now have exact SHA-256 checks in PR CI; no patient/model binary artifacts saved.
+- Still **NO independent radiologist pneumothorax positive/negative labels, no sensitivity/specificity, no spatial localization, no clinical patient mode**.
