@@ -87,3 +87,40 @@ LLM Gemini/Opus могут независимо обсудить находку,
 Любая реальная передача обезличенных изображений в OpenRouter требует
 предыдущих юридических/операторских допусков; данная ветка ничего не
 отправляет в сеть.
+
+## Original lightweight ONNX CT mediastinal nodes — genuine CPU research
+
+More practical than original TensorFlow 1.14 is the same publisher team's
+Raidionics release `v1.3.0-rc`: original pretrained
+`Raidionics-CT_LymphNodes-v13.zip` (105,186,900 bytes, SHA-256
+`922c0e99cb637a872d18b83300a648eb0d782b1ef874c5d33a551285e52ccb08`).
+The release separately offers `CT_Tumor` (233,395,992 bytes), which is NOT
+interchangeable with the lymph node checkpoint.
+
+The official vendor public inference test sample
+`Samples-RaidionicsSegLib-UnitTest-Mediastinum-v1.5.zip`
+(27,321,314 bytes, SHA-256
+`3bc452580051dbea0f67caa52c4eb09c75eafdde9e8e7ff60c3a143ec94dce1f`)
+contains a CT and an original lung mask to provide source geometry to the
+model's preprocessing. We use the **original** author `raidionicsseg==1.5.3`
+with ONNX Runtime CPU, no TensorFlow, torch, GPU, browser inference or Mac
+processing; original model preprocessing and 3D output are not imitated.
+`--mode prepare` checks both published exact archive sizes and SHA-256,
+refuses unsafe ZIP entries, identifies original ONNX and preprocessing;
+`--mode infer` invokes the actual author library in an independent CPU
+process capped to 4.8GiB RSS/1100sec; `--mode evaluate` requires native
+image grid and reports number/volume of detected node-label voxels and
+all model/source digests.
+
+**Research caveat:** vendor unit-test sample is **NOT** automatically an
+independent radiologist-positive LyNoS case or diagnostic validation.
+Report independently expert-masked Dice only after a separate licensed
+human-annotated positive CT passes the same source SHA/affine checks.
+A real ONNX process success proves only model execution, NOT sensitivity,
+specificity, metastatic staging, malignancy classification, or patient
+eligibility. No patient data or images leave the GitHub runner.
+
+Original public release:
+https://github.com/raidionics/Raidionics-models/releases/tag/v1.3.0-rc
+Original CPU engine:
+https://github.com/dbouget/raidionics_seg_lib
