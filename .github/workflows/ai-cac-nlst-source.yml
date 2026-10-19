@@ -1,0 +1,26 @@
+name: Real public NLST CT source admission for AI-CAC
+on:
+  push:
+    branches:
+      - research/ai-cac-nlst-native-public-source
+    paths:
+      - .github/workflows/ai-cac-nlst-source.yml
+      - scripts/prepare-ai-cac-public-nlst.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  public-source-metadata:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Compile and query original NCI TCIA NLST series metadata
+        run: |
+          python -m py_compile scripts/prepare-ai-cac-public-nlst.py
+          timeout --signal=TERM --kill-after=10s 300s \
+            python scripts/prepare-ai-cac-public-nlst.py --mode probe
+      # Only metadata read; no images and no patient DICOM CI artifacts.
