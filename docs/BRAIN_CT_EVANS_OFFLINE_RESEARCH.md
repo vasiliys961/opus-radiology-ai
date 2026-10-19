@@ -28,7 +28,7 @@ Example only — DO NOT treat placeholders below as real checkpoint signatures o
       --source-url 'https://<ACTUAL_ALLOWED_PUBLIC_CT_SOURCE>' \
       --approved-deidentified-public-head-CT-only
 
-The JSON manifest has the form \`{"files":[{"path":"<relative model file path>","sha256":"<actual sha256>"}, ...]}\` with **>=2** physically present pretrained assets from the two required model families. The executor checks actual local file bytes against these values; **the owner-supplied manifest alone does not authenticate the publisher**. A future step must independently pin original published weights/model IDs.
+The JSON manifest must include two publisher model families with a relative file path and SHA-256 per asset, for example `{"files":[{"path":"models/brain_checkpoint.pth","sha256":"<actual 64-character hash>","family":"brain_skull"},{"path":"models/ventricle_checkpoint.pth","sha256":"<actual 64-character hash>","family":"ventricle_parts"}]}`. Require at least one real asset from each family; file names shown are illustrative. The executor checks actual local file bytes against these values; **the owner-supplied manifest alone does not authenticate the publisher**. A future step must independently pin original published weights/model IDs.
 
 The output contains only hashes, source shape/spacing, weights bytes sizes/digests, original vendor Evans ratio and brain/ventricle volumes, no CT image, DICOM UID, raw pixel, expert identifier or PNG. Failed vendor runs do not publish stderr/stdout, which could contain paths or PHI. Actual case-specific radiologist review must inspect the vendor native output locally and ensure atlas registration validity.
 
