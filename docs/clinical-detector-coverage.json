@@ -510,6 +510,19 @@
       "restriction": "Only source-grid axial Feret review-candidate postprocessor implemented; pretrained aorta model not executed on positive AAA in this workstream. No infrarenal localisation, orthogonal external-wall caliper, model weight SHA or diagnostic validation. No patient mode.",
       "priority": 2,
       "next": "Run genuine model on lawful positive AAA CT; independently compare centerline-orthogonal expert calipers and 3D localisation; no diagnosis before that."
+    },
+    {
+      "id": "emphysema-laa950-inspiratory-ct",
+      "modality": "CT",
+      "anatomy": "thorax",
+      "pathology": "emphysema-like inspiratory low-attenuation burden (LAA-950, quantitative marker)",
+      "status": "real_checkpoint_candidate",
+      "weights": "Lungmask R231 actual pretrained two-lung anatomical segmentation (not trained emphysema detector)",
+      "source": "https://github.com/JoHof/lungmask",
+      "reference": "Fleischner Society 2025 CT density recommendations; no independent expert-matched source case yet",
+      "restriction": "Only source-registered HU-calibrated thin-slice full-inspiratory noncontrast CT; research-only postprocessor. Prior R231 trained-model research is not real LAA-950 measurement. No expert pathology/PFT reference, scanner/kernel harmonisation, patient mode or cloud.",
+      "priority": 2,
+      "next": "Execute real R231 full-inspiration deidentified public chest CT with native HU, LAA-950 source evidence, expert verification and independent cases; do not stage COPD or assert diagnosis."
     }
   ],
   "selectionRule": "Prioritize uncovered CT/MR diseases with legal checkpoints, independently usable real image/mask pair and host RAM budget, in that order."
