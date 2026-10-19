@@ -148,7 +148,7 @@ export default function VisionFramePlanningPanel({
         слева {localLaa950.leftLungPct.toFixed(2)}%).
         Только локальный исследовательский контекст: эти цифры не отправляются в OpenRouter
         и не подтверждают диагноз эмфиземы.</p>}
-      {laaWarning&&<p role="status">{laaWarning}</p>
+      {laaWarning&&<p role="status">{laaWarning}</p>}
       <VisionPrivacyPreparation key={JSON.stringify(report.frames.map(f=>f.fileId))+requested}
         previews={report.frames.map(f=>thumbnails[f.fileId]?.url)}
         modality={series.find(s=>s.key===report.seriesKey)?.modality??""}
