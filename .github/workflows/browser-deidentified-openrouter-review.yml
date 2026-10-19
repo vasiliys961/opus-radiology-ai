@@ -6,6 +6,8 @@ on:
       - web/lib/sanitized-cloud-review.test.ts
       - web/lib/same-series-r231-cloud-evidence.ts
       - web/lib/same-series-r231-cloud-evidence.test.ts
+      - web/lib/local-dual-vision-physician-draft.ts
+      - web/lib/local-dual-vision-physician-draft.test.ts
       - web/components/SegmentationControls.tsx
       - web/components/CornerstoneMPR.tsx
       - web/app/page.tsx
@@ -32,5 +34,5 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Strict exact-byte image, metadata, auth and dual-LLM contract
         working-directory: web
-        run: node --disable-warning=ExperimentalWarning --experimental-strip-types --test lib/sanitized-cloud-review.test.ts lib/same-series-r231-cloud-evidence.test.ts
+        run: node --disable-warning=ExperimentalWarning --experimental-strip-types --test lib/sanitized-cloud-review.test.ts lib/same-series-r231-cloud-evidence.test.ts lib/local-dual-vision-physician-draft.test.ts
       # Fake completion callbacks ONLY. No OpenRouter token or patient image in CI.
