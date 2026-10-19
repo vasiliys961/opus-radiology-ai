@@ -660,6 +660,58 @@
       "restriction": "Executed only on opt-in separate Linux/OCI research worker when actual trained models preinstalled, manifest-verified, 24GB memory cap and network disabled; not yet observed genuine positive CT inference. Evans >=0.3 is a review flag, not a diagnosis. Missing image/localization/independent metrics and patient-cloud permissions.",
       "priority": 2,
       "next": "Independent publisher checkpoint SHA, sealed vendor OCI image and licensed positive adult head CT; run actual original models, confirm atlas registration and compare expert ventricular/skull widths; holdout sensitivity not assumed."
+    },
+    {
+      "id": "mediastinal-lymph-node-contrast-ct",
+      "modality": "CT",
+      "anatomy": "thorax-mediastinum",
+      "pathology": "mediastinal lymph node segmentation in contrast-enhanced CT",
+      "status": "real_checkpoint_candidate",
+      "weights": "Original Bouget et al. 2022 pretrained 3D UNet-SW32 / AGUNet models via authors' setup.py; publisher models.zip MD5 434775bebd64910e01f4198eab251666",
+      "source": "https://github.com/dbouget/ct_mediastinal_structures_segmentation",
+      "reference": "Authors' expert-reviewed LyNoS 15 contrast-enhanced CT with node masks; separate CT Lymph Nodes 89 NIH cases; data rights and training overlap to audit",
+      "restriction": "Publisher documents optional CPU inference, but original weights not downloaded, SHA256 not computed, exact code/TF dependencies and memory limits untested on Mac M1 8GB. Training folds overlap author data; not clinical. Lymph node masks do not diagnose metastases. Licence BSD-2-Clause for source; verify downloaded model and data use terms separately.",
+      "priority": 1,
+      "next": "In isolated CPU/Linux worker: verify official models.zip checksum then per-file SHA256; run original UNet-SW32 on licensed positive contrast CT and compare native-space node mask to expert reference, assess RAM and false-positive vessels; no GPU or patient upload."
+    },
+    {
+      "id": "lung-tumor-segmentation-ct",
+      "modality": "CT",
+      "anatomy": "thorax-lung",
+      "pathology": "pulmonary tumor primary lesion mask CT (distinct from small nodule detection)",
+      "status": "real_checkpoint_candidate",
+      "weights": "Carles et al. 2024 pretrained nnU-Net v1 3D fullres CT Task998_LungCTSegmentation, original checkpoint linked via authors to Kaggle",
+      "source": "https://github.com/MonCarFa/PET-CT-Lung-Segmentation-Models",
+      "reference": "Original published Carles et al. 2024 lung tumor CT cohort; independent positive annotated CT and rights must be acquired",
+      "restriction": "Pretrained published author weights linked; exact model bytes, license, real forward and CPU memory unverified. Not equivalent to LUNA16 nodule RetinaNet, not mediastinal lymph nodes. PET model is distinct from CT. Research-only until verified.",
+      "priority": 1,
+      "next": "Verify Kaggle author CT checkpoint and reuse terms, controlled CPU inference with memory cap on deidentified licensed lung-tumor CT, compare segmentation to independent expert tumor mask."
+    },
+    {
+      "id": "mediastinal-primary-mass-ct",
+      "modality": "CT",
+      "anatomy": "thorax-mediastinum",
+      "pathology": "mediastinal primary soft tissue masses (thymic, lymphoid, germ-cell and other masses)",
+      "status": "weights_unverified",
+      "weights": "No separately verified pretrained primary mediastinal mass detector; original Bouget pretrained nodes do not count as primary mediastinal tumors",
+      "source": "https://github.com/dbouget/ct_mediastinal_structures_segmentation",
+      "reference": "Need independent source-licensed positive CT with explicit expert tumor mass mask and compartment",
+      "restriction": "Do not reuse lymph node segmentation as mass or metastasis classifier; manual source-bound physician worklist is not automatic inference.",
+      "priority": 1,
+      "next": "Find permitted original pretrained primary mediastinal tumor CT segmentation checkpoint and positive expert-mask reference; CPU benchmark then independent case."
+    },
+    {
+      "id": "pleural-chest-wall-mass-ct",
+      "modality": "CT",
+      "anatomy": "thorax-pleura-chestwall",
+      "pathology": "pleural neoplasm and chest-wall soft tissue mass",
+      "status": "weights_unverified",
+      "weights": "Pleural effusion and R231 lung masks do not detect pleural malignancy or chest wall tumors",
+      "source": "https://github.com/wasserth/TotalSegmentator/tree/v2.18.0",
+      "reference": "Need dedicated pleural tumor and chest wall lesion CT pretrained model plus expert lesion mask",
+      "restriction": "Anatomical segmentation and pleural fluid inference cannot justify negative tumor screening.",
+      "priority": 1,
+      "next": "Locate rights-cleared original tumor-specific weights and assess true expert-positive CT masks without cloud or GPU requirements."
     }
   ],
   "selectionRule": "Prioritize uncovered CT/MR diseases with legal checkpoints, independently usable real image/mask pair and host RAM budget, in that order."
