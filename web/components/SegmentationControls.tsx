@@ -307,7 +307,7 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
           маски R231. Модель не диагностирует эмфизему или ХОБЛ.
           Полнота обоих лёгких не доказана; результаты зависят от протокола КТ.</p>
         <label><input type="checkbox" checked={laaConfirmed} disabled={laaBusy}
-          onChange={e=>{setLaaConfirmed(e.target.checked);setLaaResult(null);}}/>
+          onChange={e=>{setLaaConfirmed(e.target.checked);setLaaResult(null);callbacks.current.onLaa950Change?.(null);}}/>
           Я проверил исходное исследование: инспираторная КТ без внутривенного контраста,
           реконструкция подходит для денситометрии; понимаю, что выборка может быть неполной.
         </label>
