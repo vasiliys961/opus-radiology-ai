@@ -3,6 +3,7 @@
 import {useEffect,useRef,useState} from "react";
 import type {VisionPrivacyPacket} from "../lib/vision-privacy";
 import type {SanitizedModelReview} from "../lib/sanitized-cloud-review";
+import {buildLocalDualReviewDraft,findingReviewKey,type LocalObservationAssessment} from "../lib/local-dual-vision-physician-draft";
 import type {LocalLungFacts} from "../lib/local-lung-review";
 import {bindLocalSanitizedReview,sourceFileForObservation,perFrameModelCoverage} from "../lib/local-cloud-source-navigation";
 
@@ -27,11 +28,14 @@ export default function DeidentifiedOpenRouterPanel({
   const [readinessNote,setReadinessNote]=useState("");
   const [includeSpecialist,setIncludeSpecialist]=useState(false);
   const [result,setResult]=useState<SanitizedModelReview|null>(null);
+  const [decisions,setDecisions]=useState<Record<string,LocalObservationAssessment>>({});
+  const [clinicalSynthesis,setClinicalSynthesis]=useState("");
+  const [draftError,setDraftError]=useState("");
   const ctl=useRef<AbortController|null>(null);
   // Never probe even localhost without a clinician/operator click.
   // This is essential for offline DICOM review and fail-closed browser tests.
   useEffect(()=>()=>{ctl.current?.abort();},[]);
-  useEffect(()=>{setResult(null);setIncludeSpecialist(false);},[specialistLocalBinding]);
+  useEffect(()=>{setResult(null);setIncludeSpecialist(false);setDecisions({});setClinicalSynthesis("");},[specialistLocalBinding]);
   async function checkReadiness(){
     if(working)return;
     setReadinessNote("");setError("");setServer(null);
@@ -48,7 +52,7 @@ export default function DeidentifiedOpenRouterPanel({
   async function send(){
     if(working||!enabledByLocalChecks||!server?.enabled||token.length<24||
        !clinician||!providerRights||!pixelReview||!paid)return;
-    setError("");setResult(null);setWorking(true);
+    setError("");setResult(null);setDecisions({});setClinicalSynthesis("");setDraftError("");setWorking(true);
     const controller=new AbortController();ctl.current=controller;
     try{
       const packet=prepareReviewedPacket(); // local exact copy + signed action journal check
@@ -96,6 +100,21 @@ export default function DeidentifiedOpenRouterPanel({
         e instanceof Error?e.message:"Ошибка анализа проверенных срезов");
     }finally{setWorking(false);ctl.current=null;}
   }
+  const downloadLocalReview=()=>{
+    if(!result)return;
+    try{
+      const doc=buildLocalDualReviewDraft(result,
+        exactReviewedHashes.map(f=>({imageId:f.imageId,reviewedPixelSha256:f.sha256})),
+        originalLocalFileIds,decisions,clinicalSynthesis);
+      const blob=new Blob([JSON.stringify(doc,null,2)],{type:"application/json"});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement("a");a.href=url;
+      a.download="opus-local-gemini-opus-physician-review.json";
+      document.body.appendChild(a);a.click();a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),1000);
+      setDraftError("");
+    }catch{setDraftError("Сверка потеряла исходную серию или содержит неподтверждённое наблюдение. Экспорт запрещён.");}
+  };
   return <section className="ora-evidence-draft" aria-label="Отправка проверенных обезличенных CT/MR кадров в OpenRouter">
     <h4>OpenRouter · Gemini + Opus на проверенных КТ/МРТ</h4>
     <p>Браузер оставляет исходные DICOM локально. Отправляются только точные
@@ -189,6 +208,23 @@ export default function DeidentifiedOpenRouterPanel({
         {r.review.observations.length?<ul>{r.review.observations.map(o=><li key={o.id}>
           <strong>{o.imageId} · {o.anatomy}:</strong> {o.sign}
           <small> · Ограничение: {o.uncertainty}</small>
+          <div className="ora-evidence-actions">
+            {(["needs_original_source_recheck","rejected_by_local_reviewer"] as const).map(choice=>
+              <button type="button" key={choice}
+                aria-pressed={decisions[findingReviewKey(r.reviewer,o.imageId,o.id)]?.decision===choice}
+                onClick={()=>{const key=findingReviewKey(r.reviewer,o.imageId,o.id);
+                  setDecisions(prev=>({...prev,[key]:{decision:choice,note:prev[key]?.note??""}}));}}>
+                {choice==="needs_original_source_recheck"?"На перепроверку":"Отклонить локально"}
+              </button>)}
+          </div>
+          <label>Локальная заметка врача · {o.imageId}
+            <textarea rows={2} maxLength={500}
+              value={decisions[findingReviewKey(r.reviewer,o.imageId,o.id)]?.note??""}
+              onChange={e=>{const key=findingReviewKey(r.reviewer,o.imageId,o.id);
+                setDecisions(prev=>({...prev,[key]:{
+                  decision:prev[key]?.decision??"unreviewed",note:e.target.value,
+                }}));}}/>
+          </label>
           <button type="button" onClick={()=>{
             try{
               const id=sourceFileForObservation(result,
@@ -201,6 +237,23 @@ export default function DeidentifiedOpenRouterPanel({
           <p>Наблюдений нет; это не исключает патологию.</p>}
         <ul>{r.review.limitations.map((t,i)=><li key={i}>{t}</li>)}</ul>
       </article>)}
+      <section className="ora-reviewer-note" aria-label="Локальная врачебная сверка Gemini Opus и R231">
+        <h4>Врачебная сверка наблюдений и детектора · локально</h4>
+        <p>Отметки относятся только к наблюдениям отдельных срезов.
+          Выводы Gemini и Opus не голосуют за диагноз.
+          Врачебные записи остаются в браузере и могут содержать чувствительные данные.</p>
+        <label>Рабочий синтез врача (необязательно)
+          <textarea rows={3} maxLength={4000} value={clinicalSynthesis}
+            onChange={e=>setClinicalSynthesis(e.target.value)}/>
+        </label>
+        <button type="button" onClick={downloadLocalReview}>
+          Скачать локальный неподписанный протокол сверки JSON
+        </button>
+        {draftError&&<p role="alert">{draftError}</p>}
+        <small>Протокол не содержит исходные UID, имена файлов, пиксели или DICOM,
+          но текст наблюдений и врачебных заметок может быть медицинской тайной.
+          Храните его локально; данные не направляются LLM повторно.</small>
+      </section>
       <p>Разные выводы двух моделей не усредняются. Исходные фреймы и
         привязка к DICOM не покидают браузер. Проверка врачом обязательна.</p>
     </div>}
