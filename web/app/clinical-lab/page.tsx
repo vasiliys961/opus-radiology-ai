@@ -1,6 +1,7 @@
 "use client";
 
 import {useEffect,useState} from "react";
+import DualPublicDetectorReview from "../../components/DualPublicDetectorReview";
 import type {PublicResearchCase,PublicLLMReview,PublicCaseId} from "../../lib/public-case-evidence";
 import "./clinical-lab.css";
 
@@ -102,6 +103,7 @@ export default function ClinicalLab(){
           <p className="cl-muted">Интерпретация LLM не проверена независимым врачом, не является источником дополнительных патологических находок.</p>
         </div>}
       </section>
+      <DualPublicDetectorReview/>
     </section>
   </main>;
 }
