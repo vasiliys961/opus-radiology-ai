@@ -53,7 +53,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          SHA="$(sha256sum /tmp/opus-xrv-public/nih-densenet121-d121-tw-lr001-rot45-tr15-sc15-seed0-best.pt | cut -d' ' -f1)"
+          # Pinned values observed during the genuine publisher run #39242605402.
+          echo '31a5475c6b1383a7edbfcaf96af9ce302eb9969cfe28b6b8b5859afc6f274fdf  /tmp/opus-xrv-public/nih-densenet121-d121-tw-lr001-rot45-tr15-sc15-seed0-best.pt' | sha256sum -c -
+          echo 'c8cbe59e6b9b186060dc68e63965658fa6b5b3ada6648d25c189b8b69b43cd4c  /tmp/opus-xrv-public/00000001_000.png' | sha256sum -c -
+          SHA="31a5475c6b1383a7edbfcaf96af9ce302eb9969cfe28b6b8b5859afc6f274fdf"
           python scripts/real-xrv-pneumothorax-cxr.py \
             --image /tmp/opus-xrv-public/00000001_000.png \
             --weights /tmp/opus-xrv-public/nih-densenet121-d121-tw-lr001-rot45-tr15-sc15-seed0-best.pt \
