@@ -1,0 +1,51 @@
+name: Genuine AI-CAC release asset provenance (1.2 GB)
+on:
+  push:
+    branches:
+      - research/ai-cac-published-weights-public-ct
+    paths:
+      - .github/workflows/real-ai-cac-publisher-asset.yml
+      - scripts/real-ai-cac-public-ct.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  fetch-genuine-published-checkpoint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Check free disk before downloading actual 1.2 GB publisher asset
+        run: |
+          python - <<'PY'
+          import shutil
+          total, used, free = shutil.disk_usage(".")
+          print("Free disk GiB", round(free / 2**30, 2))
+          assert free >= 3*2**30, "not enough ephemeral disk for real publisher model"
+          PY
+      - name: Download genuine released checkpoint from original publisher and observe SHA256
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=20s 1000s \
+            python scripts/real-ai-cac-public-ct.py \
+              --mode fetch-weights --model-dir "$RUNNER_TEMP/opus-real-ai-cac-original" \
+              --public-research-consent
+          python - <<'PY'
+          import json, os, pathlib
+          p = pathlib.Path(os.environ["RUNNER_TEMP"]) / "opus-real-ai-cac-original/publisher.json"
+          d=json.loads(p.read_text())
+          assert d["release"] == "v1.0.0" and d["releaseAssetBytes"] == 1205817465
+          assert len(d["checkpointSha256Observed"])==64
+          print("Genuine publisher release asset downloaded")
+          print("Asset bytes:",d["releaseAssetBytes"])
+          print("Observed SHA256:",d["checkpointSha256Observed"])
+          print("No inference run; no clinical claims")
+          PY
+      - name: Always remove original heavy checkpoint and temporary files
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/opus-real-ai-cac-original"
