@@ -432,6 +432,19 @@
       "restriction": "bone anatomy segmentation not sufficient",
       "priority": 4,
       "next": "license-check pathology-specific pretrained weights"
+    },
+    {
+      "id": "spinal-myeloma-osteolytic-vmi40-ct",
+      "modality": "CT-DE-VMI40",
+      "anatomy": "spine",
+      "pathology": "osteolytic lesions of spinal multiple myeloma",
+      "status": "real_checkpoint_candidate",
+      "weights": "Genuine pretrained author nnU-Net Dataset802 spine + Dataset710 myeloma lesion 40-keV VMI, original 3.7GB Zenodo 18598645",
+      "source": "https://zenodo.org/records/18598645",
+      "reference": "TCIA Spinal-Multiple-Myeloma-SEG CC BY 4.0 original aligned ConvCT and VMI40 series with expert osteolytic segmentation",
+      "restriction": "Research-only; original model may overlap cases, model-weights commercial rights unverified, genuine GPU case-run not yet completed",
+      "priority": 2,
+      "next": "Run the source/weights SHA-bound original publisher pipeline on a permitted paired ConvCT VMI40 expert-positive TCIA study; report source-native lesion Dice, spatial error and no independent holdout claim"
     }
   ],
   "selectionRule": "Prioritize uncovered CT/MR diseases with legal checkpoints, independently usable real image/mask pair and host RAM budget, in that order."
