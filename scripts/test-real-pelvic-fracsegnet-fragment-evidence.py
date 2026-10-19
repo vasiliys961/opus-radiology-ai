@@ -95,8 +95,12 @@ class PelvisEvidenceTests(unittest.TestCase):
             ct = root/"ct.nii.gz"
             mask = root/"fragments.nii.gz"
             out = root/"report.json"
-            nib.save(nib.Nifti1Image(np.full(labels.shape, 100, dtype=np.int16), affine), str(ct))
-            nib.save(nib.Nifti1Image(labels, affine), str(mask))
+            source_img = nib.Nifti1Image(np.full(labels.shape, 100, dtype=np.int16), affine)
+            source_img.header.set_xyzt_units("mm")
+            mask_img = nib.Nifti1Image(labels, affine)
+            mask_img.header.set_xyzt_units("mm")
+            nib.save(source_img, str(ct))
+            nib.save(mask_img, str(mask))
             result = app.run(ct, mask, out, "CC BY 4.0")
             self.assertEqual(result["sourceMaskSHA256"], app.sha256(mask))
             self.assertEqual(result["fragmentComponents"][0]["fragmentLabel"], 1)
