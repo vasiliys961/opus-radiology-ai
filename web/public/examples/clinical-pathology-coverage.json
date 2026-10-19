@@ -451,13 +451,13 @@
       "modality": "CT",
       "anatomy": "abdomen",
       "pathology": "urolithiasis",
-      "status": "weights_unverified",
-      "weights": "no verified stone detector",
+      "status": "real_checkpoint_candidate",
+      "weights": "Pretrained TotalSegmentator CT kidney_left and kidney_right anatomy + source-native HU 3D high-attenuation component candidates (NOT pretrained stone detector)",
       "source": "https://github.com/wasserth/TotalSegmentator/tree/v2.18.0",
-      "reference": "noncontrast renal stone case with manual lesion boxes",
-      "restriction": "TotalSegmentator renal anatomy masks do not prove stones",
+      "reference": "No independent expert-labeled positive stone NCCT yet; original source CT/protocol rights not established",
+      "restriction": "NEW research postprocessor implemented; actual model execution in this workstream, trained stone-specific weights, expert data, FP/scan and validation absent. HU >=130 is a candidate filter not a stone diagnosis; intrarenal only, excludes ureter; no patient use.",
       "priority": 4,
-      "next": "locate stone detection checkpoints and expert-signed cases"
+      "next": "Run genuine anatomical pretrained model plus HU candidate extraction on lawful noncontrast positive public kidney-stone CT with expert lesion coordinates; evaluate lesion recall and false positives, seek true pathology-specific checkpoint."
     },
     {
       "id": "osteonecrosis-hip-mri",
