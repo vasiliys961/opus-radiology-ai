@@ -1,0 +1,80 @@
+name: REAL original Raidionics mediastinal lymph nodes ONNX CPU
+on:
+  pull_request:
+    paths:
+      - .github/workflows/real-raidionics-mediastinal-onnx-cpu.yml
+      - scripts/real-raidionics-mediastinal-onnx-cpu.py
+      - scripts/test-real-raidionics-mediastinal-onnx-cpu.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  actual-onnx-lymphnodes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 32
+    env:
+      PYTHONUNBUFFERED: "1"
+      OMP_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "2"
+      HF_HUB_OFFLINE: "1"
+      DO_NOT_DOWNLOAD_PATIENT_DATA: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Original publisher source and no-fake-pretrained checkpoints
+        run: |
+          python scripts/real-raidionics-mediastinal-onnx-cpu.py --mode contract
+          python -m unittest discover -s scripts -p 'test-real-raidionics-mediastinal-onnx-cpu.py' -v
+      - name: Install pinned true publisher ONNX CPU runtime, not TensorFlow, GPU or PyTorch
+        run: |
+          set -euo pipefail
+          python -m pip install --no-cache-dir "numpy==1.26.4" "raidionicsseg==1.5.3" "psutil==6.1.1" "requests==2.32.3"
+          python - <<'PY'
+          import importlib.metadata as m
+          import onnxruntime as ort
+          assert m.version("raidionicsseg")=="1.5.3"
+          assert "CPUExecutionProvider" in ort.get_available_providers()
+          print("Original ONNX CPU runtime:",ort.__version__,ort.get_available_providers())
+          PY
+      - name: Admit safe external research CPU runner
+        run: |
+          set -euo pipefail
+          mkdir "$RUNNER_TEMP/raidionics-original"
+          python - <<'PY'
+          from pathlib import Path
+          import shutil
+          a=int(next(x.split()[1] for x in Path("/proc/meminfo").read_text().splitlines() if x.startswith("MemAvailable:")))*1024
+          d=shutil.disk_usage(".").free
+          print("RAM available GiB",round(a/1024**3,2),"disk available GiB",round(d/1024**3,2))
+          assert a>=5500*1024**2 and d>=4*1024**3,"CPU runner too small"
+          PY
+      - name: Download genuine 105 MB mediastinal node ONNX plus original 27 MB public source, SHA-256 exact
+        run: |
+          timeout --signal=TERM --kill-after=20s 360s \
+            python scripts/real-raidionics-mediastinal-onnx-cpu.py \
+            --mode prepare --work "$RUNNER_TEMP/raidionics-original"
+      - name: REAL publisher raidionicsseg ONNX forward on original CT using CPU with <4.8GiB RSS budget
+        run: |
+          timeout --signal=TERM --kill-after=25s 1180s \
+            python scripts/real-raidionics-mediastinal-onnx-cpu.py \
+            --mode infer --work "$RUNNER_TEMP/raidionics-original"
+      - name: Source-native mask, exact pretrained SHA, numeric research-only results
+        run: |
+          python scripts/real-raidionics-mediastinal-onnx-cpu.py \
+            --mode evaluate --work "$RUNNER_TEMP/raidionics-original" \
+            --output "$RUNNER_TEMP/real-raidionics-mediastinal-node-numeric.json"
+      - name: Upload original-trained-model numeric evidence only, never voxels
+        uses: actions/upload-artifact@v4
+        with:
+          name: original-raidionics-ct-mediastinal-lymph-nodes-onnx-numeric
+          path: ${{ runner.temp }}/real-raidionics-mediastinal-node-numeric.json
+          retention-days: 14
+          if-no-files-found: error
+      - name: Delete original model CT mask and output regardless of result
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/raidionics-original" \
+            "$RUNNER_TEMP/real-raidionics-mediastinal-node-numeric.json"
