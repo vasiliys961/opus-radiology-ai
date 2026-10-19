@@ -35,7 +35,7 @@ export default function VisionPrivacyPreparation({previews,modality}:{previews:r
   const reviewed=frames.length>0&&frames.every(f=>f.pixelReviewSha256===f.sha256&&f.visualReviewSha256===f.sha256);
   const allOcrChecked=frames.length>0&&frames.every(f=>{
     const output=ocr[f.frameId];
-    return output?.sha256===f.sha256&&
+    return !!output&&output.sha256===f.sha256&&
       (output.regions.length===0||keptText[f.frameId]===f.sha256);
   });
   const pilotReady=reviewed&&allOcrChecked&&!busy&&!ocrBusy&&!importBusy;
