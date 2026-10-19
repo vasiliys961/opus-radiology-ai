@@ -41,6 +41,14 @@ This mapping never goes to the OpenRouter endpoint, AI prompt, JSON response, do
 
 Gemini vs Opus counts are **NOT agreement metrics**: distinct findings can refer to different pathologies or uncertainty. Any pixel redaction can hide pathology and the 2–4 selected views do NOT sample the full volume.
 
+## New in the CPU specialist evidence + Vision review integration
+
+A genuine LOCAL R231 CPU segmentation executed for the current loaded CT series can now be combined with Gemini and Opus's already-reviewed source-frame analysis. In the MPR mode, verified `SegmentationEvidence` is emitted from the existing R231 worker/result importer to the browser application state, scoped to the **exact same currently selected DICOM series key and ordered local file IDs**. Replacing/removing the source, changed slice order, unsupported modality, geometry mismatch, different weights, incomplete two lung masks, stale/partial masks and incomplete source reports block the numeric bridge; original R231 and its weights must have run first. A separate user-visible opt-in checkbox appears only when the current CT has eligible evidence.
+
+The only additional data sent with the already-authorized OpenRouter Vision PNG request are **two lung-mask volumes (mL), the count of actually processed source slices and a fixed code-defined Lungmask R231 model ID**. No original DICOM, image metadata, patient identifier, original study UID, per-mask SHA, local R231 request ID, free clinician notes or full mask is sent. The server independently applies a strict allowlist parser to these extra numeric fields before opening either remote connection. Both Gemini and Opus receive precisely the same numeric measurements with a warning that **R231 segments lung anatomy; it is not a pathology detector**. Model-side observations remain separate from detector measurements. The browser shows the numeric mask result and two independently attributed image evaluations, plus original-local-DICOM navigation.
+
+**Clinical limitation:** This is same-browser-session **source scoping**, not server-verifiable clinical source attestation. The OpenRouter server never receives private DICOM identifiers, so it cannot prove that a malicious browser has not fabricated the numeric R231 statement; its response explicitly reports `clinicalProvenanceServerVerified:false`. The masks and findings are research only, patient processing remains opt-in and subject to terms and legal authorization, and full-study diagnostic accuracy has NOT been established. No new GPU, external weights or model training is introduced. Neither Gemini nor Opus can substitute for a real pathology-specific pretrained detector.
+
 ## Boundaries, not hidden exceptions
 
 - This is an **opt-in localhost research pilot**, not the general deployed clinical cloud API. \`PATIENT_CLOUD_TRANSMISSION_RELEASED=false\` and the old \`/api/ai/route.ts\` unsafe upload prohibition remain intact.
