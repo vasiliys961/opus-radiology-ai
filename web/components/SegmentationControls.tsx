@@ -299,7 +299,7 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
     </>}
     {summary?.evidence?.producer.model.id==="lungmask-R231"&&
       summary.evidence.producer.executionMode==="local"&&onQuantifyLaa950&&
-      <details className="ora-mask-provenance">
+      <details className="ora-lung-laa950">
         <summary>CPU: LAA−950 в маске R231 · только фрагмент КТ</summary>
         <p>Подсчёт настоящих декодированных КТ-вокселей ≤−950 HU внутри исходной
           маски R231. Модель не диагностирует эмфизему или ХОБЛ.
