@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseDicomSeriesHeader, readDicomSeriesHeader, groupDicomSeries, type TechnicalDicomMetadata } from './dicom-series.ts';
 
-function syntheticHeader({series = '1.2.3.4', position = '0\\0\\10', syntax = '1.2.840.10008.1.2.1'} = {}) {
+function syntheticHeader({series = '1.2.3.4', position = '0\\0\\10', syntax = '1.2.840.10008.1.2.1', slope=null, intercept=null, unit=null}: {series?:string;position?:string;syntax?:string;slope?:string|null;intercept?:string|null;unit?:string|null} = {}) {
   const bytes: number[] = [...Buffer.alloc(128), ...Buffer.from('DICM')];
   const add = (group: number, element: number, vr: string, text: string) => {
     const value = Buffer.from(text);
@@ -21,6 +21,9 @@ function syntheticHeader({series = '1.2.3.4', position = '0\\0\\10', syntax = '1
   add(0x20, 0x37, 'DS', '1\\0\\0\\0\\1\\0');
   add(0x20, 0x13, 'IS', '1');
   add(0x08, 0x60, 'CS', 'CT');
+  if(slope!==null)add(0x28,0x1053,'DS',slope);
+  if(intercept!==null)add(0x28,0x1052,'DS',intercept);
+  if(unit!==null)add(0x28,0x1054,'LO',unit);
   const pixel = Buffer.alloc(12);
   pixel.writeUInt16LE(0x7fe0, 0);
   pixel.writeUInt16LE(0x0010, 2);
