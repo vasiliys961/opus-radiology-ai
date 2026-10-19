@@ -1,0 +1,30 @@
+name: Brain CT Evans original vendor offline execution contract
+on:
+  pull_request:
+    paths:
+      - scripts/real-head-ct-evans-offline.py
+      - scripts/test-real-head-ct-evans-offline.py
+      - .github/workflows/brain-ct-evans-original-contract.yml
+      - docs/BRAIN_CT_EVANS_OFFLINE_RESEARCH.md
+      - docs/clinical-detector-coverage.json
+      - web/public/examples/clinical-pathology-coverage.json
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  original-vendor-safety-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate strict offline numeric and checkpoint contract
+        run: |
+          python -m py_compile scripts/real-head-ct-evans-offline.py
+          python scripts/test-real-head-ct-evans-offline.py
+          python scripts/check-clinical-detector-coverage.py
+          python scripts/check-web-pathology-coverage.py
+      # No patient data, vendor container, original model weights or CT here.
+      # All numeric fixtures synthetic; this is NOT original pretrained inference.

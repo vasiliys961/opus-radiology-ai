@@ -647,6 +647,19 @@
         "clinicallyValidated": false,
         "spatiallyLocalized": false
       }
+    },
+    {
+      "id": "brain-ventriculomegaly-ct-evans",
+      "modality": "CT",
+      "anatomy": "brain",
+      "pathology": "ventriculomegaly / hydrocephalus morphometric research review",
+      "status": "real_checkpoint_candidate",
+      "weights": "Original TotalSegmentator 2.18.0 trained brain/skull + ventricle_parts via published totalseg_evans_index utility; offline digest-pinned OCI runner, publisher checkpoint SHA and real positive case not yet verified",
+      "source": "https://github.com/wasserth/TotalSegmentator/tree/v2.18.0",
+      "reference": "Public deidentified adult head CT with expert Evans calipers: not yet acquired or evaluated",
+      "restriction": "Executed only on opt-in separate Linux/OCI research worker when actual trained models preinstalled, manifest-verified, 24GB memory cap and network disabled; not yet observed genuine positive CT inference. Evans >=0.3 is a review flag, not a diagnosis. Missing image/localization/independent metrics and patient-cloud permissions.",
+      "priority": 2,
+      "next": "Independent publisher checkpoint SHA, sealed vendor OCI image and licensed positive adult head CT; run actual original models, confirm atlas registration and compare expert ventricular/skull widths; holdout sensitivity not assumed."
     }
   ],
   "selectionRule": "Prioritize uncovered CT/MR diseases with legal checkpoints, independently usable real image/mask pair and host RAM budget, in that order."
