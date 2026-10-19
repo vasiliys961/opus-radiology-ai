@@ -122,7 +122,9 @@ export default function VisionFramePlanningPanel({
         врача и допуска локального OpenRouter-пилота.</p>
       <VisionPrivacyPreparation key={JSON.stringify(report.frames.map(f=>f.fileId))+requested}
         previews={report.frames.map(f=>thumbnails[f.fileId]?.url)}
-        modality={series.find(s=>s.key===report.seriesKey)?.modality??""}/>
+        modality={series.find(s=>s.key===report.seriesKey)?.modality??""}
+        originalLocalFileIds={report.frames.map(f=>f.fileId)}
+        onOpenOriginalSlice={onOpenSlice}/>
     </div>}
     <p className="ora-vision-plan-footnote">Отбираем по равномерным индексам геометрически проверенной серии,
       сохраняя исходные SOPInstanceUID локально. Выборка не гарантирует обнаружения очагов между срезами.</p>

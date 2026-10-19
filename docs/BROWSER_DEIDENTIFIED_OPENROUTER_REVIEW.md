@@ -33,6 +33,14 @@ The operator token is typed into the browser on each pilot run and verified in c
 3. In the new panel supply local operator token, verify per-study clinical authority/legal basis, approved OpenRouter health-data handling, final visual privacy, and paid two-call acknowledgement.
 4. Click **Отправить проверенные кадры Gemini + Opus**. Both models receive only the cleaned raster image data, not original DICOM. Independently review displayed findings against locally loaded DICOM.
 
+## Added: return from two AI model observations to the ORIGINAL local DICOM slice
+
+The separate Gemini and Opus findings now include a browser-only **Показать исходный срез** control; a summary displays each model's number of observations per source image and a DICOM navigation button. The local component maps cloud-visible ephemeral `frame-1..4` to the original source file ID only **after** full ordered SHA-256 agreement with the current final reviewed PNGs and full observation-to-reviewed-frame binding.
+
+This mapping never goes to the OpenRouter endpoint, AI prompt, JSON response, downloaded privacy packet or physician handoff. The original source frame ID exists only in React props and the currently loaded DICOM viewer. A changed frame SHA, reordered frame set, unexpected model source ID, duplicated local file ID or partial output makes navigation fail closed. The resolved file ID is passed directly to the preexisting viewer `onOpenSlice` callback. Neither a model-reported location on a single 2D image nor a click on the correct source proves cortical lesion localization in physical 3D coordinates.
+
+Gemini vs Opus counts are **NOT agreement metrics**: distinct findings can refer to different pathologies or uncertainty. Any pixel redaction can hide pathology and the 2–4 selected views do NOT sample the full volume.
+
 ## Boundaries, not hidden exceptions
 
 - This is an **opt-in localhost research pilot**, not the general deployed clinical cloud API. \`PATIENT_CLOUD_TRANSMISSION_RELEASED=false\` and the old \`/api/ai/route.ts\` unsafe upload prohibition remain intact.
