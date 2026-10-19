@@ -87,3 +87,40 @@ LLM Gemini/Opus могут независимо обсудить находку,
 Любая реальная передача обезличенных изображений в OpenRouter требует
 предыдущих юридических/операторских допусков; данная ветка ничего не
 отправляет в сеть.
+
+
+## Original Bouget/LyNoS **real CPU inference attempt** (research branch)
+
+Source: publisher GitHub revision `f1eedfe117da9fe5377daa3b2e72fc268e5c7867`,
+original `models.zip` Google Drive file ID `1DBIl8JyXEo6YdM9uNyo3vrv5T2WsYSXT`
+(author `setup.py`; MD5 `434775bebd64910e01f4198eab251666`).
+Publisher TensorFlow 1.14 is **not installed in Opus, browser, Mac or main
+Next.js server**. Research runner attempts original publisher CPU-only Docker
+`dbouget/ct_mediastinal_structures_segmentation:v1`, `UNet-SW32` plus
+the original `CT_Lungs` preprocessing model, with `--network none`,
+2 CPU cores, 5.5 GiB RAM limit, time bounds and process caps. Dynamic Docker
+image digest and extracted original checkpoint SHA256 are recorded if a real
+run succeeds.
+
+Independent **expert-positive public research CT pair**:
+`LyNoS` (Zenodo 10102261, `Pat1` original `pat1_data.nii.gz` plus original
+`pat1_labels_LymphNodes.nii.gz`). Full publisher archive is approximately
+2.9 GB, but runner requires HTTP Range and selects only these two entries
+via `remotezip`. If range support is blocked, STOP without pulling 2.9GB.
+Individual decompressed entry, source voxel count, overall free RAM and
+disk use have caps. NIfTI original expert-prediction spatial affine equality
+is required before voxel TP/FP/FN/Dice; no shifting/fake resampling to force
+a metric. The original expert set was published as a benchmark, but patient-
+level training independence has not yet been independently audited.
+
+Executable source:
+`scripts/real-mediastinal-lynos-ct-cpu.py` and
+`.github/workflows/real-mediastinal-lynos-original-cpu.yml`.
+**The existence of this workflow does not mean model download, model forward,
+positive mask Dice or sensitivity has succeeded.** Only a CI run with the
+real numeric JSON artifact and original publisher hashes qualifies.
+If Google Drive original archive, original Docker image or partial Zenodo
+reads become unavailable, the job must fail transparently; fake/random
+checkpoints, unverified public images and synthetic metrics are forbidden.
+Only numerical artifacts may leave the workflow; original images and model
+weights are purged at job end. No patient CT or cloud LLM calls.
