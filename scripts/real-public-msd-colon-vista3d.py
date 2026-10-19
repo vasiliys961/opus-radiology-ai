@@ -197,10 +197,6 @@ def count_confusion(prediction, expert):
 
 
 def evaluate(work: Path, report: Path):
-    import nibabel as nib
-    import numpy as np
-    from scipy import ndimage
-
     if report.exists() or report.is_symlink():
         raise ValueError("do_not_replace_existing_real_result")
     m = _admitted(work)
@@ -214,6 +210,10 @@ def evaluate(work: Path, report: Path):
             or run.get("labelPrompt") != [LABEL]
             or not isinstance(rel, str) or not rel.startswith("prediction/")):
         raise ValueError("real_trained_inference_provenance_missing_or_changed")
+    import nibabel as nib
+    import numpy as np
+    from scipy import ndimage
+
     prediction_path = (work / rel).resolve()
     if not prediction_path.is_relative_to((work / "prediction").resolve()):
         raise ValueError("prediction_path_traversal_not_allowed")
@@ -227,7 +227,8 @@ def evaluate(work: Path, report: Path):
             or not np.allclose(pred_image.affine, original.affine, atol=0.05, rtol=0)):
         raise ValueError("pretrained_cancer_prediction_not_registered_to_original_CT")
     raw = np.asarray(pred_image.dataobj)
-    if not np.isfinite(raw).all() or not np.equal(raw, np.rint(raw)).all():
+    if (not np.isfinite(raw).all() or not np.equal(raw, np.rint(raw)).all()
+            or not np.isin(raw, (0, LABEL)).all()):
         raise ValueError("unresolved_VISTA3D_prediction_floats")
     prediction = raw.astype(np.uint8)
     expert = np.asarray(nib.load(str(work / "expert.nii.gz")).dataobj)
