@@ -66,3 +66,16 @@ mathematical calibration proof. Dose, kernel, inspiration and contrast can
 change LAA-950. The calculated number is not COPD or emphysema diagnosis,
 cannot exclude disease when absent, and is not independently validated.
 All output stays in the browser and no extra OpenRouter call occurs.
+
+## Same-CT browser review beside Gemini and Opus
+
+After CPU LAA-950 measurement, the original series key, ordered local file IDs,
+source SHA and R231 mask SHA remain ONLY in Opus browser memory. A dedicated
+same-series binder verifies these links and R231 volumes, rejecting changed CT
+or masks rather than showing stale densitometry beside model observations.
+
+The doctor sees right, left and combined sampled-mask LAA-950 fractions next
+to independent Gemini and Opus visual findings. These numbers stay LOCAL;
+the existing OpenRouter requests and prompts are unchanged. This is neither
+a second LLM validation nor an emphysema/COPD diagnosis, and it does not prove
+whole-lung coverage or exact decoder HU calibration.
