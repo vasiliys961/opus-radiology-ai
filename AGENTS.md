@@ -1,3 +1,31 @@
+## CURRENT OWNER PRIORITY — 2026-10-20: EXPAND REAL CLINICAL PATHOLOGY DETECTORS
+
+**MANDATORY FOR ALL AGENTS AND FUTURE CHATS:** Read
+[docs/CLINICAL_DETECTOR_EXPANSION_DIRECTIVE.md](docs/CLINICAL_DETECTOR_EXPANSION_DIRECTIVE.md)
+before choosing the next medical task; reconcile it with live
+[docs/clinical-detector-coverage.json](docs/clinical-detector-coverage.json), `main`,
+current CI and existing model executors. This owner directive takes priority over
+older handoff wording which repeatedly prioritizes generic anatomy, R231 smoke
+checks or synthetic demos. The principal goal is **broad clinically useful CT/MRI
+pathology detection** across thorax, neuro, abdomen, pelvis, spine and joints.
+
+Implement short, source-verified clinical increments: real licensed pretrained weights
+→ genuine positive public CT/MRI → source-native finding and (where possible)
+expert overlap → physician-viewer localization → independent validation.
+**Do not** conflate green CI, verified weights, original forward, a single-case Dice,
+and clinical validation. Prefer a still-uncovered pathology over duplicate detector
+comparisons; complete or replace high-value blocked executors. No compulsory
+retraining of existing RSNA Knee models: owner reports latest competition 0.956
+(verify exact weights and score provenance before stating it as audited).
+
+Next priority queue: QTIM brain metastases T1CE five-fold positive inference;
+CLN lung tumor; Raidionics LyNoS mediastinal nodes; failed/low-accuracy CTPA PE
+replacement; multiphase renal neoplasms; WMH expert-positive fold0; RSNA Knee
+weight integration; then spinal/bone metastases, ILD HRCT, adrenal and
+retroperitoneal lesions, spine discs/stenosis, hip osteonecrosis and pelvic tumors.
+See complete policy for rights, evidence acceptance, hardware, privacy and
+independent Gemini/Opus review. Do not silently enable real-patient cloud transfer.
+
 
 ## Repository owner operational decision — 2026-10-18
 
