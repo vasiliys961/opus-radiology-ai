@@ -22,6 +22,12 @@ TRAINER = "nnUNetTrainerWandb2000"
 PLANS = "nnUNetResEncUNetMPlans"
 ARCH = TRAINER + "__" + PLANS + "__3d_fullres"
 MODELS = {"lung": (105, "Lung"), "kidney": (102, "Kidney")}
+PUBLISHER_VERIFIED_REVISION = "7f0906ddcb93d139c53c720ddc56208a5af5ad7b"
+PUBLISHER_VERIFIED_CHECKPOINT_SHA256 = {
+    "lung": "bb14da9985955dee14ac09af7ce233f896f30e538b14b0c595498e694dbef15d",
+    "kidney": "5a1c9e2894160d50dfa0f8c0ac0a88198897973f642c0cbeb33e935457fd9d8c",
+}
+PUBLISHER_VERIFICATION_RUN = "https://github.com/vasiliys961/opus-radiology-ai/actions/runs/39484700749"
 MIN_AVAILABLE_GIB = 64
 MAX_VOXELS = 180_000_000
 MAX_FILE_BYTES = 1500 * 1024**2
@@ -101,10 +107,15 @@ def check_official_checkpoint(results, anatomy):
     plan = json.loads(plans[0].read_text(encoding="utf8"))
     if PLANS not in str(plan.get("plans_name", "")):
         raise ValueError("model architecture plan mismatch")
+    observed_checkpoint_sha = hashfile(chk)
     return {
         "taskId": task_id,
         "dataset": folder.name,
-        "originalCheckpointSha256": hashfile(chk),
+        "originalCheckpointSha256": observed_checkpoint_sha,
+        "actualDownloadedPublisherExpectedCheckpointSha256": PUBLISHER_VERIFIED_CHECKPOINT_SHA256[anatomy],
+        "checkpointMatchesRealVerifiedPublisherBytes": observed_checkpoint_sha == PUBLISHER_VERIFIED_CHECKPOINT_SHA256[anatomy],
+        "pinOriginalPublisherFullRevision": PUBLISHER_VERIFIED_REVISION,
+        "actualModelWeightsVerificationRun": PUBLISHER_VERIFICATION_RUN,
         "originalDatasetJsonSha256": hashfile(datasets[0]),
         "originalPlansJsonSha256": hashfile(plans[0]),
         "labelNamesFromPublisherDataset": labels,
@@ -193,6 +204,8 @@ def run(source, results, out, anatomy, *, execute=False, device="cpu"):
     }
     if not execute:
         return report
+    if official["checkpointMatchesRealVerifiedPublisherBytes"] is not True:
+        raise ValueError("local original checkpoint SHA256 is NOT the genuine publisher pinned trained weights")
     if available_gib() < MIN_AVAILABLE_GIB:
         raise ValueError("large CT resampling requires >=64GiB free RAM: refusing original forward")
     if device == "cuda":
