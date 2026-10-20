@@ -1,0 +1,45 @@
+name: Authentic publicly annotated FLAIR WMH reference
+on:
+  pull_request:
+    paths:
+      - scripts/verify-public-wmh-expert-flair.py
+      - scripts/test-verify-public-wmh-expert-flair.py
+      - .github/workflows/original-public-wmh-flair.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/verify-public-wmh-expert-flair.py
+      - scripts/test-verify-public-wmh-expert-flair.py
+      - .github/workflows/original-public-wmh-flair.yml
+permissions:
+  contents: read
+jobs:
+  expert-native-geometry-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python3 -m pip install 'numpy==1.26.4' 'nibabel==5.3.2'
+      - run: python3 -m unittest discover -s scripts -p 'test-verify-public-wmh-expert-flair.py'
+  real-published-flair-expert:
+    if: github.event_name == 'push'
+    needs: expert-native-geometry-contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python3 -m pip install 'numpy==1.26.4' 'nibabel==5.3.2' 'huggingface_hub==0.35.3'
+      - name: Fetch exact public challenge expert-positive original FLAIR MRI and label
+        run: python3 scripts/verify-public-wmh-expert-flair.py --report "$RUNNER_TEMP/wmh-expert-source.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: public-wmh-flair-native-expert-numeric-only
+          path: ${{ runner.temp }}/wmh-expert-source.json
+          if-no-files-found: error
+          retention-days: 7
