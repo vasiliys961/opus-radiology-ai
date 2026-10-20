@@ -22,9 +22,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - run: python3 -m pip install 'numpy==1.26.4' 'scipy==1.15.3'
       - run: python3 -m unittest discover -s scripts -p 'test-real-bouget-sw32-lynos-ct-cpu.py'
   real-positive-original-model:
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    # Clinical evaluation must run on the PR, not only after merge.
+    if: github.event_name == 'pull_request' || github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -33,7 +35,15 @@ jobs:
         with:
           python-version: '3.11'
       - name: Dependencies for reference geometry and public source download
-        run: python3 -m pip install 'gdown==5.2.0' 'huggingface_hub==0.35.3' 'nibabel==5.3.2' 'numpy==1.26.4'
+        run: python3 -m pip install 'gdown==5.2.0' 'huggingface_hub==0.35.3' 'nibabel==5.3.2' 'numpy==1.26.4' 'scipy==1.15.3'
+      - name: Verify isolated real CPU Docker worker and source memory budget
+        run: |
+          set -euo pipefail
+          docker info >/dev/null
+          python3 - <<'PY'
+          import shutil
+          assert shutil.disk_usage("/").free >= 5*1024**3, "insufficient_publisher_model_CT_disk"
+          PY
       - name: Original CPU forward on one source-licensed LyNoS CT with published checkpoint
         run: |
           python3 scripts/real-bouget-sw32-lynos-ct-cpu.py \
