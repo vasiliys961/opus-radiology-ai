@@ -52,3 +52,37 @@ to high-attenuation-only output, so no Dice is claimed against it.
 The adapter's lightweight offline source/grid/ontology contract is exercised
 by `python -m unittest discover -s scripts -p test_lungscape191_native_evidence.py -v`.
 It does not simulate an original nnU-Net forward.
+
+## Public positive-source admission (research-only, separate from model)
+
+`scripts/prepare-lungscape191-public-coronacases.py` supports a genuinely
+published CoronaCases NIfTI chest CT and separate expert lung/infection masks.
+The source is the [Ma et al. Zenodo 3757476 collection](https://zenodo.org/records/3757476),
+served from the [MedOtter mirror](https://huggingface.co/datasets/MedOtter/covid19-ct-seg/tree/main).
+The script pins the live mirror commit SHA, downloads only one case and its mask,
+copies the CT bytes without resampling into an isolated private nnU-Net input
+folder (`lungcase001_0000.nii.gz`), and keeps the expert in a **different**
+`reference/` directory that is not an nnU-Net input. It measures original and
+expert SHA-256, source NIfTI grid agreement, explicit unique annotation values,
+and does **not** pass the expert to the model or compute a misleading Dice.
+Only the numbers-only manifest may become a short-lived CI artifact. Source
+NIfTI and pixel images must not be committed or uploaded to GitHub artifacts.
+
+**Rights warning:** the Hugging Face mirror advertises CC BY 4.0 while the
+original COVID-19-CT-Seg benchmark lists CC BY-NC-SA. Until rights are reconciled,
+assume the more restrictive **noncommercial research-only** terms, with
+attribution, and do not reuse commercially. No claim of independent model
+validation: LungSCAPE reports training on nine CoronaCases scans; patient
+training overlap is not excluded. This dataset annotates *infection*, which
+is not semantically identical to the model's *high-attenuation* target.
+
+Run only for publicly released research CTs:
+
+```bash
+python scripts/prepare-lungscape191-public-coronacases.py \
+  --case coronacases_003 --output-private /isolated/research/lungscape-public \
+  --execute-download
+```
+
+The corresponding opt-in GitHub workflow `lungscape191-real-public-ct.yml`
+performs actual dataset retrieval and evidence auditing (no neural forward).
