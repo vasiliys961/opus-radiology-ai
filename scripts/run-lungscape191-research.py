@@ -12,6 +12,9 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+from lungscape191_native_evidence import (
+    MAX_FILE_BYTES, MAX_VOXELS, installed_label_map, inspect_native_prediction,
+)
 
 MODEL_ID = 191
 FOLDS = ("0", "1", "2", "3", "4")
@@ -33,7 +36,8 @@ def run(input_file, results, output_dir, *, device="cpu", execute=False):
     source = Path(input_file).expanduser().resolve(strict=True)
     weights_root = Path(results).expanduser().resolve(strict=True)
     destination = Path(output_dir).expanduser().resolve()
-    if not source.is_file() or not source.name.endswith(".nii.gz"):
+    if (source.is_symlink() or not source.is_file() or source.stat().st_size > MAX_FILE_BYTES
+            or not source.name.endswith(".nii.gz")):
         raise ValueError("input must be one explicit local .nii.gz CT file")
     if source.name.endswith("_0000.nii.gz"):
         stem = source.name[:-12]
@@ -41,7 +45,9 @@ def run(input_file, results, output_dir, *, device="cpu", execute=False):
         raise ValueError("input filename must end with _0000.nii.gz (nnU-Net one-channel)")
     if not stem or any(c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_" for c in stem):
         raise ValueError("case name must contain only alphanumeric, dash or underscore")
-    if destination == source.parent or destination == weights_root:
+    if (destination == source.parent or destination.is_relative_to(source.parent)
+            or destination == weights_root or destination.is_relative_to(weights_root)
+            or weights_root.is_relative_to(destination)):
         raise ValueError("output must be isolated from inputs and weights")
     models = list(weights_root.glob("Dataset191_*"))
     if len(models) != 1:
@@ -49,6 +55,7 @@ def run(input_file, results, output_dir, *, device="cpu", execute=False):
     model = models[0]
     if not model.is_dir() or not (model / CONFIG).is_dir() or not (model / "dataset.json").is_file():
         raise ValueError("missing Dataset191 3d_fullres installation or dataset.json")
+    original_labels = installed_label_map(model / "dataset.json")
     folds = [model / CONFIG / ("fold_" + f) / "checkpoint_final.pth" for f in FOLDS]
     if any(not p.is_file() or p.stat().st_size == 0 for p in folds):
         raise ValueError("all five official Dataset191 checkpoint_final.pth folds required")
@@ -56,21 +63,27 @@ def run(input_file, results, output_dir, *, device="cpu", execute=False):
     if cmd_path is None:
         raise ValueError("nnUNetv2_predict is not installed")
     image = nib.load(str(source))
-    if len(image.shape) != 3 or any(s < 2 or s > 2048 for s in image.shape):
+    if (len(image.shape) != 3 or any(s < 2 or s > 2048 for s in image.shape)
+            or int(np.prod(image.shape)) > MAX_VOXELS):
         raise ValueError("expected a bounded 3D CT image")
     if not np.isfinite(image.affine).all() or abs(float(np.linalg.det(image.affine[:3, :3]))) < 1e-8:
         raise ValueError("invalid source affine")
     if not np.isfinite(image.header.get_zooms()[:3]).all():
         raise ValueError("invalid pixel spacing")
     # Research runner never claims CT HU protocol verification by filename alone.
+    source_hash = sha256(source)
+    checkpoint_hashes = {f: sha256(p) for f, p in zip(FOLDS, folds)}
     if not execute:
         return {"status": "ready_not_executed", "model": "LungSCAPE Dataset191",
-                "source_sha256": sha256(source), "shape": list(image.shape),
-                "weight_folds_sha256": {f: sha256(p) for f, p in zip(FOLDS, folds)},
+                "source_sha256": source_hash, "shape": list(image.shape),
+                "weight_folds_sha256": checkpoint_hashes,
+                "original_model_label_map": {str(k): v for k, v in original_labels.items()},
                 "clinical_validation": False}
     destination.mkdir(parents=True, exist_ok=True)
     if any(destination.iterdir()):
         raise ValueError("output directory must be empty to prevent stale predictions")
+    for key in ("nnUNet_raw", "nnUNet_preprocessed"):
+        (destination / key).mkdir(mode=0o700)
     env = os.environ.copy()
     env["nnUNet_results"] = str(weights_root)
     env["nnUNet_raw"] = str(destination / "nnUNet_raw")
@@ -83,20 +96,20 @@ def run(input_file, results, output_dir, *, device="cpu", execute=False):
         raise ValueError("put exactly one case in a private inference input directory")
     subprocess.run(invocation, env=env, check=True, timeout=7200)
     output = destination / (stem + ".nii.gz")
-    if not output.is_file():
-        raise RuntimeError("nnU-Net completed without the expected mask")
-    segmentation = nib.load(str(output))
-    if segmentation.shape != image.shape or not np.allclose(segmentation.affine, image.affine, atol=1e-3):
-        raise RuntimeError("mask/source grid mismatch: no overlay permitted")
-    labels = np.unique(np.asanyarray(segmentation.dataobj))
-    if not np.isfinite(labels).all() or not np.all(labels == np.floor(labels)):
-        raise RuntimeError("unexpected nonintegral segmentation labels")
-    report = {"status": "research_mask_generated", "source_sha256": sha256(source),
+    if (output.is_symlink() or not output.is_file()
+            or output.stat().st_size > MAX_FILE_BYTES):
+        raise RuntimeError("nnU-Net completed without a bounded ordinary mask")
+    if sha256(source) != source_hash:
+        raise RuntimeError("source CT changed during prediction: no mask binding")
+    native_evidence = inspect_native_prediction(source, output, original_labels)
+    report = {"status": "research_mask_generated", "source_sha256": source_hash,
               "mask_sha256": sha256(output), "model": "LungSCAPE Dataset191",
-              "weight_folds_sha256": {f: sha256(p) for f, p in zip(FOLDS, folds)},
-              "observed_numeric_labels_no_clinical_mapping": [int(x) for x in labels],
-              "shape": list(image.shape), "affine_match": True,
-              "ggo_vs_fibrosis_classification": False, "clinical_validation": False}
+              "model_dataset_json_sha256": sha256(model / "dataset.json"),
+              "weight_folds_sha256": checkpoint_hashes,
+              "trueOriginalTrainedModelForwardCompleted": True,
+              "originalCrossoverWithTrainingUnexcluded": True,
+              "noIndependentClinicalValidation": True,
+              **native_evidence}
     (destination / "opus-lungscape191-research-report.json").write_text(
         json.dumps(report, indent=2) + "\n", encoding="utf-8")
     return report
