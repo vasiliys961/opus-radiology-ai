@@ -1,0 +1,26 @@
+name: Brain FLAIR WMH actual publisher CPU model contract
+on:
+  pull_request:
+    paths:
+      - scripts/real-brain-flair-wmh-cpu.py
+      - scripts/test-real-brain-flair-wmh-cpu.py
+      - .github/workflows/brain-original-wmh-flair.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/real-brain-flair-wmh-cpu.py
+      - scripts/test-real-brain-flair-wmh-cpu.py
+      - .github/workflows/brain-original-wmh-flair.yml
+permissions:
+  contents: read
+jobs:
+  external-original-CPU-model-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python3 -m pip install 'numpy==1.26.4' 'nibabel==5.3.2' 'scipy==1.15.3'
+      - run: python3 -m unittest discover -s scripts -p 'test-real-brain-flair-wmh-cpu.py'
