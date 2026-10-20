@@ -84,10 +84,20 @@ def run(args):
         raise ValueError("source_CT_must_be_bounded_NIfTI")
     weights = checkpoint(args.models, args.fold)
     model_hash, source_hash = digest(weights), digest(args.ct)
+    if not args.preflight and (not args.pinned_checkpoint_sha256 or
+                               model_hash != args.pinned_checkpoint_sha256.lower()):
+        raise ValueError("checkpoint_SHA256_must_match_independent_publisher_audit")
+    import nibabel as nib
+    import numpy as np
+    ct_img = nib.load(str(args.ct))
+    if (len(ct_img.shape) != 3 or np.prod(ct_img.shape, dtype=np.int64) > 200_000_000 or
+        not np.isfinite(ct_img.affine).all()):
+        raise ValueError("invalid_or_oversized_public_CT_3D_geometry")
     report = {"schema": "opus-carles-Task998-CT-research/v1", "task": TASK,
               "originalModelSHA256": model_hash, "publicSourceSHA256": source_hash,
               "gpuUsed": False, "patientCloudTransfer": False, "clinicalValidation": False,
-              "realForwardCompleted": False}
+              "realForwardCompleted": False,
+              "originalPublisherReleaseAuthenticated": False}
     if args.preflight:
         return report
     exe = shutil.which("nnUNet_predict")
@@ -123,6 +133,7 @@ def main():
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--report", type=Path, required=True)
     p.add_argument("--expert", type=Path)
+    p.add_argument("--pinned-checkpoint-sha256", help="externally audited publisher SHA256 required for forward")
     p.add_argument("--fold", type=int, default=0)
     p.add_argument("--public-research", action="store_true")
     p.add_argument("--preflight", action="store_true")
