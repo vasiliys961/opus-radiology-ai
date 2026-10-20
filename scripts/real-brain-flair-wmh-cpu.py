@@ -139,6 +139,59 @@ def inspect_mask(source, mask, mask_sha):
             "WMHVsMSVsOtherTissueEtiologyIndeterminate": True}
 
 
+
+def compare_native_expert(source, prediction, expert, expected_expert_sha256):
+    """Voxel-wise WMH overlap on genuine original source grid, bounded by 2-D slices.
+
+    WMH Challenge annotation class 2 denotes OTHER pathology, not WMH:
+    report and exclude it from denominators (never silently label it normal).
+    A single-case score is not independent model validation.
+    """
+    import re
+    import nibabel as nib
+    import numpy as np
+    if not re.fullmatch(r"[0-9a-f]{64}", expected_expert_sha256.lower()):
+        raise ValueError("expert_original_SHA256_required")
+    source_img = safe_scan(source)
+    pred_img = safe_scan(prediction)
+    expert_img = safe_scan(expert)
+    if digest(expert) != expected_expert_sha256.lower():
+        raise ValueError("original_expert_mask_SHA256_mismatch")
+    if (source_img.shape != pred_img.shape or source_img.shape != expert_img.shape or
+            not np.allclose(source_img.affine, pred_img.affine, atol=.02, rtol=0) or
+            not np.allclose(source_img.affine, expert_img.affine, atol=.02, rtol=0)):
+        raise ValueError("original_expert_source_prediction_native_geometry_mismatch")
+    if pred_img.get_data_dtype().kind not in "biu" or expert_img.get_data_dtype().kind not in "biu":
+        raise ValueError("expert_and_prediction_must_be_integer_labels")
+    tp = fp = fn = tn = ignored = 0
+    for z in range(source_img.shape[2]):
+        pred = np.asarray(pred_img.dataobj[:, :, z])
+        truth = np.asarray(expert_img.dataobj[:, :, z])
+        if not np.isin(pred, (0, 1)).all():
+            raise ValueError("prediction_WMH_binary_ontology_invalid")
+        if not np.isin(truth, (0, 1, 2)).all():
+            raise ValueError("expert_WMH_challenge_ontology_invalid")
+        valid = truth != 2
+        ignored += int(np.count_nonzero(~valid))
+        tp += int(np.count_nonzero(valid & (pred == 1) & (truth == 1)))
+        fp += int(np.count_nonzero(valid & (pred == 1) & (truth == 0)))
+        fn += int(np.count_nonzero(valid & (pred == 0) & (truth == 1)))
+        tn += int(np.count_nonzero(valid & (pred == 0) & (truth == 0)))
+    if tp + fn == 0:
+        raise ValueError("reference_WMH_positive_required_for_positive_benchmark")
+    return {
+        "originalExpertWMHMaskSHA256": expected_expert_sha256.lower(),
+        "sameOriginalNativeGrid": True,
+        "expertOtherPathologyLabel2ExcludedVoxels": ignored,
+        "tp": tp, "fp": fp, "fn": fn, "tn": tn,
+        "dice": 2 * tp / (2 * tp + fp + fn),
+        "sensitivity": tp / (tp + fn),
+        "precision": tp / (tp + fp) if tp + fp else 0.0,
+        "singleCaseResearchScoreNotIndependentValidation": True,
+        "clinicalValidation": False
+    }
+
+
 def execute(args):
     if (not args.approved_public_research or not args.flair_protocol_confirmed
             or not args.public_source_url.startswith("https://")
@@ -161,6 +214,11 @@ def execute(args):
                         "-o", str(args.mask_out.resolve()), "--invivo",
                         "--folds", "0"], env, args.rss_limit_gib, args.timeout_sec)
     metrics = inspect_mask(args.flair, args.mask_out, digest(args.mask_out))
+    if bool(args.expert) != bool(args.expert_sha256):
+        raise ValueError("expert_and_original_SHA256_must_be_supplied_together")
+    overlap = (compare_native_expert(args.flair, args.mask_out, args.expert,
+                                     args.expert_sha256)
+               if args.expert else None)
     return {"schema": "opus-original-wmh-source-MRI-CPU-research/v1",
             "publisher": PUBLISHER, "publisherRevision": MODEL_REV,
             "version": VERSION, "sourceFLAIRSHA256": args.flair_sha256.lower(),
@@ -171,6 +229,8 @@ def execute(args):
             "sourceCodeAndCheckpointCommercialRights": "NOT_VERIFIED",
             "modelRunFold": 0, "peakObservedProcessTreeRSSBytes": peak,
             "clinicallyValidated": False, "patientCloudTransfer": False,
+            "originalExpertOverlap": overlap,
+            "trainingOverlapIndependentlyExcluded": False,
             **metrics}
 
 
@@ -180,6 +240,8 @@ def main():
         p.add_argument("--"+option, required=True, type=Path)
     p.add_argument("--flair-sha256", required=True)
     p.add_argument("--checkpoint-sha256", required=True)
+    p.add_argument("--expert", type=Path, help="Original native-grid expert WMH mask (0/1/2); optional research benchmark")
+    p.add_argument("--expert-sha256", help="SHA-256 of original expert NIfTI bytes")
     p.add_argument("--public-source-url", required=True)
     p.add_argument("--public-source-license", required=True)
     p.add_argument("--approved-public-research", action="store_true")
