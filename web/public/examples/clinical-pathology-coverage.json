@@ -738,12 +738,12 @@
       "anatomy": "thorax-lung",
       "pathology": "pulmonary tumor primary lesion mask CT (distinct from small nodule detection)",
       "status": "real_checkpoint_candidate",
-      "weights": "Carles et al. 2024 pretrained nnU-Net v1 3D fullres CT Task998_LungCTSegmentation, original checkpoint linked via authors to Kaggle",
+      "weights": "Carles et al. 2024 pretrained nnU-Net v1 3D fullres CT Task998_LungCTSegmentation, original checkpoint linked via authors to Kaggle; KS987 site-specific PanCancerSeg Dataset105_Lung original pretrained fold0 checkpoint_best.pth, Apache-2.0 model-card claim, source-bound runnable executor",
       "source": "https://github.com/MonCarFa/PET-CT-Lung-Segmentation-Models",
       "reference": "Original published Carles et al. 2024 lung tumor CT cohort; independent positive annotated CT and rights must be acquired",
-      "restriction": "Pretrained published author weights linked; exact model bytes, license, real forward and CPU memory unverified. Not equivalent to LUNA16 nodule RetinaNet, not mediastinal lymph nodes. PET model is distinct from CT. Research-only until verified.",
+      "restriction": "Pretrained published author weights linked; exact model bytes, license, real forward and CPU memory unverified. Not equivalent to LUNA16 nodule RetinaNet, not mediastinal lymph nodes. PET model is distinct from CT. Research-only until verified.; NEW runnable original site-specific tumor research adapter, but ~64GiB system RAM required for vendor nnU-Net resampling, original pretrained forward and expert Dice not yet demonstrated; independent permissions and data rights still require review",
       "priority": 1,
-      "next": "Verify Kaggle author CT checkpoint and reuse terms, controlled CPU inference with memory cap on deidentified licensed lung-tumor CT, compare segmentation to independent expert tumor mask."
+      "next": "Use audited publisher KS987 fold0 model on lawful expert-positive native CT with >=64GiB external Linux RAM, verify source-bound tumor mask and independent expert Dice; keep CLN independently blocked"
     },
     {
       "id": "mediastinal-primary-mass-ct",
@@ -817,6 +817,19 @@
       "restriction": "New genuine original-model executable adapter only, NO actual pretrained forward yet; upstream archive access and commercial-rights require review. This is MS lesion segmentation, not a clinical MS diagnosis or same task as vascular WMH; no expert Dice, lesion FROC or independent validation. Research-only Linux worker, not Mac M1 or patient cloud.",
       "priority": 2,
       "next": "Obtain rights-cleared official original weights and public expert MS FLAIR, skull strip with audit and native source geometry, perform genuine five-fold (if available) nnU-Net inference on isolated GPU, report 26-connected lesion-level recall and expert metrics."
+    },
+    {
+      "id": "renal-neoplasm-singlephase-ct",
+      "modality": "CT-singlephase",
+      "anatomy": "abdomen",
+      "pathology": "kidney primary tumor candidates (single CT series)",
+      "status": "real_checkpoint_candidate",
+      "weights": "Original KS987 site-specific PanCancerSeg Dataset102_Kidney, nnUNetTrainerWandb2000 ResEncM original pretrained fold0 checkpoint_best.pth (Apache-2.0 model card claim; true bytes/SHA not verified)",
+      "source": "https://huggingface.co/KS987/PanCancerSeg-Specialized-weights",
+      "reference": "Public original expert kidney cancer NIfTI and source-native binary tumor mask to acquire; inspect FLARE study/patient train overlap",
+      "restriction": "Executable original-model research adapter, NOT proven forward or diagnosis. Unlike MONAI 3-phase renalStructures model, accepts single native HU CT; original vendor nnU-Net 3D resampling may require >=64GiB Linux RAM. Model weights/rights and clinical validation unverified; not Mac, no private-patient cloud.",
+      "priority": 2,
+      "next": "Admit licensed positive singlephase CT and expert lesion mask; download exact original KS987 model SHA, install audited author trainer on >=64GiB Linux worker, run original nnUNet, measure native TP/FP/FN and lesion overlap."
     }
   ],
   "selectionRule": "Prioritize uncovered CT/MR diseases with legal checkpoints, independently usable real image/mask pair and host RAM budget, in that order."
