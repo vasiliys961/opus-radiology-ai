@@ -12,14 +12,15 @@ const titles:Record<string,string>={
  "opus-original-wmh-source-MRI-CPU-research/v1":"FLAIR · очаги белого вещества",
  "opus-CT-gallbladder-hyperattenuation-candidate/v1":"Жёлчный пузырь · гиперденсные кандидаты",
  "opus-hip-proximal-femur-pelvis-source-mask-separation/v1":"Тазобедренный сустав · костная геометрия",
- "opus-aortic-centerline-orthogonal-anatomy-candidates/v1":"Аорта · перпендикулярные сечения КТ"
+ "opus-aortic-centerline-orthogonal-anatomy-candidates/v1":"Аорта · перпендикулярные сечения КТ",
+ "opus-true-original-TotalSpineSeg-disc-cord-MRI/v1":"МРТ позвоночника · диски и канал"
 };
 export function validateMorphometryReport(raw:unknown):NumericReview{
  const x=obj(raw);
  if(typeof x.schema!=="string"||!Object.prototype.hasOwnProperty.call(titles,x.schema))
   throw Error("Неизвестная схема исследовательских данных.");
  if(x.clinicallyValidated!==false)throw Error("Отсутствует обязательный запрет на клиническую валидность.");
- const sourceSha256=hash(x.originalSourceCTSHA256??x.sourceCTSHA256??x.originalCtSHA256??x.sourceFLAIRSHA256);
+ const sourceSha256=hash(x.originalSourceCTSHA256??x.sourceCTSHA256??x.originalCtSHA256??x.sourceFLAIRSHA256??x.sourceMRI_SHA256);
  const fields:{label:string;value:string}[]=[];
  const add=(label:string,n:unknown,unit:string,lo=-1500,hi=1000000)=>fields.push({label,value:fmt(val(n,lo,hi),unit)});
  if(x.schema==="opus-native-cardiovascular-CT-anatomy-measurements/v1"){
@@ -43,6 +44,30 @@ export function validateMorphometryReport(raw:unknown):NumericReview{
   if(!Array.isArray(x.candidates)||x.candidates.length>1000)throw Error("Неограниченный список кандидатов.");
   add("Гиперденсные кандидаты",x.candidates.length,"",0,1000);
   add("Порог HU",x.thresholdHU,"HU",150,350);
+ }else if(x.schema==="opus-true-original-TotalSpineSeg-disc-cord-MRI/v1"){
+  if(x.realTwoStagePretrainedCPUMRIForwardCompleted!==true||
+     x.noMRIStenosisOrDiscHerniationDiagnosis!==true)
+   throw Error("Подлинный двухэтапный инференс TotalSpineSeg не подтверждён.");
+  const archives=x.publisherModelArchives;
+  if(!Array.isArray(archives)||archives.length!==2)
+   throw Error("Не подтверждены обе оригинальные модели TotalSpineSeg.");
+  for(const archive of archives){
+   const a=obj(archive);
+   hash(a.authorZipSHA256);hash(a.installedFold0CheckpointSHA256);
+  }
+  const discs=x.discCandidates;
+  if(!Array.isArray(discs)||discs.length!==6)throw Error("Неверный список поясничных дисков.");
+  const expected=["T12-L1","L1-L2","L2-L3","L3-L4","L4-L5","L5-S"];
+  let present=0;
+  for(let i=0;i<expected.length;i++){
+   const d=obj(discs[i]);
+   if(d.disc!==expected[i]||d.present!==true&&d.present!==false)
+    throw Error("Неподтверждённая разметка уровня позвоночного диска.");
+   if(d.present===true){present++;add(expected[i]+" · объём маски",d.volumeMl,"мл",0,1000);}
+  }
+  add("Размечено дисков",present,"",0,6);
+  add("Маска спинного мозга · воксели",x.spinalCordMaskVoxels,"",0,120000000);
+  add("Маска канала · воксели",x.spinalCanalMaskVoxels,"",0,120000000);
  }else if(x.schema==="opus-aortic-centerline-orthogonal-anatomy-candidates/v1"){
   if(x.noAneurysmOrAorticDiseaseDiagnosis!==true||
      x.measurementsAreInteriorSegmentationNotExternalWallCalipers!==true||
