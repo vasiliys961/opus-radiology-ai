@@ -1,0 +1,61 @@
+name: REAL original KiTS23 expert-positive renal cancer CT admission
+on:
+  pull_request:
+    paths:
+      - scripts/admit-real-public-kits23-kidney-tumor.py
+      - scripts/test_admit_real_public_kits23_kidney_tumor.py
+      - .github/workflows/kits23-public-renal-cancer-original.yml
+      - docs/KITS23_ORIGINAL_POSITIVE_RENAL_TUMOR.md
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  genuine-expert-positive-native-CT:
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    env:
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      HF_HUB_DISABLE_XET: "1"
+      HF_HUB_DISABLE_PROGRESS_BARS: "1"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install only lightweight public NIfTI/Hub audit deps (no torch)
+        run: python -m pip install 'numpy==2.2.6' 'nibabel==5.3.2' 'huggingface_hub==0.35.3'
+      - name: Original expert class and source-native physical geometry checks
+        run: |
+          python -m py_compile scripts/admit-real-public-kits23-kidney-tumor.py
+          python -m unittest discover -s scripts -p 'test_admit_real_public_kits23_kidney_tumor.py' -v
+      - name: ACTUAL public KiTS23 CT and ORIGINAL expert renal tumor mask SHA and geometry
+        run: |
+          python scripts/admit-real-public-kits23-kidney-tumor.py \
+            --output-private "$RUNNER_TEMP/original-public-kits23-renal" \
+            --execute-original-public-download
+      - name: Confirm actual expert tumor positive, forbid fabricated forward
+        run: |
+          python - <<'PY'
+          import json,os,pathlib
+          p=pathlib.Path(os.environ["RUNNER_TEMP"])/"original-public-kits23-renal/numeric-original-renal-tumor-evidence.json"
+          j=json.loads(p.read_text())
+          assert j["originalCTSha256"]=="c8fc76065ce316d6935c3dc87490606381d19fbff1bdd43616814e0cde0c0637"
+          assert j["originalManualExpertSegmentationSha256"]=="0292f2683b376043f478788624a8fdd924ce736c98626378fb897d4723991b50"
+          assert j["expertTumorPositive"] is True
+          assert j["expertTumorVoxelCount"]>0
+          assert j["nativeSourceAndExpertGridVerified"] is True
+          assert j["originalCancerModelForwardCompleted"] is False
+          assert j["noExpertDiceWithoutRealModelInference"] is True
+          print("REAL ORIGINAL EXPERT RENAL TUMOR VOXELS:",j["expertTumorVoxelCount"])
+          PY
+      - name: Upload only anonymized aggregate original CT/renal tumor provenance numbers
+        uses: actions/upload-artifact@v4
+        with:
+          name: genuine-kits23-expert-positive-original-ct-numeric
+          path: ${{ runner.temp }}/original-public-kits23-renal/numeric-original-renal-tumor-evidence.json
+          retention-days: 5
+          if-no-files-found: error
+      - name: Discard runner copy of CT and expert reference
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/original-public-kits23-renal"
