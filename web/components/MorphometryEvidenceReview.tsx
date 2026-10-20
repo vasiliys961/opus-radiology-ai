@@ -74,7 +74,7 @@ export default function MorphometryEvidenceReview(){
   if(!source||!report)return;
   const expected=report.additionalSources?.find(x=>x.role===role)?.sha256;
   if(!expected)return;
-  if(!/\\.nii(\\.gz)?$/i.test(source.name)){
+  if(!/\.nii(\.gz)?$/i.test(source.name)){
    setSourceError(role+": выберите исходный NIfTI.");return;
   }
   const controller=new AbortController();
