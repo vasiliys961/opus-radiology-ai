@@ -10,6 +10,7 @@ import argparse
 import importlib.util
 import json
 from pathlib import Path
+import shutil
 from types import SimpleNamespace
 
 AUTHOR_FOLD0_SHA256 = "f7ef9747eb73ef8a927c07e4227bc4b9bfab761e0f7c60f2fd09ac9cf1a5fd3a"
@@ -44,6 +45,20 @@ def run(workdir: Path, report: Path):
                                   filename=source.EXPERT,revision=revision,token=False))
     if engine.digest(flair) != metadata["sourceFLAIRSHA256"] or engine.digest(expert) != metadata["originalExpertWMHSHA256"]:
         raise ValueError("public_WMH_source_or_expert_hash_changed_between_checks")
+    # hf_hub_download may return a cache symlink. Never weaken safe_scan():
+    # copy only SHA-verified source bytes to fresh regular files on the
+    # ephemeral isolated research worker, then hash the copies again.
+    def verified_regular_copy(cache_path: Path, filename: str, expected: str) -> Path:
+        target = workdir / filename
+        if target.exists() or target.is_symlink() or cache_path.stat().st_size > 300*1024**2:
+            raise ValueError("nonempty_or_unbounded_private_WMH_research_copy")
+        with cache_path.open("rb") as inp, target.open("xb") as out:
+            shutil.copyfileobj(inp, out, 1024*1024)
+        if target.is_symlink() or not target.is_file() or engine.digest(target) != expected:
+            raise ValueError("native_public_WMH_research_copy_SHA_mismatch")
+        return target
+    flair = verified_regular_copy(flair, "original-wmh-flair.nii.gz", metadata["sourceFLAIRSHA256"])
+    expert = verified_regular_copy(expert, "original-wmh-expert.nii.gz", metadata["originalExpertWMHSHA256"])
     model = provision.provision(workdir/"original-author-fold0")
     if model["localCheckpointSHA256"] != AUTHOR_FOLD0_SHA256:
         raise ValueError("published_original_WMH_fold0_reproducible_SHA_mismatch")
