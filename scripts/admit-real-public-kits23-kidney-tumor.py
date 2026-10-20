@@ -135,8 +135,11 @@ def fetch_pair(directory):
                                     repo_type="dataset", revision=info.sha, token=False)),
     }
     for key, expected in (("ct", ORIGINAL_CT_SHA256), ("mask", ORIGINAL_MASK_SHA256)):
-        if sha256(downloaded[key]) != expected:
-            raise ValueError("actual downloaded original KiTS23 LFS bytes differ from pinned publisher SHA")
+        observed = sha256(downloaded[key])
+        if observed != expected:
+            raise ValueError("actual KiTS23 "+key+" LFS mismatch: observed_sha256="+observed+
+                             " expected_sha256="+expected+
+                             " observed_bytes="+str(downloaded[key].stat().st_size))
     directory.mkdir(mode=0o700, parents=True)
     (directory / "in").mkdir(mode=0o700)
     (directory / "expert_reference_private").mkdir(mode=0o700)
