@@ -1,0 +1,25 @@
+name: Original KiTS23 renal tumor native-scoring safety checks
+on:
+  pull_request:
+    paths:
+      - scripts/score-kits23-original-renal-tumor.py
+      - scripts/test_score_kits23_original_renal_tumor.py
+      - docs/KITS23_TUMOR_NATIVE_SCORING.md
+      - .github/workflows/kits23-original-renal-tumor-scorer.yml
+permissions:
+  contents: read
+jobs:
+  native-scoring-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Check syntax and CLI
+        run: |
+          python -m py_compile scripts/score-kits23-original-renal-tumor.py
+          python scripts/score-kits23-original-renal-tumor.py --help | grep -- --checkpoint
+      - name: Run fail-closed source provenance checks
+        run: python -m unittest discover -s scripts -p 'test_score_kits23_original_renal_tumor.py' -v
