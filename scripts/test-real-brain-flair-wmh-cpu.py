@@ -48,6 +48,45 @@ class TrueBrainWmhBridgeContract(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "original_FLAIR"):
             mod.inspect_mask(self.flair, bad, mod.digest(bad))
 
+
+    def test_original_expert_overlap_with_ignore_other_pathology(self):
+        truth = self.np.zeros((64, 64, 24), dtype=self.np.uint8)
+        truth[6:10, 10:14, 4:7] = 1
+        truth[5, 10, 4] = 2  # Challenge class 2: other pathology, not normal.
+        expert = self.root/"expert.nii.gz"
+        self.nib.save(self.nib.Nifti1Image(truth, self.affine), expert)
+        score = mod.compare_native_expert(
+            self.flair, self.mask, expert, mod.digest(expert))
+        self.assertEqual(score["tp"], 36)
+        self.assertEqual(score["fp"], 11)
+        self.assertEqual(score["fn"], 12)
+        self.assertEqual(score["expertOtherPathologyLabel2ExcludedVoxels"], 1)
+        self.assertAlmostEqual(score["dice"], 72/95)
+        self.assertFalse(score["clinicalValidation"])
+        self.assertTrue(score["singleCaseResearchScoreNotIndependentValidation"])
+
+    def test_expert_checksum_mismatch_and_invalid_ontology_fail_closed(self):
+        truth = self.np.zeros((64, 64, 24), dtype=self.np.uint8)
+        truth[7:9, 10:12, 4:7] = 1
+        expert = self.root/"expert.nii.gz"
+        self.nib.save(self.nib.Nifti1Image(truth, self.affine), expert)
+        with self.assertRaisesRegex(ValueError, "SHA256_mismatch"):
+            mod.compare_native_expert(self.flair, self.mask, expert, "0"*64)
+        truth[20, 20, 10] = 3
+        self.nib.save(self.nib.Nifti1Image(truth, self.affine), expert)
+        with self.assertRaisesRegex(ValueError, "ontology_invalid"):
+            mod.compare_native_expert(self.flair, self.mask, expert, mod.digest(expert))
+
+    def test_expert_native_affine_mismatch_fails(self):
+        truth = self.np.zeros((64, 64, 24), dtype=self.np.uint8)
+        truth[7:9, 10:12, 4:7] = 1
+        affine = self.affine.copy()
+        affine[0, 3] = 4.
+        expert = self.root/"shifted.nii.gz"
+        self.nib.save(self.nib.Nifti1Image(truth, affine), expert)
+        with self.assertRaisesRegex(ValueError, "native_geometry_mismatch"):
+            mod.compare_native_expert(self.flair, self.mask, expert, mod.digest(expert))
+
     def test_only_original_checkpoint_and_license_gate(self):
         with self.assertRaisesRegex(ValueError, "unprovisioned"):
             mod.original_model(self.root/"notinstalled", "0"*64)
