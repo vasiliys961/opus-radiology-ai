@@ -1,0 +1,43 @@
+name: Original Carles CT model Kaggle provenance (CPU)
+on:
+  pull_request:
+    paths:
+      - scripts/carles-kaggle-model-provenance.py
+      - scripts/test-carles-kaggle-model-provenance.py
+      - .github/workflows/carles-kaggle-model-provenance.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/carles-kaggle-model-provenance.py
+      - .github/workflows/carles-kaggle-model-provenance.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  provenance-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python3 -m unittest discover -s scripts -p 'test-carles-kaggle-model-provenance.py'
+  actual-public-kaggle-metadata:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Fetch only public publisher metadata (no weights or scans)
+        run: python3 scripts/carles-kaggle-model-provenance.py --output "$RUNNER_TEMP/carles-ct-publisher.json"
+      - name: Save non-patient model provenance numeric metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: carles-ct-kaggle-publisher-metadata-only
+          path: ${{ runner.temp }}/carles-ct-publisher.json
+          retention-days: 7
+          if-no-files-found: error
