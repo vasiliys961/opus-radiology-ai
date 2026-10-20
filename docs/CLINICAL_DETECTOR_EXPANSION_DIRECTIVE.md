@@ -4,7 +4,7 @@
 This is an instruction to coding agents, not a claim that the listed diagnoses are detected reliably.
 Read with [AGENTS.md](../AGENTS.md), [REQUIREMENTS.md](../REQUIREMENTS.md),
 [master specification](OPUS_RADIOLOGY_MASTER_SPEC.md), and the live
-[45-task detector inventory](clinical-detector-coverage.json).
+[46-task detector inventory](clinical-detector-coverage.json).
 The inventory is a dated snapshot; check GitHub main, PRs, Actions and original scientific sources before updating a status.
 
 ## Mission and governing decision

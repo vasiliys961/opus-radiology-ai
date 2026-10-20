@@ -1,6 +1,6 @@
 {
   "schema": "opus-clinically-prioritized-detector-coverage/v1",
-  "asOf": "2026-10-19",
+  "asOf": "2026-10-20",
   "mission": "Real pretrained pathologic detection across more anatomic regions before multimodel comparison, UI or LLM orchestration",
   "evidenceStates": {
     "real_case_measured": "genuine isolated inference observed on one public research volume, NOT validated",
@@ -517,10 +517,22 @@
       "status": "real_checkpoint_candidate",
       "weights": "QTIM-Lab original five trained TensorFlow nnU-Net folds: all 15 official Dropbox files downloaded in public CI, 1,248,034,031 bytes, all SHA256 pinned; TensorFlow checkpoint loading and positive MRI inference NOT YET VERIFIED",
       "source": "https://github.com/QTIM-Lab/Brain-Mets-Seg",
-      "reference": "UCSF-BMSR expert metastasis annotations, controlled-access noncommercial source; exact case and training overlap not verified",
-      "restriction": "All real pretrained original weights acquired; trained MRI inference not yet tested on public T1CE. Requires original vendor GPU environment, explicit study/preprocessing provenance, exact-grid expert mask, no patient/cloud authorization.",
+      "reference": "BEAMSTER genuine published T1CE Dataset_A_001 + expert mask, 9599 positive voxels, exact image SHA256 246adca8f57b451b8b204f78361184cbb087fc80186c2cb910cd56e02a6f9abf; available native planning-space pair, NOT QTIM preprocessed",
+      "restriction": "Original five pretrained weights SHA verified (15 files, no forward yet). BEAMSTER source case 1 and binary expert label physically aligned; QTIM preprocessing (skull strip, 1mm resample, N4, registration, z-normalization), spatial back-transform and GPU TensorFlow 2.10 original model NOT performed. Only irradiated lesions annotated, training overlap unknown, clinical use blocked.",
       "priority": 2,
-      "next": "Run original fivefold trained TensorFlow inference using SHA-verified offline checkpoints on permitted source-positive T1CE with expert voxels; measure lesion-wise recall/FROC and native-grid TP/FP/FN/Dice, rule out training overlap."
+      "next": "Use actual BEAMSTER expert-positive T1CE under pinned source SHA (run39445202263); perform verified QTIM preprocessing, original fivefold GPU forward, map to planning-space expert mask, score voxel/lesion TP/FP/FN, no patient cloud.",
+      "observedResearchEvidence": {
+        "sourceRun": "https://github.com/vasiliys961/opus-radiology-ai/actions/runs/39445202263",
+        "source": "MedOtter/BEAMSTER Dataset_A_001, CC BY 4.0",
+        "caseCount": 1,
+        "originalExpertPositiveVoxels": 9599,
+        "sourceImageSHA256": "246adca8f57b451b8b204f78361184cbb087fc80186c2cb910cd56e02a6f9abf",
+        "matchedNativePlanningGrid": true,
+        "modelForwardCompleted": false,
+        "preprocessedForQTIM": false,
+        "independentHoldout": false,
+        "clinicallyValidated": false
+      }
     },
     {
       "id": "aortic-dilatation-ct-morphometry",
@@ -734,6 +746,32 @@
       "restriction": "Anatomical segmentation and pleural fluid inference cannot justify negative tumor screening.",
       "priority": 1,
       "next": "Locate rights-cleared original tumor-specific weights and assess true expert-positive CT masks without cloud or GPU requirements."
+    },
+    {
+      "id": "white-matter-hyperintensities-flair",
+      "modality": "MR-FLAIR",
+      "anatomy": "brain",
+      "pathology": "white matter hyperintensity lesions (WMH; no etiologic MS versus vascular classification)",
+      "status": "real_case_measured",
+      "weights": "Original jil202/wmh_seg 1.6.0 fold0 nnU-Net CPU; SHA256 f7ef9747eb73ef8a927c07e4227bc4b9bfab761e0f7c60f2fd09ac9cf1a5fd3a",
+      "source": "https://github.com/jinghangli98/wmh_seg",
+      "reference": "WMH Challenge Singapore/85 real FLAIR with original expert class 1 WMH and class 2 other pathology; expert 6754 positive WMH voxels, source SHA256 d0dddfbe04d8af5b70d7e799cbe8d11083f7c70533c072dd9d525223dcccda82",
+      "restriction": "Actual one-case original fold0 forward and native expert overlap; TP 6672 FP 5864 FN 82 Dice 0.691757. Overlap with original model training not excluded, not lesion recall, no independent holdout; mirror CC BY 4.0 versus original CC BY-NC 4.0 rights conflict. Research only, no MS/small-vessel-disease differentiation or clinical claims.",
+      "priority": 1,
+      "next": "Confirm independent model-training-disjoint FLAIR cohort with true expert masks; lesion-level sensitivity/FP per study and clinical phenotype verification, while broadening other pathology detectors.",
+      "observedResearchEvidence": {
+        "run": "https://github.com/vasiliys961/opus-radiology-ai/actions/runs/39443493209",
+        "caseCount": 1,
+        "modelRunCompleted": true,
+        "expertReferenceAvailable": true,
+        "voxelTP": 6672,
+        "voxelFP": 5864,
+        "voxelFN": 82,
+        "expertPositiveVoxels": 6754,
+        "voxelDice": 0.691757,
+        "independentHoldout": false,
+        "clinicallyValidated": false
+      }
     }
   ],
   "selectionRule": "Prioritize uncovered CT/MR diseases with legal checkpoints, independently usable real image/mask pair and host RAM budget, in that order."

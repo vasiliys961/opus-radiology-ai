@@ -2,7 +2,7 @@
 
 **Обязательная цель для всех будущих чатов и AI-разработчиков.** 
 Основной документ: [CLINICAL_DETECTOR_EXPANSION_DIRECTIVE.md](CLINICAL_DETECTOR_EXPANSION_DIRECTIVE.md).
-Рабочие данные: [clinical-detector-coverage.json](clinical-detector-coverage.json) (45 направлений — перечень целей/экспериментов, **не** 45 клинически готовых детекторов).
+Рабочие данные: [clinical-detector-coverage.json](clinical-detector-coverage.json) (46 направлений — перечень целей/экспериментов, **не** 45 клинически готовых детекторов).
 Общая продуктовая спецификация: [OPUS_RADIOLOGY_MASTER_SPEC.md](OPUS_RADIOLOGY_MASTER_SPEC.md).
 Владелец согласовал стратегию 20 октября 2026 года.
 
