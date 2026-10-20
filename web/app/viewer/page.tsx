@@ -93,7 +93,7 @@ export default function ViewerPage() {
         <button type="button" className={sourceMode==="coverage"?"active":""}
           onClick={()=>setSourceMode("coverage")}>Покрытие патологий · доказательства</button>
         <button type="button" className={sourceMode==="morphometry"?"active":""}
-          onClick={()=>setSourceMode("morphometry")}>Морфометрия · 6 областей</button>
+          onClick={()=>setSourceMode("morphometry")}>Морфометрия · 7 модулей</button>
       </div>
       {sourceMode==="nodules" ? <NoduleBoundResearchView/> : sourceMode==="nifti" ? <NiftiCtResearchView/> : sourceMode==="colon" ? <ColonCancerResearchResults/> : sourceMode==="coverage" ? <PathologyCoverageResearch/> : sourceMode==="morphometry" ? <MorphometryEvidenceReview/> : <>
       <div className="cs-intro"><div><div className="cs-kicker">IMAGING LAB / 2D STACK</div><h1>DICOM Viewer <em>β</em></h1><p>Просмотр локальных DICOM-серий с декодированием Cornerstone3D. Без облака, без анализа ИИ.</p></div><span className="cs-watermark">ИССЛЕДОВАТЕЛЬСКИЙ ПРОТОТИП · НЕ ДЛЯ ДИАГНОСТИКИ</span></div>
