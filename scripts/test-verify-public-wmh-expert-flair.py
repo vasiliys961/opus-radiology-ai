@@ -7,19 +7,21 @@ mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
 class OriginalPublicWMHReference(unittest.TestCase):
  def test_authentic_named_public_pair(self):
   self.assertEqual(mod.REPO,"MedOtter/wmh-segmentation")
-  self.assertIn("test/Singapore/85/orig/FLAIR.nii.gz",mod.FLAIR)
-  self.assertIn("test/Singapore/85/wmh.nii.gz",mod.EXPERT)
+  self.assertEqual(mod.FLAIR,"dataverse_files/test/Singapore/85/orig/FLAIR.nii.gz")
+  self.assertEqual(mod.EXPERT,"dataverse_files/test/Singapore/85/wmh.nii.gz")
+  self.assertNotIn("data/nii/",mod.FLAIR)
  def test_expert_positive_native_grid(self):
   import numpy as np
   import nibabel as nib
   with tempfile.TemporaryDirectory() as root:
    src=np.ones((12,12,8),dtype=np.float32)
-   gt=np.zeros_like(src,dtype=np.uint8);gt[3:5,3:6,2:5]=1
+   gt=np.zeros_like(src,dtype=np.uint8);gt[3:5,3:6,2:5]=1;gt[5,5,5]=2
    a=np.diag([1.,1.,2.,1.])
    p=Path(root)/"flair.nii.gz";q=Path(root)/"wmh.nii.gz"
    nib.save(nib.Nifti1Image(src,a),p);nib.save(nib.Nifti1Image(gt,a),q)
    result=mod.verify(p,q)
    self.assertEqual(result["expertPositiveVoxels"],18)
+   self.assertEqual(result["expertOtherPathologyVoxels"],1)
    self.assertEqual(result["sourceVoxelVolumeMm3"],2)
    self.assertTrue(result["sameNativePhysicalGrid"])
  def test_wrong_expert_affine_rejected(self):
