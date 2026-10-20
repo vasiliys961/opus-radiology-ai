@@ -32,6 +32,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Install official Kaggle API client
+        run: python3 -m pip install 'kaggle==1.8.2'
       - name: Fetch only public publisher metadata (no weights or scans)
         run: python3 scripts/carles-kaggle-model-provenance.py --output "$RUNNER_TEMP/carles-ct-publisher.json"
       - name: Save non-patient model provenance numeric metadata
