@@ -34,9 +34,16 @@ representative external evaluation have been established.
 
 ### Actual data limitation, 20 October 2026
 
-`MedOtter/wmh-segmentation` provides JSONL *path strings*, not the source
-NIfTI pair: workflow #39430837434 rightly failed. Its CC-BY-4.0 metadata
-must not override original rights. Original WMH Challenge dataset:
+`MedOtter/wmh-segmentation` contains **real compressed NIfTI** below
+`dataverse_files/` (about 399 MB total). The failed workflow
+#39430837434 mistakenly used the `data/nii/WMH_Segmentation_Challenge/`
+prefix from JSONL paths, rather than the actual Hugging Face repository tree.
+The test Singapore/85 pair is about 2.51 MB; the corrected source admission
+downloads and hashes those exact files at a pinned dataset revision.
+Some masks in this mirror have had their NIfTI header sform updated, so its
+bytes are not necessarily identical to the original archive.
+Its CC-BY-4.0 metadata must not override original rights.
+Original WMH Challenge dataset:
 [DataverseNL DOI 10.34894/AECRSD](https://doi.org/10.34894/AECRSD);
 the original complete Academic Torrents archive is about 8.72 GB and
 lists **CC BY-NC 4.0**; evaluate upstream terms before use.
