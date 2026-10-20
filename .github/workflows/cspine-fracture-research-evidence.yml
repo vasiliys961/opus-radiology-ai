@@ -1,0 +1,22 @@
+name: Cervical CT fracture original prediction admission
+on:
+  pull_request:
+    paths:
+      - "scripts/admit-rsna22-cspine-fracture-evidence.py"
+      - "scripts/test_admit_rsna22_cspine_fracture_evidence.py"
+      - ".github/workflows/cspine-fracture-research-evidence.yml"
+      - "docs/RSNA22_CSPINE_FRACTURE_ADAPTER.md"
+permissions:
+  contents: read
+jobs:
+  admission:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: |
+          python -m py_compile scripts/admit-rsna22-cspine-fracture-evidence.py
+          python -m unittest discover -s scripts -p 'test_admit_rsna22_cspine_fracture_evidence.py' -v
