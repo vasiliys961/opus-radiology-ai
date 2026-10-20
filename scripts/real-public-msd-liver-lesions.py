@@ -98,6 +98,40 @@ def download(root:Path):
                       "shape":geom["shape"],
                       "expertLesionVoxels":geom["expertTumorVoxels"]}))
 
+def lesion_components(model_mask, affine, minimum_voxels=10):
+    """Source-grid liver focal lesion candidates from REAL pretrained mask 1."""
+    import numpy as np
+    from scipy import ndimage
+    m=np.asarray(model_mask)
+    a=np.asarray(affine,dtype=float)
+    if (m.ndim!=3 or m.size>MAX_VOXELS or
+        not np.isin(m,[0,1]).all() or a.shape!=(4,4) or
+        not np.isfinite(a).all() or abs(float(np.linalg.det(a[:3,:3])))<1e-8):
+        raise ValueError("model_liver_lesion_mask_invalid_native_grid")
+    if not 1<=minimum_voxels<=100:
+        raise ValueError("invalid_candidate_size")
+    labels,n=ndimage.label(m==1,structure=ndimage.generate_binary_structure(3,2))
+    found=[]
+    voxel_mm3=abs(float(np.linalg.det(a[:3,:3])))
+    for idx,box in enumerate(ndimage.find_objects(labels),1):
+        if box is None:continue
+        cut=labels[box]==idx
+        count=int(np.count_nonzero(cut))
+        if count<minimum_voxels:continue
+        centroid=np.array(ndimage.center_of_mass(cut))+[x.start for x in box]
+        world=(a@np.r_[centroid,1])[:3]
+        found.append({
+          "nativeVoxelBoxIJK":[[int(s.start),int(s.stop-1)] for s in box],
+          "nativeVoxelCentroidIJK":[round(float(x),3) for x in centroid],
+          "sourceNiftiWorldCentroidMm":[round(float(x),3) for x in world],
+          "candidateVolumeMl":round(count*voxel_mm3/1000,4),
+          "candidateVoxels":count,
+          "isHepaticMalignancyConfirmed":False})
+        if len(found)>128:
+            raise ValueError("too_many_hepatic_lesion_candidates")
+    found.sort(key=lambda x:x["candidateVoxels"],reverse=True)
+    return found
+
 def evaluate(root:Path,mask:Path,out:Path,checkpoint_manifest:Path):
     import nibabel as nib
     import numpy as np
@@ -134,6 +168,7 @@ def evaluate(root:Path,mask:Path,out:Path,checkpoint_manifest:Path):
         raise ValueError("unexpected_total_segmentator_liver_lesions_labels")
     gt=(np.asarray(nib.load(str(truth)).dataobj)==2)
     pred=(prediction==1)
+    focal_candidates=lesion_components(prediction,scan.affine)
     tp=int(np.count_nonzero(pred & gt))
     fp=int(np.count_nonzero(pred & ~gt))
     fn=int(np.count_nonzero(~pred & gt))
@@ -148,7 +183,11 @@ def evaluate(root:Path,mask:Path,out:Path,checkpoint_manifest:Path):
       "predictedMaskSha256":sha(mask),"checkpointSha256":model["checkpointSha256"],
       "checkpointPublisherSigned":False,
       "originalDimensions":geo["shape"],"expertTumorVoxels":expertvox,
-      "modelLesionVoxels":modelvox,"truePositiveVoxels":tp,
+      "modelLesionVoxels":modelvox,"lesionCandidates":focal_candidates,
+      "lesionCandidateCount":len(focal_candidates),
+      "noMalignancyEstablished":False,
+      "NIfTIWorldNotVerifiedDICOMLPS":True,
+      "truePositiveVoxels":tp,
       "falsePositiveVoxels":fp,"falseNegativeVoxels":fn,
       "tumorDiceOnThisOneVolume":round(dice,6),
       "oneVolumeVoxelRecall":round(tp/expertvox,6),
