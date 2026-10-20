@@ -1,0 +1,82 @@
+name: LungSCAPE191 ORIGINAL pretrained forward on public chest CT
+on:
+  workflow_dispatch:
+    inputs:
+      case:
+        description: Public original CoronaCases CT (research only, possible training overlap)
+        required: true
+        type: choice
+        options:
+          - coronacases_003
+          - coronacases_004
+permissions:
+  contents: read
+jobs:
+  genuine-model-forward:
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    env:
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      HF_HUB_DISABLE_XET: "1"
+      HF_HUB_DISABLE_PROGRESS_BARS: "1"
+      PYTHONUNBUFFERED: "1"
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+      nnUNet_n_proc_DA: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install original nnU-Net v2 research executor (isolated Linux runner)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --index-url https://download.pytorch.org/whl/cpu torch==2.6.0
+          python -m pip install nnunetv2 nibabel==5.3.2 huggingface_hub==0.35.3
+          python - <<'PY'
+          import torch, nnunetv2
+          assert torch.__version__.startswith("2.6.0")
+          assert torch.version.cuda is None
+          print("CPU torch pinned and original nnUNetv2 installed")
+          PY
+      - name: Admit original public CT and original expert reference separately
+        run: |
+          python scripts/prepare-lungscape191-public-coronacases.py \
+            --case "${{ inputs.case }}" \
+            --output-private "$RUNNER_TEMP/lungscape-public" --execute-download
+      - name: Download and verify original publisher 5-fold archive
+        run: |
+          python scripts/prepare-lungscape191-original-weights.py \
+            --output-private "$RUNNER_TEMP/lungscape-weights" --execute-download
+      - name: Install the genuine original Dataset191 folds
+        env:
+          nnUNet_results: ${{ runner.temp }}/nnunet-results
+        run: |
+          mkdir -p "$nnUNet_results"
+          nnUNetv2_install_pretrained_model_from_zip "$RUNNER_TEMP/lungscape-weights/Dataset191_HighAttenuation.zip"
+      - name: Run original model on original CT (fail if RAM/time bound exceeded)
+        env:
+          nnUNet_results: ${{ runner.temp }}/nnunet-results
+        run: |
+          # Linux-hosted CPU worker only. Never execute this action on the user's Mac.
+          ulimit -v 12582912
+          python scripts/run-lungscape191-research.py \
+            --input "$RUNNER_TEMP/lungscape-public/in/lungcase001_0000.nii.gz" \
+            --nnunet-results "$nnUNet_results" \
+            --output "$RUNNER_TEMP/lungscape-predictions" \
+            --device cpu --execute
+      - name: Bind model result to exact public source and ontology (numeric only)
+        run: |
+          python scripts/bind-lungscape191-real-public-evidence.py \
+            --source-manifest "$RUNNER_TEMP/lungscape-public/numeric-public-ct-manifest.json" \
+            --weight-manifest "$RUNNER_TEMP/lungscape-weights/numeric-original-weight-manifest.json" \
+            --prediction-report "$RUNNER_TEMP/lungscape-predictions/opus-lungscape191-research-report.json" \
+            --output "$RUNNER_TEMP/lungscape191-authentic-forward-numeric.json"
+      - name: Upload numeric research evidence only (never CT, weights, masks)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lungscape191-original-public-ct-numeric
+          path: ${{ runner.temp }}/lungscape191-authentic-forward-numeric.json
+          retention-days: 3
+          if-no-files-found: error
