@@ -11,8 +11,8 @@ from pathlib import Path
 import numpy as np
 
 REPO="MedOtter/wmh-segmentation"
-FLAIR="data/nii/WMH_Segmentation_Challenge/dataverse_files/test/Singapore/85/orig/FLAIR.nii.gz"
-EXPERT="data/nii/WMH_Segmentation_Challenge/dataverse_files/test/Singapore/85/wmh.nii.gz"
+FLAIR="dataverse_files/test/Singapore/85/orig/FLAIR.nii.gz"
+EXPERT="dataverse_files/test/Singapore/85/wmh.nii.gz"
 MAX_FILE=300*1024**2
 
 def sha(path):
@@ -30,13 +30,15 @@ def verify(source,truth):
      not np.isfinite(image.affine).all()):
   raise ValueError("original_FLAIR_expert_physical_affine_not_aligned")
  count=0
+ other_pathology=0
  for k in range(image.shape[2]):
   block=np.asarray(mask.dataobj[:,:,k])
-  if not np.isfinite(block).all() or not np.isin(block,(0,1)).all():
+  if not np.isfinite(block).all() or not np.isin(block,(0,1,2)).all():
    raise ValueError("expert_WMH_label_ontology_not_binary")
-  count+=int(np.count_nonzero(block))
+  count+=int(np.count_nonzero(block==1))
+  other_pathology+=int(np.count_nonzero(block==2))
  if count<=0:raise ValueError("expert_reference_not_WMH_positive")
- return {"expertPositiveVoxels":count,"originalShape":list(image.shape),
+ return {"expertPositiveVoxels":count,"expertOtherPathologyVoxels":other_pathology,"originalShape":list(image.shape),
          "sourceFLAIRSHA256":sha(source),"originalExpertWMHSHA256":sha(truth),
          "sameNativePhysicalGrid":True,"expertMaskIsNotModelPrediction":True,
          "sourceVoxelVolumeMm3":abs(float(np.linalg.det(image.affine[:3,:3])))}
@@ -61,7 +63,8 @@ def execute():
  return {"schema":"opus-public-original-WMH-expert-FLAIR-admission/v1",
          "dataset":REPO,"sourceRevision":info.sha,"caseReference":"Singapore/85",
          "sourceFLAIRRelativePath":FLAIR,"sourceExpertRelativePath":EXPERT,
-         "reportedDatasetLicense":"CC BY 4.0 (mirror card, not independently audited upstream)",
+         "reportedDatasetLicense":"Mirror: CC BY 4.0; original Academic Torrents lists CC BY-NC 4.0; rights unresolved for commercial use",
+         "mirrorFilesMayHaveModifiedNiftiHeaders":True,
          "officialSplitReportedByMirror":"test",
          "modelTrainingOverlapIndependentlyExcluded":False,
          "realModelForwardCompleted":False,"clinicallyValidated":False,
