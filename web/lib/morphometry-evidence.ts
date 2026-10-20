@@ -113,6 +113,10 @@ export function validateMorphometryReport(raw:unknown):NumericReview{
  return {schema:x.schema,title:titles[x.schema],sourceSha256,fields,clinicalValidation:false,warnings:[
   "Числа получены из внешнего JSON: импорт не удостоверяет подлинность исследования и модели.",
   "Нельзя трактовать эти измерения как диагноз или исключение заболевания.",
-  "Требуются сопоставление с исходной КТ/МРТ и независимая врачебная проверка."
+  "Требуются сопоставление с исходной КТ/МРТ и независимая врачебная проверка.",
+  ...(x.schema==="opus-original-wmh-source-MRI-CPU-research/v1" && x.originalExpertOverlap!=null
+   ? ["WMH Dice рассчитан для одного исходного исследования; независимость от обучения и клиническая точность НЕ доказаны.",
+      "Разметка класса 2 (другая патология) исключена из подсчёта ошибок WMH."]
+   : [])
  ]};
 }
