@@ -1,0 +1,23 @@
+name: Gated adrenal tumor original nnUNet research contract
+on:
+  pull_request:
+    paths:
+      - scripts/original-adrenal-tumor-gated-research.py
+      - scripts/test_original_adrenal_tumor_gated_research.py
+      - docs/ADRENAL_TUMOR_GATED_RESEARCH.md
+      - .github/workflows/adrenal-tumor-gated-research.yml
+permissions:
+  contents: read
+jobs:
+  no-gated-assets-or-patient-data:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: |
+          python -m py_compile scripts/original-adrenal-tumor-gated-research.py
+          python -m unittest discover -s scripts -p 'test_original_adrenal_tumor_gated_research.py' -v
+          python scripts/original-adrenal-tumor-gated-research.py --help | grep -- --execute
