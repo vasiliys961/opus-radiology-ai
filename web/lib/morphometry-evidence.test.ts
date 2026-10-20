@@ -52,6 +52,28 @@ test("Aortic centerline geometry is shown as mask-only profile, NEVER diagnosed 
  assert.throws(()=>validateMorphometryReport({...legitimate,maximumSampledMaskFeretMm:NaN}),/числовая/);
  assert.throws(()=>validateMorphometryReport({...legitimate,numberOfReviewedOrthogonalPlanes:6}),/количество/);
 });
+test("Real TotalSpineSeg two original models and exact disc labels are required",()=>{
+ const levels=["T12-L1","L1-L2","L2-L3","L3-L4","L4-L5","L5-S"];
+ const genuine={
+  schema:"opus-true-original-TotalSpineSeg-disc-cord-MRI/v1",
+  sourceMRI_SHA256:hash,clinicallyValidated:false,
+  realTwoStagePretrainedCPUMRIForwardCompleted:true,
+  noMRIStenosisOrDiscHerniationDiagnosis:true,
+  publisherModelArchives:[
+   {authorZipSHA256:hash,installedFold0CheckpointSHA256:hash},
+   {authorZipSHA256:hash,installedFold0CheckpointSHA256:hash}
+  ],
+  discCandidates:levels.map((disc,i)=>({disc,present:i===1,volumeMl:i===1?2.43:undefined})),
+  spinalCordMaskVoxels:923,spinalCanalMaskVoxels:1841
+ };
+ const report=validateMorphometryReport(genuine);
+ assert.equal(report.sourceSha256,hash);
+ assert.equal(report.fields.length,4);
+ assert.equal(report.clinicalValidation,false);
+ assert.throws(()=>validateMorphometryReport({...genuine,realTwoStagePretrainedCPUMRIForwardCompleted:false}),/инференс/);
+ assert.throws(()=>validateMorphometryReport({...genuine,publisherModelArchives:[]}),/обе/);
+ assert.throws(()=>validateMorphometryReport({...genuine,discCandidates:[...genuine.discCandidates].reverse()}),/уровня/);
+});
 test("Reject unknown schema, malformed SHA, fake validation and NaN",()=>{
  const input={schema:"opus-native-cardiovascular-CT-anatomy-measurements/v1",sourceCTSHA256:hash,clinicallyValidated:false,
   measurements:{aorta:{maskEmpty:false,volumeMl:42}}};
