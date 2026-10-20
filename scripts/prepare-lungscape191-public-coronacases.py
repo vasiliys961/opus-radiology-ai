@@ -41,10 +41,19 @@ def audit_pair(source, reference):
         raise ValueError("CT / annotation incompatible 3D shapes")
     if (not np.isfinite(ct.affine).all()
             or not np.isfinite(expert.affine).all()
-            or abs(float(np.linalg.det(ct.affine[:3, :3]))) < 1e-8
-            or not np.allclose(ct.affine, expert.affine, atol=1e-3, rtol=0)
+            or abs(float(np.linalg.det(ct.affine[:3, :3]))) < 1e-8):
+        raise ValueError("CT or annotation has nonfinite or degenerate affine")
+    if (not np.allclose(ct.affine, expert.affine, atol=1e-3, rtol=0)
             or ct.header.get_xyzt_units()[0] != expert.header.get_xyzt_units()[0]):
-        raise ValueError("CT and expert annotation do not share physical geometry")
+        raise ValueError(
+            "CT and expert annotation do not share physical geometry: "
+            "sourceShape=" + repr(ct.shape) +
+            " expertShape=" + repr(expert.shape) +
+            " sourceUnit=" + repr(ct.header.get_xyzt_units()[0]) +
+            " expertUnit=" + repr(expert.header.get_xyzt_units()[0]) +
+            " sourceAffine=" + repr(ct.affine.round(4).tolist()) +
+            " expertAffine=" + repr(expert.affine.round(4).tolist()) +
+            " maxAffineDelta=" + str(float(np.max(np.abs(ct.affine - expert.affine)))))
     if expert.header.get_data_dtype().kind not in ("i", "u", "f"):
         raise ValueError("annotation not numeric")
     observed = {}
