@@ -40,6 +40,8 @@ jobs:
             'numpy==1.26.4' 'scipy==1.15.3' 'nibabel==5.3.2' \
             'huggingface_hub==0.35.3' 'psutil==6.1.1'
           python3 -m pip check
+      - name: Check clinical WMH overlap contracts (including real float32 expert ontology)
+        run: python3 -m unittest discover -s scripts -p 'test-real-brain-flair-wmh-cpu.py'
       - name: Run original author fold0 on exact public NIfTI and expert mask
         run: |
           python3 -m py_compile scripts/run-public-original-wmh-fold0.py
