@@ -52,6 +52,37 @@ test("WMH original expert scoring is internally recomputed and never promoted to
  assert.throws(()=>validateMorphometryReport({...data,originalExpertOverlap:{...overlap,expertOtherPathologyLabel2ExcludedVoxels:-1}}),/вне диапазона/);
  assert.throws(()=>validateMorphometryReport({...data,trainingOverlapIndependentlyExcluded:true}),/исследовательское/);
 });
+test("True WMH 3D component recall is source-bound, recomputed and descriptive only",()=>{
+ const overlap={
+  originalExpertWMHMaskSHA256:"b".repeat(64),sameOriginalNativeGrid:true,
+  clinicalValidation:false,singleCaseResearchScoreNotIndependentValidation:true,
+  tp:6672,fp:5864,fn:82,tn:2838198,expertOtherPathologyLabel2ExcludedVoxels:0,
+  dice:13344/(13344+5864+82),sensitivity:6672/6754,precision:6672/12536,
+  expertLesionComponents26Connectivity:70,
+  predictedLesionComponents26Connectivity:41,
+  matchedExpertLesionsAnyVoxelOneToOne:37,
+  missedExpertLesions:33,unmatchedPredictedLesionComponents:4,
+  lesionRecallAnyOverlap:37/70,falsePositiveComponentsPerStudy:4,
+  singleCaseAnyVoxelOverlapNotValidatedDetection:true,
+  otherPathologyLabel2ExcludedFromComponentScoring:true,
+  independentHoldout:false
+ };
+ const data={schema:"opus-original-wmh-source-MRI-CPU-research/v1",
+  sourceFLAIRSHA256:hash,clinicallyValidated:false,checkpointSHA256:"c".repeat(64),
+  realTrainedOriginalWMHModelForwardCompleted:true,candidateComponentCount:41,
+  totalPredictedHyperintensityMl:12.1,trainingOverlapIndependentlyExcluded:false,
+  originalExpertOverlap:overlap};
+ const valid=validateMorphometryReport(data);
+ assert.equal(valid.fields.length,14);
+ assert.match(valid.fields.find(x=>x.label.includes("recall компонентов"))?.value??"",/52,857/);
+ assert.match(valid.warnings.join(" "),/26-связным/);
+ assert.match(valid.warnings.join(" "),/НЕ подтверждённая врачом/);
+ assert.throws(()=>validateMorphometryReport({...data,originalExpertOverlap:{...overlap,lesionRecallAnyOverlap:.99}}),/не совпадают/);
+ assert.throws(()=>validateMorphometryReport({...data,originalExpertOverlap:{...overlap,missedExpertLesions:2}}),/не совпадают/);
+ assert.throws(()=>validateMorphometryReport({...data,originalExpertOverlap:{...overlap,independentHoldout:true}}),/исследовательское/);
+ assert.throws(()=>validateMorphometryReport({...data,originalExpertOverlap:{...overlap,predictedLesionComponents26Connectivity:2}}),/не совпадают/);
+ assert.throws(()=>validateMorphometryReport({...data,originalExpertOverlap:{...overlap,otherPathologyLabel2ExcludedFromComponentScoring:false}}),/исследовательское/);
+});
 test("Gallbladder hyperattenuation candidate output never becomes diagnosis",()=>{
  const x=validateMorphometryReport({schema:"opus-CT-gallbladder-hyperattenuation-candidate/v1",sourceCTSHA256:hash,
   clinicallyValidated:false,thresholdHU:180,candidates:[{candidateIndex:0}]});
