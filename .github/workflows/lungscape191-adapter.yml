@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - "scripts/run-lungscape191-research.py"
+      - "scripts/lungscape191_native_evidence.py"
+      - "scripts/test_lungscape191_native_evidence.py"
       - "docs/LUNGSCAPE191_REAL_MODEL_ADAPTER.md"
       - ".github/workflows/lungscape191-adapter.yml"
   workflow_dispatch:
@@ -18,7 +20,11 @@ jobs:
         with:
           python-version: '3.11'
       - name: Compile adapter without loading models or downloading CT
-        run: python -m py_compile scripts/run-lungscape191-research.py
+        run: python -m py_compile scripts/run-lungscape191-research.py scripts/lungscape191_native_evidence.py scripts/test_lungscape191_native_evidence.py
+      - name: Install lightweight numeric test dependencies only
+        run: python -m pip install numpy==2.2.6 nibabel==5.3.2
+      - name: Verify original ontology, native grid, bbox and units
+        run: python -m unittest discover -s scripts -p test_lungscape191_native_evidence.py -v
       - name: Validate explicit opt-in arguments
         run: |
           python scripts/run-lungscape191-research.py --help | grep -- --execute
