@@ -65,6 +65,27 @@ class TrueBrainWmhBridgeContract(unittest.TestCase):
         self.assertFalse(score["clinicalValidation"])
         self.assertTrue(score["singleCaseResearchScoreNotIndependentValidation"])
 
+    def test_real_publisher_float32_categorical_expert_mask(self):
+        # A real expert NIfTI can store exact 0/1/2 labels as float32.
+        truth = self.np.zeros((64, 64, 24), dtype=self.np.float32)
+        truth[6:10, 10:14, 4:7] = 1.
+        truth[5, 10, 4] = 2.
+        expert = self.root/"publisher-float32-expert.nii.gz"
+        self.nib.save(self.nib.Nifti1Image(truth, self.affine), expert)
+        score = mod.compare_native_expert(self.flair, self.mask, expert, mod.digest(expert))
+        self.assertEqual((score["tp"], score["fp"], score["fn"]), (36, 11, 12))
+        self.assertEqual(score["expertOtherPathologyLabel2ExcludedVoxels"], 1)
+
+        # Never round or threshold floating-point pseudo-labels.
+        truth[12, 12, 9] = .5
+        self.nib.save(self.nib.Nifti1Image(truth, self.affine), expert)
+        with self.assertRaisesRegex(ValueError, "ontology_invalid"):
+            mod.compare_native_expert(self.flair, self.mask, expert, mod.digest(expert))
+        truth[12, 12, 9] = self.np.nan
+        self.nib.save(self.nib.Nifti1Image(truth, self.affine), expert)
+        with self.assertRaisesRegex(ValueError, "ontology_invalid"):
+            mod.compare_native_expert(self.flair, self.mask, expert, mod.digest(expert))
+
     def test_expert_checksum_mismatch_and_invalid_ontology_fail_closed(self):
         truth = self.np.zeros((64, 64, 24), dtype=self.np.uint8)
         truth[7:9, 10:12, 4:7] = 1
