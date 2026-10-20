@@ -1,0 +1,26 @@
+name: Abdomen original native CT 9-organ quantitative anatomy research
+on:
+  pull_request:
+    paths:
+      - scripts/real-abdomen-organ-anatomical-volumetry.py
+      - scripts/test-real-abdomen-organ-anatomical-volumetry.py
+      - .github/workflows/abdomen-nine-organ-source-ct.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/real-abdomen-organ-anatomical-volumetry.py
+      - scripts/test-real-abdomen-organ-anatomical-volumetry.py
+      - .github/workflows/abdomen-nine-organ-source-ct.yml
+permissions:
+  contents: read
+jobs:
+  original-abdominal-native-source-geometry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python3 -m pip install 'numpy==1.26.4' 'nibabel==5.3.2'
+      - run: python3 -m unittest discover -s scripts -p 'test-real-abdomen-organ-anatomical-volumetry.py'
