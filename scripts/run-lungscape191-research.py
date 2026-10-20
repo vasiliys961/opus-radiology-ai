@@ -12,6 +12,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+from lungscape191_lesion_components import inspect_components
 from lungscape191_native_evidence import (
     MAX_FILE_BYTES, MAX_VOXELS, installed_label_map, inspect_native_prediction,
 )
@@ -102,6 +103,7 @@ def run(input_file, results, output_dir, *, device="cpu", execute=False):
     if sha256(source) != source_hash:
         raise RuntimeError("source CT changed during prediction: no mask binding")
     native_evidence = inspect_native_prediction(source, output, original_labels)
+    separate_candidate_evidence = inspect_components(source, output, original_labels)
     report = {"status": "research_mask_generated", "source_sha256": source_hash,
               "mask_sha256": sha256(output), "model": "LungSCAPE Dataset191",
               "model_dataset_json_sha256": sha256(model / "dataset.json"),
@@ -109,7 +111,7 @@ def run(input_file, results, output_dir, *, device="cpu", execute=False):
               "trueOriginalTrainedModelForwardCompleted": True,
               "originalCrossoverWithTrainingUnexcluded": True,
               "noIndependentClinicalValidation": True,
-              **native_evidence}
+              **native_evidence, **separate_candidate_evidence}
     (destination / "opus-lungscape191-research-report.json").write_text(
         json.dumps(report, indent=2) + "\n", encoding="utf-8")
     return report
