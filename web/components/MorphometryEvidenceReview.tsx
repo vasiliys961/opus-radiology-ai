@@ -9,6 +9,7 @@ const MAX_REPORT_BYTES=128*1024;
 export default function MorphometryEvidenceReview(){
  const [report,setReport]=useState<NumericReview|null>(null);
  const [sourceConfirm,setSourceConfirm]=useState("");
+ const [otherConfirm,setOtherConfirm]=useState<Record<string,string>>({});
  const [sourceError,setSourceError]=useState("");
  const [sourceProgress,setSourceProgress]=useState("");
  const [verifying,setVerifying]=useState(false);
@@ -18,7 +19,7 @@ export default function MorphometryEvidenceReview(){
  const [name,setName]=useState("");
  async function onPick(e:ChangeEvent<HTMLInputElement>){
   ++verificationVersion.current;activeVerification.current?.abort();
-  setReport(null);setSourceConfirm("");setName("");setError("");
+  setReport(null);setSourceConfirm("");setOtherConfirm({});setName("");setError("");
   setSourceError("");setSourceProgress("");setVerifying(false);
   const file=e.target.files?.[0];
   e.target.value="";
@@ -63,7 +64,38 @@ export default function MorphometryEvidenceReview(){
    if(version===verificationVersion.current){setVerifying(false);activeVerification.current=null;}
   }
  }
- const confirmed=!!report&&sourceConfirm===report.sourceSha256;
+ async function onAdditionalSourcePick(e:ChangeEvent<HTMLInputElement>,role:"ADC"|"FLAIR"){
+  ++verificationVersion.current;
+  const version=verificationVersion.current;
+  activeVerification.current?.abort();
+  setVerifying(false);setOtherConfirm(prev=>({...prev,[role]:""}));
+  setSourceError("");setSourceProgress("");
+  const source=e.target.files?.[0];e.target.value="";
+  if(!source||!report)return;
+  const expected=report.additionalSources?.find(x=>x.role===role)?.sha256;
+  if(!expected)return;
+  if(!/\\.nii(\\.gz)?$/i.test(source.name)){
+   setSourceError(role+": выберите исходный NIfTI.");return;
+  }
+  const controller=new AbortController();
+  activeVerification.current=controller;
+  setVerifying(true);
+  try{
+   const observed=await hashLocalNifti(source,controller.signal,(n,total)=>{
+    if(version===verificationVersion.current)setSourceProgress(role+": "+Math.round(100*n/total)+"%");
+   });
+   if(version!==verificationVersion.current||controller.signal.aborted)return;
+   if(observed!==expected)throw Error(role+": SHA-256 не совпадает с оригиналом.");
+   setOtherConfirm(prev=>({...prev,[role]:observed}));
+  }catch(err){
+   if(version===verificationVersion.current&&!controller.signal.aborted)
+    setSourceError(err instanceof Error?err.message:role+": ошибка SHA.");
+  }finally{
+   if(version===verificationVersion.current){setVerifying(false);activeVerification.current=null;}
+  }
+ }
+ const confirmed=!!report&&sourceConfirm===report.sourceSha256&&
+  (report.additionalSources??[]).every(x=>otherConfirm[x.role]===x.sha256);
  return <section className="cs-geometry" aria-label="Количественные находки КТ и МРТ">
   <h2>Морфометрия · числовые результаты</h2>
   <p>Отдельные исследовательские измерения сердца и сосудов, позвоночника, печени,
@@ -81,6 +113,12 @@ export default function MorphometryEvidenceReview(){
    <label>Для сверки выберите локальный исходный NIfTI КТ/МРТ (.nii или .nii.gz). SHA-256 вычисляется в браузере блоками до 2 МиБ, без отправки изображений: {" "}
     <input type="file" accept=".nii,.nii.gz,application/octet-stream" disabled={verifying} onChange={e=>{void onOriginalSourcePick(e);}}/>
    </label>
+   {report.additionalSources?.map(x=><label key={x.role}>
+     Для подтверждения результата инсульта выберите локальный оригинал {x.role} (.nii/.nii.gz) без передачи данных:
+     <input type="file" accept=".nii,.nii.gz,application/octet-stream" disabled={verifying}
+      onChange={e=>{void onAdditionalSourcePick(e,x.role);}}/>
+     {otherConfirm[x.role]===x.sha256?<span> · SHA-256 подтверждён</span>:<span> · не подтверждён</span>}
+    </label>)}
    {sourceProgress&&<p role="status">{sourceProgress}</p>}
    {sourceError&&<p role="alert">{sourceError}</p>}
    {!confirmed?<p role="status">Измерения скрыты, пока не подтверждён SHA-256 исходного исследования.</p>:<>
@@ -92,7 +130,7 @@ export default function MorphometryEvidenceReview(){
     {report.warnings.map(w=><p key={w}><small>{w}</small></p>)}
    </>}
    <p><strong>Исследовательский режим · клиническая точность не подтверждена.</strong></p>
-   <button type="button" onClick={()=>{++verificationVersion.current;activeVerification.current?.abort();setReport(null);setSourceConfirm("");setSourceProgress("");setSourceError("");setVerifying(false);setName("");setError("");}}>
+   <button type="button" onClick={()=>{++verificationVersion.current;activeVerification.current?.abort();setReport(null);setSourceConfirm("");setOtherConfirm({});setSourceProgress("");setSourceError("");setVerifying(false);setName("");setError("");}}>
     Очистить данные
    </button>
   </div>}
