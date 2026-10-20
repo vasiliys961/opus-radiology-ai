@@ -22,6 +22,7 @@ export function validateMorphometryReport(raw:unknown):NumericReview{
  if(x.clinicallyValidated!==false)throw Error("Отсутствует обязательный запрет на клиническую валидность.");
  const sourceSha256=hash(x.originalSourceCTSHA256??x.sourceCTSHA256??x.originalCtSHA256??x.sourceFLAIRSHA256??x.sourceMRI_SHA256);
  const fields:{label:string;value:string}[]=[];
+ let originalWMHLesionEvidenceVerified=false;
  const add=(label:string,n:unknown,unit:string,lo=-1500,hi=1000000)=>fields.push({label,value:fmt(val(n,lo,hi),unit)});
  if(x.schema==="opus-native-cardiovascular-CT-anatomy-measurements/v1"){
   const m=obj(x.measurements);const known=["heart","aorta","superior_vena_cava","inferior_vena_cava","portal_vein_and_splenic_vein","iliac_artery_left","iliac_artery_right","iliac_vena_left","iliac_vena_right"];
@@ -63,6 +64,43 @@ export function validateMorphometryReport(raw:unknown):NumericReview{
    add("Экспертная WMH · чувствительность",sensitivity*100,"%",0,100);
    add("Экспертная WMH · precision",precision*100,"%",0,100);
    add("Другие патологии · исключённые воксели",ignored,"",0,80000000);
+   // Optional TRUE author fold-0 lesion analysis (newer research JSON).
+   // Older genuine WMH reports without this field remain readable.
+   const lesionKeys=[
+    "expertLesionComponents26Connectivity",
+    "predictedLesionComponents26Connectivity",
+    "matchedExpertLesionsAnyVoxelOneToOne",
+    "missedExpertLesions",
+    "unmatchedPredictedLesionComponents",
+    "lesionRecallAnyOverlap",
+    "falsePositiveComponentsPerStudy"
+   ] as const;
+   if(lesionKeys.some(k=>e[k]!==undefined)){
+    if(lesionKeys.some(k=>e[k]===undefined)||
+       e.singleCaseAnyVoxelOverlapNotValidatedDetection!==true||
+       e.otherPathologyLabel2ExcludedFromComponentScoring!==true||
+       e.independentHoldout!==false||e.clinicalValidation!==false)
+     throw Error("WMH компоненты не подтверждены как ограниченное исследовательское сопоставление.");
+    const trueLesions=count(e.expertLesionComponents26Connectivity);
+    const predictedLesions=count(e.predictedLesionComponents26Connectivity);
+    const matched=count(e.matchedExpertLesionsAnyVoxelOneToOne);
+    const missed=count(e.missedExpertLesions);
+    const unmatched=count(e.unmatchedPredictedLesionComponents);
+    const falseComponents=count(e.falsePositiveComponentsPerStudy);
+    const lesionRecall=val(e.lesionRecallAnyOverlap,0,1);
+    if(trueLesions<1||matched>Math.min(trueLesions,predictedLesions)||
+       matched+missed!==trueLesions||matched+unmatched!==predictedLesions||
+       unmatched!==falseComponents||
+       Math.abs(lesionRecall-matched/trueLesions)>0.000001)
+     throw Error("Число обнаруженных/пропущенных WMH-компонентов и recall не совпадают.");
+    add("Экспертные WMH · 3D-компоненты",trueLesions,"",1,80000000);
+    add("WMH · сопоставлено 3D-компонентов",matched,"",0,80000000);
+    add("WMH · пропущено 3D-компонентов",missed,"",0,80000000);
+    add("WMH · несопоставленные предсказанные компоненты",unmatched,"",0,80000000);
+    add("WMH · recall компонентов (любое пересечение)",lesionRecall*100,"%",0,100);
+    originalWMHLesionEvidenceVerified=true;
+   }
+
   }
  }else if(x.schema==="opus-CT-gallbladder-hyperattenuation-candidate/v1"){
   if(!Array.isArray(x.candidates)||x.candidates.length>1000)throw Error("Неограниченный список кандидатов.");
@@ -117,6 +155,10 @@ export function validateMorphometryReport(raw:unknown):NumericReview{
   ...(x.schema==="opus-original-wmh-source-MRI-CPU-research/v1" && x.originalExpertOverlap!=null
    ? ["WMH Dice рассчитан для одного исходного исследования; независимость от обучения и клиническая точность НЕ доказаны.",
       "Разметка класса 2 (другая патология) исключена из подсчёта ошибок WMH."]
-   : [])
+   : []),
+  ...(originalWMHLesionEvidenceVerified ? [
+   "WMH recall рассчитан по 26-связным 3D-компонентам и любому пересечению с экспертной маской, с сопоставлением один к одному. Это НЕ подтверждённая врачом чувствительность отдельных очагов.",
+   "Высокая чувствительность по вокселям не означает обнаружение всех небольших WMH; этиологию (сосудистая, РС и др.) модель не классифицирует."
+  ] : [])
  ]};
 }
