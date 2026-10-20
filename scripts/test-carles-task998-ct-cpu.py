@@ -43,5 +43,39 @@ class AuthenticCarlesCTContract(unittest.TestCase):
         self.assertNotIn('subprocess.run(["curl"', source)
 
 
+    def test_native_voxel_centroid_and_world_affine_not_dicom(self):
+        import nibabel as nib
+        import numpy as np
+        with tempfile.TemporaryDirectory() as directory:
+            d = Path(directory)
+            affine = np.diag([2.0, 3.0, 4.0, 1.0])
+            affine[:3, 3] = [5, 7, 11]
+            ct = np.full((3, 3, 3), 37, dtype=np.int16)
+            mask = np.zeros((3, 3, 3), dtype=np.uint8)
+            mask[1, 1, 1] = 1
+            mask[2, 1, 1] = 1
+            source, pred, expert = (d / f"{x}.nii.gz" for x in ("ct", "pred", "expert"))
+            nib.save(nib.Nifti1Image(ct, affine), source)
+            nib.save(nib.Nifti1Image(mask, affine), pred)
+            nib.save(nib.Nifti1Image(mask, affine), expert)
+            out = mod.inspect_mask(source, pred, expert)
+            self.assertEqual(out["sourceVoxelBounds"], {
+                "minInclusive": [1, 1, 1], "maxInclusive": [2, 1, 1]})
+            self.assertEqual(out["sourceVoxelCentroid"], [1.5, 1.0, 1.0])
+            self.assertEqual(out["niftiWorldCentroidMm"], [8.0, 10.0, 15.0])
+            self.assertFalse(out["dicomLpsCoordinatesVerified"])
+            self.assertEqual(out["tumorVolumeMl"], 0.048)
+            self.assertEqual(out["voxelDice"], 1.0)
+            nib.save(nib.Nifti1Image(np.zeros((3, 3, 3), dtype=np.uint8), affine), pred)
+            empty = mod.inspect_mask(source, pred, None)
+            self.assertIsNone(empty["sourceVoxelCentroid"])
+            self.assertFalse(empty["negativeDiagnosis"])
+            shifted = affine.copy()
+            shifted[0, 3] += 2.0
+            nib.save(nib.Nifti1Image(mask, shifted), pred)
+            with self.assertRaisesRegex(ValueError, "source_grid"):
+                mod.inspect_mask(source, pred, expert)
+
+
 if __name__ == "__main__":
     unittest.main()
