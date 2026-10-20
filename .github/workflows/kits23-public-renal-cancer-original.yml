@@ -3,7 +3,7 @@ on:
   pull_request:
     paths:
       - scripts/admit-real-public-kits23-kidney-tumor.py
-      - scripts/test-admit-real-public-kits23-kidney-tumor.py
+      - scripts/test_admit_real_public_kits23_kidney_tumor.py
       - .github/workflows/kits23-public-renal-cancer-original.yml
       - docs/KITS23_ORIGINAL_POSITIVE_RENAL_TUMOR.md
   workflow_dispatch:
@@ -28,7 +28,7 @@ jobs:
       - name: Original expert class and source-native physical geometry checks
         run: |
           python -m py_compile scripts/admit-real-public-kits23-kidney-tumor.py
-          python -m unittest discover -s scripts -p 'test-admit-real-public-kits23-kidney-tumor.py' -v
+          python -m unittest discover -s scripts -p 'test_admit_real_public_kits23_kidney_tumor.py' -v
       - name: ACTUAL public KiTS23 CT and ORIGINAL expert renal tumor mask SHA and geometry
         run: |
           python scripts/admit-real-public-kits23-kidney-tumor.py \
