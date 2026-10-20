@@ -58,10 +58,10 @@ def score(source_path, expert_path, prediction_path, *, checkpoint_path):
         a = np.asarray(expert.dataobj[:,:,z])
         b = np.asarray(pred.dataobj[:,:,z])
         if (not np.isin(a,[0,1,2,3]).all()
-                or not np.isin(b,[0,1,2,3]).all()):
-            raise ValueError("unexpected label; expected KiTS23 class2 tumor, class1 kidney, class3 cyst")
+                or not np.isin(b,[0,1]).all()):
+            raise ValueError("unexpected label; expected expert KiTS23 label2 or original KS987 binary prediction label1")
         truth = a == 2
-        result = b == 2
+        result = b == 1
         t = int(np.count_nonzero(truth & result))
         p = int(np.count_nonzero(result))
         n = int(np.count_nonzero(truth))
@@ -87,7 +87,7 @@ def score(source_path, expert_path, prediction_path, *, checkpoint_path):
         "modelMaskSha256":sha256(paths[2]),
         "nativeSourceGeometryVerified":True,
         "originalExpertLabelId":2,
-        "predictedTumorLabelId":2,
+        "predictedTumorLabelId":1,
         "expertTumorVoxels":expert_n,
         "predictedTumorVoxels":pred_n,
         "voxelTP":tp,"voxelFP":fp,"voxelFN":fn,
