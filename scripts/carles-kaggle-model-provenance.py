@@ -9,7 +9,8 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
-import urllib.request
+import subprocess
+import tempfile
 
 MODEL = "dejankuhn/ct-lung-tumor-segmentation-model"
 URL = "https://www.kaggle.com/api/v1/models/view/" + MODEL
@@ -51,16 +52,19 @@ def parse_metadata(payload: bytes) -> dict:
 
 
 def fetch_metadata() -> bytes:
-    request = urllib.request.Request(URL, headers={
-        "Accept": "application/json", "User-Agent": "Opus-Radiology-research-provenance/1.0"})
-    with urllib.request.urlopen(request, timeout=45) as response:
-        if response.status != 200:
-            raise ValueError("kaggle_original_model_metadata_not_public")
-        data = response.read(MAX_METADATA + 1)
-    if len(data) > MAX_METADATA:
-        raise ValueError("authoritative_kaggle_metadata_oversized")
-    return data
-
+    """Use Kaggle's supported official CLI, not an invented REST route."""
+    with tempfile.TemporaryDirectory(prefix="opus-kaggle-public-model-") as tmp:
+        cmd = ["kaggle", "models", "get", MODEL, "-p", tmp]
+        completed = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        if completed.returncode:
+            raise ValueError("public_original_Carles_Kaggle_model_unavailable_through_official_CLI")
+        metadata = Path(tmp) / "model-metadata.json"
+        if not metadata.is_file():
+            raise ValueError("official_Kaggle_CLI_returned_no_model_metadata")
+        payload = metadata.read_bytes()
+        if len(payload) > MAX_METADATA:
+            raise ValueError("authoritative_kaggle_metadata_oversized")
+        return payload
 
 def main():
     p = argparse.ArgumentParser()
