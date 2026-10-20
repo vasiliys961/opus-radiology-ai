@@ -33,7 +33,7 @@ jobs:
           python-version: "3.11"
       - name: Check source and native positive lesion expert contracts (no fake model)
         run: |
-          python3 -m pip install --no-cache-dir "numpy==2.2.6" "nibabel==5.3.2"
+          python3 -m pip install --no-cache-dir "numpy==2.2.6" "nibabel==5.3.2" "scipy==1.15.3"
           python3 -m unittest discover -s scripts -p 'test-real-isles22-stroke-dwi-adc-flair.py' -v
       - name: Bound true 3D public ISLES source RAM and scratch disk
         run: |
