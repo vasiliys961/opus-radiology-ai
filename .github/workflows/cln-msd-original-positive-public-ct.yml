@@ -1,0 +1,76 @@
+name: Original CLN MSD positive public CT CPU research
+on:
+  pull_request:
+    paths:
+      - scripts/cln-msd-original-positive-public-ct.py
+      - scripts/test-cln-msd-original-positive-public-ct.py
+      - .github/workflows/cln-msd-original-positive-public-ct.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/cln-msd-original-positive-public-ct.py
+      - .github/workflows/cln-msd-original-positive-public-ct.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  true-CT-source-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python3 -m unittest discover -s scripts -p 'test-cln-msd-original-positive-public-ct.py'
+  original-positive-reference:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Lightweight exact source + 3D expert mask dependencies
+        run: python3 -m pip install 'huggingface_hub==0.35.3' 'nibabel==5.3.2' 'numpy==1.26.4'
+      - name: Original public expert-positive CT checksum, geometry and actual annotations
+        run: |
+          python3 scripts/cln-msd-original-positive-public-ct.py --mode source --workdir "$RUNNER_TEMP/cln-positive" --report "$RUNNER_TEMP/cln-positive-source.json"
+      - name: Export only numeric source evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: cln-original-MSD-public-expert-CT-source-only
+          path: ${{ runner.temp }}/cln-positive-source.json
+          if-no-files-found: error
+          retention-days: 7
+  actual-original-CPU-model:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    needs: original-positive-reference
+    runs-on: ubuntu-latest
+    timeout-minutes: 42
+    env:
+      HF_HUB_DISABLE_TELEMETRY: '1'
+      HF_HUB_DISABLE_PROGRESS_BARS: '1'
+      OMP_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+      CUDA_VISIBLE_DEVICES: '-1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install CPU-only PyTorch then original nnU-Net v2 runtime
+        run: |
+          python3 -m pip install 'torch==2.5.1+cpu' --index-url https://download.pytorch.org/whl/cpu
+          python3 -m pip install 'nnunetv2==2.7.0' 'huggingface_hub==0.35.3' 'nibabel==5.3.2' 'psutil==7.0.0'
+      - name: ONE true pretrained CPU prediction against public original expert-positive CT
+        run: |
+          python3 scripts/cln-msd-original-positive-public-ct.py --mode infer --workdir "$RUNNER_TEMP/cln-positive" --report "$RUNNER_TEMP/cln-positive-true-voxel-metrics.json" --memory-gib 6 --timeout-sec 1500
+      - name: Export only authentic numeric original weights + CT mask measurements
+        uses: actions/upload-artifact@v4
+        with:
+          name: cln-genuine-single-positive-CT-CPU-voxels
+          path: ${{ runner.temp }}/cln-positive-true-voxel-metrics.json
+          if-no-files-found: error
+          retention-days: 7
