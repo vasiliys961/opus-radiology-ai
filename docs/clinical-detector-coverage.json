@@ -859,6 +859,19 @@
         "publicSourceAdmissionRun": "https://github.com/vasiliys961/opus-radiology-ai/actions/runs/39488274964",
         "originalModelExpertDiceMeasured": false
       }
+    },
+    {
+      "id": "cervical-spine-fracture-ct",
+      "modality": "CT",
+      "anatomy": "spine",
+      "pathology": "cervical vertebral fractures C1-C7 (vertebra-level classification)",
+      "status": "real_checkpoint_candidate",
+      "weights": "Original RSNA22 top-solution trained-model weight releases via Kaggle (Qishen, Darragh); publisher bytes and individual license NOT audited; only local research-output adapter currently implemented",
+      "source": "https://github.com/zxjasonhu/cspine-2022-challenge-inference-collection",
+      "reference": "Public RSNA 2022 cervical fracture CT competition with vertebra-specific manual labels; source/weight license and positive CT still to admit",
+      "restriction": "No downloaded original checkpoint SHA, genuine pretrained forward, original DICOM study or expert scores in Opus. CSV C1-C7 admission is output contract ONLY; caller-provided SHA strings do not prove provenance. No lesion voxel location, independent AUC, or diagnosis. No patient cloud use.",
+      "priority": 2,
+      "next": "Audit actual Kaggle original author model weight licenses/bytes SHA, obtain lawful expert-positive original DICOM cervical trauma CT, execute original model on isolated GPU, verify original per-vertebra predictions and SOP/frame localization, count errors independently."
     }
   ],
   "selectionRule": "Prioritize uncovered CT/MR diseases with legal checkpoints, independently usable real image/mask pair and host RAM budget, in that order."
