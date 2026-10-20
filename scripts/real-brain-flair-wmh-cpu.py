@@ -140,6 +140,75 @@ def inspect_mask(source, mask, mask_sha):
 
 
 
+
+def evaluate_lesion_components(source_img, pred_img, expert_img):
+    """3D 26-connected component detection on authentic, source-aligned WMH masks.
+
+    Any source-voxel overlap matches at most ONE predicted and ONE expert
+    component. This is a descriptive *single-case*, uncalibrated sensitivity
+    at any-overlap, not proof of distinguishing lacunes, MS or vascular WMH.
+    Challenge label 2 (other pathology) is excluded from both components.
+    """
+    import numpy as np
+    from scipy.ndimage import label
+
+    shape = source_img.shape
+    if np.prod(shape, dtype=np.int64) > MAX_VOXELS:
+        raise ValueError("WMH_lesion_level_volume_unbounded")
+    reference = np.zeros(shape, dtype=np.bool_)
+    predicted = np.zeros(shape, dtype=np.bool_)
+    for z in range(shape[2]):
+        gt = np.asarray(expert_img.dataobj[:, :, z])
+        pr = np.asarray(pred_img.dataobj[:, :, z])
+        if (not np.isin(gt, (0, 1, 2)).all()
+                or not np.isin(pr, (0, 1)).all()):
+            raise ValueError("WMH_component_label_ontology_invalid")
+        valid = gt != 2
+        reference[:, :, z] = (gt == 1)
+        predicted[:, :, z] = (pr == 1) & valid
+
+    connectivity = np.ones((3, 3, 3), dtype=np.uint8)
+    reference_cc, n_ref = label(reference, structure=connectivity)
+    prediction_cc, n_pred = label(predicted, structure=connectivity)
+    if n_ref > 5000 or n_pred > 5000:
+        raise ValueError("WMH_lesion_components_exceed_safe_limit")
+    # Sparse per-slice intersections, no giant (Nref * Npred) matrix.
+    pair_counts = {}
+    for z in range(shape[2]):
+        a = reference_cc[:, :, z]
+        b = prediction_cc[:, :, z]
+        touched = (a > 0) & (b > 0)
+        if not np.any(touched):
+            continue
+        pairs, count = np.unique(
+            np.stack((a[touched], b[touched]), axis=1), axis=0,
+            return_counts=True)
+        for pair, n in zip(pairs, count):
+            key = (int(pair[0]), int(pair[1]))
+            pair_counts[key] = pair_counts.get(key, 0) + int(n)
+    # Highest-overlap first; each connected component matches at most once.
+    assigned_ref, assigned_pred = set(), set()
+    for (rid, pid), overlap in sorted(
+            pair_counts.items(), key=lambda x: (-x[1], x[0])):
+        if rid not in assigned_ref and pid not in assigned_pred:
+            assigned_ref.add(rid)
+            assigned_pred.add(pid)
+    found = len(assigned_ref)
+    return {
+        "expertLesionComponents26Connectivity": int(n_ref),
+        "predictedLesionComponents26Connectivity": int(n_pred),
+        "matchedExpertLesionsAnyVoxelOneToOne": found,
+        "missedExpertLesions": int(n_ref - found),
+        "unmatchedPredictedLesionComponents": int(n_pred - found),
+        "lesionRecallAnyOverlap": found / n_ref if n_ref else None,
+        "falsePositiveComponentsPerStudy": int(n_pred - found),
+        "singleCaseAnyVoxelOverlapNotValidatedDetection": True,
+        "otherPathologyLabel2ExcludedFromComponentScoring": True,
+        "independentHoldout": False,
+        "clinicalValidation": False,
+    }
+
+
 def compare_native_expert(source, prediction, expert, expected_expert_sha256):
     """Voxel-wise WMH overlap on genuine original source grid, bounded by 2-D slices.
 
@@ -186,7 +255,9 @@ def compare_native_expert(source, prediction, expert, expected_expert_sha256):
         tn += int(np.count_nonzero(valid & (pred == 0) & (truth == 0)))
     if tp + fn == 0:
         raise ValueError("reference_WMH_positive_required_for_positive_benchmark")
+    lesion_components = evaluate_lesion_components(source_img, pred_img, expert_img)
     return {
+        **lesion_components,
         "originalExpertWMHMaskSHA256": expected_expert_sha256.lower(),
         "sameOriginalNativeGrid": True,
         "expertOtherPathologyLabel2ExcludedVoxels": ignored,
