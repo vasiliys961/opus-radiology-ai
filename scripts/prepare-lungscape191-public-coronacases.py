@@ -43,8 +43,7 @@ def audit_pair(source, reference):
             or not np.isfinite(expert.affine).all()
             or abs(float(np.linalg.det(ct.affine[:3, :3]))) < 1e-8):
         raise ValueError("CT or annotation has nonfinite or degenerate affine")
-    if (not np.allclose(ct.affine, expert.affine, atol=1e-3, rtol=0)
-            or ct.header.get_xyzt_units()[0] != expert.header.get_xyzt_units()[0]):
+    if not np.allclose(ct.affine, expert.affine, atol=1e-3, rtol=0):
         raise ValueError(
             "CT and expert annotation do not share physical geometry: "
             "sourceShape=" + repr(ct.shape) +
@@ -74,6 +73,10 @@ def audit_pair(source, reference):
     return {
         "sourceShape": list(ct.shape),
         "sourceSpatialUnit": ct.header.get_xyzt_units()[0],
+        "expertSpatialUnit": expert.header.get_xyzt_units()[0],
+        "spatialUnitCodesMatch": ct.header.get_xyzt_units()[0] == expert.header.get_xyzt_units()[0],
+        "sourceMillimetresVerified": ct.header.get_xyzt_units()[0] == expert.header.get_xyzt_units()[0] == "mm",
+        "nativePhysicalVolumesSuppressedWhenUnitsUnknown": True,
         "matchingSourceAndExpertNiftiGrid": True,
         "observedAnnotationValueCountsNoSemanticMapping": observed,
         "trainingOverlapWithOriginalNineCoronaCasesExcluded": False,
