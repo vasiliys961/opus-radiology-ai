@@ -1,3 +1,12 @@
+> **CURRENT PRIORITY OVERRIDE · 2026-10-20:** Continue toward a broad, real, clinically useful
+> portfolio of CT/MRI pathology detectors. BEFORE following older historical notes in this file,
+> read [docs/CLINICAL_DETECTOR_EXPANSION_DIRECTIVE.md](docs/CLINICAL_DETECTOR_EXPANSION_DIRECTIVE.md)
+> and latest [AGENTS.md](AGENTS.md); older `main` SHAs, manual-merge constraints and
+> R231-first instructions below are historical, superseded by the current owner directive.
+> Preserve source-licensed real inference and exact geometry, no invented accuracy,
+> no Mac M1 memory overload or unsanctioned patient cloud. Owner-reported RSNA Knee
+> result is **0.956**, verify the exact official score/weight artifact before promoting it.
+
 # Передать следующему чату: Opus Radiology AI
 
 Продолжай разработку **Opus Radiology AI** в GitHub: https://github.com/vasiliys961/opus-radiology-ai .
