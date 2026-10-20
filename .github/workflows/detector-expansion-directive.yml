@@ -1,0 +1,41 @@
+name: Detector-expansion directive integrity
+on:
+  pull_request:
+    paths:
+      - AGENTS.md
+      - HANDOFF_NEXT_CHAT.md
+      - docs/CLINICAL_DETECTOR_EXPANSION_DIRECTIVE.md
+      - .github/workflows/detector-expansion-directive.yml
+  push:
+    branches: [main]
+    paths:
+      - AGENTS.md
+      - HANDOFF_NEXT_CHAT.md
+      - docs/CLINICAL_DETECTOR_EXPANSION_DIRECTIVE.md
+permissions:
+  contents: read
+jobs:
+  detector-directive-integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure current agents and handoff link a real complete clinical detector instruction
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          doc = Path("docs/CLINICAL_DETECTOR_EXPANSION_DIRECTIVE.md").read_text()
+          agents = Path("AGENTS.md").read_text()
+          handoff = Path("HANDOFF_NEXT_CHAT.md").read_text()
+          inventory = json.loads(Path("docs/clinical-detector-coverage.json").read_text())
+          assert "CLINICAL_DETECTOR_EXPANSION_DIRECTIVE.md" in agents
+          assert "CLINICAL_DETECTOR_EXPANSION_DIRECTIVE.md" in handoff
+          assert len(inventory["entries"]) >= 40
+          assert len({e["id"] for e in inventory["entries"]}) == len(inventory["entries"])
+          for topic in ("Brain metastases", "Lung tumor", "Pulmonary embolism",
+                        "RSNA Knee", "Spine and musculoskeletal", "INDEPENDENT VALIDATION",
+                        "Gemini", "No identifiable"):
+              assert topic.lower() in doc.lower(), f"missing directive: {topic}"
+          print("Clinical detector owner directive linked; inventory includes", len(inventory["entries"]), "targets")
+          PY
