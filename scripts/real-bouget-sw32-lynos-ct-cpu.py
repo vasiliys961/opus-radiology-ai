@@ -7,10 +7,12 @@ No patient uploads, no images in artifacts; no diagnosis or model calibration.
 """
 from __future__ import annotations
 import argparse
+import configparser
 import hashlib
 import importlib.util
 import json
 import os
+import re
 from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
@@ -25,6 +27,7 @@ HF_DATASET = "andreped/LyNoS"
 CT_FILE = "Pat3/pat3_data.nii.gz"
 GT_FILE = "Pat3/pat3_labels_LymphNodes.nii.gz"
 MAX_STORAGE_BYTES = 4 * 1024**3
+PREDICTION_THRESHOLD = 0.4  # Explicit research threshold, not calibrated
 
 def loaded_preflight():
     mod_path = Path(__file__).with_name("bouget-official-checkpoint-preflight.py")
@@ -47,6 +50,31 @@ def guarded_copy_member(archive,info,target:Path,limit:int):
     if copied!=info.file_size:
         raise ValueError("model_truncated_during_extraction")
 
+def select_lymphnode_prediction(output_dir:Path, model_config:Path, prefix:str):
+    """Select only a publisher-declared lymph-node probability channel.
+
+    The original model emits multiple files (including its prerequisite CT_Lungs).
+    A glob selecting the first or requiring exactly one file is unsafe.
+    The class label must come from the genuine model pre_processing.ini,
+    with the exact publisher filename convention in src/Utils/io.py.
+    """
+    config = configparser.ConfigParser()
+    if not config.read(model_config):
+        raise ValueError("original_UNet_SW32_training_class_config_missing")
+    raw = config.get("Training", "classes", fallback="").split("#", 1)[0]
+    declared = [label.strip() for label in raw.split(",") if label.strip()]
+    matches = [label for label in declared
+               if re.sub(r"[^a-z0-9]", "", label.lower()) in
+               {"lymphnode", "lymphnodes", "mediastinallymphnodes"}]
+    if len(matches) != 1:
+        raise ValueError("original_model_lymphnode_class_not_uniquely_declared")
+    label = matches[0]
+    candidate = output_dir / (prefix + "-pred_" + label + ".nii.gz")
+    if not candidate.is_file() or candidate.stat().st_size == 0:
+        raise ValueError("original_lymphnode_probability_output_missing")
+    return label, candidate
+
+
 def metrics(pred_path:Path,expert_path:Path):
     import nibabel as nib
     import numpy as np
@@ -55,7 +83,10 @@ def metrics(pred_path:Path,expert_path:Path):
     if reference.shape!=prediction.shape or len(reference.shape)!=3 or not np.allclose(reference.affine,prediction.affine,rtol=0,atol=0.03):
         raise ValueError("model_predictions_not_in_native_expert_CT_geometry")
     ref=np.asarray(reference.dataobj)>0
-    pred=np.asarray(prediction.dataobj)>0.5
+    scores=np.asarray(prediction.dataobj)
+    if not np.isfinite(scores).all() or scores.min() < 0 or scores.max() > 1:
+        raise ValueError("original_prediction_is_not_valid_probability_volume")
+    pred=scores>=PREDICTION_THRESHOLD
     tp=int(np.count_nonzero(ref&pred));fp=int(np.count_nonzero(~ref&pred));fn=int(np.count_nonzero(ref&~pred))
     denominator=2*tp+fp+fn
     return {"maskGeometryExact":True,"referencePositiveVoxels":int(np.count_nonzero(ref)),
@@ -120,19 +151,19 @@ def run_case(work:Path):
              DOCKER_IMAGE,"-i","./resources/data/"+ct_path.name,
              "-o","./resources/output/lynos-pat3","-m","UNet-SW32"]
     subprocess.run(command,check=True,timeout=1200)
-    candidates=sorted((root/"output").glob("lynos-pat3*.nii.gz"))
-    if not candidates:
-        raise ValueError("true_model_forward_did_not_create_NIfTI_mask")
-    # Native geometry and expert mask both required. Reject ambiguous channel.
+    # Publisher emits CT_Lungs and UNet-SW32 channels in the same output dir.
+    # Never score the lung probability as mediastinal lymph nodes.
+    declared_class, node_path=select_lymphnode_prediction(
+        root/"output",models/"UNet-SW32"/"pre_processing.ini","lynos-pat3")
     original_gt=root/"data"/Path(GT_FILE).name
-    if len(candidates)!=1:
-        raise ValueError("ambiguous_publisher_segmentation_outputs_require_manual_audit")
-    report=metrics(candidates[0],original_gt)
+    report=metrics(node_path,original_gt)
     report.update({
         "schema":"opus-real-bouget-mediastinal-UNet-SW32-LyNoS-P3/v1",
         "originalArchiveSHA256":PINNED_PUBLISHER_ZIP_SHA256,
         "originalPublicCtSHA256":PINNED_IMAGE_SHA256,
         "model":"Bouget-UNet-SW32",
+        "publisherOutputClass":declared_class,
+        "probabilityThreshold":PREDICTION_THRESHOLD,
         "gpuUsed":False,"cpuMemoryCapGiB":5,
         "patientCloudTransfer":False,
         "sourceType":"research_public_contrast_enhanced_CT",
