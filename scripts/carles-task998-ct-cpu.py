@@ -52,13 +52,27 @@ def inspect_mask(ct: Path, prediction: Path, expert: Path | None):
     if gt and (gt.shape != src.shape or not np.allclose(src.affine, gt.affine, atol=0.02, rtol=0)):
         raise ValueError("expert_tumor_mask_geometry_mismatch")
     n = tp = fp = fn = 0
+    bounds_min, bounds_max = None, None
+    source_index_sums = np.zeros(3, dtype=np.float64)
     for z in range(0, src.shape[2], 8):
         sl = (slice(None), slice(None), slice(z, min(z + 8, src.shape[2])))
         array = np.asarray(pred.dataobj[sl])
         if not np.isfinite(array).all() or not np.isin(array, (0, 1)).all():
             raise ValueError("unexpected_original_tumor_mask_labels")
         positive = array == 1
-        n += int(np.count_nonzero(positive))
+        count = int(np.count_nonzero(positive))
+        n += count
+        if count:
+            ix, iy, iz = np.nonzero(positive)
+            index_min = [int(ix.min()), int(iy.min()), int(iz.min()) + z]
+            index_max = [int(ix.max()), int(iy.max()), int(iz.max()) + z]
+            if bounds_min is None:
+                bounds_min, bounds_max = index_min, index_max
+            else:
+                bounds_min = [min(x, y) for x, y in zip(bounds_min, index_min)]
+                bounds_max = [max(x, y) for x, y in zip(bounds_max, index_max)]
+            source_index_sums += [float(ix.sum()), float(iy.sum()),
+                                  float(iz.sum()) + z * count]
         if gt is not None:
             truth = np.asarray(gt.dataobj[sl]) > 0
             tp += int(np.count_nonzero(positive & truth))
@@ -67,7 +81,17 @@ def inspect_mask(ct: Path, prediction: Path, expert: Path | None):
     ml = n * float(np.prod(src.header.get_zooms()[:3])) / 1000
     report = {"nativeCTGeometryVerified": True, "tumorVoxels": n,
               "tumorVolumeMl": round(ml, 3), "clinicallyValidated": False,
-              "lesionRecallValidated": False, "negativeDiagnosis": False}
+              "lesionRecallValidated": False, "negativeDiagnosis": False,
+              "dicomLpsCoordinatesVerified": False,
+              "sourceVoxelBounds": None, "sourceVoxelCentroid": None,
+              "niftiWorldCentroidMm": None}
+    if n:
+        center = source_index_sums / n
+        world = src.affine @ np.array([*center, 1.0], dtype=np.float64)
+        report["sourceVoxelBounds"] = {"minInclusive": bounds_min,
+                                       "maxInclusive": bounds_max}
+        report["sourceVoxelCentroid"] = [round(float(x), 3) for x in center]
+        report["niftiWorldCentroidMm"] = [round(float(x), 3) for x in world[:3]]
     if gt is not None:
         report.update({"TP": tp, "FP": fp, "FN": fn,
                        "voxelDice": (2 * tp / (2 * tp + fp + fn) if (2 * tp + fp + fn) else None),

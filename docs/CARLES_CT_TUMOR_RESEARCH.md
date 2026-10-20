@@ -38,6 +38,20 @@ using the existing local NIfTI mask route and audited against original image
 geometry. The numeric report contains source and weights SHA-256; it does not
 contain original CT files, DICOM IDs, raw pixels, or patient metadata.
 
+## Source-grid anatomical navigation (native NIfTI, not DICOM)
+For real mask label 1, report the **union bounding box** across all predicted
+voxels (min/max inclusive original CT voxel indices), the all-positive-voxel
+centroid, and its 3D position through the original source NIfTI affine.
+This supports reviewing candidate extent and locating the matching region
+on the original loaded NIfTI.
+
+For an empty mask all coordinates are null, **never** a negative CT diagnosis.
+Bounds are not a measured RECIST lesion diameter; multiple lesions can form one
+large bounding box. These are NIfTI coordinates, **not** authenticated DICOM
+LPS coordinates or SOP references, and lesion-level findings have not been
+validated. The existing browser import must independently check source ID and
+geometry before any MPR navigation or report linkage.
+
 ## Evidence boundary
 The actual original Carles CT weights have **not** yet been downloaded or
 executed by this branch. CI verifies only the runner contract, not a model
