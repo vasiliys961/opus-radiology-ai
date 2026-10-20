@@ -21,7 +21,7 @@ ORIGINAL_CT = "dataset/case_00021/imaging.nii.gz"
 ORIGINAL_MASK = "dataset/case_00021/segmentation.nii.gz"
 # The ORIGINAL publicly published LFS SHA256 objects from publisher's dataset mirror.
 ORIGINAL_CT_SHA256 = "c8fc76065ce316d6935c3dc87490606381d19fbff1bdd43616814e0cde0c0637"
-ORIGINAL_MASK_SHA256 = "8e79ea88a9a0abd0c271b6826ab917431c20d45d4da907eae83b46eaef7449bf"
+ORIGINAL_MASK_SHA256 = "0292f2683b376043f478788624a8fdd924ce736c98626378fb897d4723991b50"
 ORIGINAL_LFS_GIT_COMMIT = "3ddf82e740fbf40f5ca609762be4ba426335d8e7"
 LABELS = {0: "background", 1: "kidney", 2: "renal_tumor", 3: "renal_cyst"}
 MAX_SHAPE_VOXELS = 230_000_000
