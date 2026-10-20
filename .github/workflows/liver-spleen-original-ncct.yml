@@ -1,0 +1,26 @@
+name: Liver vs spleen original NCCT HU research
+on:
+  pull_request:
+    paths:
+      - scripts/real-liver-spleen-ncct-source-hu.py
+      - scripts/test-real-liver-spleen-ncct-source-hu.py
+      - .github/workflows/liver-spleen-original-ncct.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/real-liver-spleen-ncct-source-hu.py
+      - scripts/test-real-liver-spleen-ncct-source-hu.py
+      - .github/workflows/liver-spleen-original-ncct.yml
+permissions:
+  contents: read
+jobs:
+  source-HU-and-geometry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python3 -m pip install 'numpy==1.26.4' 'scipy==1.15.3' 'nibabel==5.3.2'
+      - run: python3 -m unittest discover -s scripts -p 'test-real-liver-spleen-ncct-source-hu.py'
