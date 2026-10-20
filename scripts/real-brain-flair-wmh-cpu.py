@@ -20,7 +20,7 @@ PUBLISHER = "https://github.com/jinghangli98/wmh_seg"
 MODEL_REV = "a5ad55c6dec7cb2d4bd7b419a3e7d0c14e72aaee"
 VERSION = "1.6.0"
 MAX_BYTES = 900*1024**2
-MAX_VOXELS = 200_000_000
+MAX_VOXELS = 80_000_000
 
 
 def digest(path):
@@ -34,7 +34,7 @@ def digest(path):
 def safe_scan(path):
     import nibabel as nib
     import numpy as np
-    if path.is_symlink() or not path.is_file() or not 200 <= path.stat().st_size <= MAX_BYTES:
+    if path.is_symlink() or not path.is_file() or not 100 <= path.stat().st_size <= MAX_BYTES:
         raise ValueError("original_FLAIR_file_invalid_or_oversized")
     img = nib.load(str(path))
     if len(img.shape) != 3 or np.prod(img.shape, dtype=np.int64) > MAX_VOXELS:
@@ -109,6 +109,8 @@ def inspect_mask(source, mask, mask_sha):
     if not np.isin(vox, (0, 1)).all():
         raise ValueError("original_WMH_class_ontology_not_binary")
     cc, n = label(vox == 1)
+    if n > 5000:
+        raise ValueError("unbounded_WMH_component_count")
     coords = find_objects(cc)
     candidates = []
     for index, spans in enumerate(coords, start=1):
