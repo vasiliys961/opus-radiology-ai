@@ -75,25 +75,101 @@ def select_lymphnode_prediction(output_dir:Path, model_config:Path, prefix:str):
     return label, candidate
 
 
-def metrics(pred_path:Path,expert_path:Path):
+def score_connected_node_components(reference, prediction):
+    """Research-only 3D 26-neighbor instance proxy, not pathology diagnosis.
+
+    One-to-one highest overlap any-positive-voxel assignment; touching nodes
+    can merge into one 3D component. The proxy is NOT manual nodal station
+    identification, held-out FROC, or clinically validated node recall.
+    """
+    import numpy as np
+    from scipy.ndimage import label
+
+    if reference.shape != prediction.shape or reference.ndim != 3:
+        raise ValueError("lynos_component_masks_shape_mismatch")
+    if np.prod(reference.shape, dtype=np.int64) > 180_000_000:
+        return {"connectedNodeAnalysisCompleted": False,
+                "connectedNodeAnalysisSkippedResourceGuard": True,
+                "expertConnectedComponents26": None,
+                "predictedConnectedComponents26": None,
+                "matchedReferenceComponentsOneToOne": None,
+                "unmatchedPredictionComponents": None,
+                "missedReferenceComponents": None,
+                "connectedComponentRecallAnyVoxel": None}
+    connection = np.ones((3, 3, 3), dtype=np.uint8)
+    refcc, refs = label(reference, structure=connection)
+    predcc, preds = label(prediction, structure=connection)
+    if refs > 10000 or preds > 10000:
+        raise ValueError("lynos_excessive_component_count")
+    intersections = {}
+    for z in range(reference.shape[2]):
+        a = refcc[:, :, z]
+        b = predcc[:, :, z]
+        valid = (a > 0) & (b > 0)
+        if not np.any(valid):
+            continue
+        pairs, counts = np.unique(
+            np.stack((a[valid], b[valid]), axis=1),
+            axis=0, return_counts=True)
+        for pair, count in zip(pairs, counts):
+            key = (int(pair[0]), int(pair[1]))
+            intersections[key] = intersections.get(key, 0) + int(count)
+    assigned_gt, assigned_pred = set(), set()
+    for (gt, pr), count in sorted(
+            intersections.items(), key=lambda pair: (-pair[1], pair[0])):
+        if gt not in assigned_gt and pr not in assigned_pred:
+            assigned_gt.add(gt)
+            assigned_pred.add(pr)
+    hits = len(assigned_gt)
+    return {
+        "connectedNodeAnalysisCompleted": True,
+        "connectedNodeAnalysisSkippedResourceGuard": False,
+        "expertConnectedComponents26": int(refs),
+        "predictedConnectedComponents26": int(preds),
+        "matchedReferenceComponentsOneToOne": hits,
+        "unmatchedPredictionComponents": int(preds - hits),
+        "missedReferenceComponents": int(refs - hits),
+        "connectedComponentRecallAnyVoxel": (hits / refs if refs else None),
+        "connectedComponentMatchingCriterion": "26-neighbor any-voxel overlap; one-to-one greedy",
+        "independentClinicalNodeRecallValidated": False,
+    }
+
+
+def metrics(pred_path:Path,expert_path:Path,source_ct:Path):
     import nibabel as nib
     import numpy as np
     reference=nib.load(str(expert_path))
     prediction=nib.load(str(pred_path))
-    if reference.shape!=prediction.shape or len(reference.shape)!=3 or not np.allclose(reference.affine,prediction.affine,rtol=0,atol=0.03):
+    original=nib.load(str(source_ct))
+    if (reference.shape != prediction.shape or reference.shape != original.shape
+            or len(reference.shape) != 3
+            or not np.isfinite(original.affine).all()
+            or not np.allclose(reference.affine, prediction.affine, rtol=0, atol=.03)
+            or not np.allclose(reference.affine, original.affine, rtol=0, atol=.03)):
         raise ValueError("model_predictions_not_in_native_expert_CT_geometry")
-    ref=np.asarray(reference.dataobj)>0
+    values = np.asarray(reference.dataobj)
+    if (not np.isfinite(values).all() or not np.equal(values, np.floor(values)).all()
+            or np.any(values < 0) or np.any(values > 4096)):
+        raise ValueError("original_LyNoS_expert_node_label_ontology_invalid")
+    ref = values > 0
+    if not ref.any():
+        raise ValueError("original_LyNoS_expert_node_reference_not_positive")
     scores=np.asarray(prediction.dataobj)
     if not np.isfinite(scores).all() or scores.min() < 0 or scores.max() > 1:
         raise ValueError("original_prediction_is_not_valid_probability_volume")
     pred=scores>=PREDICTION_THRESHOLD
     tp=int(np.count_nonzero(ref&pred));fp=int(np.count_nonzero(~ref&pred));fn=int(np.count_nonzero(ref&~pred))
     denominator=2*tp+fp+fn
+    lesion=score_connected_node_components(ref,pred)
     return {"maskGeometryExact":True,"referencePositiveVoxels":int(np.count_nonzero(ref)),
             "predictedVoxels":int(np.count_nonzero(pred)),"TP":tp,"FP":fp,"FN":fn,
             "voxelDice":(2*tp/denominator if denominator else None),
+            "expertLabelSHA256":loaded_preflight().digest_file(expert_path,"sha256"),
+            "originalPredictionSHA256":loaded_preflight().digest_file(pred_path,"sha256"),
+            "sourceCTSHA256":loaded_preflight().digest_file(source_ct,"sha256"),
             "notIndependentHoldout":True,"caseCount":1,"lesionRecallValidated":False,
-            "wholeCTOriginalModelForwardCompleted":True,"clinicallyValidated":False}
+            "wholeCTOriginalModelForwardCompleted":True,"clinicallyValidated":False,
+            **lesion}
 
 def run_case(work:Path):
     work.mkdir(parents=True,exist_ok=True)
@@ -156,7 +232,7 @@ def run_case(work:Path):
     declared_class, node_path=select_lymphnode_prediction(
         root/"output",models/"UNet-SW32"/"pre_processing.ini","lynos-pat3")
     original_gt=root/"data"/Path(GT_FILE).name
-    report=metrics(node_path,original_gt)
+    report=metrics(node_path,original_gt,ct_path)
     report.update({
         "schema":"opus-real-bouget-mediastinal-UNet-SW32-LyNoS-P3/v1",
         "originalArchiveSHA256":PINNED_PUBLISHER_ZIP_SHA256,
