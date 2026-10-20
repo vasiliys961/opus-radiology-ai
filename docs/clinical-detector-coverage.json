@@ -872,6 +872,19 @@
       "restriction": "No downloaded original checkpoint SHA, genuine pretrained forward, original DICOM study or expert scores in Opus. CSV C1-C7 admission is output contract ONLY; caller-provided SHA strings do not prove provenance. No lesion voxel location, independent AUC, or diagnosis. No patient cloud use.",
       "priority": 2,
       "next": "Audit actual Kaggle original author model weight licenses/bytes SHA, obtain lawful expert-positive original DICOM cervical trauma CT, execute original model on isolated GPU, verify original per-vertebra predictions and SOP/frame localization, count errors independently."
+    },
+    {
+      "id": "adrenal-tumor-ct",
+      "modality": "CT-ROI",
+      "anatomy": "abdomen",
+      "pathology": "adrenal gland neoplasm/tumor candidates on contrast CT (pre-extracted ROI only)",
+      "status": "license_blocked",
+      "weights": "yunnaa/Adrenal-Tumor-nnUNet five original nnU-Net v2 fold checkpoint_best.pth models; gated Hugging Face terms, original checkpoint SHAs unverified and assets NOT downloaded",
+      "source": "https://huggingface.co/yunnaa/Adrenal-Tumor-nnUNet",
+      "reference": "Author original 373-case adrenal gland/tumor training cohort; no public expert-positive CT with correctly transformed adrenal ROI admitted by Opus",
+      "restriction": "Hugging Face model-weight access gated; license marked other, human acceptance and commercial license rights required. Original trained forward=0; preprocessed ROI lacks proven full CT backprojection; no sensitivity/Dice/independent validation, patient use or Mac inference.",
+      "priority": 2,
+      "next": "With human-authorized license, audit original five fold weight bytes/SHA and author VOI algorithm, retrieve lawful positive adrenal CT with expert tumor class2, run original nnU-Net 3D on isolated >=16GiB Linux CPU/GPU, map 128x192x192 ROI back to source CT, calculate actual expert metrics."
     }
   ],
   "selectionRule": "Prioritize uncovered CT/MR diseases with legal checkpoints, independently usable real image/mask pair and host RAM budget, in that order."
