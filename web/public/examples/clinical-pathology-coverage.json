@@ -804,6 +804,19 @@
         "lesionRecallAnyOverlap": 0.5285714285714286,
         "lesionRecallClinicallyValidated": false
       }
+    },
+    {
+      "id": "multiple-sclerosis-lesions-flair",
+      "modality": "MR-FLAIR",
+      "anatomy": "brain",
+      "pathology": "multiple sclerosis lesion candidates (NOT nonspecific ischemic WMH)",
+      "status": "real_checkpoint_candidate",
+      "weights": "Francesco La Rosa original FLAMeS nnU-Net Dataset004_WML, nnUNetTrainer_8000epochs (2.4GB official Zenodo published archive md5 8b90b789d6ceca1886f42fa1724a08cc; NOT installed/SHA-verified here)",
+      "source": "https://zenodo.org/records/17955359",
+      "reference": "Positive expert-masked MS FLAIR study to acquire; skull stripped SynthStrip --no-csf source required",
+      "restriction": "New genuine original-model executable adapter only, NO actual pretrained forward yet; upstream archive access and commercial-rights require review. This is MS lesion segmentation, not a clinical MS diagnosis or same task as vascular WMH; no expert Dice, lesion FROC or independent validation. Research-only Linux worker, not Mac M1 or patient cloud.",
+      "priority": 2,
+      "next": "Obtain rights-cleared official original weights and public expert MS FLAIR, skull strip with audit and native source geometry, perform genuine five-fold (if available) nnU-Net inference on isolated GPU, report 26-connected lesion-level recall and expert metrics."
     }
   ],
   "selectionRule": "Prioritize uncovered CT/MR diseases with legal checkpoints, independently usable real image/mask pair and host RAM budget, in that order."
