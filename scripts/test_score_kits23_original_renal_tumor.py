@@ -18,7 +18,7 @@ class RenalSourceScorerContract(unittest.TestCase):
         self.assertIn("truth = a == 2",src)
         self.assertIn("result = b == 1",src)
         self.assertIn("not np.isin(b,[0,1]).all()",src)
-        self.assertIn(\'"predictedTumorLabelId":1\',src)
+        self.assertIn('"predictedTumorLabelId":1',src)
 
     def test_missing_original_files_fail_closed(self):
         with self.assertRaises(FileNotFoundError):
