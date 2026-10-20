@@ -5,6 +5,8 @@ on:
       - AGENTS.md
       - HANDOFF_NEXT_CHAT.md
       - docs/CLINICAL_DETECTOR_EXPANSION_DIRECTIVE.md
+      - docs/CLINICAL_DEVELOPMENT_PATH.md
+      - docs/NEXT_CHAT_CLINICAL_START.md
       - .github/workflows/detector-expansion-directive.yml
   push:
     branches: [main]
@@ -12,6 +14,8 @@ on:
       - AGENTS.md
       - HANDOFF_NEXT_CHAT.md
       - docs/CLINICAL_DETECTOR_EXPANSION_DIRECTIVE.md
+      - docs/CLINICAL_DEVELOPMENT_PATH.md
+      - docs/NEXT_CHAT_CLINICAL_START.md
 permissions:
   contents: read
 jobs:
@@ -29,6 +33,14 @@ jobs:
           agents = Path("AGENTS.md").read_text()
           handoff = Path("HANDOFF_NEXT_CHAT.md").read_text()
           inventory = json.loads(Path("docs/clinical-detector-coverage.json").read_text())
+          roadmap = Path("docs/CLINICAL_DEVELOPMENT_PATH.md").read_text()
+          new_chat = Path("docs/NEXT_CHAT_CLINICAL_START.md").read_text()
+          assert "CLINICAL_DEVELOPMENT_PATH.md" in agents and "CLINICAL_DEVELOPMENT_PATH.md" in handoff
+          assert "NEXT_CHAT_CLINICAL_START.md" in agents and "NEXT_CHAT_CLINICAL_START.md" in handoff
+          assert "НАША ЦЕЛЬ И МАРШРУТ" in new_chat
+          for target in ("QTIM", "CLN", "Raidionics", "ТЭЛА", "WMH", "RSNA", "локализация", "врач"):
+              assert target.casefold() in roadmap.casefold(), f"roadmap missing clinical milestone: {target}"
+          assert "CLINICAL_DEVELOPMENT_PATH.md" in new_chat
           assert "CLINICAL_DETECTOR_EXPANSION_DIRECTIVE.md" in agents
           assert "CLINICAL_DETECTOR_EXPANSION_DIRECTIVE.md" in handoff
           assert len(inventory["entries"]) >= 40

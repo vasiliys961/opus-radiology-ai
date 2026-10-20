@@ -1,3 +1,16 @@
+## ОБЯЗАТЕЛЬНОЕ НАЧАЛО СЛЕДУЮЩЕГО ЧАТА — НАША ЦЕЛЬ
+
+Открывать новое продолжение не с устаревшей технической задачи, а с
+[docs/NEXT_CHAT_CLINICAL_START.md](docs/NEXT_CHAT_CLINICAL_START.md).
+В первую очередь включать в текст нового чата целеполагание из раздела
+**«НАША ЦЕЛЬ И МАРШРУТ»**, ссылку на постоянный
+[docs/CLINICAL_DEVELOPMENT_PATH.md](docs/CLINICAL_DEVELOPMENT_PATH.md),
+затем фактические main SHA, PR/Actions, реальные клинические результаты,
+блокеры и следующий клинический детектор. Редактировать только подтверждённые
+статусы, не возрождать R231-first или требование ручных слияний из истории.
+Критерий продвижения — новые настоящие детекторы + физическая локализация +
+независимое качество, не число PR.
+
 > **CURRENT PRIORITY OVERRIDE · 2026-10-20:** Continue toward a broad, real, clinically useful
 > portfolio of CT/MRI pathology detectors. BEFORE following older historical notes in this file,
 > read [docs/CLINICAL_DETECTOR_EXPANSION_DIRECTIVE.md](docs/CLINICAL_DETECTOR_EXPANSION_DIRECTIVE.md)

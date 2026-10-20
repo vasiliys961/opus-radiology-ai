@@ -1,3 +1,18 @@
+## FIXED STRATEGIC ROUTE — CONTINUE CLINICAL DETECTOR DEVELOPMENT (2026-10-20)
+
+**MANDATORY:** Before selecting a task, read the complete
+[docs/CLINICAL_DEVELOPMENT_PATH.md](docs/CLINICAL_DEVELOPMENT_PATH.md)
+and [docs/CLINICAL_DETECTOR_EXPANSION_DIRECTIVE.md](docs/CLINICAL_DETECTOR_EXPANSION_DIRECTIVE.md).
+The former is the ordered, evidence-gated path from real diverse pathology
+detection through independent metrics and physician-visible MPR to the full product.
+Do not replace it with synthetic test work or anatomy-only feature counts.
+
+When starting a new chat, use [docs/NEXT_CHAT_CLINICAL_START.md](docs/NEXT_CHAT_CLINICAL_START.md)
+as the **first** goal-setting block, fill its current SHA, PR/CI, true model evidence
+and immediate task from live GitHub. Treat the older historical handoff underneath
+as archival. Continue short independent medical coding cycles without user
+micromanagement. No failed CI merges and no fabricated real inference.
+
 ## CURRENT OWNER PRIORITY — 2026-10-20: EXPAND REAL CLINICAL PATHOLOGY DETECTORS
 
 **MANDATORY FOR ALL AGENTS AND FUTURE CHATS:** Read
