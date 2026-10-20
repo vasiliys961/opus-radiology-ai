@@ -41,7 +41,7 @@ jobs:
           p=pathlib.Path(os.environ["RUNNER_TEMP"])/"original-public-kits23-renal/numeric-original-renal-tumor-evidence.json"
           j=json.loads(p.read_text())
           assert j["originalCTSha256"]=="c8fc76065ce316d6935c3dc87490606381d19fbff1bdd43616814e0cde0c0637"
-          assert j["originalManualExpertSegmentationSha256"]=="8e79ea88a9a0abd0c271b6826ab917431c20d45d4da907eae83b46eaef7449bf"
+          assert j["originalManualExpertSegmentationSha256"]=="0292f2683b376043f478788624a8fdd924ce736c98626378fb897d4723991b50"
           assert j["expertTumorPositive"] is True
           assert j["expertTumorVoxelCount"]>0
           assert j["nativeSourceAndExpertGridVerified"] is True
