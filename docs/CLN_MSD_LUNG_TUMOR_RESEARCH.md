@@ -54,3 +54,25 @@ human annotations exist and the source is appropriately licensed.
 (2) named publicly redistributable expert-positive CT with source SHA;
 (3) real trained forward with original volume geometry;
 (4) voxel TP/FP/FN, independent data overlap audit and component-level recall.
+
+
+## One public CT / real original CPU model research
+
+The original MSD Task06 CT and expert tumor mask are mirrored at
+https://huggingface.co/datasets/MedOtter/msd-lung
+under CC BY-SA 4.0. `scripts/cln-msd-original-positive-public-ct.py`
+uses the precise pair `imagesTr/lung_043.nii.gz` and
+`labelsTr/lung_043.nii.gz`, pins actual revision, authentic source LFS
+hashes where available, enforces native affine/shape and an expert-positive
+tumor mask. A source-only mode is separate from genuine original model
+execution. The GitHub CPU workflow after merge runs source verification
+first, then prepares the real SHA-matched pretrained checkpoint and
+invokes `nnUNetv2_predict -device cpu` with no GPU, memory/time guard,
+and **no CT/mask uploads as artifacts**.
+
+This Task06 CT comes from the same dataset family used for CLN training;
+model training/validation overlap has **not** been excluded, so even a
+successful 3D voxel Dice here is not independent clinical sensitivity.
+If CPU memory/timeout or input geometry fails, the run must fail and no
+numeric Dice is claimed. User Mac 8GB is never part of this CI.
+
