@@ -2,7 +2,7 @@
 """Acquire genuine author WMH fold0 asset and configs; no studies or patient content."""
 import argparse
 import hashlib
-import importlib.resources
+import importlib.metadata
 import json
 from pathlib import Path
 import shutil
@@ -48,7 +48,7 @@ def provision(dest):
     if dest.exists(): raise ValueError("new_model_folder_required")
     dest.mkdir(parents=True)
     for name in ("dataset.json","plans.json"):
-        source_cfg=importlib.resources.files("wmh_seg").joinpath("nnunet_assets","invivo",name)
+        source_cfg=Path(importlib.metadata.distribution("wmh_seg").locate_file("wmh_seg/nnunet_assets/invivo/"+name))
         if not source_cfg.is_file():raise ValueError("bundled_original_config_missing")
         shutil.copyfile(source_cfg,dest/name)
     fold=dest/"fold_0"
