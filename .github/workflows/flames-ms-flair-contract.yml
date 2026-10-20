@@ -1,0 +1,27 @@
+name: Original FLAMeS MS-FLAIR research executor contract
+on:
+  pull_request:
+    paths:
+      - scripts/flames_ms_research.py
+      - scripts/test_flames_ms_research.py
+      - docs/FLAMES_MS_FLAIR_RESEARCH.md
+      - .github/workflows/flames-ms-flair-contract.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-research-adapter:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Offline minimal segmentation geometry dependencies, no pretrained weights
+        run: python -m pip install 'numpy==2.2.6' 'scipy==1.15.3' 'nibabel==5.3.2'
+      - name: Verify FLAIR skull stripping, official trainer, source geometry and nonclinical flags
+        run: |
+          python -m py_compile scripts/flames_ms_research.py scripts/test_flames_ms_research.py
+          python -m unittest discover -s scripts -p 'test_flames_ms_research.py' -v
+          python scripts/flames_ms_research.py --help | grep -- --execute
