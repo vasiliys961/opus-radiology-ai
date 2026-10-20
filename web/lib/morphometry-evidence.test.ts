@@ -28,6 +28,30 @@ test("WMH requires TRUE original trained forward and model hash",()=>{
   realTrainedOriginalWMHModelForwardCompleted:true,checkpointSHA256:hash,candidateComponentCount:2,totalPredictedHyperintensityMl:0.1});
  assert.equal(x.fields.length,2);
 });
+test("WMH original expert scoring is internally recomputed and never promoted to clinical evidence",()=>{
+ const overlap={
+  originalExpertWMHMaskSHA256:"b".repeat(64),sameOriginalNativeGrid:true,
+  clinicalValidation:false,singleCaseResearchScoreNotIndependentValidation:true,
+  tp:36,fp:11,fn:12,tn:12200,expertOtherPathologyLabel2ExcludedVoxels:1,
+  dice:72/95,sensitivity:36/48,precision:36/47
+ };
+ const data={
+  schema:"opus-original-wmh-source-MRI-CPU-research/v1",sourceFLAIRSHA256:hash,clinicallyValidated:false,
+  realTrainedOriginalWMHModelForwardCompleted:true,checkpointSHA256:hash,
+  candidateComponentCount:2,totalPredictedHyperintensityMl:.15,
+  trainingOverlapIndependentlyExcluded:false,originalExpertOverlap:overlap
+ };
+ const report=validateMorphometryReport(data);
+ assert.equal(report.fields.length,9);
+ assert.match(report.fields[5].label,/Dice/);
+ assert.match(report.fields[5].value,/75,789/);
+ assert.equal(report.clinicalValidation,false);
+ assert.throws(()=>validateMorphometryReport({...data,realTrainedOriginalWMHModelForwardCompleted:false}),/инференс/);
+ assert.throws(()=>validateMorphometryReport({...data,originalExpertOverlap:{...overlap,dice:0.99}}),/не совпадают/);
+ assert.throws(()=>validateMorphometryReport({...data,originalExpertOverlap:{...overlap,tp:36.5}}),/нецелые/);
+ assert.throws(()=>validateMorphometryReport({...data,originalExpertOverlap:{...overlap,expertOtherPathologyLabel2ExcludedVoxels:-1}}),/вне диапазона/);
+ assert.throws(()=>validateMorphometryReport({...data,trainingOverlapIndependentlyExcluded:true}),/исследовательское/);
+});
 test("Gallbladder hyperattenuation candidate output never becomes diagnosis",()=>{
  const x=validateMorphometryReport({schema:"opus-CT-gallbladder-hyperattenuation-candidate/v1",sourceCTSHA256:hash,
   clinicallyValidated:false,thresholdHU:180,candidates:[{candidateIndex:0}]});
