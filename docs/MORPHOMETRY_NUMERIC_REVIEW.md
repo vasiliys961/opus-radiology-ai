@@ -46,3 +46,13 @@ explicitly denies aneurysm/disease diagnosis, and cross-section count matches
 its source-bound numeric profile. Feret and area-equivalent diameters are
 from the **interior anatomical aortic segmentation**, NOT outer-to-outer
 clinical lumen/wall measurements, not a positive AAA flag.
+
+## MRI spine disc and canal research results (eighth route)
+
+The exact `opus-true-original-TotalSpineSeg-disc-cord-MRI/v1` output is
+shown only with a locally hashed original MRI NIfTI matching its source
+SHA256, explicit true trained two-stage forward flag, two original author
+archive/checkpoint SHA256 pairs and sorted publisher lumbar disc ontology.
+The display shows source-mask volumes, detected anatomy levels and cord/canal
+mask voxel counts. Missing disc does NOT mean normal, no disc-herniation,
+spinal stenosis, spinal cord compression or MS diagnosis is generated.
