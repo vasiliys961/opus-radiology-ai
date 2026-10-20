@@ -681,10 +681,10 @@
       "status": "real_case_measured",
       "weights": "Verified original Raidionics CT_LymphNodes ONNX v13, published 105,186,900 byte archive SHA256 922c0e99cb637a872d18b83300a648eb0d782b1ef874c5d33a551285e52ccb08; original raidionicsseg 1.5.2 CPU forward observed (distinct legacy Bouget TF1.14 UNet-SW32 research archive)",
       "source": "https://github.com/dbouget/ct_mediastinal_structures_segmentation",
-      "reference": "Original published Raidionics 27,321,314-byte vendor mediastinum CPU test CT with a lung mask; NOT independent lymph-node expert-positive validation. Separate 15-case LyNoS with human mask remains to evaluate.",
-      "restriction": "REAL pretrained publisher CT_LymphNodes ONNX inference on vendor test CT only: 81,490 candidate mask voxels (233.145 mL), source-affine matched, 20.01s, main-process peak RSS 3,999,629,312 B. This is NOT independent expert-positive/negative CT, no ground-truth lesion mask comparison, clinical Dice/FROC/sensitivity/FP unresolved, no malignancy classification or patient use. Old TF1.14 LyNoS Pat1 original weights verified but case >200M voxel safety cap and no forward.",
+      "reference": "Original published Raidionics 27,321,314-byte vendor mediastinum CPU test CT with a lung mask; NOT independent lymph-node expert-positive validation. Separate 15-case LyNoS with human mask remains to evaluate. Original LyNoS Pat3 expert-positive (9425 voxels) source SHA d918d73688c38be7550a59e881e6a72b617f4d8f4171e99b286afb89f27ce646.",
+      "restriction": "REAL pretrained publisher CT_LymphNodes ONNX inference on vendor test CT only: 81,490 candidate mask voxels (233.145 mL), source-affine matched, 20.01s, main-process peak RSS 3,999,629,312 B. This is NOT independent expert-positive/negative CT, no ground-truth lesion mask comparison, clinical Dice/FROC/sensitivity/FP unresolved, no malignancy classification or patient use. Old TF1.14 LyNoS Pat1 original weights verified but case >200M voxel safety cap and no forward. Original Bouget UNet-SW32 full positive Pat3 forward measured voxel Dice 0.039482 (TP244 FP2691 FN9181), 3/6 26-connected reference components matched and 10 unmatched predictions. Unsuitable for diagnosis; not independent.",
       "priority": 1,
-      "next": "Select permitted LyNoS positive CT with true independent manual lymph-node mask within CPU memory budget, run this original source SHA-pinned ONNX and compute voxel Dice, lesion-level recall and false-positive nodes/CT after exact 3D affine validation.",
+      "next": "Run newer genuine Raidionics CT_LymphNodes ONNX on exact SHA-pinned LyNoS Pat3 with an independently verified SAME-CT lung mask; compare expert Dice and lesion-level recall to weak Bouget baseline; test distinct negative/hard cases before any clinical claims.",
       "observedResearchEvidence": {
         "run": "https://github.com/vasiliys961/opus-radiology-ai/actions/runs/39311359233",
         "artifact": "https://github.com/vasiliys961/opus-radiology-ai/actions/runs/39311359233/artifacts/12216651101",
@@ -705,6 +705,30 @@
         "clinicalDice": null,
         "lesionLevelRecall": null,
         "clinicalValidation": false,
+        "patientUseAllowed": false
+      },
+      "observedAdditionalResearchEvidence": {
+        "run": "https://github.com/vasiliys961/opus-radiology-ai/actions/runs/39460493908",
+        "artifact": "https://github.com/vasiliys961/opus-radiology-ai/actions/runs/39460493908/artifacts/12282766880",
+        "model": "Original Bouget UNet-SW32 with original CT_Lungs",
+        "case": "LyNoS Pat3",
+        "caseCount": 1,
+        "originalPublicCTSHA256": "d918d73688c38be7550a59e881e6a72b617f4d8f4171e99b286afb89f27ce646",
+        "originalWeightArchiveSHA256": "e00d3c83aed6ba7fc0cd376e20e4aa3ec8a672d1737a0fc41becc8d217449d72",
+        "expertPositiveVoxels": 9425,
+        "predictedVoxels": 2935,
+        "voxelTP": 244,
+        "voxelFP": 2691,
+        "voxelFN": 9181,
+        "voxelDice": 0.039482200647249194,
+        "expertConnectedComponents26": 6,
+        "predictedConnectedComponents26": 13,
+        "matchedComponents26": 3,
+        "missedComponents26": 3,
+        "unmatchedPredictionComponents26": 10,
+        "anyOverlapConnectedComponentRecall": 0.5,
+        "independentHoldout": false,
+        "clinicallyValidated": false,
         "patientUseAllowed": false
       }
     },
@@ -756,7 +780,7 @@
       "weights": "Original jil202/wmh_seg 1.6.0 fold0 nnU-Net CPU; SHA256 f7ef9747eb73ef8a927c07e4227bc4b9bfab761e0f7c60f2fd09ac9cf1a5fd3a",
       "source": "https://github.com/jinghangli98/wmh_seg",
       "reference": "WMH Challenge Singapore/85 real FLAIR with original expert class 1 WMH and class 2 other pathology; expert 6754 positive WMH voxels, source SHA256 d0dddfbe04d8af5b70d7e799cbe8d11083f7c70533c072dd9d525223dcccda82",
-      "restriction": "Actual one-case original fold0 forward and native expert overlap; TP 6672 FP 5864 FN 82 Dice 0.691757. Overlap with original model training not excluded, not lesion recall, no independent holdout; mirror CC BY 4.0 versus original CC BY-NC 4.0 rights conflict. Research only, no MS/small-vessel-disease differentiation or clinical claims.",
+      "restriction": "Actual one-case original fold0 forward and native expert overlap; TP 6672 FP 5864 FN 82 Dice 0.691757. Overlap with original model training not excluded, not lesion recall, no independent holdout; mirror CC BY 4.0 versus original CC BY-NC 4.0 rights conflict. Research only, no MS/small-vessel-disease differentiation or clinical claims. Authentic source-level 26-connected WMH components: 70 expert, 41 predicted, 37 matched, 33 missed, 4 unmatched; descriptive any-overlap recall 0.528571, not calibrated lesion sensitivity.",
       "priority": 1,
       "next": "Confirm independent model-training-disjoint FLAIR cohort with true expert masks; lesion-level sensitivity/FP per study and clinical phenotype verification, while broadening other pathology detectors.",
       "observedResearchEvidence": {
@@ -770,7 +794,15 @@
         "expertPositiveVoxels": 6754,
         "voxelDice": 0.691757,
         "independentHoldout": false,
-        "clinicallyValidated": false
+        "clinicallyValidated": false,
+        "lesionMetricRun": "https://github.com/vasiliys961/opus-radiology-ai/actions/runs/39459488016",
+        "expertComponents26": 70,
+        "predictedComponents26": 41,
+        "matchedComponents26": 37,
+        "missedComponents26": 33,
+        "unmatchedPredictionComponents26": 4,
+        "lesionRecallAnyOverlap": 0.5285714285714286,
+        "lesionRecallClinicallyValidated": false
       }
     }
   ],
