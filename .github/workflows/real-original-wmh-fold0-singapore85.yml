@@ -17,7 +17,7 @@ jobs:
       CUDA_VISIBLE_DEVICES: '-1'
       HF_HUB_DISABLE_TELEMETRY: '1'
       HF_HUB_DISABLE_PROGRESS_BARS: '1'
-      TORCH_HOME: ${{ runner.temp }}/torch-cache
+      TORCH_HOME: /tmp/opus-wmh-torch-cache
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
