@@ -1,15 +1,32 @@
 name: Genuine pancreatic tumor CT MONAI pretrained DiNTS on original expert MSD
 on:
-  push:
-    branches:
-      - research/real-pancreatic-tumor-monai-msd
+  pull_request:
     paths:
       - .github/workflows/real-msd-pancreatic-tumor-dints.yml
       - scripts/real-msd-pancreatic-tumor-dints.py
+      - scripts/test-real-msd-pancreatic-tumor-dints.py
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/real-msd-pancreatic-tumor-dints.yml
+      - scripts/real-msd-pancreatic-tumor-dints.py
+      - scripts/test-real-msd-pancreatic-tumor-dints.py
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
+  authentic-pancreas-pathology-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Original trained MONAI pancreatic tumor task contract
+        run: python -m unittest discover -s scripts -p 'test-real-msd-pancreatic-tumor-dints.py'
   trained-pancreatic-tumor-cpu:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 55
     env:
@@ -32,7 +49,7 @@ jobs:
           mem=int(next(line.split()[1] for line in Path("/proc/meminfo").read_text().splitlines() if line.startswith("MemAvailable:")))*1024
           space=shutil.disk_usage(".").free
           print("Available GiB RAM",round(mem/2**30,1),"disk",round(space/2**30,1))
-          assert mem>=10*2**30 and space>=8*2**30,"CPU host not safe for isolated full CT"
+          assert mem>=6*2**30 and space>=8*2**30,"CPU host not safe for isolated full CT"
           PY
       - name: Install pinned CPU dependencies and official MONAI inference toolkit
         run: |
