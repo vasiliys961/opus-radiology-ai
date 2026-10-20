@@ -45,7 +45,7 @@ class RealOriginalForwardSafety(unittest.TestCase):
   with tempfile.TemporaryDirectory() as d:
    root=Path(d)
    config=root/"pre_processing.ini"
-   config.write_text("[Training]\\nclasses = Background, Lungs, LymphNodes # publisher classes\\n")
+   config.write_text("[Training]\nclasses = Background, Lungs, LymphNodes # publisher classes\n")
    (root/"lynos-pat3-pred_Lungs.nii.gz").write_bytes(b"lung")
    (root/"lynos-pat3-pred_LymphNodes.nii.gz").write_bytes(b"nodes")
    (root/"lynos-pat3-pred_Other.nii.gz").write_bytes(b"other")
@@ -56,17 +56,17 @@ class RealOriginalForwardSafety(unittest.TestCase):
   with tempfile.TemporaryDirectory() as d:
    root=Path(d)
    config=root/"pre_processing.ini"
-   config.write_text("[Training]\\nclasses = Background, Lungs\\n")
+   config.write_text("[Training]\nclasses = Background, Lungs\n")
    (root/"lynos-pat3-pred_Lungs.nii.gz").write_bytes(b"lung")
    with self.assertRaisesRegex(ValueError,"not_uniquely_declared"):
     mod.select_lymphnode_prediction(root,config,"lynos-pat3")
-   config.write_text("[Training]\\nclasses = Background, LymphNodes\\n")
+   config.write_text("[Training]\nclasses = Background, LymphNodes\n")
    with self.assertRaisesRegex(ValueError,"probability_output_missing"):
     mod.select_lymphnode_prediction(root,config,"lynos-pat3")
    (root/"lynos-pat3-pred_LymphNodes.nii.gz").write_bytes(b"")
    with self.assertRaisesRegex(ValueError,"probability_output_missing"):
     mod.select_lymphnode_prediction(root,config,"lynos-pat3")
-   config.write_text("[Training]\\nclasses = Background, LymphNodes, Lymph_Nodes\\n")
+   config.write_text("[Training]\nclasses = Background, LymphNodes, Lymph_Nodes\n")
    with self.assertRaisesRegex(ValueError,"not_uniquely_declared"):
     mod.select_lymphnode_prediction(root,config,"lynos-pat3")
  def test_threshold_matches_declared_research_runtime(self):
