@@ -24,7 +24,7 @@ def convert(csv_path, *, exact_study_uid, original_dicom_manifest_sha, original_
                        ("trained checkpoint",original_model_checkpoint_sha)):
         if not SHA.fullmatch(value):
             raise ValueError(kind+" original SHA256 required")
-    if not isinstance(exact_study_uid,str) or not re.fullmatch(r"[0-9]+(?:\\.[0-9]+)+",exact_study_uid):
+    if not isinstance(exact_study_uid,str) or not (2 <= len(exact_study_uid.split(".")) <= 64 and all(part.isdigit() and part for part in exact_study_uid.split("."))):
         raise ValueError("exact private DICOM StudyInstanceUID must be numeric OID")
     p=Path(csv_path)
     if p.is_symlink() or not p.is_file() or p.stat().st_size>1024*1024:
