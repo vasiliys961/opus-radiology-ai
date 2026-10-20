@@ -86,6 +86,43 @@ class TrueBrainWmhBridgeContract(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "ontology_invalid"):
             mod.compare_native_expert(self.flair, self.mask, expert, mod.digest(expert))
 
+    def test_26_connected_single_case_lesion_recall_one_to_one(self):
+        truth = self.np.zeros((64, 64, 24), dtype=self.np.uint8)
+        truth[5:9, 10:14, 4:7] = 1
+        truth[22:24, 22:24, 10:12] = 1
+        expert = self.root/"components-reference.nii.gz"
+        self.nib.save(self.nib.Nifti1Image(truth, self.affine), expert)
+        # Existing prediction matches lesion 1 only (one lesion missed).
+        score = mod.compare_native_expert(
+            self.flair, self.mask, expert, mod.digest(expert))
+        self.assertEqual(score["expertLesionComponents26Connectivity"], 2)
+        self.assertEqual(score["matchedExpertLesionsAnyVoxelOneToOne"], 1)
+        self.assertEqual(score["missedExpertLesions"], 1)
+        self.assertAlmostEqual(score["lesionRecallAnyOverlap"], .5)
+        self.assertEqual(score["falsePositiveComponentsPerStudy"], 0)
+        self.assertFalse(score["clinicalValidation"])
+        # Separate false positive component. Count one unmatched prediction.
+        pred = self.np.zeros_like(truth)
+        pred[5:9, 10:14, 4:7] = 1
+        pred[32:34, 32:34, 10:12] = 1
+        self.nib.save(self.nib.Nifti1Image(pred, self.affine), self.mask)
+        score = mod.compare_native_expert(
+            self.flair, self.mask, expert, mod.digest(expert))
+        self.assertEqual(score["predictedLesionComponents26Connectivity"], 2)
+        self.assertEqual(score["falsePositiveComponentsPerStudy"], 1)
+
+    def test_other_pathology_does_not_create_false_component(self):
+        truth = self.np.zeros((64, 64, 24), dtype=self.np.float32)
+        truth[5:9, 10:14, 4:7] = 1.
+        truth[22:24, 22:24, 10:12] = 2.
+        expert = self.root/"components-other-expert.nii.gz"
+        self.nib.save(self.nib.Nifti1Image(truth, self.affine), expert)
+        score = mod.compare_native_expert(
+            self.flair, self.mask, expert, mod.digest(expert))
+        self.assertEqual(score["expertLesionComponents26Connectivity"], 1)
+        self.assertEqual(score["missedExpertLesions"], 0)
+        self.assertTrue(score["otherPathologyLabel2ExcludedFromComponentScoring"])
+
     def test_expert_checksum_mismatch_and_invalid_ontology_fail_closed(self):
         truth = self.np.zeros((64, 64, 24), dtype=self.np.uint8)
         truth[7:9, 10:12, 4:7] = 1
