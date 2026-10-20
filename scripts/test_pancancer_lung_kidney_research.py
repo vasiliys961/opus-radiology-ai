@@ -25,7 +25,7 @@ class SpecialistContracts(unittest.TestCase):
         self.affine=np.diag([1.2, 1.2, 2., 1.])
         vox=np.zeros((32, 32, 32),dtype="int16")
         vox[:]= -1000
-        vox[5:28,5:28,5:28]=100
+        vox[5:28,5:28,5:28]=100+np.random.default_rng(19).integers(-30, 30, size=(23,23,23), dtype="int16")
         self.image=vox
         self.save(self.source,vox)
         for name in ("Lung","Kidney"):
@@ -77,7 +77,7 @@ class SpecialistContracts(unittest.TestCase):
             tumor.inspect_prediction(self.source,pred)
 
     def test_reject_normalized_not_hu(self):
-        self.image[:]=1
+        self.image=np.random.default_rng(49).random((32,32,32),dtype="float32")
         self.save(self.source,self.image)
         with self.assertRaisesRegex(ValueError,"original HU"):
             tumor.check_original_ct(self.source)
