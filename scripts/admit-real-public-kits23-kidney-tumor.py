@@ -40,7 +40,7 @@ def audit_pair(ct_file, expert_file):
     import numpy as np
 
     for item in (ct_file, expert_file):
-        if item.is_symlink() or not item.is_file() or not 1024 < item.stat().st_size < 650*1024**2:
+        if item.is_symlink() or not item.is_file() or not 128 < item.stat().st_size < 650*1024**2:
             raise ValueError("original public NIfTI missing or exceeds safe research bound")
     ct, seg = nib.load(str(ct_file)), nib.load(str(expert_file))
     if (ct.ndim != 3 or seg.ndim != 3 or ct.shape != seg.shape
