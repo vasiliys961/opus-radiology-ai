@@ -41,6 +41,37 @@ class RealOriginalForwardSafety(unittest.TestCase):
     with self.assertRaisesRegex(ValueError, "oversized_original_model_member"):
      mod.guarded_copy_member(z,z.infolist()[0],dest,500)
    self.assertFalse(dest.exists())
+ def test_selects_author_class_and_not_lung_mask_or_other_channels(self):
+  with tempfile.TemporaryDirectory() as d:
+   root=Path(d)
+   config=root/"pre_processing.ini"
+   config.write_text("[Training]\\nclasses = Background, Lungs, LymphNodes # publisher classes\\n")
+   (root/"lynos-pat3-pred_Lungs.nii.gz").write_bytes(b"lung")
+   (root/"lynos-pat3-pred_LymphNodes.nii.gz").write_bytes(b"nodes")
+   (root/"lynos-pat3-pred_Other.nii.gz").write_bytes(b"other")
+   label,source=mod.select_lymphnode_prediction(root,config,"lynos-pat3")
+   self.assertEqual(label,"LymphNodes")
+   self.assertEqual(source.name,"lynos-pat3-pred_LymphNodes.nii.gz")
+ def test_refuses_absent_or_ambiguous_author_lymph_node_channel(self):
+  with tempfile.TemporaryDirectory() as d:
+   root=Path(d)
+   config=root/"pre_processing.ini"
+   config.write_text("[Training]\\nclasses = Background, Lungs\\n")
+   (root/"lynos-pat3-pred_Lungs.nii.gz").write_bytes(b"lung")
+   with self.assertRaisesRegex(ValueError,"not_uniquely_declared"):
+    mod.select_lymphnode_prediction(root,config,"lynos-pat3")
+   config.write_text("[Training]\\nclasses = Background, LymphNodes\\n")
+   with self.assertRaisesRegex(ValueError,"probability_output_missing"):
+    mod.select_lymphnode_prediction(root,config,"lynos-pat3")
+   (root/"lynos-pat3-pred_LymphNodes.nii.gz").write_bytes(b"")
+   with self.assertRaisesRegex(ValueError,"probability_output_missing"):
+    mod.select_lymphnode_prediction(root,config,"lynos-pat3")
+   config.write_text("[Training]\\nclasses = Background, LymphNodes, Lymph_Nodes\\n")
+   with self.assertRaisesRegex(ValueError,"not_uniquely_declared"):
+    mod.select_lymphnode_prediction(root,config,"lynos-pat3")
+ def test_threshold_matches_declared_research_runtime(self):
+  self.assertEqual(mod.PREDICTION_THRESHOLD,0.4)
+  self.assertIn('"probabilityThreshold":PREDICTION_THRESHOLD',NAME.read_text())
  def test_docker_cpu_execution_is_explicitly_network_isolated_and_memory_capped(self):
   s=NAME.read_text()
   for needle in ['"--network","none"','"--memory","5g"','"--cpus","2"',
