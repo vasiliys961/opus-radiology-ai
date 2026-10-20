@@ -92,7 +92,7 @@ def run(roi,results,output,*,expected_roi_sha,checkpoint_sha,license_approved,ex
     if not re.fullmatch("[a-f0-9]{64}",expected_roi_sha):
         raise ValueError("exact original ROI SHA256 required")
     if sha256(roi)!=expected_roi_sha:
-        raise ValueError("original MRI/CT ROI bytes not the declared research source")
+        raise ValueError("original CT ROI bytes not the declared research source")
     source=inspect_roi(roi)
     if out==roi.parent or out.is_relative_to(roi.parent) or out.is_relative_to(results):
         raise ValueError("isolate prediction from CT and original weights")
@@ -108,9 +108,15 @@ def run(roi,results,output,*,expected_roi_sha,checkpoint_sha,license_approved,ex
         raise ValueError("original author fold0 checkpoint SHA mismatch")
     summary={"model":MODEL,"ontology":labels,"sourceROISha256":expected_roi_sha,
              "originalWeightFoldSha256":checkpoints,"originalTrainedForward":False,
-             "clinicalValidation":False,"completeAbdominalCTCoverage":False,
+             "clinicalValidation":False,"completeAbdominalCTCoverage":False,"publisherBytesIndependentlyVerified":False,
              "roiBacktransformToOriginalDICOMProven":False}
     if not execute:return summary
+    if not sys.platform.startswith("linux"):
+        raise RuntimeError("heavy nnU-Net 3D research inference is isolated Linux-worker only; not user Mac")
+    mem=Path("/proc/meminfo").read_text().splitlines()
+    available=next(int(line.split()[1]) for line in mem if line.startswith("MemAvailable:"))
+    if available < 16*1024*1024:
+        raise RuntimeError("original adrenal nnU-Net requires >=16GiB free Linux worker memory")
     if shutil.which("nnUNetv2_predict") is None:
         raise RuntimeError("original nnUNetv2_predict executable missing")
     if len(list(roi.parent.glob("*_0000.nii.gz")))!=1:
