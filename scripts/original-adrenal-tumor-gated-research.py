@@ -84,11 +84,11 @@ def inspect_prediction(source,prediction):
 
 
 def run(roi,results,output,*,expected_roi_sha,checkpoint_sha,license_approved,execute):
+    if not license_approved:
+        raise PermissionError("official gated model terms must be accepted by authorized human")
     roi=Path(roi).expanduser().resolve(strict=True)
     results=Path(results).expanduser().resolve(strict=True)
     out=Path(output).expanduser().resolve()
-    if not license_approved:
-        raise PermissionError("official gated model terms must be accepted by authorized human")
     if not re.fullmatch("[a-f0-9]{64}",expected_roi_sha):
         raise ValueError("exact original ROI SHA256 required")
     if sha256(roi)!=expected_roi_sha:
