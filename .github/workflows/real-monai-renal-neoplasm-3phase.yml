@@ -1,0 +1,33 @@
+name: Original MONAI renal neoplasm three-phase CT research contract
+on:
+  pull_request:
+    paths:
+      - scripts/real-monai-renal-neoplasm-3phase.py
+      - scripts/test-real-monai-renal-neoplasm-3phase.py
+      - .github/workflows/real-monai-renal-neoplasm-3phase.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/real-monai-renal-neoplasm-3phase.py
+      - scripts/test-real-monai-renal-neoplasm-3phase.py
+      - .github/workflows/real-monai-renal-neoplasm-3phase.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  original-renal-neoplasm-source-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Only lightweight 3D candidate geometry dependencies
+        run: python -m pip install 'numpy==1.26.4' 'scipy==1.15.3'
+      - name: Confirm 3-phase trained neoplasm channel and fail-closed source rules
+        run: python -m unittest discover -s scripts -p 'test-real-monai-renal-neoplasm-3phase.py'
+# Full publisher checkpoint is hosted in Google Drive and must be acquired
+# separately with MD5 164752169d98459d30592d72a3fa86f4.
+# Real inference requires registered kidney-cropped artery/vein/excretory CT,
+# external RAM-bound research worker, and cannot be faked by unit tests.
