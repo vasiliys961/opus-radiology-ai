@@ -1,0 +1,26 @@
+name: Gallbladder dense calculus native NCCT candidates
+on:
+  pull_request:
+    paths:
+      - scripts/real-gallbladder-dense-calculus-ncct.py
+      - scripts/test-real-gallbladder-dense-calculus-ncct.py
+      - .github/workflows/gallbladder-dense-CT.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/real-gallbladder-dense-calculus-ncct.py
+      - scripts/test-real-gallbladder-dense-calculus-ncct.py
+      - .github/workflows/gallbladder-dense-CT.yml
+permissions:
+  contents: read
+jobs:
+  gallbladder-HU-anatomy-geometry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python3 -m pip install 'numpy==1.26.4' 'scipy==1.15.3' 'nibabel==5.3.2'
+      - run: python3 -m unittest discover -s scripts -p 'test-real-gallbladder-dense-calculus-ncct.py'
