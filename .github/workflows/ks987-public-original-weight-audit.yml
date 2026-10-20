@@ -1,0 +1,62 @@
+name: REAL ORIGINAL KS987 specialist pretrained checkpoint provenance
+on:
+  pull_request:
+    paths:
+      - scripts/verify-ks987-original-pancancer-checkpoints.py
+      - scripts/test-verify-ks987-original-pancancer-checkpoints.py
+      - .github/workflows/ks987-public-original-weight-audit.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  author-original-trained-weight-bytes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [lung, kidney]
+    env:
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      HF_HUB_DISABLE_XET: "1"
+      HF_HUB_DISABLE_PROGRESS_BARS: "1"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install lightweight public HF download client only - NO torch, no images
+        run: python -m pip install huggingface_hub==0.35.3
+      - name: Author source-file parsing and execution opt-in offline contract
+        run: |
+          python -m py_compile scripts/verify-ks987-original-pancancer-checkpoints.py
+          python -m unittest discover -s scripts -p test-verify-ks987-original-pancancer-checkpoints.py -v
+      - name: ACTUAL publisher trained checkpoint download and SHA256, no pickle load
+        run: |
+          python scripts/verify-ks987-original-pancancer-checkpoints.py \
+            --target ${{ matrix.target }} \
+            --output "$RUNNER_TEMP/pancancer-original-${{ matrix.target }}.json" \
+            --execute-download-original-public-weights
+      - name: Verify real model bytes and absence of patient/inference claims
+        run: |
+          python - <<'PY'
+          import json,os,pathlib
+          t="${{ matrix.target }}"
+          p=pathlib.Path(os.environ["RUNNER_TEMP"])/("pancancer-original-"+t+".json")
+          j=json.loads(p.read_text())
+          assert j["actualPublicPretrainedWeightBytesDownloadedAndHashed"] is True
+          assert j["actualOriginalForward"] is False
+          assert j["independentValidation"] is False
+          assert j["expertPositivesEvaluated"]==0
+          assert j["originalFold0CheckpointByteSize"]>10*1024**2
+          print("ACTUAL ORIGINAL TRAINED WEIGHTS:",t,j["publisherRevisionSha"],
+                j["originalFiles"]["weights"]["actualDownloadedSha256"])
+          PY
+      - name: Retain only nonimage publisher numeric byte evidence (never checkpoint)
+        uses: actions/upload-artifact@v4
+        with:
+          name: actual-original-ks987-trained-${{ matrix.target }}-checkpoint-sha
+          path: ${{ runner.temp }}/pancancer-original-${{ matrix.target }}.json
+          retention-days: 14
+          if-no-files-found: error
