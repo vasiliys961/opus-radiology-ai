@@ -1,0 +1,50 @@
+name: CLN original pretrained lung CT CPU research
+on:
+  pull_request:
+    paths:
+      - scripts/cln-msd-original-ct-cpu.py
+      - scripts/test-cln-msd-original-ct-cpu.py
+      - .github/workflows/cln-msd-original-ct-cpu.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/cln-msd-original-ct-cpu.py
+      - scripts/test-cln-msd-original-ct-cpu.py
+      - .github/workflows/cln-msd-original-ct-cpu.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  original-ct-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python3 -m unittest discover -s scripts -p 'test-cln-msd-original-ct-cpu.py'
+  original-public-weights:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      HF_HUB_DISABLE_TELEMETRY: '1'
+      HF_HUB_DISABLE_PROGRESS_BARS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install official Hub downloader (no Torch, GPU or CT)
+        run: python3 -m pip install 'huggingface_hub==0.35.3'
+      - name: Fetch true original fold-0 checkpoint and verify publisher LFS SHA
+        run: |
+          python3 scripts/cln-msd-original-ct-cpu.py --mode provision             --model-dir "$RUNNER_TEMP/cln-msd-models"             --report "$RUNNER_TEMP/cln-msd-weights-report.json"
+      - name: Upload hash and metadata only, never original weights or images
+        uses: actions/upload-artifact@v4
+        with:
+          name: cln-msd-original-publisher-weights-manifest
+          path: ${{ runner.temp }}/cln-msd-weights-report.json
+          retention-days: 7
+          if-no-files-found: error
