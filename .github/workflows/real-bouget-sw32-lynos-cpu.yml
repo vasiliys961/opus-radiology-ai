@@ -22,6 +22,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - run: python3 -m pip install 'numpy==1.26.4' 'scipy==1.15.3'
       - run: python3 -m unittest discover -s scripts -p 'test-real-bouget-sw32-lynos-ct-cpu.py'
   real-positive-original-model:
     # Clinical evaluation must run on the PR, not only after merge.
