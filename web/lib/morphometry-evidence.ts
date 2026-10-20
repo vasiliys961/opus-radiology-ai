@@ -10,6 +10,7 @@ const titles:Record<string,string>={
  "opus-vertebral-opportunistic-native-CT-HU/v1":"Позвоночник · L1–L5 HU",
  "opus-noncontrast-native-CT-liver-spleen-HU/v1":"Печень и селезёнка · КТ",
  "opus-original-wmh-source-MRI-CPU-research/v1":"FLAIR · очаги белого вещества",
+ "opus-real-bouget-mediastinal-UNet-SW32-LyNoS-P3/v1":"Средостение · лимфоузлы, Bouget",
  "opus-CT-gallbladder-hyperattenuation-candidate/v1":"Жёлчный пузырь · гиперденсные кандидаты",
  "opus-hip-proximal-femur-pelvis-source-mask-separation/v1":"Тазобедренный сустав · костная геометрия",
  "opus-aortic-centerline-orthogonal-anatomy-candidates/v1":"Аорта · перпендикулярные сечения КТ",
@@ -23,6 +24,8 @@ export function validateMorphometryReport(raw:unknown):NumericReview{
  const sourceSha256=hash(x.originalSourceCTSHA256??x.sourceCTSHA256??x.originalCtSHA256??x.sourceFLAIRSHA256??x.sourceMRI_SHA256);
  const fields:{label:string;value:string}[]=[];
  let originalWMHLesionEvidenceVerified=false;
+ let bougetLowAccuracyObserved=false;
+ let bougetComponentsUnmeasured=false;
  const add=(label:string,n:unknown,unit:string,lo=-1500,hi=1000000)=>fields.push({label,value:fmt(val(n,lo,hi),unit)});
  if(x.schema==="opus-native-cardiovascular-CT-anatomy-measurements/v1"){
   const m=obj(x.measurements);const known=["heart","aorta","superior_vena_cava","inferior_vena_cava","portal_vein_and_splenic_vein","iliac_artery_left","iliac_artery_right","iliac_vena_left","iliac_vena_right"];
@@ -102,6 +105,55 @@ export function validateMorphometryReport(raw:unknown):NumericReview{
    }
 
   }
+ }else if(x.schema==="opus-real-bouget-mediastinal-UNet-SW32-LyNoS-P3/v1"){
+  if(x.wholeCTOriginalModelForwardCompleted!==true||x.maskGeometryExact!==true||
+     x.caseCount!==1||x.patientCloudTransfer!==false||x.gpuUsed!==false||
+     x.notIndependentHoldout!==true||x.lesionRecallValidated!==false||
+     x.model!=="Bouget-UNet-SW32"||x.publisherOutputClass!=="LymphNodes"||
+     x.sourceType!=="research_public_contrast_enhanced_CT")
+   throw Error("Экспертный отчёт лимфоузлов не подтверждает реальный ограниченный инференс.");
+  hash(x.originalArchiveSHA256);hash(x.originalPredictionSHA256);
+  hash(x.expertLabelSHA256);
+  if(hash(x.originalPublicCtSHA256)!==sourceSha256)
+   throw Error("SHA-256 исходной КТ LyNoS не совпадает с доказательством модели.");
+  if(val(x.probabilityThreshold,0,1)!==0.4)
+   throw Error("Не совпадает исходный исследовательский порог Bouget.");
+  const count=(v:unknown)=>{const n=val(v,0,100000000);if(!Number.isInteger(n))throw Error("Воксели/компоненты лимфоузлов не целые.");return n;};
+  const tp=count(x.TP),fp=count(x.FP),fn=count(x.FN);
+  const positive=count(x.referencePositiveVoxels),predicted=count(x.predictedVoxels);
+  if(positive===0||positive!==tp+fn||predicted!==tp+fp)
+   throw Error("Экспертные TP/FP/FN лимфоузлов не совпадают с объёмами масок.");
+  const dice=2*tp/(2*tp+fp+fn);
+  if(Math.abs(val(x.voxelDice,0,1)-dice)>0.000001)
+   throw Error("Dice лимфоузлов не совпадает с оригинальными TP/FP/FN.");
+  add("LyNoS · экспертные воксели",positive,"",1,100000000);
+  add("Bouget · предсказанные воксели",predicted,"",0,100000000);
+  add("Лимфоузлы · TP",tp,"",0,100000000);
+  add("Лимфоузлы · FP",fp,"",0,100000000);
+  add("Лимфоузлы · FN",fn,"",0,100000000);
+  add("Лимфоузлы · Dice исходной маски",dice*100,"%",0,100);
+  if(x.connectedNodeAnalysisCompleted===true){
+   if(x.connectedNodeAnalysisSkippedResourceGuard!==false||
+      x.independentClinicalNodeRecallValidated!==false||
+      x.connectedComponentMatchingCriterion!=="26-neighbor any-voxel overlap; one-to-one greedy")
+    throw Error("Нельзя представлять компоненты лимфоузлов как независимую клиническую чувствительность.");
+   const expert=count(x.expertConnectedComponents26),pred=count(x.predictedConnectedComponents26);
+   const matched=count(x.matchedReferenceComponentsOneToOne);
+   const missed=count(x.missedReferenceComponents),unmatched=count(x.unmatchedPredictionComponents);
+   const recall=val(x.connectedComponentRecallAnyVoxel,0,1);
+   if(expert<1||matched>Math.min(expert,pred)||matched+missed!==expert||
+      matched+unmatched!==pred||Math.abs(recall-matched/expert)>0.000001)
+    throw Error("Количество сопоставленных/пропущенных компонентов лимфоузлов не совпадает.");
+   add("LyNoS · экспертные 3D-компоненты",expert,"",1,100000000);
+   add("Bouget · сопоставлены 3D-компоненты",matched,"",0,100000000);
+   add("Bouget · пропущены 3D-компоненты",missed,"",0,100000000);
+   add("Bouget · неподтверждённые 3D-компоненты",unmatched,"",0,100000000);
+   add("Bouget · recall компонентов (любое пересечение)",recall*100,"%",0,100);
+  }else if(x.connectedNodeAnalysisCompleted===false&&
+           x.connectedNodeAnalysisSkippedResourceGuard===true){
+   bougetComponentsUnmeasured=true;
+  }else throw Error("Нет достоверного статуса измерения компонентов LyNoS.");
+  bougetLowAccuracyObserved=dice<0.20;
  }else if(x.schema==="opus-CT-gallbladder-hyperattenuation-candidate/v1"){
   if(!Array.isArray(x.candidates)||x.candidates.length>1000)throw Error("Неограниченный список кандидатов.");
   add("Гиперденсные кандидаты",x.candidates.length,"",0,1000);
@@ -159,6 +211,12 @@ export function validateMorphometryReport(raw:unknown):NumericReview{
   ...(originalWMHLesionEvidenceVerified ? [
    "WMH recall рассчитан по 26-связным 3D-компонентам и любому пересечению с экспертной маской, с сопоставлением один к одному. Это НЕ подтверждённая врачом чувствительность отдельных очагов.",
    "Высокая чувствительность по вокселям не означает обнаружение всех небольших WMH; этиологию (сосудистая, РС и др.) модель не классифицирует."
-  ] : [])
+  ] : []),
+  ...(x.schema==="opus-real-bouget-mediastinal-UNet-SW32-LyNoS-P3/v1" ? [
+   "Bouget / LyNoS: это один исследовательский случай, не независимая клиническая валидация. Маска не определяет злокачественность или стадию опухоли.",
+   "Сопоставление 26-связных компонентов по любому пересечению НЕ является подтверждённой чувствительностью обнаружения отдельных лимфоузлов."
+  ] : []),
+  ...(bougetLowAccuracyObserved ? ["ВНИМАНИЕ: очень низкий исходный Dice лимфоузлов. Результат непригоден для исключения лимфаденопатии или других диагнозов."] : []),
+  ...(bougetComponentsUnmeasured ? ["Оценка отдельных компонентов пропущена из-за ограничения памяти; нет оснований считать их отрицательными."] : [])
  ]};
 }

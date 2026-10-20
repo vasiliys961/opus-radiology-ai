@@ -83,6 +83,47 @@ test("True WMH 3D component recall is source-bound, recomputed and descriptive o
  assert.throws(()=>validateMorphometryReport({...data,originalExpertOverlap:{...overlap,predictedLesionComponents26Connectivity:2}}),/не совпадают/);
  assert.throws(()=>validateMorphometryReport({...data,originalExpertOverlap:{...overlap,otherPathologyLabel2ExcludedFromComponentScoring:false}}),/исследовательское/);
 });
+test("Real Bouget LyNoS expert case shows genuine LOW Dice and rejects counterfeit metrics",()=>{
+ const real={
+  schema:"opus-real-bouget-mediastinal-UNet-SW32-LyNoS-P3/v1",
+  sourceCTSHA256:"d".repeat(64),originalPublicCtSHA256:"d".repeat(64),
+  expertLabelSHA256:"e".repeat(64),originalPredictionSHA256:"f".repeat(64),
+  originalArchiveSHA256:"a".repeat(64),
+  clinicallyValidated:false,wholeCTOriginalModelForwardCompleted:true,
+  maskGeometryExact:true,caseCount:1,patientCloudTransfer:false,
+  gpuUsed:false,notIndependentHoldout:true,lesionRecallValidated:false,
+  model:"Bouget-UNet-SW32",publisherOutputClass:"LymphNodes",
+  sourceType:"research_public_contrast_enhanced_CT",
+  probabilityThreshold:0.4,
+  referencePositiveVoxels:9425,predictedVoxels:2935,
+  TP:244,FP:2691,FN:9181,voxelDice:488/12360,
+  connectedNodeAnalysisCompleted:true,
+  connectedNodeAnalysisSkippedResourceGuard:false,
+  expertConnectedComponents26:6,predictedConnectedComponents26:13,
+  matchedReferenceComponentsOneToOne:3,
+  unmatchedPredictionComponents:10,missedReferenceComponents:3,
+  connectedComponentRecallAnyVoxel:.5,
+  connectedComponentMatchingCriterion:"26-neighbor any-voxel overlap; one-to-one greedy",
+  independentClinicalNodeRecallValidated:false
+ };
+ const accepted=validateMorphometryReport(real);
+ assert.equal(accepted.sourceSha256,real.sourceCTSHA256);
+ assert.equal(accepted.fields.length,11);
+ assert.match(accepted.fields.find(x=>x.label.includes("Dice"))?.value??"",/3,948/);
+ assert.match(accepted.warnings.join(" "),/низкий/);
+ assert.match(accepted.warnings.join(" "),/НЕ является подтверждённой/);
+ assert.throws(()=>validateMorphometryReport({...real,wholeCTOriginalModelForwardCompleted:false}),/инференс/);
+ assert.throws(()=>validateMorphometryReport({...real,originalPublicCtSHA256:"1".repeat(64)}),/SHA-256/);
+ assert.throws(()=>validateMorphometryReport({...real,voxelDice:.9}),/Dice/);
+ assert.throws(()=>validateMorphometryReport({...real,FN:2}),/не совпадают/);
+ assert.throws(()=>validateMorphometryReport({...real,connectedComponentRecallAnyVoxel:.8}),/не совпадает/);
+ assert.throws(()=>validateMorphometryReport({...real,independentClinicalNodeRecallValidated:true}),/чувствительность/);
+ assert.throws(()=>validateMorphometryReport({...real,clinicallyValidated:true}),/клиническую/);
+ const memoryGuarded=validateMorphometryReport({...real,connectedNodeAnalysisCompleted:false,
+  connectedNodeAnalysisSkippedResourceGuard:true});
+ assert.equal(memoryGuarded.fields.length,6);
+ assert.match(memoryGuarded.warnings.join(" "),/ограничения памяти/);
+});
 test("Gallbladder hyperattenuation candidate output never becomes diagnosis",()=>{
  const x=validateMorphometryReport({schema:"opus-CT-gallbladder-hyperattenuation-candidate/v1",sourceCTSHA256:hash,
   clinicallyValidated:false,thresholdHU:180,candidates:[{candidateIndex:0}]});
