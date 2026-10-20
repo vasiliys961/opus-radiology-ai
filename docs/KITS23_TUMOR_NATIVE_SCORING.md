@@ -23,8 +23,8 @@ python scripts/score-kits23-original-renal-tumor.py \
 ```
 
 **Safety:** the scorer checks original CT and expert bytes, full original
-trained checkpoint hash, native physical grid and integer mask class2
-(renal tumor, **not** kidney class1 or cyst class3). It streams individual
+trained checkpoint hash, native physical grid and **expert class2 versus publisher model binary tumor class1**
+(renal tumor, **not** kidney class1 or cyst class3). The model publisher original `Dataset102_Kidney/dataset.json` defines only background=0 and tumor=1; do not equate its label1 with KiTS23 expert kidney class1. It streams individual
 2D slices for bounded memory, computes TP/FP/FN, Dice, voxel recall, 
 original source coordinate bounds and conditional mm-based mL.
 An unregistered or probability-only prediction is refused.
