@@ -124,6 +124,35 @@ test("Real Bouget LyNoS expert case shows genuine LOW Dice and rejects counterfe
  assert.equal(memoryGuarded.fields.length,6);
  assert.match(memoryGuarded.warnings.join(" "),/ограничения памяти/);
 });
+test("Actual ISLES22 three-series DWI ADC FLAIR expert stroke metrics require provenance",()=>{
+ const observed={
+  schema:"opus-real-isles22-pretrained-ischemic-stroke-expert-mask/v1",
+  clinicalValidation:false,pretrainedModelExecuted:true,
+  sourceStudy:"sub-strokecase0032",
+  task:"ischemic_stroke_DWI_ADC_FLAIR",
+  originalMRISha256:{dwi:"a".repeat(64),adc:"b".repeat(64),flair:"c".repeat(64)},
+  observedActualCheckpointSha256:"d".repeat(64),
+  expertMaskSha256:"e".repeat(64),trainedPredictionSha256:"f".repeat(64),
+  nativeSourceShape:[112,112,73],independentVendorTrainingHoldoutVerified:false,
+  lesionLevelSensitivity:null,expertIschemicMaskVoxels:47,
+  predictedIschemicMaskVoxels:58,truePositiveVoxels:39,
+  falsePositiveVoxels:19,falseNegativeVoxels:8,
+  oneScanIschemicDice:0.742857,oneScanVoxelRecall:0.829787
+ };
+ const valid=validateMorphometryReport(observed);
+ assert.equal(valid.fields.length,7);
+ assert.equal(valid.sourceSha256,"a".repeat(64));
+ assert.deepEqual(valid.additionalSources,[{role:"ADC",sha256:"b".repeat(64)},
+  {role:"FLAIR",sha256:"c".repeat(64)}]);
+ assert.match(valid.fields.find(x=>x.label.includes("Dice"))?.value??"",/74,286/);
+ assert.match(valid.warnings.join(" "),/не.*клиническая чувствительность/i);
+ assert.throws(()=>validateMorphometryReport({...observed,pretrainedModelExecuted:false}),/инференса/);
+ assert.throws(()=>validateMorphometryReport({...observed,clinicalValidation:true}),/клинической валидации/);
+ assert.throws(()=>validateMorphometryReport({...observed,independentVendorTrainingHoldoutVerified:true}),/ограничениями/);
+ assert.throws(()=>validateMorphometryReport({...observed,originalMRISha256:{...observed.originalMRISha256,adc:"bad"}}),/SHA/);
+ assert.throws(()=>validateMorphometryReport({...observed,truePositiveVoxels:40}),/не совпадают/);
+ assert.throws(()=>validateMorphometryReport({...observed,oneScanIschemicDice:0.99}),/Dice/);
+});
 test("Gallbladder hyperattenuation candidate output never becomes diagnosis",()=>{
  const x=validateMorphometryReport({schema:"opus-CT-gallbladder-hyperattenuation-candidate/v1",sourceCTSHA256:hash,
   clinicallyValidated:false,thresholdHU:180,candidates:[{candidateIndex:0}]});

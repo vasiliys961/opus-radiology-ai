@@ -1,5 +1,5 @@
 /** Research numeric-only import; no source CT, mask, trained inference or patient data transfer. */
-export type NumericReview={schema:string;title:string;sourceSha256:string;fields:{label:string;value:string}[];warnings:string[];clinicalValidation:false};
+export type NumericReview={schema:string;title:string;sourceSha256:string;additionalSources?:{role:"ADC"|"FLAIR";sha256:string}[];fields:{label:string;value:string}[];warnings:string[];clinicalValidation:false};
 type RecordValue=Record<string,unknown>;
 const obj=(x:unknown):RecordValue=>{if(!x||typeof x!=="object"||Array.isArray(x))throw Error("Некорректный исследовательский JSON.");return x as RecordValue;};
 const hash=(x:unknown)=>{if(typeof x!=="string"||!/^[a-f0-9]{64}$/i.test(x))throw Error("Отсутствует корректный SHA-256 оригинального исследования.");return x.toLowerCase();};
@@ -11,6 +11,7 @@ const titles:Record<string,string>={
  "opus-noncontrast-native-CT-liver-spleen-HU/v1":"Печень и селезёнка · КТ",
  "opus-original-wmh-source-MRI-CPU-research/v1":"FLAIR · очаги белого вещества",
  "opus-real-bouget-mediastinal-UNet-SW32-LyNoS-P3/v1":"Средостение · лимфоузлы, Bouget",
+ "opus-real-isles22-pretrained-ischemic-stroke-expert-mask/v1":"МРТ · ишемический очаг, ISLES’22",
  "opus-CT-gallbladder-hyperattenuation-candidate/v1":"Жёлчный пузырь · гиперденсные кандидаты",
  "opus-hip-proximal-femur-pelvis-source-mask-separation/v1":"Тазобедренный сустав · костная геометрия",
  "opus-aortic-centerline-orthogonal-anatomy-candidates/v1":"Аорта · перпендикулярные сечения КТ",
@@ -20,8 +21,19 @@ export function validateMorphometryReport(raw:unknown):NumericReview{
  const x=obj(raw);
  if(typeof x.schema!=="string"||!Object.prototype.hasOwnProperty.call(titles,x.schema))
   throw Error("Неизвестная схема исследовательских данных.");
- if(x.clinicallyValidated!==false)throw Error("Отсутствует обязательный запрет на клиническую валидность.");
- const sourceSha256=hash(x.originalSourceCTSHA256??x.sourceCTSHA256??x.originalCtSHA256??x.sourceFLAIRSHA256??x.sourceMRI_SHA256);
+ const isStroke=x.schema==="opus-real-isles22-pretrained-ischemic-stroke-expert-mask/v1";
+ if(isStroke){
+  if(x.clinicalValidation!==false||x.clinicallyValidated===true)
+   throw Error("Исследовательская модель инсульта не имеет клинической валидации.");
+ }else if(x.clinicallyValidated!==false)throw Error("Отсутствует обязательный запрет на клиническую валидность.");
+ const sourceSha256=hash(x.originalSourceCTSHA256??x.sourceCTSHA256??x.originalCtSHA256??x.sourceFLAIRSHA256??x.sourceMRI_SHA256??
+  (isStroke?obj(x.originalMRISha256).dwi:undefined));
+ const additionalSources:{role:"ADC"|"FLAIR";sha256:string}[]=[];
+ if(isStroke){
+  const source=obj(x.originalMRISha256);
+  additionalSources.push({role:"ADC",sha256:hash(source.adc)},
+                         {role:"FLAIR",sha256:hash(source.flair)});
+ }
  const fields:{label:string;value:string}[]=[];
  let originalWMHLesionEvidenceVerified=false;
  let bougetLowAccuracyObserved=false;
@@ -154,6 +166,35 @@ export function validateMorphometryReport(raw:unknown):NumericReview{
    bougetComponentsUnmeasured=true;
   }else throw Error("Нет достоверного статуса измерения компонентов LyNoS.");
   bougetLowAccuracyObserved=dice<0.20;
+ }else if(isStroke){
+  if(x.pretrainedModelExecuted!==true||x.nativeSourceShape==null||
+     x.task!=="ischemic_stroke_DWI_ADC_FLAIR"||
+     x.independentVendorTrainingHoldoutVerified!==false||
+     x.lesionLevelSensitivity!==null||
+     x.sourceStudy!=="sub-strokecase0032"||
+     x.caseCount!=null && x.caseCount!==1)
+   throw Error("Нет реального оригинального ISLES22 инференса с ограничениями.");
+  hash(x.observedActualCheckpointSha256);
+  hash(x.expertMaskSha256);hash(x.trainedPredictionSha256);
+  const dims=x.nativeSourceShape;
+  if(!Array.isArray(dims)||dims.length!==3||dims.some(v=>typeof v!=="number"||!Number.isInteger(v)||v<16||v>512))
+   throw Error("Некорректная геометрия оригинальной DWI-МРТ.");
+  const count=(v:unknown)=>{const n=val(v,0,100000000);if(!Number.isInteger(n))throw Error("TP/FP/FN инсульта не целые.");return n;};
+  const tp=count(x.truePositiveVoxels),fp=count(x.falsePositiveVoxels),fn=count(x.falseNegativeVoxels);
+  const truth=count(x.expertIschemicMaskVoxels),pred=count(x.predictedIschemicMaskVoxels);
+  if(truth<1||tp+fn!==truth||tp+fp!==pred)
+   throw Error("TP/FP/FN ISLES22 не совпадают с исходными масками.");
+  const dice=2*tp/(2*tp+fp+fn);
+  if(Math.abs(val(x.oneScanIschemicDice,0,1)-dice)>1e-6||
+     Math.abs(val(x.oneScanVoxelRecall,0,1)-tp/truth)>1e-6)
+   throw Error("Dice/recall инсульта не совпадают с оригинальными TP/FP/FN.");
+  add("ISLES22 · экспертные воксели",truth,"",1,100000000);
+  add("ISLES22 · предсказанные воксели",pred,"",0,100000000);
+  add("ISLES22 · TP",tp,"",0,100000000);
+  add("ISLES22 · FP",fp,"",0,100000000);
+  add("ISLES22 · FN",fn,"",0,100000000);
+  add("Ишемический очаг · Dice",dice*100,"%",0,100);
+  add("Ишемический очаг · recall по вокселям",tp/truth*100,"%",0,100);
  }else if(x.schema==="opus-CT-gallbladder-hyperattenuation-candidate/v1"){
   if(!Array.isArray(x.candidates)||x.candidates.length>1000)throw Error("Неограниченный список кандидатов.");
   add("Гиперденсные кандидаты",x.candidates.length,"",0,1000);
@@ -200,7 +241,9 @@ export function validateMorphometryReport(raw:unknown):NumericReview{
   add("Костные поверхности · медиана",distance.median,"мм",0,200);
  }
  if(fields.length<1||fields.length>24)throw Error("В отчёте нет допустимых ограниченных измерений.");
- return {schema:x.schema,title:titles[x.schema],sourceSha256,fields,clinicalValidation:false,warnings:[
+ return {schema:x.schema,title:titles[x.schema],sourceSha256,
+  ...(additionalSources.length?{additionalSources}:{}),
+  fields,clinicalValidation:false,warnings:[
   "Числа получены из внешнего JSON: импорт не удостоверяет подлинность исследования и модели.",
   "Нельзя трактовать эти измерения как диагноз или исключение заболевания.",
   "Требуются сопоставление с исходной КТ/МРТ и независимая врачебная проверка.",
@@ -217,6 +260,11 @@ export function validateMorphometryReport(raw:unknown):NumericReview{
    "Сопоставление 26-связных компонентов по любому пересечению НЕ является подтверждённой чувствительностью обнаружения отдельных лимфоузлов."
   ] : []),
   ...(bougetLowAccuracyObserved ? ["ВНИМАНИЕ: очень низкий исходный Dice лимфоузлов. Результат непригоден для исключения лимфаденопатии или других диагнозов."] : []),
-  ...(bougetComponentsUnmeasured ? ["Оценка отдельных компонентов пропущена из-за ограничения памяти; нет оснований считать их отрицательными."] : [])
+  ...(bougetComponentsUnmeasured ? ["Оценка отдельных компонентов пропущена из-за ограничения памяти; нет оснований считать их отрицательными."] : []),
+  ...(isStroke ? [
+    "ISLES22: для просмотра чисел требуется локально подтвердить SHA-256 всех трёх исходных последовательностей — DWI, ADC и FLAIR.",
+    "Один открытый случай из обучающего пула ISLES22; независимость от обучения, точность отдельных очагов и клиническая чувствительность НЕ доказаны.",
+    "Даже при высоком Dice нельзя исключать ишемию или устанавливать диагноз на основании одной маски; требуется врачебная проверка исходной МРТ."
+  ] : [])
  ]};
 }
