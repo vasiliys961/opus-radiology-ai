@@ -17,7 +17,7 @@ class AdrenalGatedResearch(unittest.TestCase):
             p.write_text('{"labels":{"background":0,"adrenal_gland":1,"tumor":1}}')
             with self.assertRaises(ValueError):M.check_ontology(p)
     def test_license_refusal_no_external_access(self):
-        with self.assertRaises(FileNotFoundError):
+        with self.assertRaises(PermissionError):
             M.run("/no-real-ct","/no-rights","/no-output",
                   expected_roi_sha="0"*64,checkpoint_sha="1"*64,
                   license_approved=False,execute=True)
