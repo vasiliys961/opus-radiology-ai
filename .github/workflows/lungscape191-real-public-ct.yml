@@ -1,0 +1,53 @@
+name: LungSCAPE191 real public CT source admission
+on:
+  pull_request:
+    paths:
+      - "scripts/prepare-lungscape191-public-coronacases.py"
+      - ".github/workflows/lungscape191-real-public-ct.yml"
+      - "docs/LUNGSCAPE191_REAL_MODEL_ADAPTER.md"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  admit-public-ct:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install small public-data audit dependencies (no torch)
+        run: python -m pip install numpy==2.2.6 nibabel==5.3.2 huggingface_hub==0.35.3
+      - name: Pin mirror commit, download genuine CT plus expert annotation, check grids and SHA
+        env:
+          HF_HUB_DISABLE_TELEMETRY: "1"
+          HF_HUB_DISABLE_XET: "1"
+          HF_HUB_DISABLE_PROGRESS_BARS: "1"
+        run: |
+          python -m py_compile scripts/prepare-lungscape191-public-coronacases.py
+          python scripts/prepare-lungscape191-public-coronacases.py \
+            --case coronacases_003 \
+            --output-private "$RUNNER_TEMP/lungscape191-public-case" \
+            --execute-download
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          p = Path(os.environ["RUNNER_TEMP"]) / "lungscape191-public-case/numeric-public-ct-manifest.json"
+          z = json.loads(p.read_text())
+          assert z["matchingSourceAndExpertNiftiGrid"]
+          assert z["truePretrainedModelForwardCompleted"] is False
+          assert z["expertMaskSemanticallyEquivalentToHighAttenuation"] is False
+          print("REAL PUBLIC SOURCE PASS: " + z["publicResearchCase"] +
+                " source_sha256=" + z["sourceSha256"] +
+                " expert_sha256=" + z["combinedExpertSha256"] +
+                " annotation_values=" + str(z["observedAnnotationValueCountsNoSemanticMapping"]))
+          PY
+      - name: Upload only numeric provenance; no CT, masks, patient headers or images
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lungscape191-public-ct-numeric-admission
+          path: ${{ runner.temp }}/lungscape191-public-case/numeric-public-ct-manifest.json
+          retention-days: 3
+          if-no-files-found: error
