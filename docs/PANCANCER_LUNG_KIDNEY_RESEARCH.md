@@ -36,3 +36,12 @@ python scripts/pancancer_lung_kidney_research.py \
 The runner invokes the original `nnUNetv2_predict` command and `checkpoint_best.pth` with the author trainer/plans. After successful original forward, the source hash is rechecked; the produced native CT NIfTI segmentation must match source shape and affine within 0.1mm; labels are restricted to {0,1}. It builds 26-connected voxel candidates with native bounds, RAS-mm centroid and physical volume. Original CT and mask stay locally private; `pancancer-original-numeric.json` is a report of hashes, *candidate* geometry and limitations, not patient data.
 
 **This PR only installs an opt-in executable research adapter, synthetic-code contract tests and a registry candidate. No publisher weight download, forward, positive original expert-mask Dice or independent holdout is claimed.** Next: acquire/checkpoint SHA and run on a licensed independent positive CT with expert tumor mask, ideally large isolated CPU/GPU resources, then source-bound true TP/FP/FN and clinician MPR overlay. If 64GiB is unavailable, park expensive executor and continue different pathology rather than raising Mac memory guards.
+
+## Original publisher checkpoint SHA-256 pins — verified 2026-10-20
+
+Public real [GitHub Actions asset-verification workflow](https://github.com/vasiliys961/opus-radiology-ai/actions/runs/39484700749) **downloaded actual trained original bytes** at full Hugging Face revision `7f0906ddcb93d139c53c720ddc56208a5af5ad7b`:
+
+- Dataset105_Lung fold_0/checkpoint_best.pth: `bb14da9985955dee14ac09af7ce233f896f30e538b14b0c595498e694dbef15d`
+- Dataset102_Kidney fold_0/checkpoint_best.pth: `5a1c9e2894160d50dfa0f8c0ac0a88198897973f642c0cbeb33e935457fd9d8c`
+
+The **--execute** runner now rejects a replacement local checkpoint whose hash differs from the actual published bytes. Merely having the right filename, dataset.json or nnU-Net trainer configuration never bypasses this. Its ordinary readiness mode still reports the observed hash and an explicit mismatch flag without trying to execute a model. These are **verified model ASSETS**, not an inference accuracy report; no clinical diagnostic claims, positive CT forward, Dice, or independent validation are established.

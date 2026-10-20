@@ -51,7 +51,10 @@ class SpecialistContracts(unittest.TestCase):
             self.assertFalse(audit["actualOriginalTrainedForward"])
             self.assertEqual(audit["originalPretrainedModel"]["taskId"],task)
             self.assertFalse(audit["clinicalValidation"])
+            self.assertFalse(audit["originalPretrainedModel"]["checkpointMatchesRealVerifiedPublisherBytes"])
             self.assertFalse(self.output.exists())
+            with self.assertRaisesRegex(ValueError,"publisher pinned trained weights"):
+                tumor.run(self.source,self.weights,self.output,anatomy,execute=True)
 
     def test_plans_and_ontology_are_strict(self):
         config=self.weights/"Dataset105_Lung"/tumor.ARCH

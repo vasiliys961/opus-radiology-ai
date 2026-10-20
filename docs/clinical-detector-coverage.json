@@ -743,7 +743,18 @@
       "reference": "Original published Carles et al. 2024 lung tumor CT cohort; independent positive annotated CT and rights must be acquired",
       "restriction": "Pretrained published author weights linked; exact model bytes, license, real forward and CPU memory unverified. Not equivalent to LUNA16 nodule RetinaNet, not mediastinal lymph nodes. PET model is distinct from CT. Research-only until verified.; NEW runnable original site-specific tumor research adapter, but ~64GiB system RAM required for vendor nnU-Net resampling, original pretrained forward and expert Dice not yet demonstrated; independent permissions and data rights still require review",
       "priority": 1,
-      "next": "Use audited publisher KS987 fold0 model on lawful expert-positive native CT with >=64GiB external Linux RAM, verify source-bound tumor mask and independent expert Dice; keep CLN independently blocked"
+      "next": "Next gate: complete original pretrained positive CT forward with exact pinned checkpoint on isolated >=64GiB Linux research worker, expert native-mask Dice and lesion recall; prevent training overlap; no patient use.",
+      "observedResearchEvidence": {
+        "modelPublisher": "KS987/PanCancerSeg-Specialized-weights",
+        "originalPublisherCommit": "7f0906ddcb93d139c53c720ddc56208a5af5ad7b",
+        "originalCheckpointSha256": "bb14da9985955dee14ac09af7ce233f896f30e538b14b0c595498e694dbef15d",
+        "originalCheckpointActuallyDownloaded": true,
+        "sourceRun": "https://github.com/vasiliys961/opus-radiology-ai/actions/runs/39484700749",
+        "originalModelForwardCompleted": false,
+        "publicExpertPositiveCTEvaluated": 0,
+        "independentHoldout": false,
+        "clinicallyValidated": false
+      }
     },
     {
       "id": "mediastinal-primary-mass-ct",
@@ -829,7 +840,18 @@
       "reference": "Public original expert kidney cancer NIfTI and source-native binary tumor mask to acquire; inspect FLARE study/patient train overlap",
       "restriction": "Executable original-model research adapter, NOT proven forward or diagnosis. Unlike MONAI 3-phase renalStructures model, accepts single native HU CT; original vendor nnU-Net 3D resampling may require >=64GiB Linux RAM. Model weights/rights and clinical validation unverified; not Mac, no private-patient cloud.",
       "priority": 2,
-      "next": "Admit licensed positive singlephase CT and expert lesion mask; download exact original KS987 model SHA, install audited author trainer on >=64GiB Linux worker, run original nnUNet, measure native TP/FP/FN and lesion overlap."
+      "next": "Next gate: complete original pretrained positive CT forward with exact pinned checkpoint on isolated >=64GiB Linux research worker, expert native-mask Dice and lesion recall; prevent training overlap; no patient use.",
+      "observedResearchEvidence": {
+        "modelPublisher": "KS987/PanCancerSeg-Specialized-weights",
+        "originalPublisherCommit": "7f0906ddcb93d139c53c720ddc56208a5af5ad7b",
+        "originalCheckpointSha256": "5a1c9e2894160d50dfa0f8c0ac0a88198897973f642c0cbeb33e935457fd9d8c",
+        "originalCheckpointActuallyDownloaded": true,
+        "sourceRun": "https://github.com/vasiliys961/opus-radiology-ai/actions/runs/39484700749",
+        "originalModelForwardCompleted": false,
+        "publicExpertPositiveCTEvaluated": 0,
+        "independentHoldout": false,
+        "clinicallyValidated": false
+      }
     }
   ],
   "selectionRule": "Prioritize uncovered CT/MR diseases with legal checkpoints, independently usable real image/mask pair and host RAM budget, in that order."
