@@ -52,7 +52,7 @@ export function validateMorphometryReport(raw:unknown):NumericReview{
    if(tp+fn===0||tp+fp+fn+tn+ignored>80000000)
     throw Error("Некорректная экспертная WMH статистика.");
    const dice=2*tp/(2*tp+fp+fn),sensitivity=tp/(tp+fn),precision=tp+fp?tp/(tp+fp):0;
-   for(const [reported,computed] of [[e.dice,dice],[e.sensitivity,sensitivity],[e.precision,precision]]){
+   for(const [reported,computed] of [[e.dice,dice],[e.sensitivity,sensitivity],[e.precision,precision]] as [unknown,number][]){
     if(Math.abs(val(reported,0,1)-computed)>0.000001)
      throw Error("WMH Dice/чувствительность/precision не совпадают с TP/FP/FN.");
    }
