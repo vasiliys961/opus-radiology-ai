@@ -1,0 +1,43 @@
+name: Authentic expert-positive LyNoS CT source for mediastinal nodes
+on:
+  pull_request:
+    paths:
+      - scripts/verify-public-lynos-positive-ct.py
+      - scripts/test-verify-public-lynos-positive-ct.py
+      - .github/workflows/real-public-lynos-expert-positive.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/verify-public-lynos-positive-ct.py
+      - .github/workflows/real-public-lynos-expert-positive.yml
+permissions:
+  contents: read
+jobs:
+  original-expert-native-grid-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python3 -m pip install 'numpy==1.26.4' 'nibabel==5.3.2'
+      - run: python3 -m unittest discover -s scripts -p 'test-verify-public-lynos-positive-ct.py'
+  actual-published-human-annotated-ct:
+    needs: original-expert-native-grid-contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python3 -m pip install 'numpy==1.26.4' 'nibabel==5.3.2' 'huggingface_hub==0.35.3'
+      - name: Real public CT expert native geometry, labels and SHA256
+        run: python3 scripts/verify-public-lynos-positive-ct.py --report "$RUNNER_TEMP/lynos-expert-source.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: real-LyNoS-contrast-CT-expert-positive-numeric
+          path: ${{ runner.temp }}/lynos-expert-source.json
+          if-no-files-found: error
+          retention-days: 7
