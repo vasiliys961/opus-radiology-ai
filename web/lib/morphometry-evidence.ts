@@ -40,6 +40,30 @@ export function validateMorphometryReport(raw:unknown):NumericReview{
   hash(x.checkpointSHA256);
   add("WMH · компоненты",x.candidateComponentCount,"",0,5000);
   add("WMH · объём кандидатов",x.totalPredictedHyperintensityMl,"мл",0,100000);
+  if(x.originalExpertOverlap!=null){
+   const e=obj(x.originalExpertOverlap);
+   hash(e.originalExpertWMHMaskSHA256);
+   if(e.sameOriginalNativeGrid!==true||e.clinicalValidation!==false||
+      e.singleCaseResearchScoreNotIndependentValidation!==true||
+      x.trainingOverlapIndependentlyExcluded!==false)
+    throw Error("Экспертный WMH score не подтверждён как ограниченное исследовательское сравнение.");
+   const count=(n:unknown)=>{const v=val(n,0,80000000);if(!Number.isInteger(v))throw Error("WMH TP/FP/FN нецелые.");return v;};
+   const tp=count(e.tp),fp=count(e.fp),fn=count(e.fn),tn=count(e.tn),ignored=count(e.expertOtherPathologyLabel2ExcludedVoxels);
+   if(tp+fn===0||tp+fp+fn+tn+ignored>80000000)
+    throw Error("Некорректная экспертная WMH статистика.");
+   const dice=2*tp/(2*tp+fp+fn),sensitivity=tp/(tp+fn),precision=tp+fp?tp/(tp+fp):0;
+   for(const [reported,computed] of [[e.dice,dice],[e.sensitivity,sensitivity],[e.precision,precision]]){
+    if(Math.abs(val(reported,0,1)-computed)>0.000001)
+     throw Error("WMH Dice/чувствительность/precision не совпадают с TP/FP/FN.");
+   }
+   add("Экспертная WMH · TP",tp,"",0,80000000);
+   add("Экспертная WMH · FP",fp,"",0,80000000);
+   add("Экспертная WMH · FN",fn,"",0,80000000);
+   add("Экспертная WMH · Dice",dice*100,"%",0,100);
+   add("Экспертная WMH · чувствительность",sensitivity*100,"%",0,100);
+   add("Экспертная WMH · precision",precision*100,"%",0,100);
+   add("Другие патологии · исключённые воксели",ignored,"",0,80000000);
+  }
  }else if(x.schema==="opus-CT-gallbladder-hyperattenuation-candidate/v1"){
   if(!Array.isArray(x.candidates)||x.candidates.length>1000)throw Error("Неограниченный список кандидатов.");
   add("Гиперденсные кандидаты",x.candidates.length,"",0,1000);
