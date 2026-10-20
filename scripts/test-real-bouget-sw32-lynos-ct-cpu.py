@@ -69,6 +69,33 @@ class RealOriginalForwardSafety(unittest.TestCase):
    config.write_text("[Training]\nclasses = Background, LymphNodes, Lymph_Nodes\n")
    with self.assertRaisesRegex(ValueError,"not_uniquely_declared"):
     mod.select_lymphnode_prediction(root,config,"lynos-pat3")
+ def test_original_connected_node_scoring_counts_missed_and_false_components(self):
+  import numpy as np
+  gt=np.zeros((48,48,24),dtype=bool)
+  gt[4:8,5:9,4:7]=True
+  gt[21:23,20:22,12:14]=True
+  pr=np.zeros_like(gt)
+  pr[4:8,5:9,4:7]=True
+  pr[35:37,35:37,12:14]=True
+  score=mod.score_connected_node_components(gt,pr)
+  self.assertTrue(score["connectedNodeAnalysisCompleted"])
+  self.assertEqual(score["expertConnectedComponents26"],2)
+  self.assertEqual(score["predictedConnectedComponents26"],2)
+  self.assertEqual(score["matchedReferenceComponentsOneToOne"],1)
+  self.assertEqual(score["missedReferenceComponents"],1)
+  self.assertEqual(score["unmatchedPredictionComponents"],1)
+  self.assertAlmostEqual(score["connectedComponentRecallAnyVoxel"],0.5)
+  self.assertFalse(score["independentClinicalNodeRecallValidated"])
+ def test_oversized_connected_scoring_requires_explicit_resource_guard(self):
+  import numpy as np
+  class ShapeOnly:
+   ndim=3
+   shape=(512,512,700)
+  result=mod.score_connected_node_components(ShapeOnly(),ShapeOnly())
+  self.assertFalse(result["connectedNodeAnalysisCompleted"])
+  self.assertTrue(result["connectedNodeAnalysisSkippedResourceGuard"])
+  self.assertIsNone(result["connectedComponentRecallAnyVoxel"])
+
  def test_threshold_matches_declared_research_runtime(self):
   self.assertEqual(mod.PREDICTION_THRESHOLD,0.4)
   self.assertIn('"probabilityThreshold":PREDICTION_THRESHOLD',NAME.read_text())
