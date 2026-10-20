@@ -106,6 +106,44 @@ def prepare(folder):
         (folder/"expert.nii.gz").unlink()
     raise ValueError("no_expert_tumor_positive_CTs_in_shortlist")
 
+def tumor_components(label_mask, affine, minimum_voxels=10):
+    """Localize trained tumor label 2 in ORIGINAL CT voxel coordinates.
+
+    Components are candidates; not pancreatic cancer diagnoses and not a
+    validated lesion-level detector. Multiple small foci may be suppressed.
+    """
+    import numpy as np
+    from scipy import ndimage
+    data=np.asarray(label_mask)
+    a=np.asarray(affine,dtype=float)
+    if (data.ndim!=3 or data.size>MAX_VOXELS or
+        not np.isin(data,(0,1,2)).all() or a.shape!=(4,4) or
+        not np.isfinite(a).all() or abs(np.linalg.det(a[:3,:3]))<1e-8):
+        raise ValueError("not_original_native_pancreatic_tumor_label_grid")
+    if not 1<=minimum_voxels<=100:
+        raise ValueError("unsupported_minimum_lesion_component_size")
+    objects,count=ndimage.label(data==2,structure=ndimage.generate_binary_structure(3,2))
+    slices=ndimage.find_objects(objects)
+    voxel_mm3=abs(float(np.linalg.det(a[:3,:3])))
+    lesions=[]
+    for label,sl in enumerate(slices,1):
+        if sl is None:continue
+        block=objects[sl]==label
+        n=int(np.count_nonzero(block))
+        if n<minimum_voxels:continue
+        center=np.array(ndimage.center_of_mass(block))+[x.start for x in sl]
+        world=(a@np.r_[center,1])[:3]
+        lesions.append({
+            "nativeSourceVoxelBoxIJK":[[int(x.start),int(x.stop-1)] for x in sl],
+            "nativeSourceCentroidIJK":[round(float(x),3) for x in center],
+            "sourceNiftiWorldCentroidMm":[round(float(x),3) for x in world],
+            "candidateVoxelCount":n,"candidateVolumeMl":round(n*voxel_mm3/1000,4),
+            "confirmedPancreaticCancer":False})
+        if len(lesions)>128:
+            raise ValueError("excessive_tumor_components_require_review")
+    lesions.sort(key=lambda q:q["candidateVoxelCount"],reverse=True)
+    return lesions
+
 def infer(folder,out):
     import nibabel as nib
     import numpy as np
@@ -156,6 +194,7 @@ def infer(folder,out):
     original_truth=nib.load(str(folder/"expert.nii.gz"))
     ground_truth=np.asarray(original_truth.dataobj)==2
     detected=native==2
+    lesions=tumor_components(native,original.affine)
     tp=int(np.count_nonzero(ground_truth&detected))
     fp=int(np.count_nonzero(~ground_truth&detected))
     fn=int(np.count_nonzero(ground_truth&~detected))
@@ -176,6 +215,10 @@ def infer(folder,out):
        "nativeSourceDimensions":meta["originalCtShape"],
        "expertTumorVoxels":counts["2"],
        "predictedTumorVoxels":tp+fp,
+       "tumorCandidateComponents":lesions,
+       "tumorCandidateCount":len(lesions),
+       "absenceOfCancerEstablished":False,
+       "sourceNiftiCoordinatesNotDICOMLPS":True,
        "truePositiveTumorVoxels":tp,"falsePositiveTumorVoxels":fp,
        "falseNegativeTumorVoxels":fn,
        "oneStudyTumorDice":round(dice,6),
