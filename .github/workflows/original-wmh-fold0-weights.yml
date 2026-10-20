@@ -37,7 +37,9 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install genuine source package and publisher downloader, not a fake checkpoint
-        run: python3 -m pip install 'wmh_seg==1.6.0' 'huggingface_hub==0.35.3'
+        run: |
+          python3 -m pip install --no-deps 'wmh_seg==1.6.0'
+          python3 -m pip install 'huggingface_hub==0.35.3'
       - name: Download author fold0 weight; cryptographically confirm Hugging Face LFS
         run: |
           python3 scripts/provision-real-author-wmh-fold0.py \
