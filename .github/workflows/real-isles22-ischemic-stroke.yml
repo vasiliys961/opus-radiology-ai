@@ -1,8 +1,12 @@
 name: REAL pretrained ISLES22 DWI ADC FLAIR stroke MRI versus expert lesion
 on:
+  pull_request:
+    paths:
+      - .github/workflows/real-isles22-ischemic-stroke.yml
+      - scripts/real-isles22-stroke-dwi-adc-flair.py
+      - scripts/test-real-isles22-stroke-dwi-adc-flair.py
   push:
-    branches:
-      - research/real-isles22-ischemic-stroke-dwi-adc-flair
+    branches: [main]
     paths:
       - .github/workflows/real-isles22-ischemic-stroke.yml
       - scripts/real-isles22-stroke-dwi-adc-flair.py
@@ -27,6 +31,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Check source and native positive lesion expert contracts (no fake model)
+        run: |
+          python3 -m pip install --no-cache-dir "numpy==2.2.6" "nibabel==5.3.2" "scipy==1.15.3"
+          python3 -m unittest discover -s scripts -p 'test-real-isles22-stroke-dwi-adc-flair.py' -v
       - name: Bound true 3D public ISLES source RAM and scratch disk
         run: |
           python - <<'PY'
@@ -35,13 +43,29 @@ jobs:
           mem=int(next(s.split()[1] for s in Path("/proc/meminfo").read_text().splitlines() if s.startswith("MemAvailable:")))*1024
           disk=shutil.disk_usage(".").free
           print("Available RAM GiB",round(mem/2**30,2),"Disk GiB",round(disk/2**30,2))
-          assert mem>=10*2**30 and disk>=8*2**30,"insufficient isolated CPU ISLES worker"
+          # Kernel MemAvailable can report physical host RAM in hosted runners.
+          # Validate cgroup limit as well; never assume Mac or host total memory.
+          limit=Path("/sys/fs/cgroup/memory.max")
+          actual=limit.read_text().strip() if limit.exists() else ""
+          worker=int(actual) if actual.isdigit() else mem
+          print("Cgroup RAM GiB",round(worker/2**30,2))
+          assert min(mem,worker)>=5*2**30 and disk>=8*2**30,"insufficient isolated CPU ISLES worker"
           PY
       - name: Install true public official nnU-Net model CPU inference
         run: |
           set -euo pipefail
-          python -m pip install --no-cache-dir torch==2.6.0 torchvision==0.21.0 --index-url https://download.pytorch.org/whl/cpu
-          python -m pip install --no-cache-dir "nnunetv2==2.8.1" "numpy==2.2.6" "nibabel==5.3.2" "scipy==1.15.3" "huggingface_hub==0.34.4"
+          python -m pip install --no-cache-dir "torch==2.6.0+cpu" "torchvision==0.21.0+cpu" --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --no-cache-dir \
+            "nnunetv2==2.8.1" "numpy==2.2.6" "nibabel==5.3.2" \
+            "scipy==1.15.3" "huggingface_hub==0.34.4" \
+            "torch==2.6.0+cpu" "torchvision==0.21.0+cpu" \
+            --extra-index-url https://download.pytorch.org/whl/cpu
+          python -m pip check
+          python - <<'PY'
+          import torch
+          assert torch.__version__=="2.6.0+cpu" and torch.version.cuda is None, "CPU_only_PyTorch_was_replaced"
+          print("Verified ORIGINAL ISLES CPU torch:",torch.__version__)
+          PY
       - name: Fetch authentic original three ISLES MRI modalities, expert stroke mask and released trained checkpoint
         run: |
           timeout --signal=TERM --kill-after=20s 650s python scripts/real-isles22-stroke-dwi-adc-flair.py \

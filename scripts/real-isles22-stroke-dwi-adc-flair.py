@@ -23,6 +23,28 @@ def sha(f):
         for chunk in iter(lambda:fp.read(1024*1024),b""):h.update(chunk)
     return h.hexdigest()
 
+def verified_public_download(repo, revision, filename, destination, repo_type="dataset", cap=80*1024**2):
+    """Preserve source provenance: original immutable HF file, length and LFS SHA."""
+    from huggingface_hub import HfApi, hf_hub_download
+    api=HfApi(token=False)
+    info=api.repo_info(repo_id=repo,repo_type=repo_type,revision=revision,
+                       files_metadata=True,token=False)
+    item=next((s for s in info.siblings if s.rfilename==filename),None)
+    if item is None or not item.size or item.size<100 or item.size>cap:
+        raise ValueError("publisher_original_ischemic_MRI_asset_missing_or_unbounded")
+    actual=Path(hf_hub_download(repo_id=repo,repo_type=repo_type,
+                                revision=revision,filename=filename,token=False))
+    if actual.stat().st_size!=item.size:
+        raise ValueError("publisher_original_ischemic_MRI_asset_size_mismatch")
+    lfs=getattr(item,"lfs",None)
+    if lfs and lfs.get("sha256") and sha(actual)!=lfs["sha256"]:
+        raise ValueError("publisher_original_ischemic_MRI_LFS_SHA_mismatch")
+    shutil.copyfile(actual,destination)
+    if sha(destination)!=sha(actual):
+        raise ValueError("copied_original_ischemic_MRI_asset_sha_changed")
+    return {"sha256":sha(actual),"bytes":item.size}
+
+
 def read_pair(path):
     import nibabel as nib
     import numpy as np
@@ -38,7 +60,7 @@ def read_pair(path):
         not np.allclose(dwi.affine,expert.affine,rtol=0,atol=0.1)):
         raise ValueError("DWI_and_expert_original_native_geometry_invalid")
     mask=np.asarray(expert.dataobj)
-    if not np.isin(mask,[0,1]).all() or not np.count_nonzero(mask):
+    if not np.isfinite(mask).all() or not np.isin(mask,[0,1]).all() or not np.count_nonzero(mask):
         raise ValueError("expert_positive_ischemic_mask_missing")
     return dwi,int(np.count_nonzero(mask))
 
@@ -54,13 +76,8 @@ def prepare(path):
     path.mkdir(mode=0o700,parents=True)
     for name in ("dwi","adc","flair"):
         source=f"{ROOT}/{CASE}_{SESSION}_{name.upper() if name=='flair' else name}.nii.gz"
-        f=Path(hf_hub_download(repo_id=DS,repo_type="dataset",revision=ds.sha,
-                               filename=source,token=False))
-        if f.stat().st_size>80*1024**2:raise ValueError("oversize_public_ischemia_MRI")
-        shutil.copyfile(f,path/f"{name}.nii.gz")
-    f=Path(hf_hub_download(repo_id=DS,repo_type="dataset",revision=ds.sha,
-                           filename=LABEL,token=False))
-    shutil.copyfile(f,path/"expert.nii.gz")
+        verified_public_download(DS,ds.sha,source,path/f"{name}.nii.gz")
+    verified_public_download(DS,ds.sha,LABEL,path/"expert.nii.gz",cap=10*1024**2)
     dwi,positive=read_pair(path)
     original_sha={name:sha(path/f"{name}.nii.gz") for name in ("dwi","adc","flair")}
     # Real DWI, ADC, FLAIR can differ in voxel grid: the model expects jointly
@@ -85,6 +102,10 @@ def prepare(path):
              (p.parent/"fold_0/checkpoint_best.pth").is_file()]
     if not options:raise ValueError("official_trained_stroke_model_checkpoint_layout_unavailable")
     model_folder=sorted(options,key=lambda q:len(str(q)))[0]
+    # Source is a patient-containing medical public dataset, even if the
+    # dataset card labels the repository MIT. Never infer medical image
+    # commercial-use rights from the code/model repository's MIT license.
+    print("ISLES original MRI source research only; data-use rights and training overlap not independently cleared")
     checkpoint=model_folder/"fold_0/checkpoint_best.pth"
     if not 1*1024**2<checkpoint.stat().st_size<950*1024**2:
         raise ValueError("pretrained_stroke_checkpoint_missing_or_unbounded")
