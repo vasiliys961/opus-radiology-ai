@@ -1,0 +1,52 @@
+name: Original WMH fold0 true pretrained author weights
+on:
+  pull_request:
+    paths:
+      - scripts/provision-real-author-wmh-fold0.py
+      - scripts/test-provision-real-author-wmh-fold0.py
+      - .github/workflows/original-wmh-fold0-weights.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/provision-real-author-wmh-fold0.py
+      - scripts/test-provision-real-author-wmh-fold0.py
+      - .github/workflows/original-wmh-fold0-weights.yml
+permissions:
+  contents: read
+jobs:
+  author-weight-provenance-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python3 -m unittest discover -s scripts -p 'test-provision-real-author-wmh-fold0.py'
+  original-publisher-weights:
+    if: github.event_name == 'push'
+    needs: author-weight-provenance-contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      HF_HUB_DISABLE_TELEMETRY: '1'
+      HF_HUB_DISABLE_PROGRESS_BARS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install genuine source package and publisher downloader, not a fake checkpoint
+        run: python3 -m pip install 'wmh_seg==1.6.0' 'huggingface_hub==0.35.3'
+      - name: Download author fold0 weight; cryptographically confirm Hugging Face LFS
+        run: |
+          python3 scripts/provision-real-author-wmh-fold0.py \
+            --model-dir "$RUNNER_TEMP/original-wmh-model" \
+            --report "$RUNNER_TEMP/wmh-original-manifest.json"
+      - name: Export only source and model SHA, never raw images or weights
+        uses: actions/upload-artifact@v4
+        with:
+          name: original-wmh-fold0-publisher-hashes
+          path: ${{ runner.temp }}/wmh-original-manifest.json
+          retention-days: 7
+          if-no-files-found: error
