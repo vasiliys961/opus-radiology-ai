@@ -1,0 +1,44 @@
+name: Real BEAMSTER T1CE metastasis expert-positive source for QTIM
+on:
+  pull_request:
+    paths:
+      - scripts/verify-public-beamster-brain-mets-t1ce.py
+      - scripts/test-verify-public-beamster-brain-mets-t1ce.py
+      - .github/workflows/real-beamster-brain-mets-t1ce.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/verify-public-beamster-brain-mets-t1ce.py
+      - .github/workflows/real-beamster-brain-mets-t1ce.yml
+permissions:
+  contents: read
+jobs:
+  bounded-source-ontology:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python3 -m pip install 'numpy==1.26.4' 'nibabel==5.3.2'
+      - run: python3 -m unittest discover -s scripts -p 'test-verify-public-beamster-brain-mets-t1ce.py'
+  genuine-ce-t1-and-expert:
+    needs: bounded-source-ontology
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python3 -m pip install 'numpy==1.26.4' 'nibabel==5.3.2' 'huggingface_hub==0.35.3'
+      - name: Download and verify real licensed T1CE plus expert mask
+        run: python3 scripts/verify-public-beamster-brain-mets-t1ce.py --report "$RUNNER_TEMP/beamster-original-research.json"
+      - name: Keep numerical verified source only, no original MRI or lesion mask
+        uses: actions/upload-artifact@v4
+        with:
+          name: genuine-beamster-t1ce-brain-mets-expert-admission
+          path: ${{ runner.temp }}/beamster-original-research.json
+          if-no-files-found: error
+          retention-days: 7
