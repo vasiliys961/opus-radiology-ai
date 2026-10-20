@@ -5,6 +5,10 @@ from pathlib import Path
 spec=importlib.util.spec_from_file_location("wmh_provision",Path(__file__).with_name("provision-real-author-wmh-fold0.py"))
 mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
 class OriginalPublisherProvenance(unittest.TestCase):
+ def test_no_neural_runtime_import_for_source_package_assets(self):
+  s=Path(__file__).with_name("provision-real-author-wmh-fold0.py").read_text()
+  self.assertIn("distribution(\"wmh_seg\").locate_file",s)
+  self.assertNotIn("importlib.resources.files",s)
  def test_author_reference(self):
   self.assertEqual(mod.REPO,"jil202/wmh_seg")
   self.assertEqual(mod.WEIGHT,"checkpoint_final_0_invivo.pth")
