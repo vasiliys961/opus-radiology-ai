@@ -837,10 +837,10 @@
       "status": "real_checkpoint_candidate",
       "weights": "Original KS987 site-specific PanCancerSeg Dataset102_Kidney, nnUNetTrainerWandb2000 ResEncM original pretrained fold0 checkpoint_best.pth (Apache-2.0 model card claim; true bytes/SHA not verified)",
       "source": "https://huggingface.co/KS987/PanCancerSeg-Specialized-weights",
-      "reference": "Public original expert kidney cancer NIfTI and source-native binary tumor mask to acquire; inspect FLARE study/patient train overlap",
-      "restriction": "Executable original-model research adapter, NOT proven forward or diagnosis. Unlike MONAI 3-phase renalStructures model, accepts single native HU CT; original vendor nnU-Net 3D resampling may require >=64GiB Linux RAM. Model weights/rights and clinical validation unverified; not Mac, no private-patient cloud.",
+      "reference": "Original KiTS23 case_00021 public single-phase CT and expert tumor class2, 7837 positive voxels (genuine SHA/grid-admitted; NOT model output)",
+      "restriction": "Original KS987 pretrained fold0 checkpoint downloaded and hashed, but 0 genuine completed model forwards; real positive KiTS23 expert CT admitted, no Dice. Training overlap with KS987 not excluded. Model may need >=64 GiB Linux RAM; no Mac/patient cloud use.",
       "priority": 2,
-      "next": "Next gate: complete original pretrained positive CT forward with exact pinned checkpoint on isolated >=64GiB Linux research worker, expert native-mask Dice and lesion recall; prevent training overlap; no patient use.",
+      "next": "Use verified KS987 real model fold0 on exact original KiTS23 case_00021 source (CT SHA c8fc76065ce316d6935c3dc87490606381d19fbff1bdd43616814e0cde0c0637) with expert label2 (mask SHA 0292f2683b376043f478788624a8fdd924ce736c98626378fb897d4723991b50) in isolated high-RAM/GPU runner. Verify native geometry, voxel Dice, lesion recall; not independent.",
       "observedResearchEvidence": {
         "modelPublisher": "KS987/PanCancerSeg-Specialized-weights",
         "originalPublisherCommit": "7f0906ddcb93d139c53c720ddc56208a5af5ad7b",
@@ -848,9 +848,16 @@
         "originalCheckpointActuallyDownloaded": true,
         "sourceRun": "https://github.com/vasiliys961/opus-radiology-ai/actions/runs/39484700749",
         "originalModelForwardCompleted": false,
-        "publicExpertPositiveCTEvaluated": 0,
+        "publicExpertPositiveCTEvaluated": 1,
         "independentHoldout": false,
-        "clinicallyValidated": false
+        "clinicallyValidated": false,
+        "publicExpertPositiveOriginalCase": "KiTS23 case_00021",
+        "publicExpertTumorLabelId": 2,
+        "publicExpertTumorVoxels": 7837,
+        "publicOriginalCtSha256": "c8fc76065ce316d6935c3dc87490606381d19fbff1bdd43616814e0cde0c0637",
+        "publicOriginalExpertMaskSha256": "0292f2683b376043f478788624a8fdd924ce736c98626378fb897d4723991b50",
+        "publicSourceAdmissionRun": "https://github.com/vasiliys961/opus-radiology-ai/actions/runs/39488274964",
+        "originalModelExpertDiceMeasured": false
       }
     }
   ],
