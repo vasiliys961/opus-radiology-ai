@@ -1,0 +1,57 @@
+name: REAL pretrained WMH fold0 on original public expert-positive MRI
+on:
+  pull_request:
+    paths:
+      - scripts/run-public-original-wmh-fold0.py
+      - .github/workflows/real-original-wmh-fold0-singapore85.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-original-trained-fold0-public-reference:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      OMP_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+      CUDA_VISIBLE_DEVICES: '-1'
+      HF_HUB_DISABLE_TELEMETRY: '1'
+      HF_HUB_DISABLE_PROGRESS_BARS: '1'
+      TORCH_HOME: /tmp/opus-wmh-torch-cache
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check disk budget for original CPU packages, actual data and weight
+        run: |
+          python3 - <<'PY'
+          import shutil
+          free = shutil.disk_usage("/").free
+          print("Ephemeral disk available GiB:", round(free / 2**30, 3))
+          assert free >= 9 * 2**30, "no budget for isolated real pretrained CPU job"
+          PY
+      - name: Install CPU-only original pretrained nnU-Net runtime
+        run: |
+          set -euo pipefail
+          python3 -m pip install --no-cache-dir 'torch==2.6.0' 'torchvision==0.21.0' \
+            --index-url https://download.pytorch.org/whl/cpu
+          python3 -m pip install --no-cache-dir 'wmh_seg==1.6.0' \
+            'numpy==1.26.4' 'scipy==1.15.3' 'nibabel==5.3.2' \
+            'huggingface_hub==0.35.3' 'psutil==6.1.1'
+          python3 -m pip check
+      - name: Check clinical WMH overlap contracts (including real float32 expert ontology)
+        run: python3 -m unittest discover -s scripts -p 'test-real-brain-flair-wmh-cpu.py'
+      - name: Run original author fold0 on exact public NIfTI and expert mask
+        run: |
+          python3 -m py_compile scripts/run-public-original-wmh-fold0.py
+          python3 scripts/run-public-original-wmh-fold0.py \
+            --workdir "$RUNNER_TEMP" --report "$RUNNER_TEMP/wmh-fold0-public-score.json"
+      - name: Save only numeric research metrics, no images or masks or weights
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-author-wmh-fold0-public-expert-overlap
+          path: ${{ runner.temp }}/wmh-fold0-public-score.json
+          if-no-files-found: error
+          retention-days: 7
