@@ -161,8 +161,15 @@ def compare_native_expert(source, prediction, expert, expected_expert_sha256):
             not np.allclose(source_img.affine, pred_img.affine, atol=.02, rtol=0) or
             not np.allclose(source_img.affine, expert_img.affine, atol=.02, rtol=0)):
         raise ValueError("original_expert_source_prediction_native_geometry_mismatch")
-    if pred_img.get_data_dtype().kind not in "biu" or expert_img.get_data_dtype().kind not in "biu":
-        raise ValueError("expert_and_prediction_must_be_integer_labels")
+    # Published WMH Challenge NIfTI expert files can use float storage even
+    # though their *voxel labels* are categorical integers (0/1/2). Reject
+    # fractional/nonfinite values slice-by-slice below instead of rejecting
+    # a valid publisher-provided float32 label header. Predictions still
+    # require an integer binary-mask storage dtype.
+    if pred_img.get_data_dtype().kind not in "biu":
+        raise ValueError("prediction_must_have_integer_label_storage")
+    if expert_img.get_data_dtype().kind not in "biuf":
+        raise ValueError("expert_mask_must_have_numeric_label_storage")
     tp = fp = fn = tn = ignored = 0
     for z in range(source_img.shape[2]):
         pred = np.asarray(pred_img.dataobj[:, :, z])
