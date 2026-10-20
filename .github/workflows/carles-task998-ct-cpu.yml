@@ -1,0 +1,30 @@
+name: Carles original Task998 CT tumor research contract
+on:
+  pull_request:
+    paths:
+      - scripts/carles-task998-ct-cpu.py
+      - scripts/test-carles-task998-ct-cpu.py
+      - .github/workflows/carles-task998-ct-cpu.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/carles-task998-ct-cpu.py
+      - scripts/test-carles-task998-ct-cpu.py
+      - .github/workflows/carles-task998-ct-cpu.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-original-ct-model-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify original Carles CT-only provenance and no phantom clinical Dice
+        run: python -m unittest discover -s scripts -p 'test-carles-task998-ct-cpu.py'
+# Real forward is intentionally NOT a default CI job: original publisher
+# checkpoint, licensed expert-positive CT and bounded CPU runtime must first
+# be supplied explicitly. No synthetic inference is represented as clinical.
