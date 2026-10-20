@@ -11,7 +11,8 @@ const titles:Record<string,string>={
  "opus-noncontrast-native-CT-liver-spleen-HU/v1":"Печень и селезёнка · КТ",
  "opus-original-wmh-source-MRI-CPU-research/v1":"FLAIR · очаги белого вещества",
  "opus-CT-gallbladder-hyperattenuation-candidate/v1":"Жёлчный пузырь · гиперденсные кандидаты",
- "opus-hip-proximal-femur-pelvis-source-mask-separation/v1":"Тазобедренный сустав · костная геометрия"
+ "opus-hip-proximal-femur-pelvis-source-mask-separation/v1":"Тазобедренный сустав · костная геометрия",
+ "opus-aortic-centerline-orthogonal-anatomy-candidates/v1":"Аорта · перпендикулярные сечения КТ"
 };
 export function validateMorphometryReport(raw:unknown):NumericReview{
  const x=obj(raw);
@@ -42,6 +43,17 @@ export function validateMorphometryReport(raw:unknown):NumericReview{
   if(!Array.isArray(x.candidates)||x.candidates.length>1000)throw Error("Неограниченный список кандидатов.");
   add("Гиперденсные кандидаты",x.candidates.length,"",0,1000);
   add("Порог HU",x.thresholdHU,"HU",150,350);
+ }else if(x.schema==="opus-aortic-centerline-orthogonal-anatomy-candidates/v1"){
+  if(x.noAneurysmOrAorticDiseaseDiagnosis!==true||
+     x.measurementsAreInteriorSegmentationNotExternalWallCalipers!==true||
+     x.genuineModelForwardPerformedByThisScript!==false)
+   throw Error("Морфометрия аорты не должна утверждать диагноз или оригинальный инференс.");
+  const n=val(x.numberOfReviewedOrthogonalPlanes,5,500);
+  if(!Number.isInteger(n)||!Array.isArray(x.orthogonalProfile)||x.orthogonalProfile.length!==n)
+   throw Error("Не совпадает количество ортогональных плоскостей.");
+  add("Поперечные сечения",n,"",5,500);
+  add("Максимальный Feret анатомической маски",x.maximumSampledMaskFeretMm,"мм",0,120);
+  add("Максимальный площадь-эквивалентный диаметр",x.maximumSampledMaskAreaEquivalentDiameterMm,"мм",0,120);
  }else if(x.schema==="opus-hip-proximal-femur-pelvis-source-mask-separation/v1"){
   if(x.jointSide!=="left"&&x.jointSide!=="right")throw Error("Неизвестная сторона сустава.");
   const distance=obj(x.distanceToPelvicBoneMaskMm);

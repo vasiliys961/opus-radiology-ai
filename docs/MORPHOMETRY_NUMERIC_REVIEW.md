@@ -37,3 +37,12 @@ unlocks the numeric fields. The selected NIfTI never leaves browser memory;
 no full 3D image array is decoded. This is a **content-identity** gate,
 not verification of clinical interpretation, authorized model use or
 patient data deidentification.
+
+## Aortic orthogonal anatomy mask (seventh research route)
+
+`opus-aortic-centerline-orthogonal-anatomy-candidates/v1` is displayed only
+when source NIfTI's locally calculated SHA256 matches the report, the JSON
+explicitly denies aneurysm/disease diagnosis, and cross-section count matches
+its source-bound numeric profile. Feret and area-equivalent diameters are
+from the **interior anatomical aortic segmentation**, NOT outer-to-outer
+clinical lumen/wall measurements, not a positive AAA flag.
