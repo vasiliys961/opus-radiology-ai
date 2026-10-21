@@ -2,6 +2,7 @@
 
 import {useEffect,useState} from "react";
 import DualPublicDetectorReview from "../../components/DualPublicDetectorReview";
+import LocalOnfhResearch from "../../components/LocalOnfhResearch";
 import type {PublicResearchCase,PublicLLMReview,PublicCaseId} from "../../lib/public-case-evidence";
 import "./clinical-lab.css";
 
@@ -57,6 +58,7 @@ export default function ClinicalLab(){
         <h1>Детекторы и AI-доказательства</h1>
         <p>Здесь показано, какие обученные модели действительно запускаются, и что получено на оригинальных публичных исследованиях. Предзаписанные примеры никогда не являются анализом DICOM, открытого сейчас врачом.</p>
       </header>
+      <LocalOnfhResearch/>
       <div className="cl-detectors">
         {available.map(a=><article className="cl-detector" key={a.title}>
           <small>{a.status}</small><h2>{a.title}</h2><p>{a.description}</p>
