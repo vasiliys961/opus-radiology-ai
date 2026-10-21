@@ -1,0 +1,29 @@
+name: Research hepatic liver/spleen source-native attenuation
+on:
+  pull_request:
+    paths:
+      - "scripts/real-hepatic-steatosis-ncct.py"
+      - "scripts/test-real-hepatic-steatosis-ncct.py"
+      - "docs/HEPATIC_STEATOSIS_NCCT_RESEARCH.md"
+      - "docs/clinical-detector-coverage.json"
+      - "web/public/examples/clinical-pathology-coverage.json"
+      - ".github/workflows/hepatic-steatosis-ncct-contract.yml"
+permissions:
+  contents: read
+jobs:
+  source-quantification-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install small research arithmetic dependencies (no heavy model or CT download)
+        run: python -m pip install 'numpy==2.2.6' 'scipy==1.15.3' 'nibabel==5.3.2'
+      - name: Verify native image and HU quantification, no diagnosis
+        run: |
+          python -m py_compile scripts/real-hepatic-steatosis-ncct.py
+          python -m unittest discover -s scripts -p 'test-real-hepatic-steatosis-ncct.py' -v
+          python scripts/check-clinical-detector-coverage.py
+          python scripts/check-web-pathology-coverage.py
