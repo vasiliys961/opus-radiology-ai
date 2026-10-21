@@ -5,6 +5,7 @@ on:
       - ".github/workflows/lungscape191-original-public-forward.yml"
       - "scripts/run-lungscape191-research.py"
       - "scripts/bind-lungscape191-real-public-evidence.py"
+      - "scripts/test_lungscape191_bind_original_forward.py"
   workflow_dispatch:
     inputs:
       case:
@@ -33,6 +34,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Fail-closed numeric inference provenance contract (does NOT run a model)
+        run: |
+          python -m py_compile scripts/run-lungscape191-research.py scripts/bind-lungscape191-real-public-evidence.py
+          python -m unittest discover -s scripts -p test_lungscape191_bind_original_forward.py -v
       - name: Install original nnU-Net v2 research executor (isolated Linux runner)
         run: |
           python -m pip install --upgrade pip
