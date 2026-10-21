@@ -90,10 +90,21 @@ def compare(ct_path,hip_path,femur_path,side,roi_spec):
     # The surface distance transform is meaningful ONLY inside a clinician
     # chosen proximal-femur/acetabulum joint region with both true anatomy.
     femur_surface=femur & ~binary_erosion(femur)
-    distances=distance_transform_edt(~hip,sampling=mm)[femur_surface]
+    full_distances, nearest_hip = distance_transform_edt(~hip,sampling=mm,return_indices=True)
+    distances=full_distances[femur_surface]
     near=distances[(distances>0)&(distances<=20)]
     if near.size<30:
         raise ValueError("no_anatomical_opposition_within_20mm")
+    # Record the physical, source-native nearest opposing bone pair for audit.
+    positions=np.argwhere(femur_surface)
+    sampled=full_distances[femur_surface]
+    selected=np.flatnonzero((sampled>0)&(sampled<=20))
+    closest=positions[selected[int(np.argmin(sampled[selected]))]]
+    opposite=nearest_hip[:,closest[0],closest[1],closest[2]]
+    source_ijk=closest+np.array([s.start for s in sl])
+    opposing_ijk=opposite+np.array([s.start for s in sl])
+    femur_world=(ct.affine@np.r_[source_ijk,1])[:3]
+    pelvis_world=(ct.affine@np.r_[opposing_ijk,1])[:3]
     low=np.array([s.start for s in sl])
     upper=np.array([s.stop-1 for s in sl])
     world=ct.affine @ np.r_[(low+upper)/2.,1.]
@@ -107,6 +118,11 @@ def compare(ct_path,hip_path,femur_path,side,roi_spec):
             [low.tolist(),upper.tolist()],
         "researchROICentroidRasMm":[round(float(x),3) for x in world[:3]],
         "nearestFemoralSurfaceSampleCount":int(near.size),
+        "nearestSourceFemoralVoxelIJK":[int(x) for x in source_ijk],
+        "nearestSourcePelvisVoxelIJK":[int(x) for x in opposing_ijk],
+        "nearestFemoralRASmm":[round(float(x),3) for x in femur_world],
+        "nearestPelvisRASmm":[round(float(x),3) for x in pelvis_world],
+        "closestSurfacePairDistanceMm":round(float(np.linalg.norm(femur_world-pelvis_world)),3),
         "distanceToPelvicBoneMaskMm":{
             "min":round(float(np.min(near)),3),
             "p10":round(float(np.percentile(near,10)),3),
