@@ -24,7 +24,9 @@ jobs:
         with:
           python-version: '3.11'
       - name: Verify original vendor model ROI and GPU guard without simulated trained inference
-        run: python3 -m unittest discover -s scripts -p 'test-real-fracsegnet-v1-pelvic-fracture-gpu.py'
+        run: |
+          python3 -m pip install 'numpy==2.2.6' 'nibabel==5.3.2' 'scipy==1.15.3'
+          python3 -m unittest discover -s scripts -p 'test-real-fracsegnet-v1-pelvic-fracture-gpu.py'
 # Actual original FracSegNet v1 model is vendor-distributed on Google Drive
 # and requires >=10GB NVIDIA GPU, verified rights and a separate pre-extracted
 # public ROI. No production/ordinary GitHub hosted 7GiB CPU inference.
