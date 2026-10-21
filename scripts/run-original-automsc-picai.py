@@ -137,11 +137,14 @@ def run(args):
             truth_image.affine, mask_image.affine, atol=0.001, rtol=0
         ):
             raise ValueError("Expert mask geometry mismatch")
-        truth = np.asarray(truth_image.dataobj) == 2
+        truth_values = np.asarray(truth_image.dataobj)
+        if not np.isin(truth_values, [0, 1, 2, 3, 4, 5]).all():
+            raise ValueError("Unexpected expert segmentation labels")
+        truth = np.isin(truth_values, args.expert_positive_labels)
         tp = int(np.logical_and(tumor, truth).sum())
         fp = int(np.logical_and(tumor, ~truth).sum())
         fn = int(np.logical_and(~tumor, truth).sum())
-        evidence["expertComparison"] = {"tpVoxels": tp, "fpVoxels": fp,
+        evidence["expertComparison"] = {"positiveLabels": args.expert_positive_labels, "tpVoxels": tp, "fpVoxels": fp,
                                          "fnVoxels": fn,
                                          "dice": 2 * tp / (2 * tp + fp + fn) if (2 * tp + fp + fn) else None}
     (out / "evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
@@ -154,6 +157,8 @@ def main():
         p.add_argument("--" + name, type=Path, required=True)
     p.add_argument("--cache", type=Path, default=Path.home() / ".cache/opus/automsc")
     p.add_argument("--expert-mask", type=Path)
+    p.add_argument("--expert-positive-labels", type=int, nargs="+", default=[2, 3, 4, 5],
+                   help="PI-CAI human expert ISUP-positive mask labels (default 2..5)")
     p.add_argument("--device", choices=("cuda", "cpu"), default="cuda")
     p.add_argument("--timeout", type=int, default=3600)
     run(p.parse_args())
