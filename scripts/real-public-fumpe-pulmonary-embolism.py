@@ -36,6 +36,8 @@ def native_pair(root):
             raise ValueError("original_FUMPE_source_missing_or_unbounded")
     image=nib.load(str(ct)); mask=nib.load(str(ref))
     shape=image.shape
+    if image.header.get_xyzt_units()[0] != mask.header.get_xyzt_units()[0]:
+        raise ValueError("source_and_expert_NIfTI_spatial_units_mismatch")
     if (image.ndim!=3 or mask.ndim!=3 or shape!=mask.shape or
         any(not 16<=v<=800 for v in shape) or
         math.prod(shape)>145_000_000 or
@@ -144,7 +146,9 @@ def evaluate(root,output_segmentation,checkpoint_meta,out):
     mask=prediction==1
     # True original model/expert native masks, not image-level classification.
     from pe_lesion_native_metrics import score_pe_components
-    lesion_metrics=score_pe_components(gt,mask,image.affine)
+    lesion_metrics=score_pe_components(
+        gt,mask,image.affine,
+        source_units_mm=image.header.get_xyzt_units()[0]=="mm")
     tp=int(np.count_nonzero(gt&mask))
     fp=int(np.count_nonzero(~gt&mask))
     fn=int(np.count_nonzero(gt&~mask))
