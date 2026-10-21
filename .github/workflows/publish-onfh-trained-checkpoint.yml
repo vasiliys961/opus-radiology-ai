@@ -1,0 +1,38 @@
+name: Publish reproducible ONFH model checkpoint
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/publish-onfh-trained-checkpoint.yml
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  publish-pin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install 'numpy==2.2.6' 'pillow==11.3.0' 'scikit-learn==1.7.2'
+      - name: Fetch public author MRI study pixels at original revision
+        run: |
+          git clone --depth 1 --filter=blob:none --sparse https://github.com/sole12343/JLU-ONFH-Dataset.git original-onfh
+          cd original-onfh
+          git fetch --depth 1 origin 18d1d5a72c350dfc1db836f6d9ae4b0c8c852e50
+          git checkout --detach 18d1d5a72c350dfc1db836f6d9ae4b0c8c852e50
+          git sparse-checkout set orginal_dataset/HEALTH orginal_dataset/ONFH
+      - name: Fit actual model and verify exact checkpoint byte hash
+        run: |
+          python scripts/train-real-jlu-onfh-study-baseline.py --source-root original-onfh/orginal_dataset --checkpoint /tmp/onfh-research-v1.npz
+          echo '2ad046430588270d8235b66645d6205066e8542b32943296491af4a109be9233  /tmp/onfh-research-v1.npz' | sha256sum --check
+      - name: Publish verified public model only
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view onfh-research-v1 >/dev/null 2>&1 && exit 0
+          gh release create onfh-research-v1 /tmp/onfh-research-v1.npz /tmp/onfh-research-v1.json \
+            --title "ONFH research baseline v1 (not clinically validated)" \
+            --notes "Actual original JLU-ONFH trained baseline; no diagnostic use, no DICOM integration."

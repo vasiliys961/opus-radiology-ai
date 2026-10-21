@@ -5,6 +5,8 @@ type Impression={schema:string;researchONFHScore:number;researchAboveThreshold:b
  analyzedSliceCount:number;diagnosisConfirmed:false;};
 export default function LocalOnfhResearch(){
  const [available,setAvailable]=useState(false);
+ const [checking,setChecking]=useState(true);
+ const [readiness,setReadiness]=useState("");
  const [files,setFiles]=useState<File[]>([]);
  const [ack,setAck]=useState(false);
  const [busy,setBusy]=useState(false);
@@ -14,8 +16,9 @@ export default function LocalOnfhResearch(){
   const controller=new AbortController();
   fetch("/api/research/onfh-local",{cache:"no-store",signal:controller.signal})
    .then(r=>r.ok?r.json():null)
-   .then(v=>{if(!controller.signal.aborted)setAvailable(v?.available===true);})
-   .catch(()=>{});
+   .then(v=>{if(!controller.signal.aborted){setAvailable(v?.available===true);setReadiness(v?.note??"");}})
+   .catch(()=>{if(!controller.signal.aborted)setReadiness("Не удалось проверить локальную модель.");})
+   .finally(()=>{if(!controller.signal.aborted)setChecking(false);});
   return ()=>controller.abort();
  },[]);
  async function run(){
@@ -40,8 +43,9 @@ export default function LocalOnfhResearch(){
    <p>Обученная на JLU-ONFH исследовательская модель. Только папка с PNG-срезами одной МРТ-серии.
    Не поддерживаются DICOM, КТ, NIfTI, смешанные последовательности. Файлы обрабатываются
    локальным процессом Python на вашем компьютере, без облачных LLM.</p>
-   {!available&&<p role="status">Локальные ONFH-веса пока не настроены или интерфейс
-     открыт не на localhost. См. docs/ONFH_LOCAL_PRELIMINARY_IMPRESSION.md.</p>}
+   {checking&&<p role="status">Автоматическая подготовка ONFH: проверка весов и локальных библиотек…</p>}
+   {!checking&&!available&&<p role="status">{readiness||"Модель временно недоступна."}</p>}
+   {!checking&&available&&<p role="status">Модель готова. Веса загружены и проверены автоматически.</p>}
    <label>Выберите оригинальные МРТ-срезы PNG (2–300)
      <input aria-label="МРТ PNG-срезы для ONFH" type="file" accept=".png,image/png" multiple
        disabled={busy||!available} onChange={e=>{setFiles(Array.from(e.target.files??[]));
