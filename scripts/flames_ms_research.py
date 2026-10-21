@@ -189,7 +189,7 @@ def compare_expert_ms_lesions(source: Path, prediction: Path,
 
     for path in (source, prediction, expert, brain_mask):
         if (path.is_symlink() or not path.is_file() or
-                not 1024 < path.stat().st_size < MAX_NIFTI_BYTES):
+                not 128 < path.stat().st_size < MAX_NIFTI_BYTES):
             raise ValueError("expert comparison requires real bounded source and masks")
     orig, pred, ref, brain = (nib.load(str(p)) for p in
                              (source, prediction, expert, brain_mask))
