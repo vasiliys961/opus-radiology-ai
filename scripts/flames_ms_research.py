@@ -175,7 +175,93 @@ def evaluate_original_prediction(source: Path, predicted: Path) -> dict:
     }
 
 
-def run(source: Path, brain_mask: Path, results: Path, output: Path, *, execute: bool, device: str):
+
+def compare_expert_ms_lesions(source: Path, prediction: Path,
+                              expert: Path, brain_mask: Path) -> dict:
+    """Source-matched real-mask comparison after original trained forward ONLY.
+
+    Strict 26-connected one-to-one overlap pairing; this is a single reference
+    evaluation, NOT a clinical MS diagnosis or a claim of held-out validation.
+    """
+    import nibabel as nib
+    import numpy as np
+    from scipy import ndimage
+
+    for path in (source, prediction, expert, brain_mask):
+        if (path.is_symlink() or not path.is_file() or
+                not 1024 < path.stat().st_size < MAX_NIFTI_BYTES):
+            raise ValueError("expert comparison requires real bounded source and masks")
+    orig, pred, ref, brain = (nib.load(str(p)) for p in
+                             (source, prediction, expert, brain_mask))
+    for candidate in (pred, ref, brain):
+        if (candidate.shape != orig.shape or candidate.ndim != 3
+                or candidate.header.get_xyzt_units()[0] != "mm"
+                or not np.isfinite(candidate.affine).all()
+                or not np.allclose(candidate.affine, orig.affine, rtol=0, atol=1e-4)):
+            raise ValueError("expert/predicted/brain mask not in original FLAIR source grid")
+    if orig.header.get_xyzt_units()[0] != "mm":
+        raise ValueError("expert native FLAIR millimetre units missing")
+    for labelmask in (pred, ref, brain):
+        if labelmask.header.get_data_dtype().kind not in "biu":
+            raise ValueError("expert comparison requires integer binary masks")
+    p = np.asanyarray(pred.dataobj)
+    e = np.asanyarray(ref.dataobj)
+    b = np.asanyarray(brain.dataobj)
+    if (not np.isin(p,(0,1)).all() or not np.isin(e,(0,1)).all()
+            or not np.isin(b,(0,1)).all()):
+        raise ValueError("MS model/expert/brain reference binary ontology not confirmed")
+    p, e, b = p==1, e==1, b==1
+    if not np.any(e) or np.any(e & ~b):
+        raise ValueError("positive expert MS lesion mask within source brain is required")
+
+    tp = int(np.count_nonzero(p & e))
+    fp = int(np.count_nonzero(p & ~e))
+    fn = int(np.count_nonzero(~p & e))
+    label_structure = np.ones((3,3,3),dtype=np.uint8)
+    predicted_cc, npred = ndimage.label(p,structure=label_structure)
+    expert_cc, nexpert = ndimage.label(e,structure=label_structure)
+    if npred>4096 or nexpert>4096:
+        raise ValueError("excessive mask components require expert review")
+    # Each matched lesion is counted at most once. A fused large candidate
+    # cannot artificially claim detection of all small expert lesions.
+    pairs = predicted_cc[p & e].astype(np.int64)*(nexpert+1) + expert_cc[p & e]
+    unique, overlap_counts = np.unique(pairs,return_counts=True)
+    claimed_pred, claimed_expert = set(),set()
+    for k in np.argsort(-overlap_counts, kind="stable"):
+        vp, ve = divmod(int(unique[k]), nexpert+1)
+        if vp and ve and vp not in claimed_pred and ve not in claimed_expert:
+            claimed_pred.add(vp)
+            claimed_expert.add(ve)
+    matched = len(claimed_expert)
+    return {
+        "referenceType": "original source-grid binary expert MS lesion masks",
+        "expertMaskSha256": sha256(expert),
+        "actualPredictionMaskSha256": sha256(prediction),
+        "originalSourceFlairSha256": sha256(source),
+        "brainMaskSha256": sha256(brain_mask),
+        "originalSourceGridAndMillimetresVerified": True,
+        "expertMSLesionOntologyOperatorReviewed": True,
+        "voxelTP": tp,
+        "voxelFP": fp,
+        "voxelFN": fn,
+        "voxelDice": round(2*tp/(2*tp+fp+fn),6),
+        "expert26ConnectedLesionCount": int(nexpert),
+        "predicted26ConnectedCandidateCount": int(npred),
+        "oneToOneOverlapMatchedLesions": int(matched),
+        "missedExpertLesions": int(nexpert-matched),
+        "unmatchedPredictedCandidates": int(npred-matched),
+        "singleCaseExpertLesionRecall": round(matched/nexpert,6),
+        "matchingRule": "26-connected components, one-to-one greedy descending intersecting voxels, any nonzero overlap",
+        "clinicalDiagnosisValidated": False,
+        "trainingPatientOverlapExcluded": False,
+        "independentClinicalValidation": False,
+        "singleFLAIRCannotDistinguishMSFromNonspecificWMH": True,
+    }
+
+
+def run(source: Path, brain_mask: Path, results: Path, output: Path, *, execute: bool, device: str,
+        expert: Path | None = None, expert_lesion_labels_confirmed: bool = False,
+        expert_rights_reviewed: bool = False):
     source, brain_mask, results = (p.expanduser().resolve(strict=True) for p in
                                    (source, brain_mask, results))
     output = output.expanduser().resolve()
@@ -185,6 +271,10 @@ def run(source: Path, brain_mask: Path, results: Path, output: Path, *, execute:
         raise ValueError("source/output separation required")
     if output == brain_mask.parent or output.is_relative_to(brain_mask.parent):
         raise ValueError("skull-strip-mask/output separation required")
+    if expert is not None and (not execute or not expert_lesion_labels_confirmed or not expert_rights_reviewed):
+        raise ValueError("expert mask requires real model inference, verified lesion ontology and rights")
+    if expert is None and (expert_lesion_labels_confirmed or expert_rights_reviewed):
+        raise ValueError("expert flags cannot substitute missing real expert mask")
     src = check_inputs(source, brain_mask)
     model = original_model_installation(results)
     report = {
@@ -222,6 +312,10 @@ def run(source: Path, brain_mask: Path, results: Path, output: Path, *, execute:
         raise ValueError("source or brain mask changed during model inference")
     pred = output / (source.name[:-12] + ".nii.gz")
     report["predictionEvidence"] = evaluate_original_prediction(source, pred)
+    if expert is not None:
+        report["expertReferenceEvidence"] = compare_expert_ms_lesions(
+            source, pred, expert.expanduser().resolve(strict=True), brain_mask)
+        report["independentReferenceCompared"] = True
     report["trueOriginalForward"] = True
     (output / "flames-ms-numeric-evidence.json").write_text(json.dumps(report, indent=2) + "\n")
     return report
@@ -235,10 +329,16 @@ def main():
     ap.add_argument("--output", type=Path, required=True)
     ap.add_argument("--device", choices=("cpu", "cuda"), default="cpu")
     ap.add_argument("--execute", action="store_true")
+    ap.add_argument("--expert-ms-mask", type=Path, default=None)
+    ap.add_argument("--expert-ms-lesion-labels-confirmed", action="store_true")
+    ap.add_argument("--expert-source-rights-reviewed", action="store_true")
     a = ap.parse_args()
     try:
         print(json.dumps(run(a.source, a.brain_mask, a.nnunet_results,
-                             a.output, execute=a.execute, device=a.device), indent=2))
+                             a.output, execute=a.execute, device=a.device,
+                             expert=a.expert_ms_mask,
+                             expert_lesion_labels_confirmed=a.expert_ms_lesion_labels_confirmed,
+                             expert_rights_reviewed=a.expert_source_rights_reviewed), indent=2))
     except (OSError, ValueError, ImportError, RuntimeError, subprocess.SubprocessError) as exc:
         print("FLAMeS original trained research pipeline rejected: " + str(exc), file=sys.stderr)
         return 1
