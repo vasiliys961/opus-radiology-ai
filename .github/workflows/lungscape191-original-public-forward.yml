@@ -1,5 +1,10 @@
 name: LungSCAPE191 ORIGINAL pretrained forward on public chest CT
 on:
+  pull_request:
+    paths:
+      - ".github/workflows/lungscape191-original-public-forward.yml"
+      - "scripts/run-lungscape191-research.py"
+      - "scripts/bind-lungscape191-real-public-evidence.py"
   workflow_dispatch:
     inputs:
       case:
@@ -42,7 +47,7 @@ jobs:
       - name: Admit original public CT and original expert reference separately
         run: |
           python scripts/prepare-lungscape191-public-coronacases.py \
-            --case "${{ inputs.case }}" \
+            --case "${{ inputs.case || 'coronacases_003' }}" \
             --output-private "$RUNNER_TEMP/lungscape-public" --execute-download
       - name: Download and verify original publisher 5-fold archive
         run: |
@@ -59,12 +64,15 @@ jobs:
           nnUNet_results: ${{ runner.temp }}/nnunet-results
         run: |
           # Linux-hosted CPU worker only. Never execute this action on the user's Mac.
+          # Original fold0, not publisher five-fold ensemble; CPU hosted GitHub runner.
+          # Preserve virtual-memory bound; failure is evidence of resource limits,
+          # not proof of missing CT pathology.
           ulimit -v 12582912
           python scripts/run-lungscape191-research.py \
             --input "$RUNNER_TEMP/lungscape-public/in/lungcase001_0000.nii.gz" \
             --nnunet-results "$nnUNet_results" \
             --output "$RUNNER_TEMP/lungscape-predictions" \
-            --device cpu --execute
+            --device cpu --execute --research-single-fold0
       - name: Bind model result to exact public source and ontology (numeric only)
         run: |
           python scripts/bind-lungscape191-real-public-evidence.py \
