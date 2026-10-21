@@ -54,11 +54,27 @@ def run(input_file, results, output_dir, *, device="cpu", execute=False, researc
     if len(models) != 1:
         raise ValueError("expected exactly one installed Dataset191_* model directory")
     model = models[0]
-    if not model.is_dir() or not (model / CONFIG).is_dir() or not (model / "dataset.json").is_file():
-        raise ValueError("missing Dataset191 3d_fullres installation or dataset.json")
-    original_labels = installed_label_map(model / "dataset.json")
-    folds = [model / CONFIG / ("fold_" + f) / "checkpoint_final.pth" for f in FOLDS]
-    if any(not p.is_file() or p.stat().st_size == 0 for p in folds):
+    if not model.is_dir() or model.is_symlink():
+        raise ValueError("installed Dataset191 model directory missing/linked")
+    # Official nnU-Net v2 export is Dataset191_*/TRAINER__PLANS__3d_fullres,
+    # not Dataset191_*/3d_fullres. The upstream installer does not flatten it.
+    configurations = sorted(p for p in model.glob("*__*__" + CONFIG) if p.is_dir())
+    if len(configurations) != 1:
+        raise ValueError("expected exactly one publisher nnU-Net trainer/plans 3d_fullres folder: "
+                         + repr([p.name for p in model.iterdir() if p.is_dir()][:12]))
+    config_dir = configurations[0]
+    names = config_dir.name.split("__")
+    if (len(names) != 3 or names[2] != CONFIG or
+            not names[0].startswith("nnUNetTrainer") or
+            not names[1].startswith("nnUNetPlans") or
+            config_dir.is_symlink()):
+        raise ValueError("unsupported publisher original trainer/plans layout")
+    dataset_path = config_dir / "dataset.json"
+    if not dataset_path.is_file() or dataset_path.is_symlink():
+        raise ValueError("original installed Dataset191 dataset.json missing in trainer folder")
+    original_labels = installed_label_map(dataset_path)
+    folds = [config_dir / ("fold_" + f) / "checkpoint_final.pth" for f in FOLDS]
+    if any(not p.is_file() or p.is_symlink() or p.stat().st_size == 0 for p in folds):
         raise ValueError("all five official Dataset191 checkpoint_final.pth folds required")
     cmd_path = shutil.which("nnUNetv2_predict")
     if cmd_path is None:
@@ -94,6 +110,7 @@ def run(input_file, results, output_dir, *, device="cpu", execute=False, researc
     active_folds = ("0",) if research_single_fold0 else FOLDS
     invocation = [cmd_path, "-i", str(source.parent), "-o", str(destination),
                   "-d", str(MODEL_ID), "-c", CONFIG, "-f", *active_folds,
+                  "-tr", names[0], "-p", names[1],
                   "-npp", "1", "-nps", "1", "-device", device]
     if research_single_fold0:
         invocation.extend(("-step_size", "1", "--disable_tta"))
@@ -112,7 +129,8 @@ def run(input_file, results, output_dir, *, device="cpu", execute=False, researc
     separate_candidate_evidence = inspect_components(source, output, original_labels)
     report = {"status": "research_mask_generated", "source_sha256": source_hash,
               "mask_sha256": sha256(output), "model": "LungSCAPE Dataset191",
-              "model_dataset_json_sha256": sha256(model / "dataset.json"),
+              "model_dataset_json_sha256": sha256(dataset_path),
+              "originalTrainerName": names[0], "originalPlansIdentifier": names[1],
               "weight_folds_sha256": checkpoint_hashes,
               "inferenceActualFolds": list(active_folds),
               "publisherFiveFoldEnsembleUsed": not research_single_fold0,
