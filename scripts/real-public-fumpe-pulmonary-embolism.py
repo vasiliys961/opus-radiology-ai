@@ -142,6 +142,9 @@ def evaluate(root,output_segmentation,checkpoint_meta,out):
         raise ValueError("pretrained_model_output_not_in_original_CTPA_native_voxel_grid")
     gt=np.asarray(nib.load(str(root/"expert.nii.gz")).dataobj)==1
     mask=prediction==1
+    # True original model/expert native masks, not image-level classification.
+    from pe_lesion_native_metrics import score_pe_components
+    lesion_metrics=score_pe_components(gt,mask,image.affine)
     tp=int(np.count_nonzero(gt&mask))
     fp=int(np.count_nonzero(~gt&mask))
     fn=int(np.count_nonzero(gt&~mask))
@@ -164,13 +167,14 @@ def evaluate(root,output_segmentation,checkpoint_meta,out):
       "oneVolumeEmbolusDice":round(2*tp/(2*tp+fp+fn),6),
       "oneVolumeEmbolusVoxelRecall":round(tp/n,6),
       "oneVolumeEmbolusVoxelPrecision":round(tp/(tp+fp),6) if tp+fp else None,
-      "lesionLevelSensitivity":None,"specificity":None,
+      "lesionLevelSensitivity":lesion_metrics["singleStudyComponentRecall"],"specificity":None,
       "independentTrainingHoldout":False,"clinicalValidation":False,
       "patientDiagnosisAllowed":False,
+      **lesion_metrics,
       "limitations":[
         "One FUMPE source. Exclusion of FUMPE from vendor training has not been independently established.",
         "Small CPU tile may differ in boundary behavior from released full patch setting.",
-        "Single positive case and voxel Dice do not establish general sensitivity, specificity or deployable accuracy.",
+        "Single positive case, voxel Dice and 3D lesion recall do not establish general sensitivity, specificity or deployable accuracy.",
         "Publisher checkpoint licensed CC BY-NC 4.0; commercial clinical use not authorized.",
         "FUMPE rehosted files require primary-source provenance review before clinical interpretation."
       ]}
