@@ -69,6 +69,21 @@ jobs:
         run: |
           mkdir -p "$nnUNet_results"
           nnUNetv2_install_pretrained_model_from_zip "$RUNNER_TEMP/lungscape-weights/Dataset191_HighAttenuation.zip"
+          # Log publisher installed folder layout only. No DICOM, patient source,
+          # image pixels, weights or mask data are printed.
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          root=Path(os.environ["nnUNet_results"])
+          for dataset in root.glob("Dataset191_*"):
+              print("Published nnU-Net Dataset191 directory:", dataset.name)
+              for config in dataset.iterdir():
+                  if not config.is_dir():
+                      continue
+                  print("Publisher trainer/plans folder:", config.name)
+                  print("Publisher original dataset.json:", (config/"dataset.json").is_file())
+                  print("Original trained fold0:", (config/"fold_0/checkpoint_final.pth").is_file())
+          PY
       - name: Run original model on original CT (fail if RAM/time bound exceeded)
         env:
           nnUNet_results: ${{ runner.temp }}/nnunet-results
