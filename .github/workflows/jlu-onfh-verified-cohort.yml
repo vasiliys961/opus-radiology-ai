@@ -1,0 +1,47 @@
+name: Verify original JLU ONFH public MRI subject cohort
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/jlu-onfh-verified-cohort.yml
+permissions:
+  contents: read
+jobs:
+  actual-original-public-subjects:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Fetch pinned ORIGINAL author repository tree METADATA only
+        env:
+          SOURCE_SHA: 18d1d5a72c350dfc1db836f6d9ae4b0c8c852e50
+        run: |
+          python - <<'PY'
+          import json,os,urllib.request
+          url="https://api.github.com/repos/sole12343/JLU-ONFH-Dataset/git/trees/"+os.environ["SOURCE_SHA"]+"?recursive=1"
+          req=urllib.request.Request(url,headers={"Accept":"application/vnd.github+json","User-Agent":"opus-original-onfh-provenance"})
+          with urllib.request.urlopen(req,timeout=50) as response:
+              data=response.read(8*1024*1024+1)
+          assert len(data)<8*1024*1024,"unbounded original tree metadata"
+          parsed=json.loads(data)
+          assert parsed.get("sha")==os.environ["SOURCE_SHA"]
+          assert parsed.get("truncated") is False
+          with open("source-tree.json","w") as f:json.dump(parsed,f)
+          PY
+          python scripts/admit-jlu-onfh-original-mri-studies.py --tree-json source-tree.json --source-commit "$SOURCE_SHA" --output onfh-original-subject-metrics.json
+          python - <<'PY'
+          import json
+          x=json.load(open("onfh-original-subject-metrics.json"))
+          assert x["originalStudyCount"]>0
+          assert x["originalPngSliceCount"]>=x["originalStudyCount"]*2
+          print("Real original author MRI subject counts:",x["studyCountsByAuthorLabel"])
+          PY
+      - name: Upload numeric source provenance ONLY, no images
+        uses: actions/upload-artifact@v4
+        with:
+          name: onfh-original-source-metadata
+          path: onfh-original-subject-metrics.json
+          retention-days: 7
