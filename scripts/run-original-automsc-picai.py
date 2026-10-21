@@ -117,6 +117,23 @@ def run(args):
     tumor = mask == 2
     positions = np.argwhere(tumor)
     bbox = [positions.min(axis=0).tolist(), positions.max(axis=0).tolist()] if positions.size else None
+    # NIfTI affines map voxel coordinates into RAS+ millimetres; no inferred
+    # patient-space localization is permitted without matching source geometry.
+    tumor_centroid_ras = None
+    tumor_world_bounds_ras = None
+    if positions.size:
+        affine = np.asarray(mask_image.affine, dtype=np.float64)
+        centroid_voxel = positions.astype(np.float64).mean(axis=0)
+        tumor_centroid_ras = (
+            affine[:3, :3] @ centroid_voxel + affine[:3, 3]
+        ).tolist()
+        # Rotated volumes require transforming every voxel, not just two
+        # opposite index-space corners.
+        voxel_world = positions @ affine[:3, :3].T + affine[:3, 3]
+        tumor_world_bounds_ras = [
+            voxel_world.min(axis=0).tolist(),
+            voxel_world.max(axis=0).tolist(),
+        ]
     evidence = {
         "schema": "opus-automsc-picai-original-forward/v1",
         "model": MODEL_ID, "revision": REVISION, "checkpointSha256": WEIGHT_SHA256,
@@ -127,6 +144,8 @@ def run(args):
         "tumorVoxels": int(tumor.sum()),
         "tumorVolumeMl": float(tumor.sum() * geometry["voxelVolumeMm3"] / 1000),
         "tumorVoxelBoundingBox": bbox,
+        "tumorCentroidRASmm": tumor_centroid_ras,
+        "tumorWorldBoundsRASmm": tumor_world_bounds_ras,
         "actualPublisherForward": True,
         "clinicalValidation": False, "physicianReviewRequired": True,
         "license": "PICAI CC-BY-NC 4.0: research only",
