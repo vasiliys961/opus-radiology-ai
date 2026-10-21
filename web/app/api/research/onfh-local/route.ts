@@ -63,9 +63,7 @@ export async function POST(req:NextRequest){
    const args=[script,"--subject-png-dir",series,"--weights",cfg.weights,
      "--weights-sha256",cfg.sha,"--report",output];
    const status=await new Promise<number>((resolveStatus,reject)=>{
-     const child=spawn(python,args,{stdio:["ignore","ignore","ignore"],env:{
-       PATH:process.env.PATH??"",HOME:process.env.HOME??"",PYTHONNOUSERSITE:"1"
-     }});
+     const child=spawn(python,args,{stdio:["ignore","ignore","ignore"],env:{...process.env,PYTHONNOUSERSITE:"1"}});
      const timeout=setTimeout(()=>child.kill("SIGKILL"),90000);
      child.on("error",e=>{clearTimeout(timeout);reject(e);});
      child.on("close",code=>{clearTimeout(timeout);resolveStatus(code??1);});
