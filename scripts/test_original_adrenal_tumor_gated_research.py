@@ -16,6 +16,19 @@ class AdrenalGatedResearch(unittest.TestCase):
             self.assertEqual(M.check_ontology(p)["tumor"],2)
             p.write_text('{"labels":{"background":0,"adrenal_gland":1,"tumor":1}}')
             with self.assertRaises(ValueError):M.check_ontology(p)
+    def test_adrenal_native_tumor_component_geometry(self):
+        import numpy as np
+        from types import SimpleNamespace
+        roi=np.zeros((128,192,192),dtype=np.uint8)
+        roi[8:12,14:18,22:26]=2
+        roi[1,1,1]=1
+        source=SimpleNamespace(shape=roi.shape,affine=np.diag([1.,1.,1.,1.]))
+        result=M.native_adrenal_tumor_candidates(source,roi)
+        self.assertEqual(len(result),1)
+        self.assertEqual(result[0]["voxelCount"],64)
+        self.assertEqual(result[0]["nativeRoiVoxelBoundsIJK"],[[8,11],[14,17],[22,25]])
+        self.assertFalse(result[0]["adrenalMalignancyConfirmed"])
+
     def test_license_refusal_no_external_access(self):
         with self.assertRaises(PermissionError):
             M.run("/no-real-ct","/no-rights","/no-output",
