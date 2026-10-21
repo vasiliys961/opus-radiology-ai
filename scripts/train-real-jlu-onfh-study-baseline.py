@@ -13,7 +13,7 @@ import numpy as np
 from PIL import Image
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score,balanced_accuracy_score,confusion_matrix
-from sklearn.model_selection import GroupShuffleSplit
+from sklearn.model_selection import StratifiedGroupKFold
 from sklearn.preprocessing import StandardScaler
 
 SOURCE_SHA="18d1d5a72c350dfc1db836f6d9ae4b0c8c852e50"
@@ -53,7 +53,7 @@ def train(studies,output,seed=2026):
         if z[2] in by_hash and by_hash[z[2]]!=z[0]:
             raise ValueError("cross_label_duplicate_original_MRI_conflict")
         by_hash[z[2]]=z[0]
-    train_i,val_i=next(GroupShuffleSplit(n_splits=1,test_size=.25,random_state=seed).split(vectors,labels,groups))
+    train_i,val_i=next(StratifiedGroupKFold(n_splits=4,shuffle=True,random_state=seed).split(vectors,labels,groups))
     if set(groups[train_i])&set(groups[val_i]):raise ValueError("leaked_original_duplicate_subject")
     if len(set(labels[train_i]))!=2 or len(set(labels[val_i]))!=2:
         raise ValueError("non_stratified_split_lacks_either_class")
