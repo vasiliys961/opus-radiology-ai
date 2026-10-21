@@ -83,6 +83,38 @@ def inspect_prediction(source,prediction):
     return totals
 
 
+def native_adrenal_tumor_candidates(source, prediction, minimum_voxels=10):
+    """Real label-2 instance geometry only; never diagnose adrenal malignancy."""
+    import numpy as np
+    from scipy import ndimage
+    if not 1<=minimum_voxels<=100:
+        raise ValueError("unsupported_adrenal_candidate_volume_threshold")
+    a=np.asarray(prediction)
+    if (a.ndim!=3 or a.shape!=source.shape or a.size!=MAX_VOXELS or
+            not np.isin(a,(0,1,2)).all()):
+        raise ValueError("original_adrenal_prediction_ontology_or_grid_invalid")
+    labels,n=ndimage.label(a==2,ndimage.generate_binary_structure(3,3))
+    if n>100000:raise ValueError("unbounded_adrenal_components")
+    volume=abs(float(np.linalg.det(source.affine[:3,:3])))
+    candidates=[]
+    for i,region in enumerate(ndimage.find_objects(labels),1):
+        if region is None:continue
+        component=labels[region]==i
+        count=int(np.count_nonzero(component))
+        if count<minimum_voxels:continue
+        center=np.asarray(ndimage.center_of_mass(component))+[s.start for s in region]
+        ras=(source.affine@np.r_[center,1])[:3]
+        candidates.append({
+            "nativeRoiVoxelBoundsIJK":[[int(s.start),int(s.stop-1)] for s in region],
+            "nativeRoiCentroidIJK":[round(float(x),3) for x in center],
+            "sourceNiftiRASmm":[round(float(x),3) for x in ras],
+            "volumeMl":round(count*volume/1000,5),
+            "voxelCount":count,
+            "adrenalMalignancyConfirmed":False})
+        if len(candidates)>128:
+            raise ValueError("excessive_adrenal_tumor_candidates")
+    return sorted(candidates,key=lambda x:x["voxelCount"],reverse=True)
+
 def run(roi,results,output,*,expected_roi_sha,checkpoint_sha,license_approved,execute):
     if not license_approved:
         raise PermissionError("official gated model terms must be accepted by authorized human")
@@ -104,7 +136,7 @@ def run(roi,results,output,*,expected_roi_sha,checkpoint_sha,license_approved,ex
         if p.is_symlink() or not p.is_file() or not 1_000_000<p.stat().st_size<2*1024**3:
             raise ValueError("author gated model genuine fold "+fold+" missing")
         checkpoints[fold]=sha256(p)
-    if checkpoint_sha and checkpoints["0"]!=checkpoint_sha:
+    if not re.fullmatch("[a-f0-9]{64}",checkpoint_sha) or checkpoints["0"]!=checkpoint_sha:
         raise ValueError("original author fold0 checkpoint SHA mismatch")
     summary={"model":MODEL,"ontology":labels,"sourceROISha256":expected_roi_sha,
              "originalWeightFoldSha256":checkpoints,"originalTrainedForward":False,
@@ -136,11 +168,17 @@ def run(roi,results,output,*,expected_roi_sha,checkpoint_sha,license_approved,ex
     subprocess.run(cmd,env=env,check=True,timeout=7200)
     pred=out/(roi.name[:-12]+".nii.gz")
     counts=inspect_prediction(source,pred)
+    import nibabel as nib
+    import numpy as np
+    candidates=native_adrenal_tumor_candidates(source,np.asarray(nib.load(str(pred)).dataobj))
     if sha256(roi)!=expected_roi_sha:
         raise ValueError("source changed during genuine model forward")
     summary.update({"originalTrainedForward":True,"originalMaskSha256":sha256(pred),
                     "classCountNotDiagnosis":{"background":counts[0],"adrenal_gland":counts[1],"tumor_candidates":counts[2]},
-                    "negativeTumorFindingNotEstablished":True})
+                    "negativeTumorFindingNotEstablished":True,
+                    "nativeRoiTumorCandidates":candidates,
+                    "nativeRoiOnlyNotOriginalFullCT":True,
+                    "independentExpertTumorDice":None})
     report=out/"adrenal-research-numeric.json"
     report.write_text(json.dumps(summary,indent=2)+"\n",encoding="utf8")
     return summary
