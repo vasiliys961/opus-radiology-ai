@@ -1,6 +1,6 @@
 {
   "schema": "opus-clinically-prioritized-detector-coverage/v1",
-  "asOf": "2026-10-20",
+  "asOf": "2026-10-21",
   "mission": "Real pretrained pathologic detection across more anatomic regions before multimodel comparison, UI or LLM orchestration",
   "evidenceStates": {
     "real_case_measured": "genuine isolated inference observed on one public research volume, NOT validated",
@@ -885,6 +885,19 @@
       "restriction": "Hugging Face model-weight access gated; license marked other, human acceptance and commercial license rights required. Original trained forward=0; preprocessed ROI lacks proven full CT backprojection; no sensitivity/Dice/independent validation, patient use or Mac inference.",
       "priority": 2,
       "next": "With human-authorized license, audit original five fold weight bytes/SHA and author VOI algorithm, retrieve lawful positive adrenal CT with expert tumor class2, run original nnU-Net 3D on isolated >=16GiB Linux CPU/GPU, map 128x192x192 ROI back to source CT, calculate actual expert metrics."
+    },
+    {
+      "id": "hepatic-steatosis-ncct-attenuation",
+      "modality": "NCCT",
+      "anatomy": "abdomen",
+      "pathology": "hepatic fat-associated attenuation relative to spleen (quantitative research marker, not steatosis diagnosis)",
+      "status": "real_checkpoint_candidate",
+      "weights": "Genuine TotalSegmentator pretrained liver + spleen ANATOMY masks are externally required; this HU adapter is not a pathology-trained steatosis model and has not executed organ segmentation.",
+      "source": "https://github.com/wasserth/TotalSegmentator/tree/v2.18.0",
+      "reference": "Rights-cleared original noncontrast abdominal CT with confirmed liver steatosis and independent MRI-PDFF or histological reference NOT YET acquired",
+      "restriction": "Anatomy/HU noncontrast research-only candidate; neither original trained liver+spleen forward nor an expert-positive steatosis case was run in this increment. Source native HU/DICOM protocol operator-attested, not independently verified. Cannot diagnose fatty liver, fibrosis or cirrhosis, exclude mild steatosis, or claim specificity. Research only; Mac M1/8GiB and patient/cloud modes forbidden.",
+      "priority": 2,
+      "next": "Acquire licensed noncontrast liver-fat-positive abdominal CT with PDFF/histology reference; run original pretrained TotalSegmentator liver+spleen masks on same native study in isolated Linux host; clinician audit HU/noncontrast and compare source-native liver/spleen attenuation across independent holdout; no diagnosis until validated."
     }
   ],
   "selectionRule": "Prioritize uncovered CT/MR diseases with legal checkpoints, independently usable real image/mask pair and host RAM budget, in that order."
