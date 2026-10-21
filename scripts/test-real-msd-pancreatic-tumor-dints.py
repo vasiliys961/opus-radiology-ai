@@ -18,6 +18,21 @@ class OriginalPancreasPathology(unittest.TestCase):
                      'sliding_window_inference', '"tumorCandidateComponents"'):
             self.assertIn(item,source)
 
+    def test_native_expert_pancreas_tumor_instances(self):
+        import numpy as np
+        truth=np.zeros((20,20,20),dtype=np.uint8)
+        pred=np.zeros_like(truth)
+        truth[1:5,1:5,1:5]=1
+        truth[10:14,10:14,10:14]=1
+        pred[1:6,1:6,1:6]=1
+        pred[16:19,16:19,16:19]=1
+        metric=mod.expert_tumor_components(pred,truth)
+        self.assertEqual(metric["expertComponents"],2)
+        self.assertEqual(metric["matchedExpertComponents"],1)
+        self.assertEqual(metric["missedExpertComponents"],1)
+        self.assertEqual(metric["unmatchedPredictionComponents"],1)
+        self.assertEqual(metric["singleOriginalStudyComponentRecall"],0.5)
+
     def test_native_CT_tumor_label_components_and_world_geometry(self):
         import numpy as np
         data=np.zeros((12,12,12),dtype=np.uint8)

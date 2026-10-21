@@ -144,6 +144,49 @@ def tumor_components(label_mask, affine, minimum_voxels=10):
     lesions.sort(key=lambda q:q["candidateVoxelCount"],reverse=True)
     return lesions
 
+def expert_tumor_components(prediction, truth, minimum_prediction_voxels=10):
+    """Native-grid tumor instance overlap; research one-case statistics only."""
+    import numpy as np
+    from scipy import ndimage
+    p=np.asarray(prediction,dtype=bool)
+    g=np.asarray(truth,dtype=bool)
+    if p.ndim!=3 or p.shape!=g.shape or p.size>MAX_VOXELS:
+        raise ValueError("pancreatic_expert_source_geometry_mismatch")
+    conn=ndimage.generate_binary_structure(3,3)
+    pl,pn=ndimage.label(p,structure=conn)
+    gl,gn=ndimage.label(g,structure=conn)
+    pred_sizes=np.bincount(pl.ravel(),minlength=pn+1)
+    valid={i for i in range(1,pn+1) if pred_sizes[i]>=minimum_prediction_voxels}
+    if pn>100000 or gn>100000:
+        raise ValueError("excessive_pancreatic_tumor_instances")
+    matches=[]
+    for i,box in enumerate(ndimage.find_objects(pl),1):
+        if box is None or i not in valid:
+            continue
+        original=pl[box]==i
+        ids,counts=np.unique(gl[box][original],return_counts=True)
+        for other,count in zip(ids,counts):
+            if other:
+                matches.append((int(count),i,int(other)))
+    matches.sort(reverse=True)
+    used_pred=set()
+    used_truth=set()
+    for _,i,j in matches:
+        if i not in used_pred and j not in used_truth:
+            used_pred.add(i)
+            used_truth.add(j)
+    return {
+        "connectivity":26,"minimumPredictedVoxels":minimum_prediction_voxels,
+        "expertComponents":int(gn),"predictedComponents":len(valid),
+        "matchedExpertComponents":len(used_truth),
+        "missedExpertComponents":int(gn)-len(used_truth),
+        "unmatchedPredictionComponents":len(valid)-len(used_pred),
+        "singleOriginalStudyComponentRecall":round(len(used_truth)/gn,6) if gn else None,
+        "independentFROC":None,
+        "matching":"one-to-one greedy by intersecting voxel count",
+        "researchOnly":True
+    }
+
 def infer(folder,out):
     import nibabel as nib
     import numpy as np
@@ -195,6 +238,7 @@ def infer(folder,out):
     ground_truth=np.asarray(original_truth.dataobj)==2
     detected=native==2
     lesions=tumor_components(native,original.affine)
+    component_comparison=expert_tumor_components(detected,ground_truth)
     tp=int(np.count_nonzero(ground_truth&detected))
     fp=int(np.count_nonzero(~ground_truth&detected))
     fn=int(np.count_nonzero(ground_truth&~detected))
@@ -217,6 +261,7 @@ def infer(folder,out):
        "predictedTumorVoxels":tp+fp,
        "tumorCandidateComponents":lesions,
        "tumorCandidateCount":len(lesions),
+       "nativeExpertTumorComponentComparison":component_comparison,
        "absenceOfCancerEstablished":False,
        "sourceNiftiCoordinatesNotDICOMLPS":True,
        "truePositiveTumorVoxels":tp,"falsePositiveTumorVoxels":fp,
@@ -231,6 +276,7 @@ def infer(folder,out):
          "MSD Task07 is the upstream training dataset of this model: no independent validation.",
          "CPU window overlap 0.25 differs from published 0.625: no benchmark equivalence.",
          "Single volume voxel Dice not a diagnosis or general clinical sensitivity.",
+         "Native lesion overlap is one training-case measurement, not independent FROC or clinical lesion sensitivity.",
          "Neither weights nor example outputs are clinical products; licensing needs separate review."
        ]}
     out.write_text(json.dumps(evidence,indent=2))
