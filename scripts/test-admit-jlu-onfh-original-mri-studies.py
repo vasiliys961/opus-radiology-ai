@@ -27,6 +27,7 @@ class StudyLevelContract(unittest.TestCase):
         x=self.tree()
         for z in x["tree"][3:]:
             z["sha"]="%040x" % (int(z["path"].split("/")[-1][0])+100)
-        with self.assertRaisesRegex(ValueError,"duplicated"):
-            m.inspect_tree(x,"a"*40)
+        result=m.inspect_tree(x,"a"*40)
+        self.assertEqual(result["duplicateStudyContentGroupCount"],1)
+        self.assertFalse(result["safeForStudyLevelTrainTestSplit"])
 if __name__=="__main__":unittest.main()
