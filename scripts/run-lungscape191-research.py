@@ -30,7 +30,7 @@ def sha256(path):
     return digest.hexdigest()
 
 
-def run(input_file, results, output_dir, *, device="cpu", execute=False):
+def run(input_file, results, output_dir, *, device="cpu", execute=False, research_single_fold0=False):
     import nibabel as nib
     import numpy as np
 
@@ -89,8 +89,14 @@ def run(input_file, results, output_dir, *, device="cpu", execute=False):
     env["nnUNet_results"] = str(weights_root)
     env["nnUNet_raw"] = str(destination / "nnUNet_raw")
     env["nnUNet_preprocessed"] = str(destination / "nnUNet_preprocessed")
+    # Official trained fold0 is a genuine model forward, but NOT the author five-fold
+    # ensemble. The low-memory mode trades inference accuracy for CPU feasibility.
+    active_folds = ("0",) if research_single_fold0 else FOLDS
     invocation = [cmd_path, "-i", str(source.parent), "-o", str(destination),
-                  "-d", str(MODEL_ID), "-c", CONFIG, "-f", *FOLDS, "-device", device]
+                  "-d", str(MODEL_ID), "-c", CONFIG, "-f", *active_folds,
+                  "-npp", "1", "-nps", "1", "-device", device]
+    if research_single_fold0:
+        invocation.extend(("-step_size", "1", "--disable_tta"))
     # Source directory must contain this one case only to avoid accidental other-case processing.
     cases = list(source.parent.glob("*_0000.nii.gz"))
     if len(cases) != 1 or cases[0] != source:
@@ -108,6 +114,9 @@ def run(input_file, results, output_dir, *, device="cpu", execute=False):
               "mask_sha256": sha256(output), "model": "LungSCAPE Dataset191",
               "model_dataset_json_sha256": sha256(model / "dataset.json"),
               "weight_folds_sha256": checkpoint_hashes,
+              "inferenceActualFolds": list(active_folds),
+              "publisherFiveFoldEnsembleUsed": not research_single_fold0,
+              "reducedCpuProtocolNotPublisherFiveFold": research_single_fold0,
               "trueOriginalTrainedModelForwardCompleted": True,
               "originalCrossoverWithTrainingUnexcluded": True,
               "noIndependentClinicalValidation": True,
@@ -124,10 +133,13 @@ def main():
     parser.add_argument("--output", required=True)
     parser.add_argument("--device", choices=("cpu", "cuda", "mps"), default="cpu")
     parser.add_argument("--execute", action="store_true", help="explicitly run inference")
+    parser.add_argument("--research-single-fold0", action="store_true",
+                        help="true original fold0 inference with npp/nps=1, step=1, TTA off; NOT five-fold accuracy")
     args = parser.parse_args()
     try:
         report = run(args.input, args.nnunet_results, args.output,
-                     device=args.device, execute=args.execute)
+                     device=args.device, execute=args.execute,
+                     research_single_fold0=args.research_single_fold0)
         print(json.dumps(report, ensure_ascii=False, indent=2))
     except (ValueError, OSError, subprocess.SubprocessError, RuntimeError, ImportError) as exc:
         print("LungSCAPE191 research runner rejected: " + str(exc), file=sys.stderr)
