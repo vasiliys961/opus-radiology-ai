@@ -47,6 +47,7 @@ def inspect_tree(tree, source_revision):
         raise ValueError("unexpected_original_study_slice_count")
     # A folder, not each slice, is an indivisible evaluation unit.
     fingerprints={}
+    duplicate_groups=[]
     summaries=[]
     for (label,study),files in sorted(studies.items()):
         names=[f[0] for f in files]
@@ -54,7 +55,7 @@ def inspect_tree(tree, source_revision):
         fingerprint=hashlib.sha256(
             json.dumps(sorted(files),separators=(",",":")).encode()).hexdigest()
         if fingerprint in fingerprints and fingerprints[fingerprint]!=(label,study):
-            raise ValueError("study_content_duplicated_across_groups")
+            duplicate_groups.append({"firstStudy":list(fingerprints[fingerprint]),"secondStudy":[label,study]})
         fingerprints[fingerprint]=(label,study)
         summaries.append({"label":label,"originalStudyFolder":study,
                           "sliceCount":len(files),"sliceBlobFingerprint":fingerprint})
@@ -65,6 +66,9 @@ def inspect_tree(tree, source_revision):
             "originalStudyGrouping":"orginal_dataset/{HEALTH,ONFH}/{study-folder}",
             "originalStudyCount":len(summaries),"studyCountsByAuthorLabel":counts,
             "originalPngSliceCount":len(included_paths),"studies":summaries,
+            "duplicateStudyContentGroups":duplicate_groups[:100],
+            "duplicateStudyContentGroupCount":len(duplicate_groups),
+            "safeForStudyLevelTrainTestSplit":not bool(duplicate_groups),
             "sourceDerivedSplitNotIndependent":True,
             "dicomSpatialGeometryAvailable":False,
             "genuineOsteonecrosisModelWeightsVerified":False,
