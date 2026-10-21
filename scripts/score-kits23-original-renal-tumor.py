@@ -25,6 +25,45 @@ def sha256(path):
     return h.hexdigest()
 
 
+def compare_renal_tumor_components(pred, truth, minimum_prediction_voxels=10):
+    """26-connected one-to-one expert lesion comparison, not independent FROC."""
+    import numpy as np
+    from scipy import ndimage
+    p=np.asarray(pred,dtype=bool)
+    g=np.asarray(truth,dtype=bool)
+    if p.shape!=g.shape or p.ndim!=3 or p.size>MAX_VOXELS:
+        raise ValueError("native_renal_tumor_component_grid_mismatch")
+    if not 1<=minimum_prediction_voxels<=100:
+        raise ValueError("invalid_component_threshold")
+    connectivity=ndimage.generate_binary_structure(3,3)
+    pi,npred=ndimage.label(p,structure=connectivity)
+    gi,nexpert=ndimage.label(g,structure=connectivity)
+    if npred>100000 or nexpert>100000:
+        raise ValueError("unbounded_tumor_components")
+    counts=np.bincount(pi.ravel(),minlength=npred+1)
+    valid={i for i in range(1,npred+1) if counts[i]>=minimum_prediction_voxels}
+    intersections=[]
+    for idx,box in enumerate(ndimage.find_objects(pi),1):
+        if box is None or idx not in valid:continue
+        other,n=np.unique(gi[box][pi[box]==idx],return_counts=True)
+        intersections.extend((int(c),idx,int(target)) for target,c in zip(other,n) if target)
+    intersections.sort(reverse=True)
+    found_pred=set()
+    found_expert=set()
+    for count,i,j in intersections:
+        if i not in found_pred and j not in found_expert:
+            found_pred.add(i)
+            found_expert.add(j)
+    return {"expertTumorComponents":int(nexpert),
+            "predictedTumorComponents":len(valid),
+            "matchedExpertComponents":len(found_expert),
+            "missedExpertComponents":int(nexpert)-len(found_expert),
+            "unmatchedPredictedComponents":len(valid)-len(found_pred),
+            "oneStudyLesionRecall":round(len(found_expert)/nexpert,6) if nexpert else None,
+            "connectivity":26,"minimumPredictionVoxels":minimum_prediction_voxels,
+            "matchRule":"greedy descending voxel intersection, unique expert and prediction",
+            "independentFROC":None,"clinicalValidation":False}
+
 def score(source_path, expert_path, prediction_path, *, checkpoint_path):
     import nibabel as nib
     import numpy as np
@@ -54,6 +93,11 @@ def score(source_path, expert_path, prediction_path, *, checkpoint_path):
     tp = fp = fn = pred_n = expert_n = 0
     lo = np.array(src.shape, dtype=int)
     hi = np.full(3, -1, dtype=int)
+    # Component audit uses the same admitted source-grid masks, never model input.
+    # Native label volumes are bounded to MAX_VOXELS and only numeric summaries leave runner.
+    expert_tumor = np.asarray(expert.dataobj)==2
+    predicted_tumor = np.asarray(pred.dataobj)==1
+    components = compare_renal_tumor_components(predicted_tumor,expert_tumor)
     for z in range(src.shape[2]):
         a = np.asarray(expert.dataobj[:,:,z])
         b = np.asarray(pred.dataobj[:,:,z])
@@ -92,6 +136,7 @@ def score(source_path, expert_path, prediction_path, *, checkpoint_path):
         "predictedTumorVoxels":pred_n,
         "voxelTP":tp,"voxelFP":fp,"voxelFN":fn,
         "voxelDice":round(dice,9),
+        "expertTumorComponentMatching":components,
         "voxelRecall":round(tp/expert_n,9),
         "predictedNativeVoxelBoundsInclusive":[lo.tolist(),hi.tolist()] if pred_n else None,
         "predictedTumorVolumeMl":round(pred_n*abs(float(np.linalg.det(src.affine[:3,:3])))/1000,5) if mm else None,
