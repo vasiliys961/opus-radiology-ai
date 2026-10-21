@@ -17,6 +17,22 @@ class HepaticPathologyCandidateContract(unittest.TestCase):
                       "noMalignancyEstablished"):
             self.assertIn(token,P.read_text())
 
+    def test_expert_lesion_matching_is_one_to_one(self):
+        import numpy as np
+        p=np.zeros((18,18,18),dtype=np.uint8)
+        g=np.zeros_like(p)
+        g[2:5,2:5,2:5]=1
+        g[9:12,9:12,9:12]=1
+        p[2:6,2:6,2:6]=1
+        p[14:17,14:17,14:17]=1
+        result=module.match_expert_lesions(p,g)
+        self.assertEqual(result["expertLesionCount"],2)
+        self.assertEqual(result["matchedExpertLesions"],1)
+        self.assertEqual(result["missedExpertLesions"],1)
+        self.assertEqual(result["unmatchedPredictedLesions"],1)
+        self.assertEqual(result["singleCaseLesionRecall"],0.5)
+        self.assertIsNone(result["independentFROC"])
+
     def test_liver_lesion_native_voxel_boxes(self):
         import numpy as np
         mask=np.zeros((12,12,12),dtype=np.uint8)
