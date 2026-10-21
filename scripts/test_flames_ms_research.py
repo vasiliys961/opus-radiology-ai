@@ -90,5 +90,61 @@ class FLAMeSContracts(unittest.TestCase):
         self.assertFalse(report["independentReferenceCompared"])
 
 
+
+    def test_expert_ms_source_matched_voxel_and_lesion_scores(self):
+        pred=np.zeros((32,32,32),dtype="uint8")
+        exp=np.zeros_like(pred)
+        pred[12:14,14:16,17:19]=1
+        pred[22,22,22]=1
+        exp[12:14,14:16,17:19]=1
+        exp[14,14,17]=1
+        prediction=self.root/"actual_model_mask.nii.gz"
+        expert=self.root/"expert_MS_mask.nii.gz"
+        self.save(prediction,pred)
+        self.save(expert,exp)
+        z=flames.compare_expert_ms_lesions(self.source,prediction,expert,self.mask)
+        self.assertEqual((z["voxelTP"],z["voxelFP"],z["voxelFN"]),(8,1,1))
+        self.assertEqual(z["voxelDice"],round(16/18,6))
+        self.assertEqual(z["expert26ConnectedLesionCount"],1)
+        self.assertEqual(z["predicted26ConnectedCandidateCount"],2)
+        self.assertEqual(z["oneToOneOverlapMatchedLesions"],1)
+        self.assertEqual(z["missedExpertLesions"],0)
+        self.assertEqual(z["unmatchedPredictedCandidates"],1)
+        self.assertFalse(z["clinicalDiagnosisValidated"])
+        self.assertFalse(z["independentClinicalValidation"])
+
+    def test_expert_mask_rejects_wrong_grid_fake_labels_and_no_lesions(self):
+        a=np.zeros((32,32,32),dtype="uint8")
+        a[12:14,14:16,17:19]=1
+        prediction=self.root/"actual_model_mask.nii.gz"
+        expert=self.root/"expert_MS_mask.nii.gz"
+        self.save(prediction,a)
+        self.save(expert,np.zeros_like(a))
+        with self.assertRaisesRegex(ValueError,"positive expert"):
+            flames.compare_expert_ms_lesions(self.source,prediction,expert,self.mask)
+        a[13,14,17]=2
+        self.save(expert,a)
+        with self.assertRaisesRegex(ValueError,"binary ontology"):
+            flames.compare_expert_ms_lesions(self.source,prediction,expert,self.mask)
+        a[13,14,17]=1
+        affine=self.affine.copy()
+        affine[0,3]=4.
+        shifted=nib.Nifti1Image(a,affine)
+        shifted.header.set_xyzt_units("mm")
+        nib.save(shifted,str(expert))
+        with self.assertRaisesRegex(ValueError,"not in original FLAIR"):
+            flames.compare_expert_ms_lesions(self.source,prediction,expert,self.mask)
+
+    def test_expert_scores_refuse_readiness_without_forward_or_rights(self):
+        path=self.root/"expert_mask.nii.gz"
+        self.save(path,np.zeros((32,32,32),dtype="uint8"))
+        with self.assertRaisesRegex(ValueError,"real model inference"):
+            flames.run(self.source,self.mask,self.results,self.output,execute=False,
+                       device="cpu",expert=path,expert_lesion_labels_confirmed=True,
+                       expert_rights_reviewed=True)
+        with self.assertRaisesRegex(ValueError,"flags cannot substitute"):
+            flames.run(self.source,self.mask,self.results,self.output,execute=False,
+                       device="cpu",expert_lesion_labels_confirmed=True)
+
 if __name__=="__main__":
     unittest.main()
