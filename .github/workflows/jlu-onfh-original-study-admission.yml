@@ -1,0 +1,19 @@
+name: JLU ONFH original MRI source study identity contract
+on:
+  pull_request:
+    paths:
+      - scripts/admit-jlu-onfh-original-mri-studies.py
+      - scripts/test-admit-jlu-onfh-original-mri-studies.py
+      - .github/workflows/jlu-onfh-original-study-admission.yml
+permissions:
+  contents: read
+jobs:
+  study-level-original-mri-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m unittest discover -s scripts -p 'test-admit-jlu-onfh-original-mri-studies.py' -v
