@@ -9,10 +9,12 @@ MAX_COMPONENTS = 2500
 MAX_EXPORTED_CANDIDATES = 40
 
 
-def score_pe_components(expert, predicted, affine):
+def score_pe_components(expert, predicted, affine, *, source_units_mm):
     import numpy as np
     from scipy import ndimage
 
+    if type(source_units_mm) is not bool:
+        raise ValueError("explicit original NIfTI millimetre verification required")
     e = np.asarray(expert)
     p = np.asarray(predicted)
     t = np.asarray(affine, dtype=float)
@@ -58,8 +60,8 @@ def score_pe_components(expert, predicted, affine):
         locations.append({
             "originalSourceVoxelBoundsInclusive": [low, high],
             "originalSourceVoxelCentroid": [round(x, 3) for x in center],
-            "originalSourceRasMmCentroid": [round(float(x), 3) for x in ras_mm],
-            "candidateVolumeMl": round(int(sizes[ident]) * vox_volume_ml, 5),
+            "originalSourceRasMmCentroid": [round(float(x), 3) for x in ras_mm] if source_units_mm else None,
+            "candidateVolumeMl": round(int(sizes[ident]) * vox_volume_ml, 5) if source_units_mm else None,
             "voxels": int(sizes[ident]),
             "matchesOneExpertLesion": ident in already_pred,
             "notConfirmedPE": True,
@@ -74,6 +76,7 @@ def score_pe_components(expert, predicted, affine):
         "singleStudyComponentRecall": round(matches / n_ref, 6),
         "singleStudyFalsePositiveCandidateCount": int(n_pred - len(already_pred)),
         "componentConnectivity": 26,
+        "originalSourcePhysicalMillimetresVerified": source_units_mm,
         "componentMatchingRule": "greedy one-to-one any-voxel overlap descending shared voxels",
         "candidateLocationsOriginalSourceRasMm": locations,
         "candidateLocationListTruncated": n_pred > MAX_EXPORTED_CANDIDATES,
