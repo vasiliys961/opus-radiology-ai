@@ -1,0 +1,25 @@
+name: Verify genuine AutoMSC prostate MRI tumor pretrained fold0
+on:
+  pull_request:
+    paths:
+      - scripts/verify-original-automsc-prostate-weights.py
+      - .github/workflows/automsc-prostate-original-checkpoint.yml
+permissions:
+  contents: read
+jobs:
+  actual-prostate-tumor-original-checkpoint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install 'huggingface_hub==0.34.4'
+      - name: Verify and SHA-256 genuine published prostate fold0 checkpoint
+        run: python scripts/verify-original-automsc-prostate-weights.py --output /tmp/opus-real-prostate-weights.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: original-automsc-prostate-fold0-weight-evidence
+          path: /tmp/opus-real-prostate-weights.json
+          retention-days: 14
