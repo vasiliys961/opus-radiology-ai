@@ -1,0 +1,26 @@
+name: Local real ONFH NPZ CPU research inference contract
+on:
+  pull_request:
+    paths:
+      - scripts/infer-real-jlu-onfh-local.py
+      - scripts/test-infer-real-jlu-onfh-local.py
+      - .github/workflows/onfh-local-cpu-inference.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/infer-real-jlu-onfh-local.py
+      - scripts/test-infer-real-jlu-onfh-local.py
+      - .github/workflows/onfh-local-cpu-inference.yml
+permissions:
+  contents: read
+jobs:
+  local-onfh-model-and-impression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install "numpy==2.2.6" "pillow==11.3.0"
+      - run: python -m unittest discover -s scripts -p 'test-infer-real-jlu-onfh-local.py' -v
