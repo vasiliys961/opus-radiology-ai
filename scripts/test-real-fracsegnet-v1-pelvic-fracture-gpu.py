@@ -22,6 +22,12 @@ class GenuineFracSegNetContract(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,"original_FractureSegNet_weight_file"):
                 mod.inspect_original_model(root/"missing.model",root,"a"*64)
 
+    def test_expert_fragment_overlap_rejects_missing_source(self):
+        with self.assertRaises(ValueError):
+            mod.expert_fragment_overlap(Path("/unavailable/ct.nii.gz"),
+                                        Path("/unavailable/pred.nii.gz"),
+                                        Path("/unavailable/expert.nii.gz"))
+
     def test_no_fake_fracture_confirmation_or_patient_upload(self):
         src=SRC.read_text()
         for expected in ("nnUNet_predict", "original_patched_nnunet_v1_7_predict_missing",
@@ -29,6 +35,7 @@ class GenuineFracSegNetContract(unittest.TestCase):
                          '"fullPelvicCTAutomated":False', '"diagnosisPermitted":False',
                          "source_ROI_hash_changed"):
             self.assertIn(expected,src)
+        self.assertIn("expertPositiveRoiComparison",src)
         self.assertEqual(mod.AUTHOR,"https://github.com/YzzLiu/FracSegNet")
 
 
