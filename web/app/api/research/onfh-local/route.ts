@@ -3,6 +3,7 @@ import {mkdtemp,writeFile,readFile,rm} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join,resolve} from "node:path";
 import {spawn} from "node:child_process";
+import {ensureLocalOnfh} from "../../../../lib/onfh-model-installer";
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
 const LOCAL=/^(localhost|127\.0\.0\.1)(:[0-9]{1,5})?$/;
@@ -16,20 +17,21 @@ function local(req:NextRequest,post=false){
    (req.headers.get("sec-fetch-site")===null||req.headers.get("sec-fetch-site")==="same-origin")&&
    (!post||req.headers.get("origin")==="http://"+host);
 }
-function configured(){
- const weights=process.env.OPUS_ONFH_WEIGHTS_PATH??"";
- const sha=process.env.OPUS_ONFH_WEIGHTS_SHA256??"";
- return weights.startsWith("/")&&/^[a-f0-9]{64}$/.test(sha)?{weights,sha}:null;
-}
 export async function GET(req:NextRequest){
  if(!local(req))return denied(404,"Local Mac workstation only");
- return NextResponse.json({schema:"opus-local-onfh-ready/v1",available:!!configured(),
-  input:"selected-subject-MR-PNG-slices",cloudTransfer:false,
-  note:"ONFH research weights must be downloaded locally; PNG series only."},{headers:HEADERS});
+ try{
+  await ensureLocalOnfh();
+  return NextResponse.json({schema:"opus-local-onfh-ready/v1",available:true,
+   input:"selected-subject-MR-PNG-slices",cloudTransfer:false,
+   note:"Verified genuine checkpoint and isolated Python automatically ready."},{headers:HEADERS});
+ }catch{return NextResponse.json({schema:"opus-local-onfh-ready/v1",available:false,
+   input:"selected-subject-MR-PNG-slices",cloudTransfer:false,
+   note:"Автоматическая установка ONFH недоступна. Проверьте локальный Python и подключение к GitHub."},{headers:HEADERS});}
 }
 export async function POST(req:NextRequest){
  if(!local(req,true))return denied(404,"Local Mac workstation only");
- const cfg=configured();if(!cfg)return denied(503,"ONFH weights and SHA-256 not configured locally");
+ let cfg;
+ try{cfg=await ensureLocalOnfh();}catch{return denied(503,"ONFH weights or local Python environment could not be provisioned automatically");}
  if(executing)return denied(429,"A local ONFH inference is already running");
  const len=Number(req.headers.get("content-length")??"0");
  if(!Number.isFinite(len)||len<1||len>24*1024*1024)return denied(413,"Original PNG series exceeds 24 MB");
@@ -59,7 +61,7 @@ export async function POST(req:NextRequest){
    }
    const output=join(directory,"report.json");
    const script=resolve(process.cwd(),"../scripts/infer-real-jlu-onfh-local.py");
-   const python=process.env.OPUS_ONFH_PYTHON??"python3";
+   const python=cfg.python;
    const args=[script,"--subject-png-dir",series,"--weights",cfg.weights,
      "--weights-sha256",cfg.sha,"--report",output];
    const status=await new Promise<number>((resolveStatus,reject)=>{
