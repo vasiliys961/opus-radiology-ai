@@ -32,6 +32,29 @@ class TestOriginalGridComponents(unittest.TestCase):
             self.assertEqual(report["candidateComponents"][0]["sourceVoxelBoundsInclusive"], [[1,2,3],[3,4,5]])
             self.assertFalse(report["clinicalValidation"])
 
+    def test_asymmetric_component_centroid_is_not_bbox_center(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            aff = np.diag([2.0, 3.0, 4.0, 1.0])
+            volume = np.zeros((12, 12, 12), dtype=np.uint8)
+            # 10 connected voxels: a 3x3 slab plus one corner extension.
+            volume[1:4, 2:5, 3] = 1
+            volume[4, 4, 3] = 1
+            ct = nib.Nifti1Image(np.zeros_like(volume), aff)
+            pred = nib.Nifti1Image(volume, aff)
+            ct.header.set_xyzt_units("mm")
+            pred.header.set_xyzt_units("mm")
+            a, z = root / "ct.nii.gz", root / "pred.nii.gz"
+            nib.save(ct, a)
+            nib.save(pred, z)
+            result = inspect_components(a, z, {0: "background", 1: "candidate"})
+            obj = result["candidateComponents"][0]
+            self.assertEqual(obj["voxels"], 10)
+            self.assertEqual(obj["sourceRasMmBBoxCenter"], [5.0, 9.0, 12.0])
+            self.assertEqual(obj["sourceVoxelComponentCentroid"], [2.2, 3.1, 3.0])
+            self.assertEqual(obj["sourceRasMmComponentCentroid"], [4.4, 9.3, 12.0])
+            self.assertFalse(obj["notDiagnosis"] is False)
+
     def test_wrong_geometry_refused(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
