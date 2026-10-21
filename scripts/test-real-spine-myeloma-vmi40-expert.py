@@ -22,6 +22,19 @@ class Contract(unittest.TestCase):
         pred=np.array([[[1,1],[0,0]]],dtype=np.uint8)
         self.assertEqual(mm.evaluate_arrays(pred,source),(1,1,1))
 
+    def test_spinal_osteolytic_lesion_one_to_one_expert_matching(self):
+        p=np.zeros((22,22,22),dtype=np.uint8)
+        e=np.zeros_like(p)
+        e[2:6,2:6,2:6]=1
+        e[11:15,11:15,11:15]=1
+        p[2:7,2:7,2:7]=1
+        p[18:21,18:21,18:21]=1
+        result=mm.lesion_matching(p,e)
+        self.assertEqual(result["matchedExpertComponents"],1)
+        self.assertEqual(result["missedExpertComponents"],1)
+        self.assertEqual(result["unmatchedPredictedComponents"],1)
+        self.assertEqual(result["onePublicCaseLesionRecall"],0.5)
+
     def test_invalid_masks_fail(self):
         y=np.zeros((2,2,2),dtype=np.uint8)
         for val in [2,27,255]:

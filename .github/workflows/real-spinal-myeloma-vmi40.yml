@@ -23,7 +23,7 @@ jobs:
           python-version: '3.11'
       - name: Fail-closed lesion-vs-anatomy/model/geometry contract
         run: |
-          python -m pip install --disable-pip-version-check "numpy>=1.26,<3"
+          python -m pip install --disable-pip-version-check "numpy>=1.26,<3" "scipy==1.15.3"
           python -m py_compile scripts/real-spine-myeloma-vmi40-expert.py
           python scripts/test-real-spine-myeloma-vmi40-expert.py
       - name: Prove exact upstream v1.0.2 publisher script identity (no models downloaded)

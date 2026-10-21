@@ -128,6 +128,46 @@ def evaluate_arrays(pred,expert):
             int(np.count_nonzero(model&~gt)),
             int(np.count_nonzero(~model&gt)))
 
+def lesion_matching(pred,expert,minimum_pred_voxels=5):
+    """One-to-one 26-connected overlap; never a validated lesion FROC."""
+    import numpy as np
+    from scipy import ndimage
+    p=np.asarray(pred)
+    e=np.asarray(expert)
+    if (p.shape!=e.shape or p.ndim!=3 or p.size>MAX_VOXELS
+            or not np.isin(p,(0,1)).all() or not np.isin(e,(0,1)).all()
+            or not 1<=minimum_pred_voxels<=100):
+        raise ValueError("invalid_source_grid_osteolytic_instance_labels")
+    structure=ndimage.generate_binary_structure(3,3)
+    pl,pn=ndimage.label(p==1,structure)
+    el,en=ndimage.label(e==1,structure)
+    if pn>100000 or en>100000:
+        raise ValueError("unbounded_osteolytic_instance_count")
+    sizes=np.bincount(pl.ravel(),minlength=pn+1)
+    valid={i for i in range(1,pn+1) if sizes[i]>=minimum_pred_voxels}
+    pairs=[]
+    for i,sl in enumerate(ndimage.find_objects(pl),1):
+        if sl is None or i not in valid:continue
+        ids,counts=np.unique(el[sl][pl[sl]==i],return_counts=True)
+        pairs.extend((int(n),i,int(j)) for j,n in zip(ids,counts) if j)
+    pairs.sort(reverse=True)
+    taken_pred=set()
+    taken_expert=set()
+    for _,i,j in pairs:
+        if i not in taken_pred and j not in taken_expert:
+            taken_pred.add(i)
+            taken_expert.add(j)
+    return {
+        "expertLesionComponents":int(en),
+        "predictedLesionComponents":len(valid),
+        "matchedExpertComponents":len(taken_expert),
+        "missedExpertComponents":int(en)-len(taken_expert),
+        "unmatchedPredictedComponents":len(valid)-len(taken_pred),
+        "onePublicCaseLesionRecall":round(len(taken_expert)/en,6) if en else None,
+        "connectivity":26,"minimumPredictedVoxels":minimum_pred_voxels,
+        "matching":"greedy descending overlap, one-to-one",
+        "independentFROC":None,"clinicalValidation":False}
+
 def prepare(a):
     root=a.work
     if root.exists() or root.is_symlink():
@@ -250,6 +290,7 @@ def evaluate(a):
     if not np.isfinite(x).all() or not np.equal(x,np.rint(x)).all():
         raise ValueError("not_binary_original_model_output")
     tp,fp,fn=evaluate_arrays(x,y)
+    lesion_metrics=lesion_matching(x,y)
     if tp+fn!=n:
         raise ValueError("expert_reference_changed")
     components,n_components=ndimage.label(x==1,structure=np.ones((3,3,3)))
@@ -272,6 +313,7 @@ def evaluate(a):
         "predictedOsteolyticVoxels":tp+fp,"TP":tp,"FP":fp,"FN":fn,
         "voxelDice":round(2*tp/(2*tp+fp+fn),6) if tp+fp+fn else None,
         "voxelRecall":round(tp/n,6),"lesionVoxelCandidates":boxes[:100],
+        "expertOsteolyticLesionMatching":lesion_metrics,
         "trainedInferenceObserved":True,"sourceBoundNativeNifti":True,
         "DicomSopMapped":False,"independentHeldOut":False,"clinicalValidation":False,
         "patientUseAllowed":False,
