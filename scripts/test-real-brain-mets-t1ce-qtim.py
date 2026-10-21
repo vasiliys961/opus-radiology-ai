@@ -95,6 +95,27 @@ class TestOriginalBrainMetsContract(unittest.TestCase):
         self.assertEqual(result["expertOverlap"]["dice"],round(18/19,8))
         self.assertEqual(result["lesions"][0]["preprocessedVoxelBBox"],[[20,22],[20,21],[9,9]])
 
+    def test_expert_lesion_count_detected_missed_and_unmatched(self):
+        vol=self.img(np.ones(self.shape,np.float32))
+        prediction=np.zeros(self.shape,np.uint8)
+        prediction[4:6,4:6,4:6]=1  # true match
+        prediction[20:22,20:22,20:22]=1  # unmatched component
+        expert=np.zeros(self.shape,np.uint8)
+        expert[5:7,5:7,5:7]=1
+        expert[30:32,30:32,30:32]=1  # missed lesion
+        mask=self.img(prediction)
+        probability=self.img(prediction.astype(np.float32)*.9)
+        entropy=self.img(np.zeros(self.shape,np.float32))
+        result=m.summarize_prediction(vol,mask,probability,entropy,self.img(expert))
+        det=result["expertLesionDetection"]
+        self.assertEqual(det["expertConnectedComponents"],2)
+        self.assertEqual(det["expertComponentsDetected"],1)
+        self.assertEqual(det["expertComponentsMissed"],1)
+        self.assertEqual(det["expertComponentRecall"],.5)
+        self.assertEqual(det["predictedConnectedComponents"],2)
+        self.assertEqual(det["predictedComponentsWithoutExpertOverlap"],1)
+        self.assertFalse(det["clinicalValidation"])
+
     def test_raw_dicom_grid_not_implied(self):
         vol=self.img(np.ones(self.shape,np.float32))
         zero=self.img(np.zeros(self.shape,np.uint8))

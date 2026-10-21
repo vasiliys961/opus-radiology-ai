@@ -151,6 +151,27 @@ def summarize_prediction(reference,mask,prob,unc,expert=None):
         tp=int(np.count_nonzero(binary&true))
         fp=int(np.count_nonzero(binary&~true))
         fn=int(np.count_nonzero(~binary&true))
+        # Lesion-level recall is distinct from voxel Dice. An expert component
+        # counts as found only if at least one predicted voxel intersects it.
+        # Likewise, a predicted component unmatched to every expert lesion is
+        # counted as an unmatched candidate (not a proven false diagnosis).
+        expert_cc, expert_n=label(true)
+        detected_expert_ids=np.unique(expert_cc[binary & true])
+        matched_expert=int(np.count_nonzero(detected_expert_ids))
+        pred_ids_on_truth=np.unique(labels[binary & true])
+        matched_pred=int(np.count_nonzero(pred_ids_on_truth))
+        result["expertLesionDetection"]={
+            "matchingRule":"any_voxel_overlap_on_same_preprocessed_grid",
+            "expertConnectedComponents":int(expert_n),
+            "expertComponentsDetected":matched_expert,
+            "expertComponentsMissed":int(expert_n)-matched_expert,
+            "expertComponentRecall":round(matched_expert/int(expert_n),8) if expert_n else None,
+            "predictedConnectedComponents":int(n),
+            "predictedComponentsOverlappingExpert":matched_pred,
+            "predictedComponentsWithoutExpertOverlap":int(n)-matched_pred,
+            "independentHoldoutEstablished":False,
+            "clinicalValidation":False,
+        }
         result["expertOverlap"]={
             "tpVoxels":tp,"fpVoxels":fp,"fnVoxels":fn,
             "dice":round(2*tp/(2*tp+fp+fn),8) if 2*tp+fp+fn else None,
