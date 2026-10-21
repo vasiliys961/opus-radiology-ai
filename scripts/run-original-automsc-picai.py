@@ -147,8 +147,7 @@ def run(args):
         evidence["expertComparison"] = {"positiveLabels": args.expert_positive_labels, "tpVoxels": tp, "fpVoxels": fp,
                                          "fnVoxels": fn,
                                          "dice": 2 * tp / (2 * tp + fp + fn) if (2 * tp + fp + fn) else None}
-    (out / "evidence.json").write_text(json.dumps(evidence, indent=2) + "
-")
+    (out / "evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
     print(json.dumps({k: evidence[k] for k in ("actualPublisherForward", "tumorVoxels", "tumorVolumeMl", "tumorVoxelBoundingBox")}))
 
 
