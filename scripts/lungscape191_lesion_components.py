@@ -57,8 +57,21 @@ def inspect_components(source, prediction, label_map):
             slices = objects[identifier - 1]
             low = [int(s.start) for s in slices]
             high = [int(s.stop) - 1 for s in slices]
+            # Keep the historical bounding-box center for compatibility, but it
+            # is NOT the lesion centroid for asymmetric connected regions.
             center = [(a + b) / 2 for a, b in zip(low, high)]
             ras = (src.affine @ np.array([*center, 1.0]))[:3].tolist() if physical else None
+            # Compute the actual voxel-weighted component centroid in its cropped
+            # ROI: no whole-volume coordinate grids and no patient data exported.
+            local_coords = np.nonzero(cc[slices] == identifier)
+            centroid_voxel = [
+                float(low[axis] + local_coords[axis].mean())
+                for axis in range(3)
+            ]
+            centroid_ras = (
+                (src.affine @ np.array([*centroid_voxel, 1.0]))[:3].tolist()
+                if physical else None
+            )
             corners = np.array([[*p, 1.0] for p in product(*[(a, b) for a, b in zip(low, high)])])
             physical_corners = (src.affine @ corners.T).T[:, :3] if physical else None
             out.append({
@@ -68,6 +81,8 @@ def inspect_components(source, prediction, label_map):
                 "voxels": int(sizes[identifier]),
                 "sourceVoxelBoundsInclusive": [low, high],
                 "sourceRasMmBBoxCenter": [round(float(v), 3) for v in ras] if physical else None,
+                "sourceVoxelComponentCentroid": [round(v, 4) for v in centroid_voxel],
+                "sourceRasMmComponentCentroid": [round(float(v), 3) for v in centroid_ras] if physical else None,
                 "sourceRasMmAxisAlignedBounds": [
                     [round(float(v), 3) for v in physical_corners.min(axis=0)],
                     [round(float(v), 3) for v in physical_corners.max(axis=0)]
