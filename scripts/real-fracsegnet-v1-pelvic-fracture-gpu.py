@@ -104,6 +104,69 @@ def output_fragments(source:Path, prediction:Path):
     return sorted(found,key=lambda c:c["componentVoxels"],reverse=True)
 
 
+def expert_fragment_overlap(source: Path, prediction: Path, expert: Path):
+    """Post-forward native ROI Dice and 26-connected one-to-one expert components."""
+    import nibabel as nib
+    import numpy as np
+    from scipy import ndimage
+    src=inspect_original_roi(source)
+    for file in (prediction,expert):
+        if file.is_symlink() or not file.is_file() or file.stat().st_size>MAX_SOURCE_BYTES:
+            raise ValueError("invalid_expert_or_original_prediction")
+    a,b=nib.load(str(prediction)),nib.load(str(expert))
+    if any(img.ndim!=3 or img.shape!=src.shape or
+           not np.allclose(img.affine,src.affine,atol=.02,rtol=0) or
+           img.header.get_xyzt_units()[0]!=src.header.get_xyzt_units()[0]
+           for img in (a,b)):
+        raise ValueError("expert_prediction_not_original_native_roi_grid")
+    predicted=np.asarray(a.dataobj)
+    truth=np.asarray(b.dataobj)
+    if (a.header.get_data_dtype().kind not in "iu" or
+        b.header.get_data_dtype().kind not in "iu" or
+        not np.isfinite(predicted).all() or
+        not np.isin(truth,(0,1)).all() or
+        not np.equal(predicted,np.rint(predicted)).all() or
+        np.any(predicted<0) or np.any(predicted>30)):
+        raise ValueError("unrecognized_expert_fragment_ontology")
+    p=predicted>0
+    e=truth==1
+    if not e.any():raise ValueError("positive_expert_pelvic_fracture_reference_required")
+    tp=int(np.count_nonzero(p&e))
+    fp=int(np.count_nonzero(p&~e))
+    fn=int(np.count_nonzero(~p&e))
+    conn=ndimage.generate_binary_structure(3,3)
+    pl,npred=ndimage.label(p,structure=conn)
+    el,nexpert=ndimage.label(e,structure=conn)
+    if npred>100000 or nexpert>100000:
+        raise ValueError("excessive_fragment_component_count")
+    sizes=np.bincount(pl.ravel(),minlength=npred+1)
+    valid={i for i in range(1,npred+1) if sizes[i]>=10}
+    overlaps=[]
+    for i,sl in enumerate(ndimage.find_objects(pl),1):
+        if sl is None or i not in valid:continue
+        ids,counts=np.unique(el[sl][pl[sl]==i],return_counts=True)
+        overlaps.extend((int(n),i,int(j)) for j,n in zip(ids,counts) if j)
+    overlaps.sort(reverse=True)
+    pm=set()
+    em=set()
+    for _,i,j in overlaps:
+        if i not in pm and j not in em:
+            pm.add(i);em.add(j)
+    return {"originalExpertSHA256":sha256(expert),
+            "expertFractureMaskVoxelCount":int(e.sum()),
+            "voxelTP":tp,"voxelFP":fp,"voxelFN":fn,
+            "oneRoiDice":round(2*tp/(2*tp+fp+fn),6),
+            "expertComponents26":int(nexpert),
+            "predictedComponents26AtLeast10Voxels":len(valid),
+            "matchedExpertComponents":len(em),
+            "missedExpertComponents":int(nexpert)-len(em),
+            "unmatchedPredictedComponents":len(valid)-len(pm),
+            "oneRoiComponentRecall":round(len(em)/nexpert,6),
+            "expertAnnotationScopeMustMatchPrediction":True,
+            "independentFROC":None,
+            "clinicalSensitivity":None,
+            "independentHeldOut":False}
+
 def run(args):
     if (not args.approved_public_extracted_roi or
         not trusted_digest(args.source_sha256) or
@@ -141,12 +204,15 @@ def run(args):
     pred=args.output/"case.nii.gz"
     if not pred.is_file():raise ValueError("real_vendor_FractureSegNet_output_absent")
     candidates=output_fragments(args.roi,pred)
+    expert_scores=(expert_fragment_overlap(args.roi,pred,args.expert)
+                   if args.expert is not None else None)
     return {"schema":SCHEMA,"task":"pelvic_fracture_fragment_CT",
             "publisher":AUTHOR,"modelFileSource":MODEL_SOURCE,
             "originalCheckpointSHA256":sha256(checkpoint),
             "originalSourceRoiSHA256":args.source_sha256,
             "predictedMaskSHA256":sha256(pred),
             "sourceShape":list(source.shape),"componentCandidates":candidates,
+            "expertPositiveRoiComparison":expert_scores,
             "actualPublisherModelForwardCompleted":True,
             "nativeBoneRoiGeometryVerified":True,
             "fullPelvicCTAutomated":False,
@@ -167,6 +233,7 @@ def main():
     p.add_argument("--checkpoint-sha256",required=True)
     p.add_argument("--output",type=Path,required=True)
     p.add_argument("--report",type=Path,required=True)
+    p.add_argument("--expert",type=Path,help="Optional authentic positive binary expert fragment mask on the identical extracted bone ROI grid")
     p.add_argument("--approved-public-extracted-roi",action="store_true")
     p.add_argument("--isolated-gpu-research",action="store_true")
     args=p.parse_args()
