@@ -1,0 +1,37 @@
+name: Train genuine JLU ONFH MRI subject-level research baseline
+on:
+  pull_request:
+    paths:
+      - scripts/train-real-jlu-onfh-study-baseline.py
+      - .github/workflows/train-real-jlu-onfh-study-baseline.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  train-real-public-onfh-subjects:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install CPU training packages
+        run: python -m pip install 'numpy==2.2.6' 'pillow==11.3.0' 'scikit-learn==1.7.2'
+      - name: Fetch original author ONFH MRI only, source commit pinned
+        run: |
+          git clone --depth 1 --filter=blob:none --sparse https://github.com/sole12343/JLU-ONFH-Dataset.git original-onfh
+          cd original-onfh
+          git fetch --depth 1 origin 18d1d5a72c350dfc1db836f6d9ae4b0c8c852e50
+          git checkout --detach 18d1d5a72c350dfc1db836f6d9ae4b0c8c852e50
+          git sparse-checkout set orginal_dataset/HEALTH orginal_dataset/ONFH
+      - name: Genuine training on original MRI study pixels
+        run: |
+          python scripts/train-real-jlu-onfh-study-baseline.py --source-root original-onfh/orginal_dataset --checkpoint /tmp/onfh-research-v1.npz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: actual-trained-onfh-research-npz
+          path: |
+            /tmp/onfh-research-v1.npz
+            /tmp/onfh-research-v1.json
+          retention-days: 30
