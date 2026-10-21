@@ -44,7 +44,8 @@ jobs:
           python -m pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.6.0+cpu torchvision==0.21.0+cpu
           # Downstream timm/nnunet must NOT silently replace CPU torch with
           # newest CUDA torch (previous job failed before any model inference).
-          printf 'torch==2.6.0+cpu\\ntorchvision==0.21.0+cpu\\n' > "$RUNNER_TEMP/lungscape-cpu-constraints.txt"
+          echo 'torch==2.6.0+cpu' > "$RUNNER_TEMP/lungscape-cpu-constraints.txt"
+          echo 'torchvision==0.21.0+cpu' >> "$RUNNER_TEMP/lungscape-cpu-constraints.txt"
           python -m pip install --no-cache-dir -c "$RUNNER_TEMP/lungscape-cpu-constraints.txt" nnunetv2==2.8.1 nibabel==5.3.2 huggingface_hub==0.35.3
           python -m pip check
           python - <<'PY'
