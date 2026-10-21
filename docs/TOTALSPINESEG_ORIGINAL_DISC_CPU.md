@@ -79,3 +79,30 @@ NIfTI class ontology, lesion bounding boxes, and fail-closed author ZIP
 provenance on deterministic fixtures. Next step: lawful public positive
 spine MRI + original 2-stage pretrained CPU forward + independent
 expert disc/canal masks, lesion-level validity. No patient workflow.
+
+
+## Added bounded axial source-native research planimetry (2026-10-21)
+
+The genuine pinned author step-2 mask now provides **optional** `nativeAxialCanalClass2Research`
+per lumbar disc label (T12/L1–L5/S). For a NIfTI that explicitly declares
+physical **millimetre** coordinates and whose in-plane normal is within
+~18 degrees of superior/inferior RAS, it measures the square-millimetre
+area of the publisher's **class-2 segmented spinal canal label** on
+native slices containing **both** that disc's class and canal label.
+When several exact native slices overlap, it returns the smallest
+*observed segmented label-2 area*, matching source-voxel slice index,
+source RAS centroid, and number of candidate matched disc slices.
+It does **not** interpolate missing canal labels, infer neurological
+symptoms, compute an unverified stenosis cut-off, or equate segmented
+label-2 area with the entire true anatomical canal or thecal sac.
+Sagittal/oblique series without an axial-like plane and series with
+missing physical-mm units are **ineligible**, not negative.
+
+**Evidence boundary:** anatomy-derived *research measurements* only;
+not a newly pretrained pathology-specific disc, foraminal or spinal
+stenosis detector. Original spine-model weights have **not** been newly
+executed by this change, no genuine positive stenosis patient and
+expert canal caliper have been evaluated. Inference stays opt-in on
+a separate 12+ GiB Linux CPU host; Mac M1/8GiB and patient clouds remain
+off. This closes a physician-useful source-localization/measurement
+interface without claiming clinical sensitivity, specificity or diagnosis.

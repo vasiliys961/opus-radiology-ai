@@ -68,5 +68,48 @@ class OriginalTotalSpineSegContract(unittest.TestCase):
   with self.assertRaisesRegex(ValueError,"unrecognized"):
    mod.verify_archive_and_installed_model("SomeOtherNet",fake,self.p)
 
+
+ def test_axial_native_disc_level_canal_class2_min_area_and_ras(self):
+  import numpy as np
+  ct=self.nib.load(str(self.mri))
+  seg=np.asanyarray(self.nib.load(str(self.mask)).dataobj).copy()
+  seg[18:21,15:19,15]=2
+  seg[18:23,15:20,16]=2
+  m=self.nib.Nifti1Image(np.asanyarray(ct.dataobj),self.affine)
+  m.header.set_xyzt_units("mm")
+  s=self.nib.Nifti1Image(seg,self.affine)
+  s.header.set_xyzt_units("mm")
+  axial=self.p/"verified_mm_axial.nii"
+  mask=self.p/"verified_mm_mask.nii"
+  self.nib.save(m,axial)
+  self.nib.save(s,mask)
+  z=mod.inspect_disc_mask(axial,mask)["nativeAxialCanalClass2Research"]
+  self.assertTrue(z["physicalMillimetresVerified"])
+  self.assertTrue(z["sameSliceCalibreMeasurementEligible"])
+  levels={x["disc"]:x for x in z["lumbarDiscLevelCalibreResearch"]}
+  self.assertTrue(levels["L4-L5"]["presentMatchedAxialCanalSlice"])
+  self.assertEqual(levels["L4-L5"]["nativeSliceIndex"],15)
+  self.assertAlmostEqual(levels["L4-L5"]["sameSliceSegmentedCanalClass2AreaMm2"],12.)
+  self.assertEqual(levels["L4-L5"]["sourceNiftiRasMm"],[19.,16.5,30.])
+  self.assertFalse(levels["L1-L2"]["presentMatchedAxialCanalSlice"])
+  self.assertTrue(levels["L1-L2"]["noMeasurementNotEvidenceOfNormality"])
+  self.assertTrue(z["notStenosisOrCompressionDiagnosis"])
+
+ def test_unverified_physical_units_and_sagittal_plane_refuse_area(self):
+  import numpy as np
+  original=self.nib.load(str(self.mri))
+  seg=np.asanyarray(self.nib.load(str(self.mask)).dataobj)
+  z=mod.native_axial_canal_research_measurements(original,seg)
+  self.assertFalse(z["sameSliceCalibreMeasurementEligible"])
+  self.assertFalse(z["physicalMillimetresVerified"])
+  self.assertEqual(z["lumbarDiscLevelCalibreResearch"],[])
+  a=np.array([[0.,0.,2.,0.],[0.,1.,0.,0.],[1.,0.,0.,0.],[0.,0.,0.,1.]])
+  sagittal=self.nib.Nifti1Image(np.ones(seg.shape,dtype=np.float32),a)
+  sagittal.header.set_xyzt_units("mm")
+  z=mod.native_axial_canal_research_measurements(sagittal,seg)
+  self.assertTrue(z["physicalMillimetresVerified"])
+  self.assertFalse(z["nativeSlicePlaneCloseToAxialRAS"])
+  self.assertFalse(z["sameSliceCalibreMeasurementEligible"])
+
 if __name__=="__main__":
  unittest.main()

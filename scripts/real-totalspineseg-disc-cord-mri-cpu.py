@@ -99,6 +99,59 @@ def verify_archive_and_installed_model(dataset,original_archive,model_dir):
          "installedFold0CheckpointSHA256":genuine,"fold0File":model_name}
 
 
+
+def native_axial_canal_research_measurements(original, vox):
+ """Same-native-slice spinal canal label2 area near publisher-named discs.
+
+ Only true millimetre NIfTI with axial-like plane orientation is eligible.
+ A segmented class-2 mask area is NOT whole thecal-sac diameter, spinal
+ stenosis, a disc grade, foraminal patency or nerve-root compression.
+ """
+ import numpy as np
+ axis0, axis1 = original.affine[:3,0], original.affine[:3,1]
+ normal = np.cross(axis0,axis1)
+ surface = float(np.linalg.norm(normal))
+ mm = original.header.get_xyzt_units()[0] == "mm"
+ axial = bool(surface > .01 and abs(float(normal[2]))/surface >= .95)
+ eligible = bool(mm and axial)
+ result = {
+  "physicalMillimetresVerified":bool(mm),
+  "nativeSlicePlaneCloseToAxialRAS":axial,
+  "sameSliceCalibreMeasurementEligible":eligible,
+  "segmentationLabel2OnlyNotFullAnatomicCanal":True,
+  "notStenosisOrCompressionDiagnosis":True,
+  "lumbarDiscLevelCalibreResearch":[],
+ }
+ if not eligible:
+  return result
+ areas = np.count_nonzero(vox==2,axis=(0,1))*surface
+ for name, label in LUMBAR_DISCS.items():
+  levels = np.flatnonzero(np.any(vox==label,axis=(0,1)))
+  paired = [int(i) for i in levels if areas[i]>0]
+  if not paired:
+   result["lumbarDiscLevelCalibreResearch"].append({
+    "disc":name,"presentMatchedAxialCanalSlice":False,
+    "noMeasurementNotEvidenceOfNormality":True,
+   })
+   continue
+  slice_index=min(paired,key=lambda i:areas[i])
+  coords = np.argwhere(vox[:,:,slice_index]==2)
+  plane_ijk=np.array([*coords.mean(axis=0),slice_index,1.])
+  ras = (original.affine@plane_ijk)[:3]
+  result["lumbarDiscLevelCalibreResearch"].append({
+   "disc":name,"presentMatchedAxialCanalSlice":True,
+   "nativeSliceIndex":int(slice_index),
+   "sameSliceSegmentedCanalClass2AreaMm2":round(float(areas[slice_index]),3),
+   "sourceNiftiRasMm":[round(float(v),3) for v in ras],
+   "discLabel":label,
+   "matchedSliceCount":len(paired),
+   "discOccupiedSliceCount":int(len(levels)),
+   "minimumOverObservedOverlappingSlicesNotClinicalMinimum":True,
+   "noCervicalOrForaminalStenosisClassification":True,
+  })
+ return result
+
+
 def inspect_disc_mask(original,segmentation):
  import numpy as np
  orig=source_image(original)
@@ -131,6 +184,7 @@ def inspect_disc_mask(original,segmentation):
          "discCandidates":discs,
          "spinalCordMaskVoxels":int(np.count_nonzero(vox==1)),
          "spinalCanalMaskVoxels":int(np.count_nonzero(vox==2)),
+         "nativeAxialCanalClass2Research":native_axial_canal_research_measurements(orig,vox),
          "modelSegmentedAnatomyNotDiskPathologyDetector":True,
          "noSpinalCordCompressionOrStenosisAssessment":True,
          "absenceOfLabelNeverMeansNormal":True,
