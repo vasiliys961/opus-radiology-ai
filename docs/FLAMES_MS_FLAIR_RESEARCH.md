@@ -35,3 +35,30 @@ The original CLI writes the true NIfTI mask locally. After **successful** origin
 **Current evidence level: research executor implemented; actual published archive not installed/tested in this PR, model forward NOT demonstrated, no positive licensed expert-masked case, no Dice/lesion recall/independent specificity, no patient or cloud deployment**. A negative segmentation is not a negative MS diagnosis. Follow-up: resolve publisher archive licensing, isolate positive annotated MS FLAIR (MSSEG eligible, check split), verify genuine trained inference and expert lesion sensitivity without training overlap.
 
 CI `flames-ms-flair-contract.yml` checks source/native geometry guards with synthetic inputs **without claiming trained model execution**.
+
+
+## Positive expert MS-lesion comparison (2026-10-21, research only)
+
+After a **real completed original pretrained** nnU-Net FLAIR forward, the
+operator may add `--expert-ms-mask /approved/expert/binary_lesions.nii.gz`,
+`--expert-ms-lesion-labels-confirmed`, and
+`--expert-source-rights-reviewed` on the same explicit command line used
+with `--execute`. This is opt-in and cannot run in readiness-only mode.
+
+The actual model prediction, brain mask and expert mask must be **binary**
+and share the exact original source 3D shape, affine and millimetre units;
+the expert must have one or more positive lesion voxels confined to the
+verified brain mask. The numeric research report binds the FLAIR, expert,
+model prediction and brain extraction SHA256 and computes true positive,
+false positive, false negative voxel counts and Dice. Genuine 26-connected
+lesions are matched one-to-one by descending spatial overlap, reporting
+expert lesion count, predictions, matched/missed reference lesions,
+unmatched predictions and single-case lesion recall.
+
+**This change alone has NOT run pretrained FLAMeS on a newly verified
+expert-positive subject.** Unit tests use artificial tensors strictly to
+check mask alignment, score arithmetic and fail-closed flags; they do not
+count as clinical data. The model's training-patient overlap is unexcluded;
+no longitudinal MS, FLAIR-only diagnosis, MS-vs-small-vessel WMH
+differentiation or clinical sensitivity is established. Neither pixel
+images nor masks are sent to GitHub artifacts or cloud inference providers.
