@@ -132,6 +132,51 @@ def lesion_components(model_mask, affine, minimum_voxels=10):
     found.sort(key=lambda x:x["candidateVoxels"],reverse=True)
     return found
 
+def match_expert_lesions(prediction, expert, min_prediction_voxels=10):
+    """One-to-one 26-connected overlap on source grid; no fabricated FROC."""
+    import numpy as np
+    from scipy import ndimage
+    p=np.asarray(prediction,dtype=bool)
+    g=np.asarray(expert,dtype=bool)
+    if p.shape!=g.shape or p.ndim!=3 or p.size>MAX_VOXELS:
+        raise ValueError("native_expert_prediction_grid_mismatch")
+    structure=ndimage.generate_binary_structure(3,3)
+    pl,pn=ndimage.label(p,structure=structure)
+    gl,gn=ndimage.label(g,structure=structure)
+    sizes=np.bincount(pl.ravel(),minlength=pn+1)
+    valid=np.flatnonzero(sizes>=min_prediction_voxels)
+    valid=valid[valid!=0]
+    if pn>100000 or gn>100000:
+        raise ValueError("excessive_lesion_components")
+    # Pair counts without dense (n_predictions x n_truth) allocation.
+    both=(pl>0)&(gl>0)
+    pairs=np.unique(np.stack((pl[both],gl[both]),axis=1),axis=0) if np.any(both) else np.empty((0,2),dtype=int)
+    overlaps=[]
+    allowed=set(int(x) for x in valid)
+    for pi,gi in pairs:
+        if int(pi) in allowed:
+            n=int(np.count_nonzero((pl==pi)&(gl==gi)))
+            overlaps.append((n,int(pi),int(gi)))
+    overlaps.sort(reverse=True)
+    matched_p=set()
+    matched_g=set()
+    for n,pi,gi in overlaps:
+        if pi not in matched_p and gi not in matched_g:
+            matched_p.add(pi)
+            matched_g.add(gi)
+    return {
+        "connectivity":26,
+        "minimumPredictedComponentVoxels":min_prediction_voxels,
+        "expertLesionCount":int(gn),
+        "predictedLesionCount":len(allowed),
+        "matchedExpertLesions":len(matched_g),
+        "missedExpertLesions":int(gn)-len(matched_g),
+        "unmatchedPredictedLesions":len(allowed)-len(matched_p),
+        "singleCaseLesionRecall":round(len(matched_g)/int(gn),6) if gn else None,
+        "independentFROC":None,
+        "matchingRule":"maximum-overlap greedy one-to-one; any positive voxel overlap"
+    }
+
 def evaluate(root:Path,mask:Path,out:Path,checkpoint_manifest:Path):
     import nibabel as nib
     import numpy as np
@@ -169,6 +214,7 @@ def evaluate(root:Path,mask:Path,out:Path,checkpoint_manifest:Path):
     gt=(np.asarray(nib.load(str(truth)).dataobj)==2)
     pred=(prediction==1)
     focal_candidates=lesion_components(prediction,scan.affine)
+    lesion_match=match_expert_lesions(pred,gt)
     tp=int(np.count_nonzero(pred & gt))
     fp=int(np.count_nonzero(pred & ~gt))
     fn=int(np.count_nonzero(~pred & gt))
@@ -185,6 +231,7 @@ def evaluate(root:Path,mask:Path,out:Path,checkpoint_manifest:Path):
       "originalDimensions":geo["shape"],"expertTumorVoxels":expertvox,
       "modelLesionVoxels":modelvox,"lesionCandidates":focal_candidates,
       "lesionCandidateCount":len(focal_candidates),
+      "expertLesionMatching":lesion_match,
       "noMalignancyEstablished":False,
       "NIfTIWorldNotVerifiedDICOMLPS":True,
       "truePositiveVoxels":tp,
@@ -197,6 +244,7 @@ def evaluate(root:Path,mask:Path,out:Path,checkpoint_manifest:Path):
       "limitations":["One annotated training split case; independence from upstream model training not established.",
         "MSD class 2 is annotated tumor; TotalSegmentator liver_lesions class 1 targets general focal lesions; label scope is not fully equivalent.",
         "Measured voxel Dice does not establish malignancy type, patient-level sensitivity or clinical deployment eligibility.",
+        "Single-case 26-connected overlap recalls annotated components, not independent lesion sensitivity; greedy matching and minimum predicted size must be disclosed.",
         "Original data and full model checkpoints deleted from CI, numeric output only."]}
     out.write_text(json.dumps(result,indent=2))
     print(json.dumps({k:result[k] for k in
