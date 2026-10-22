@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+from automsc_prostate_lesions import describe_lesions
 
 MODEL_ID = "cyyu96/AutoMSC-Baselines"
 REVISION = "9252036f262e2b89ac1a74322cad77691437a4f3"
@@ -146,6 +147,7 @@ def run(args):
         "tumorVoxelBoundingBox": bbox,
         "tumorCentroidRASmm": tumor_centroid_ras,
         "tumorWorldBoundsRASmm": tumor_world_bounds_ras,
+        "lesions": describe_lesions(mask, np.asarray(mask_image.affine, dtype=np.float64)),
         "actualPublisherForward": True,
         "clinicalValidation": False, "physicianReviewRequired": True,
         "license": "PICAI CC-BY-NC 4.0: research only",
