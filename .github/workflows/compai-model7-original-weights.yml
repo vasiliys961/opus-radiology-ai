@@ -1,0 +1,27 @@
+name: CompAI Model7 true GitLab checkpoint audit
+on:
+  pull_request:
+    paths:
+      - scripts/verify-compai-model7-gitlab-lfs.py
+      - .github/workflows/compai-model7-original-weights.yml
+permissions:
+  contents: read
+jobs:
+  original-gitlab-checkpoint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 24
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m py_compile scripts/verify-compai-model7-gitlab-lfs.py
+      - run: git lfs install
+      - name: Fetch publisher GitLab tag and verify actual Model7 checkpoint SHA256
+        run: python scripts/verify-compai-model7-gitlab-lfs.py --output /tmp/compai-model7-evidence.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: compai-model7-gitlab-original-weights-audit
+          path: /tmp/compai-model7-evidence.json
+          retention-days: 14
