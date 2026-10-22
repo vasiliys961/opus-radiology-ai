@@ -1,0 +1,19 @@
+name: Geneva ILD original model candidate admission
+on:
+  pull_request:
+    paths:
+      - scripts/admit-original-geneva-ild-weights.py
+      - .github/workflows/geneva-ild-publisher-assets.yml
+permissions:
+  contents: read
+jobs:
+  checkpoint-admission:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m py_compile scripts/admit-original-geneva-ild-weights.py
+      - run: python scripts/admit-original-geneva-ild-weights.py --help
