@@ -225,6 +225,8 @@ def evaluate(work:Path,out:Path):
  x=np.asanyarray(pred.dataobj)
  if x.ndim!=3 or x.dtype.kind not in "iu" or np.any((x!=0)&(x!=1)):
   raise ValueError("original_lymph_node_label_mask_not_binary")
+ from mediastinal_node_instances import measure_nodes
+ nodes=measure_nodes(x,volume.affine)
  voxel_count=int(np.count_nonzero(x))
  result={"schema":SCHEMA,"originalModel":"Raidionics CT_LymphNodes ONNX v13",
    "modelLibrary":"raidionicsseg "+MODEL_LIBRARY_VERSION,
@@ -236,6 +238,8 @@ def evaluate(work:Path,out:Path):
    "actualOriginalPretrainedModelForwardCompleted":True,
    "sourceNativeGridMatch":True,"sourceShape":list(volume.shape),
    "candidateMaskVoxelCount":voxel_count,
+   "individualCandidateCount":len(nodes),
+   "individualCandidateNodes":nodes,
    "candidateMaskVolumeMl":round(voxel_count*abs(np.linalg.det(volume.affine[:3,:3]))/1000,3),
    "originalOutputMaskSha256":sha(predictions[0]),
    "peakMainProcessRSSBytes":execution["peakMainProcessRSSBytes"],
