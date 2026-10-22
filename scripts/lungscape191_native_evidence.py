@@ -71,8 +71,13 @@ def inspect_native_prediction(source, prediction, label_map):
     if not np.allclose(src.affine, seg.affine, atol=1e-4, rtol=0):
         raise ValueError("source/mask affine mismatch")
     src_unit = src.header.get_xyzt_units()[0]
-    if src_unit != seg.header.get_xyzt_units()[0]:
-        raise ValueError("source/mask spatial units mismatch")
+    seg_unit = seg.header.get_xyzt_units()[0]
+    # The published source may leave xyzt_units unset while nnU-Net writes mm
+    # on export. Matching affine and both physical grid corners have already
+    # been independently established. Treat units as unknown rather than
+    # asserting millimetres; reject only two explicit contradictory units.
+    if src_unit != seg_unit and src_unit != "unknown" and seg_unit != "unknown":
+        raise ValueError("source/mask contradictory explicit spatial units")
     mm = src_unit == "mm"
     if seg.header.get_data_dtype().kind not in "uif":
         raise ValueError("segmentation must contain numeric labels")
@@ -113,6 +118,8 @@ def inspect_native_prediction(source, prediction, label_map):
     return {
         "sourceShape": list(src.shape),
         "sourceSpatialUnit": src_unit,
+        "segmentationSpatialUnit": seg_unit,
+        "spatialUnitsUncertain": src_unit != seg_unit,
         "verifiedNativeGrid": True,
         "sourceUnitMillimetresVerified": mm,
         "observedNonbackgroundModelVoxels": sum(counts.values()),

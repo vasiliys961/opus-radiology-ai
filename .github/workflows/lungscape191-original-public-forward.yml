@@ -1,5 +1,11 @@
 name: LungSCAPE191 ORIGINAL pretrained forward on public chest CT
 on:
+  pull_request:
+    paths:
+      - .github/workflows/lungscape191-original-public-forward.yml
+      - scripts/run-lungscape191-research.py
+      - scripts/lungscape191_native_evidence.py
+      - scripts/test_lungscape191_native_evidence.py
   workflow_dispatch:
     inputs:
       case:
@@ -31,8 +37,9 @@ jobs:
       - name: Install original nnU-Net v2 research executor (isolated Linux runner)
         run: |
           python -m pip install --upgrade pip
-          python -m pip install --index-url https://download.pytorch.org/whl/cpu torch==2.6.0
           python -m pip install nnunetv2 nibabel==5.3.2 huggingface_hub==0.35.3
+          # nnunetv2 may upgrade torch to a CUDA wheel; restore the bounded CPU wheel last.
+          python -m pip install --force-reinstall --no-deps --index-url https://download.pytorch.org/whl/cpu torch==2.6.0
           python - <<'PY'
           import torch, nnunetv2
           assert torch.__version__.startswith("2.6.0")
@@ -42,7 +49,7 @@ jobs:
       - name: Admit original public CT and original expert reference separately
         run: |
           python scripts/prepare-lungscape191-public-coronacases.py \
-            --case "${{ inputs.case }}" \
+            --case "${{ inputs.case || 'coronacases_003' }}" \
             --output-private "$RUNNER_TEMP/lungscape-public" --execute-download
       - name: Download and verify original publisher 5-fold archive
         run: |
@@ -64,7 +71,7 @@ jobs:
             --input "$RUNNER_TEMP/lungscape-public/in/lungcase001_0000.nii.gz" \
             --nnunet-results "$nnUNet_results" \
             --output "$RUNNER_TEMP/lungscape-predictions" \
-            --device cpu --execute
+            --device cpu --fold 0 --step-size 0.95 --execute
       - name: Bind model result to exact public source and ontology (numeric only)
         run: |
           python scripts/bind-lungscape191-real-public-evidence.py \

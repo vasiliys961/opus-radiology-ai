@@ -30,7 +30,7 @@ def sha256(path):
     return digest.hexdigest()
 
 
-def run(input_file, results, output_dir, *, device="cpu", execute=False):
+def run(input_file, results, output_dir, *, device="cpu", execute=False, fold="all", step_size=0.5):
     import nibabel as nib
     import numpy as np
 
@@ -54,10 +54,15 @@ def run(input_file, results, output_dir, *, device="cpu", execute=False):
     if len(models) != 1:
         raise ValueError("expected exactly one installed Dataset191_* model directory")
     model = models[0]
-    if not model.is_dir() or not (model / CONFIG).is_dir() or not (model / "dataset.json").is_file():
-        raise ValueError("missing Dataset191 3d_fullres installation or dataset.json")
-    original_labels = installed_label_map(model / "dataset.json")
-    folds = [model / CONFIG / ("fold_" + f) / "checkpoint_final.pth" for f in FOLDS]
+    trainers = [p for p in model.iterdir() if p.is_dir() and p.name.endswith("__" + CONFIG)]
+    if not model.is_dir() or len(trainers) != 1:
+        raise ValueError("missing or ambiguous nnUNetTrainer__nnUNetPlans__3d_fullres installation")
+    trainer = trainers[0]
+    dataset_json = trainer / "dataset.json"
+    if not dataset_json.is_file():
+        raise ValueError("original trained nnU-Net dataset.json is absent")
+    original_labels = installed_label_map(dataset_json)
+    folds = [trainer / ("fold_" + f) / "checkpoint_final.pth" for f in FOLDS]
     if any(not p.is_file() or p.stat().st_size == 0 for p in folds):
         raise ValueError("all five official Dataset191 checkpoint_final.pth folds required")
     cmd_path = shutil.which("nnUNetv2_predict")
@@ -89,8 +94,13 @@ def run(input_file, results, output_dir, *, device="cpu", execute=False):
     env["nnUNet_results"] = str(weights_root)
     env["nnUNet_raw"] = str(destination / "nnUNet_raw")
     env["nnUNet_preprocessed"] = str(destination / "nnUNet_preprocessed")
+    selected_folds = FOLDS if fold == "all" else (fold,)
+    if fold not in (*FOLDS, "all") or not 0.5 <= step_size <= 0.95:
+        raise ValueError("invalid fold selection or sliding window step")
     invocation = [cmd_path, "-i", str(source.parent), "-o", str(destination),
-                  "-d", str(MODEL_ID), "-c", CONFIG, "-f", *FOLDS, "-device", device]
+                  "-d", str(MODEL_ID), "-c", CONFIG, "-f", *selected_folds,
+                  "-step_size", str(step_size), "-npp", "1", "-nps", "1",
+                  "--disable_tta", "-device", device]
     # Source directory must contain this one case only to avoid accidental other-case processing.
     cases = list(source.parent.glob("*_0000.nii.gz"))
     if len(cases) != 1 or cases[0] != source:
@@ -106,9 +116,12 @@ def run(input_file, results, output_dir, *, device="cpu", execute=False):
     separate_candidate_evidence = inspect_components(source, output, original_labels)
     report = {"status": "research_mask_generated", "source_sha256": source_hash,
               "mask_sha256": sha256(output), "model": "LungSCAPE Dataset191",
-              "model_dataset_json_sha256": sha256(model / "dataset.json"),
+              "model_dataset_json_sha256": sha256(dataset_json),
               "weight_folds_sha256": checkpoint_hashes,
               "trueOriginalTrainedModelForwardCompleted": True,
+              "actuallyEvaluatedFolds": list(selected_folds),
+              "slidingWindowStepSize": step_size,
+              "testTimeAugmentation": False,
               "originalCrossoverWithTrainingUnexcluded": True,
               "noIndependentClinicalValidation": True,
               **native_evidence, **separate_candidate_evidence}
@@ -124,10 +137,13 @@ def main():
     parser.add_argument("--output", required=True)
     parser.add_argument("--device", choices=("cpu", "cuda", "mps"), default="cpu")
     parser.add_argument("--execute", action="store_true", help="explicitly run inference")
+    parser.add_argument("--fold", choices=(*FOLDS, "all"), default="all")
+    parser.add_argument("--step-size", type=float, default=0.5)
     args = parser.parse_args()
     try:
         report = run(args.input, args.nnunet_results, args.output,
-                     device=args.device, execute=args.execute)
+                     device=args.device, execute=args.execute,
+                     fold=args.fold, step_size=args.step_size)
         print(json.dumps(report, ensure_ascii=False, indent=2))
     except (ValueError, OSError, subprocess.SubprocessError, RuntimeError, ImportError) as exc:
         print("LungSCAPE191 research runner rejected: " + str(exc), file=sys.stderr)
