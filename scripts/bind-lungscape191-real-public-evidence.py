@@ -38,6 +38,14 @@ def bind(source, weights, forward):
     folds = forward.get("weight_folds_sha256")
     if not isinstance(folds, dict) or set(folds) != set("01234") or not all(sha(v) for v in folds.values()):
         raise ValueError("publisher 5-fold original checkpoint SHA audit missing")
+    actual_folds = forward.get("inferenceActualFolds")
+    if actual_folds not in (["0"], ["0", "1", "2", "3", "4"]):
+        raise ValueError("original forward fold subset is missing or unsupported")
+    ensemble = actual_folds == ["0", "1", "2", "3", "4"]
+    if forward.get("publisherFiveFoldEnsembleUsed") is not ensemble:
+        raise ValueError("incorrect original five-fold ensemble inference claim")
+    if forward.get("reducedCpuProtocolNotPublisherFiveFold") is not (not ensemble):
+        raise ValueError("untracked research low-memory protocol change")
     if forward.get("clinicalValidation") is not False or forward.get("noIndependentClinicalValidation") is not True:
         raise ValueError("unsafe clinical validation assertion")
     return {
@@ -47,6 +55,9 @@ def bind(source, weights, forward):
         "expertReferenceSha256NotSameOntology": source["combinedExpertSha256"],
         "originalPublisherArchiveSha256": weights["observedSha256"],
         "originalInstalledFiveFoldCheckpointSha256": folds,
+        "inferenceActualFolds": actual_folds,
+        "publisherFiveFoldEnsembleUsed": ensemble,
+        "reducedCpuProtocolNotPublisherFiveFold": not ensemble,
         "originalPredictionSha256": forward["mask_sha256"],
         "originalModelLabelMap": forward["labelMapFromInstalledModel"],
         "originalModelRegionsNotClinicalDiagnoses": forward["regionsByOriginalModelLabelNotConnectedLesions"],

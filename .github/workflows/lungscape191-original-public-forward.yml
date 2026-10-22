@@ -1,5 +1,11 @@
 name: LungSCAPE191 ORIGINAL pretrained forward on public chest CT
 on:
+  pull_request:
+    paths:
+      - ".github/workflows/lungscape191-original-public-forward.yml"
+      - "scripts/run-lungscape191-research.py"
+      - "scripts/bind-lungscape191-real-public-evidence.py"
+      - "scripts/test_lungscape191_bind_original_forward.py"
   workflow_dispatch:
     inputs:
       case:
@@ -28,21 +34,30 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Fail-closed numeric inference provenance contract (does NOT run a model)
+        run: |
+          python -m py_compile scripts/run-lungscape191-research.py scripts/bind-lungscape191-real-public-evidence.py
+          python -m unittest discover -s scripts -p test_lungscape191_bind_original_forward.py -v
       - name: Install original nnU-Net v2 research executor (isolated Linux runner)
         run: |
           python -m pip install --upgrade pip
-          python -m pip install --index-url https://download.pytorch.org/whl/cpu torch==2.6.0
-          python -m pip install nnunetv2 nibabel==5.3.2 huggingface_hub==0.35.3
+          python -m pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.6.0+cpu torchvision==0.21.0+cpu
+          # Downstream timm/nnunet must NOT silently replace CPU torch with
+          # newest CUDA torch (previous job failed before any model inference).
+          echo 'torch==2.6.0+cpu' > "$RUNNER_TEMP/lungscape-cpu-constraints.txt"
+          echo 'torchvision==0.21.0+cpu' >> "$RUNNER_TEMP/lungscape-cpu-constraints.txt"
+          python -m pip install --no-cache-dir -c "$RUNNER_TEMP/lungscape-cpu-constraints.txt" nnunetv2==2.8.1 nibabel==5.3.2 huggingface_hub==0.35.3
+          python -m pip check
           python - <<'PY'
           import torch, nnunetv2
-          assert torch.__version__.startswith("2.6.0")
+          assert torch.__version__ == "2.6.0+cpu", torch.__version__
           assert torch.version.cuda is None
-          print("CPU torch pinned and original nnUNetv2 installed")
+          print("CPU torch version preserved; no CUDA dependency takeover")
           PY
       - name: Admit original public CT and original expert reference separately
         run: |
           python scripts/prepare-lungscape191-public-coronacases.py \
-            --case "${{ inputs.case }}" \
+            --case "${{ inputs.case || 'coronacases_003' }}" \
             --output-private "$RUNNER_TEMP/lungscape-public" --execute-download
       - name: Download and verify original publisher 5-fold archive
         run: |
@@ -54,17 +69,35 @@ jobs:
         run: |
           mkdir -p "$nnUNet_results"
           nnUNetv2_install_pretrained_model_from_zip "$RUNNER_TEMP/lungscape-weights/Dataset191_HighAttenuation.zip"
+          # Log publisher installed folder layout only. No DICOM, patient source,
+          # image pixels, weights or mask data are printed.
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          root=Path(os.environ["nnUNet_results"])
+          for dataset in root.glob("Dataset191_*"):
+              print("Published nnU-Net Dataset191 directory:", dataset.name)
+              for config in dataset.iterdir():
+                  if not config.is_dir():
+                      continue
+                  print("Publisher trainer/plans folder:", config.name)
+                  print("Publisher original dataset.json:", (config/"dataset.json").is_file())
+                  print("Original trained fold0:", (config/"fold_0/checkpoint_final.pth").is_file())
+          PY
       - name: Run original model on original CT (fail if RAM/time bound exceeded)
         env:
           nnUNet_results: ${{ runner.temp }}/nnunet-results
         run: |
           # Linux-hosted CPU worker only. Never execute this action on the user's Mac.
+          # Original fold0, not publisher five-fold ensemble; CPU hosted GitHub runner.
+          # Preserve virtual-memory bound; failure is evidence of resource limits,
+          # not proof of missing CT pathology.
           ulimit -v 12582912
           python scripts/run-lungscape191-research.py \
             --input "$RUNNER_TEMP/lungscape-public/in/lungcase001_0000.nii.gz" \
             --nnunet-results "$nnUNet_results" \
             --output "$RUNNER_TEMP/lungscape-predictions" \
-            --device cpu --execute
+            --device cpu --execute --research-single-fold0
       - name: Bind model result to exact public source and ontology (numeric only)
         run: |
           python scripts/bind-lungscape191-real-public-evidence.py \

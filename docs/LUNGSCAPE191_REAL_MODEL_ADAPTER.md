@@ -53,6 +53,30 @@ The adapter's lightweight offline source/grid/ontology contract is exercised
 by `python -m unittest discover -s scripts -p test_lungscape191_native_evidence.py -v`.
 It does not simulate an original nnU-Net forward.
 
+## Isolated original fold0 forward trial (2026-10-21)
+
+The original publisher Dataset191 five-fold model is still the reference protocol. The
+isolated public-data Linux workflow now also runs on a narrowly scoped pull-request
+change and attempts a **real original trained fold0 forward**, with nnU-Net native
+preprocessing/export workers limited to one, step size 1, and mirror TTA disabled:
+
+```bash
+python scripts/run-lungscape191-research.py --execute --device cpu \\
+ --research-single-fold0 --input /private/in/lungcase001_0000.nii.gz \\
+ --nnunet-results /private/nnunet-results --output /private/out
+```
+
+This **reduced-compute original model**, if a genuine forward succeeds, is NOT the
+author five-fold ensemble and its numerical results must not be described as author
+ensemble accuracy. The binder refuses a result that falsely declares five folds.
+The original five-fold checkpoint files are individually hashed even when only fold0
+is run; actual used inference folds and the low-memory setting are reported distinctly.
+The GitHub job is time/virtual-memory bounded and can legitimately FAIL on an
+insufficient CPU runner. No outputs may be called observed until Actions confirms a
+successful original forward. Training-cohort overlap remains unresolved and the
+CoronaCases infection annotation is not equivalent to the author target ontology:
+**no infection-vs-high-attenuation Dice, ILD subtype or clinical validation claim**.
+
 ## Public positive-source admission (research-only, separate from model)
 
 `scripts/prepare-lungscape191-public-coronacases.py` supports a genuinely
