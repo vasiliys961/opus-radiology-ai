@@ -1,5 +1,8 @@
 name: LungSCAPE191 ORIGINAL pretrained forward on public chest CT
 on:
+  pull_request:
+    paths:
+      - .github/workflows/lungscape191-original-public-forward.yml
   workflow_dispatch:
     inputs:
       case:
@@ -42,7 +45,7 @@ jobs:
       - name: Admit original public CT and original expert reference separately
         run: |
           python scripts/prepare-lungscape191-public-coronacases.py \
-            --case "${{ inputs.case }}" \
+            --case "${{ inputs.case || 'coronacases_003' }}" \
             --output-private "$RUNNER_TEMP/lungscape-public" --execute-download
       - name: Download and verify original publisher 5-fold archive
         run: |
