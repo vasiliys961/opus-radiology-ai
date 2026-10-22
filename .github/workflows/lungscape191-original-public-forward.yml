@@ -69,7 +69,7 @@ jobs:
             --input "$RUNNER_TEMP/lungscape-public/in/lungcase001_0000.nii.gz" \
             --nnunet-results "$nnUNet_results" \
             --output "$RUNNER_TEMP/lungscape-predictions" \
-            --device cpu --execute
+            --device cpu --fold 0 --step-size 0.95 --execute
       - name: Bind model result to exact public source and ontology (numeric only)
         run: |
           python scripts/bind-lungscape191-real-public-evidence.py \
