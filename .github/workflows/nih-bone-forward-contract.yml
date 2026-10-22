@@ -1,0 +1,19 @@
+name: NIH original bone lesion forward contract
+on:
+  pull_request:
+    paths:
+      - scripts/run-nih-bone-original-inference.py
+      - .github/workflows/nih-bone-forward-contract.yml
+permissions:
+  contents: read
+jobs:
+  executor-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m py_compile scripts/run-nih-bone-original-inference.py
+      - run: python scripts/run-nih-bone-original-inference.py --help
