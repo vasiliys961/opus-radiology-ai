@@ -11,7 +11,7 @@ function validate(value:unknown):Report {
   if(typeof q.sourceSha256!=="string"||!/^[0-9a-f]{64}$/.test(q.sourceSha256))throw Error("Отсутствует SHA-256 источника");
   if(!Array.isArray(q.candidates)||q.candidates.length>100)throw Error("Некорректное количество кандидатов");
   for(const k of q.candidates){
-    if(!k||typeof k!=="object"||!Number.isInteger(k.modelClassId)||k.modelClassId<1||typeof k.sourceModelLabel!=="string"||k.sourceModelLabel.length>100||!Number.isSafeInteger(k.candidateVoxelCount)||k.candidateVoxelCount<1||k.clinicalDiagnosis!==null||k.interpretationStatus!=="requires_physician_review"||!Array.isArray(k.sourceVoxelBoundsInclusive)||k.sourceVoxelBoundsInclusive.length!==2||!k.sourceVoxelBoundsInclusive.every((a:unknown)=>Array.isArray(a)&&a.length===3&&a.every((n:unknown)=>Number.isSafeInteger(n)&&n>=0)))throw Error("Недопустимые координаты или клинические утверждения");
+    if(!k||typeof k!=="object"||!Number.isInteger(k.modelClassId)||k.modelClassId<1||typeof k.sourceModelLabel!=="string"||k.sourceModelLabel.length>100||!Number.isSafeInteger(k.candidateVoxelCount)||k.candidateVoxelCount<1||k.clinicalDiagnosis!==null||k.interpretationStatus!=="requires_physician_review"||!Array.isArray(k.sourceVoxelBoundsInclusive)||k.sourceVoxelBoundsInclusive.length!==2||!k.sourceVoxelBoundsInclusive.every((a:unknown)=>Array.isArray(a)&&a.length===3&&a.every((n:unknown)=>typeof n === "number" && Number.isSafeInteger(n) && n >= 0)))throw Error("Недопустимые координаты или клинические утверждения");
   }
   return q as unknown as Report;
 }
