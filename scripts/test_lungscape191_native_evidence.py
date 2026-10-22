@@ -99,5 +99,18 @@ class LungscapeNativeEvidenceContract(unittest.TestCase):
         self.assertIsNone(entry["sourceRasMmAxisAlignedBounds"])
 
 
+    def test_unknown_source_with_nnunet_mm_export_retains_voxel_evidence(self):
+        src = self.nib.load(str(self.src))
+        src.header.set_xyzt_units("unknown")
+        self.nib.save(src, self.src)
+        self.write_mask(self.mask_arr, self.affine, millimetres=True)
+        report = inspect_native_prediction(
+            self.src, self.mask, installed_label_map(self.labels_path))
+        self.assertTrue(report["verifiedNativeGrid"])
+        self.assertTrue(report["spatialUnitsUncertain"])
+        self.assertEqual(report["segmentationSpatialUnit"], "mm")
+        self.assertFalse(report["sourceUnitMillimetresVerified"])
+        self.assertIsNone(report["regionsByOriginalModelLabelNotConnectedLesions"][0]["volumeMl"])
+
 if __name__ == "__main__":
     unittest.main()
