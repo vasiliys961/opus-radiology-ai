@@ -24,9 +24,6 @@ def get_json(url):
 
 
 def inspect_fold(revision, fold):
-    item = get_json(f"{API}/contents/{PATH}/fold_{fold}/checkpoint_final.pth?ref={revision}")
-    if item.get("size", 0) > 1024:
-        raise ValueError("Expected Git LFS pointer metadata in GitHub content API")
     raw = f"https://raw.githubusercontent.com/{REPO}/{revision}/{PATH}/fold_{fold}/checkpoint_final.pth"
     with urllib.request.urlopen(raw, timeout=45) as response:
         head = response.read(250)
