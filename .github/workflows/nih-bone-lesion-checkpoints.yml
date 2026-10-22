@@ -16,7 +16,7 @@ jobs:
         with:
           python-version: '3.11'
       - run: python -m py_compile scripts/verify-nih-bone-lesion-original-weights.py
-      - run: python scripts/verify-nih-bone-lesion-original-weights.py --output /tmp/nih-bone-lfs.json
+      - run: python scripts/verify-nih-bone-lesion-original-weights.py --output /tmp/nih-bone-lfs.json --download-original
       - uses: actions/upload-artifact@v4
         with:
           name: nih-bone-original-lfs-provenance
