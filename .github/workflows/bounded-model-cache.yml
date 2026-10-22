@@ -1,0 +1,42 @@
+name: Bounded model archive cache
+on:
+  pull_request:
+    paths:
+      - scripts/bounded-model-archive-cache.py
+      - .github/workflows/bounded-model-cache.yml
+permissions:
+  contents: read
+jobs:
+  archive-cache:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: |
+          python -m py_compile scripts/bounded-model-archive-cache.py
+          python - <<'PY'
+          import importlib.util, tempfile
+          from pathlib import Path
+          spec=importlib.util.spec_from_file_location("modelcache","scripts/bounded-model-archive-cache.py")
+          m=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(m)
+          with tempfile.TemporaryDirectory() as td:
+              p=Path(td)
+              for n in ("compai.zip","lungscape.zip","busy.zip"):
+                  (p/n).write_bytes(b"data")
+              rows=[{"id":"compai","filename":"compai.zip","bytes":4,"lastUsedUnix":1},
+                    {"id":"lungscape","filename":"lungscape.zip","bytes":4,"lastUsedUnix":2},
+                    {"id":"busy","filename":"busy.zip","bytes":4,"lastUsedUnix":0}]
+              x=m.plan_eviction(p,rows,4,["busy"])
+              assert [e["id"] for e in x["evict"]]==["compai","lungscape"],x
+              assert x["afterBytes"]==4 and x["unresolvedExcessBytes"]==0
+              assert all((p/n).exists() for n in ("compai.zip","lungscape.zip","busy.zip"))
+              (p/"other.zip").symlink_to(p/"busy.zip")
+              try:
+                  m.plan_eviction(p,[{"id":"other","filename":"other.zip","bytes":4}],4)
+              except ValueError: pass
+              else: raise AssertionError("symlink must be refused")
+          print("PASS: bounded LRU, active protected, dry-run, no symlinks")
+          PY
