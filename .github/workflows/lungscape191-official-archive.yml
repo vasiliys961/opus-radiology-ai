@@ -1,0 +1,25 @@
+name: LungSCAPE191 original Zenodo trained archive
+on:
+  pull_request:
+    paths:
+      - scripts/audit-lungscape191-official-zenodo.py
+      - .github/workflows/lungscape191-official-archive.yml
+permissions:
+  contents: read
+jobs:
+  original-weights:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m py_compile scripts/audit-lungscape191-official-zenodo.py
+      - run: python scripts/audit-lungscape191-official-zenodo.py --output /tmp/lungscape191-provenance.json
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: lungscape191-publisher-archive-sha
+          path: /tmp/lungscape191-provenance.json
+          retention-days: 14
