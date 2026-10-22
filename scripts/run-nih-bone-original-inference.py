@@ -47,6 +47,9 @@ def main():
     if len(original.shape) != 3 or min(original.shape) < 2:
         raise ValueError("Original 3D CT volume required")
     affine = np.asarray(original.affine)
+    spacing = np.asarray(original.header.get_zooms()[:3])
+    if not np.allclose(spacing, [1.0, 1.0, 1.0], atol=0.01):
+        raise ValueError("NIH publisher requires source CT resampled to isotropic 1mm; geometry-preserving preprocessing required")
     if not np.isfinite(affine).all() or abs(np.linalg.det(affine[:3, :3])) < 1e-8:
         raise ValueError("Invalid source CT geometry")
     checkout = args.publisher_checkout.resolve()
