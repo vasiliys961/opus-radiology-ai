@@ -34,8 +34,9 @@ jobs:
       - name: Install original nnU-Net v2 research executor (isolated Linux runner)
         run: |
           python -m pip install --upgrade pip
-          python -m pip install --index-url https://download.pytorch.org/whl/cpu torch==2.6.0
           python -m pip install nnunetv2 nibabel==5.3.2 huggingface_hub==0.35.3
+          # nnunetv2 may upgrade torch to a CUDA wheel; restore the bounded CPU wheel last.
+          python -m pip install --force-reinstall --no-deps --index-url https://download.pytorch.org/whl/cpu torch==2.6.0
           python - <<'PY'
           import torch, nnunetv2
           assert torch.__version__.startswith("2.6.0")
