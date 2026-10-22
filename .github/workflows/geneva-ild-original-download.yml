@@ -1,0 +1,26 @@
+name: Geneva ILD genuine publisher checkpoint attempt
+on:
+  pull_request:
+    paths:
+      - .github/workflows/geneva-ild-original-download.yml
+      - scripts/admit-original-geneva-ild-weights.py
+permissions:
+  contents: read
+jobs:
+  original-asset:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install gdown
+      - name: Download and independently hash original UNET publisher checkpoint
+        run: python scripts/admit-original-geneva-ild-weights.py --model UNET --download --output /tmp/geneva-original-unet.json
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: geneva-ild-original-unet-source-evidence
+          path: /tmp/geneva-original-unet.json
+          retention-days: 14
