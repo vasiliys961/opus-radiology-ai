@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - .github/workflows/lungscape191-original-public-forward.yml
+      - scripts/run-lungscape191-research.py
   workflow_dispatch:
     inputs:
       case:
