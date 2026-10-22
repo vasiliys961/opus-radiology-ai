@@ -1,0 +1,21 @@
+name: AutoMSC lesion instance geometry
+on:
+  pull_request:
+    paths:
+      - scripts/automsc_prostate_lesions.py
+      - scripts/run-original-automsc-picai.py
+      - .github/workflows/automsc-lesion-instance.yml
+permissions:
+  contents: read
+jobs:
+  lesion-geometry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install 'numpy<3' 'scipy<2'
+      - run: python -m py_compile scripts/automsc_prostate_lesions.py scripts/run-original-automsc-picai.py
+      - run: python scripts/automsc_prostate_lesions.py

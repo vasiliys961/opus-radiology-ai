@@ -134,6 +134,7 @@ def run(args):
             voxel_world.min(axis=0).tolist(),
             voxel_world.max(axis=0).tolist(),
         ]
+    from automsc_prostate_lesions import describe_lesions
     evidence = {
         "schema": "opus-automsc-picai-original-forward/v1",
         "model": MODEL_ID, "revision": REVISION, "checkpointSha256": WEIGHT_SHA256,
@@ -146,6 +147,7 @@ def run(args):
         "tumorVoxelBoundingBox": bbox,
         "tumorCentroidRASmm": tumor_centroid_ras,
         "tumorWorldBoundsRASmm": tumor_world_bounds_ras,
+        "lesions": describe_lesions(mask, np.asarray(mask_image.affine, dtype=np.float64)),
         "actualPublisherForward": True,
         "clinicalValidation": False, "physicianReviewRequired": True,
         "license": "PICAI CC-BY-NC 4.0: research only",
