@@ -79,6 +79,19 @@ jobs:
             --weight-manifest "$RUNNER_TEMP/lungscape-weights/numeric-original-weight-manifest.json" \
             --prediction-report "$RUNNER_TEMP/lungscape-predictions/opus-lungscape191-research-report.json" \
             --output "$RUNNER_TEMP/lungscape191-authentic-forward-numeric.json"
+      - name: Bind physician-review candidate records to authentic CT result
+        run: |
+          python scripts/lungscape191_physician_candidates.py \
+            --evidence "$RUNNER_TEMP/lungscape191-authentic-forward-numeric.json" \
+            --output "$RUNNER_TEMP/lungscape191-physician-candidates.json"
+      - name: Upload physician-review candidates (numeric JSON only)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lungscape191-physician-candidates
+          path: ${{ runner.temp }}/lungscape191-physician-candidates.json
+          retention-days: 3
+          if-no-files-found: error
       - name: Upload numeric research evidence only (never CT, weights, masks)
         if: success()
         uses: actions/upload-artifact@v4
