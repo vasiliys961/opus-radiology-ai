@@ -29,7 +29,7 @@ def main():
                    help="directory containing CompAI original DatasetXXX_* model bundle")
     p.add_argument("--dataset", required=True, help="CompAI ORIGINAL nnUNet dataset identifier")
     p.add_argument("--configuration", default="3d_fullres")
-    p.add_argument("--fold", type=int, default=0)
+    p.add_argument("--fold", choices=("all",), default="all")
     p.add_argument("--output", type=Path, required=True)
     a = p.parse_args()
 
@@ -48,6 +48,8 @@ def main():
     model_root = a.nnunet_results.resolve()
     candidates = list(model_root.glob("Dataset*"))
     target = [x for x in candidates if x.name == a.dataset]
+    if a.dataset != "Dataset050_LNQ_Bouget_NSCLC":
+        raise ValueError("Model7 pinned publisher dataset required")
     if len(target) != 1:
         raise ValueError("Exact publisher original dataset model folder not found")
     trainers = [x for x in target[0].iterdir() if x.is_dir()
@@ -55,8 +57,10 @@ def main():
     if len(trainers) != 1:
         raise ValueError("Original CompAI training configuration absent or ambiguous")
     checkpoint = trainers[0] / f"fold_{a.fold}" / "checkpoint_final.pth"
-    if not checkpoint.is_file() or checkpoint.stat().st_size < 1_000_000:
+    if not checkpoint.is_file() or checkpoint.stat().st_size != 249378174:
         raise ValueError("Original trained checkpoint missing or Git LFS pointer")
+    if sha256(checkpoint) != "1cd4a5dd5601ad1a538cda1eda814ea914b48b2e29ec4064b00b285a7a5706c2":
+        raise ValueError("Original CompAI Model7 checkpoint SHA-256 mismatch")
     if a.output.exists() and any(a.output.iterdir()):
         raise ValueError("Output must be empty")
     a.output.mkdir(parents=True, exist_ok=True)
