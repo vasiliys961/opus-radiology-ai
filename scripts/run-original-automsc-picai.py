@@ -11,7 +11,6 @@ import os
 from pathlib import Path
 import subprocess
 import sys
-from automsc_prostate_lesions import describe_lesions
 
 MODEL_ID = "cyyu96/AutoMSC-Baselines"
 REVISION = "9252036f262e2b89ac1a74322cad77691437a4f3"
@@ -135,6 +134,7 @@ def run(args):
             voxel_world.min(axis=0).tolist(),
             voxel_world.max(axis=0).tolist(),
         ]
+    from automsc_prostate_lesions import describe_lesions
     evidence = {
         "schema": "opus-automsc-picai-original-forward/v1",
         "model": MODEL_ID, "revision": REVISION, "checkpointSha256": WEIGHT_SHA256,
