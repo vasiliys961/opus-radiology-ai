@@ -54,10 +54,15 @@ def run(input_file, results, output_dir, *, device="cpu", execute=False):
     if len(models) != 1:
         raise ValueError("expected exactly one installed Dataset191_* model directory")
     model = models[0]
-    if not model.is_dir() or not (model / CONFIG).is_dir() or not (model / "dataset.json").is_file():
-        raise ValueError("missing Dataset191 3d_fullres installation or dataset.json")
-    original_labels = installed_label_map(model / "dataset.json")
-    folds = [model / CONFIG / ("fold_" + f) / "checkpoint_final.pth" for f in FOLDS]
+    trainers = [p for p in model.iterdir() if p.is_dir() and p.name.endswith("__" + CONFIG)]
+    if not model.is_dir() or len(trainers) != 1:
+        raise ValueError("missing or ambiguous nnUNetTrainer__nnUNetPlans__3d_fullres installation")
+    trainer = trainers[0]
+    dataset_json = trainer / "dataset.json"
+    if not dataset_json.is_file():
+        raise ValueError("original trained nnU-Net dataset.json is absent")
+    original_labels = installed_label_map(dataset_json)
+    folds = [trainer / ("fold_" + f) / "checkpoint_final.pth" for f in FOLDS]
     if any(not p.is_file() or p.stat().st_size == 0 for p in folds):
         raise ValueError("all five official Dataset191 checkpoint_final.pth folds required")
     cmd_path = shutil.which("nnUNetv2_predict")
@@ -106,7 +111,7 @@ def run(input_file, results, output_dir, *, device="cpu", execute=False):
     separate_candidate_evidence = inspect_components(source, output, original_labels)
     report = {"status": "research_mask_generated", "source_sha256": source_hash,
               "mask_sha256": sha256(output), "model": "LungSCAPE Dataset191",
-              "model_dataset_json_sha256": sha256(model / "dataset.json"),
+              "model_dataset_json_sha256": sha256(dataset_json),
               "weight_folds_sha256": checkpoint_hashes,
               "trueOriginalTrainedModelForwardCompleted": True,
               "originalCrossoverWithTrainingUnexcluded": True,
