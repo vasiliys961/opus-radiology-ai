@@ -1,0 +1,50 @@
+name: LungSCAPE191 physician research candidate binding
+on:
+  pull_request:
+    paths:
+      - scripts/lungscape191_physician_candidates.py
+      - .github/workflows/lungscape191-physician-candidates.yml
+permissions:
+  contents: read
+jobs:
+  physician-candidates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Source-bound research candidate contract
+        run: |
+          python -m py_compile scripts/lungscape191_physician_candidates.py
+          python - <<'PY'
+          import importlib.util
+          s=importlib.util.spec_from_file_location("a","scripts/lungscape191_physician_candidates.py")
+          m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
+          d={"schema":"opus-lungscape191-authentic-public-ct-forward/v1",
+             "realOriginalTrainedForward":True,"verifiedNativeGrid":True,
+             "independentValidation":False,"expertDiceComputed":False,
+             "ggoHoneycombingUIPNSIPSubtypeClassification":False,
+             "clinicalUsePermitted":False,"sourcePixelsOrMasksIncludedInArtifact":False,
+             "sourceSha256":"a"*64,"publicResearchCase":"coronacases_003",
+             "originalModelLabelMap":{"0":"background","1":"high attenuation"},
+             "observedNonbackgroundModelVoxels":12,
+             "originalModelRegionsNotClinicalDiagnoses":[{"originalModelLabelId":1,
+                 "voxels":12,"sourceVoxelBoundsInclusive":[[1,2,3],[3,4,5]],
+                 "volumeMl":None,"sourceRasMmAxisAlignedBounds":None}]}
+          result=m.assemble(d)
+          assert len(result["candidates"])==1
+          assert result["candidates"][0]["clinicalDiagnosis"] is None
+          assert result["candidates"][0]["volumeMlOnlyWhenOriginalUnitsVerified"] is None
+          assert result["patientClinicalUseAllowed"] is False
+          d["observedNonbackgroundModelVoxels"]=13
+          try:m.assemble(d)
+          except ValueError:pass
+          else:raise AssertionError("mismatch accepted")
+          d["observedNonbackgroundModelVoxels"]=12
+          d["clinicalUsePermitted"]=True
+          try:m.assemble(d)
+          except ValueError:pass
+          else:raise AssertionError("unsafe clinical claim accepted")
+          print("PASS: genuine source-bound candidates and fail closed")
+          PY
