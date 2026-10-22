@@ -43,6 +43,7 @@ def main():
     p.add_argument("--model", choices=sorted(MODELS), required=True)
     p.add_argument("--file", type=Path, help="original publisher file already downloaded")
     p.add_argument("--download", action="store_true", help="opt-in research download via gdown")
+    p.add_argument("--report-blocker", action="store_true", help="emit explicit unavailable status, not model success")
     p.add_argument("--output", type=Path, required=True)
     args = p.parse_args()
     if args.download and args.file:
@@ -52,9 +53,25 @@ def main():
         path = args.output.with_suffix(".weights")
         if path.exists():
             raise ValueError("refuse_overwrite_of_existing_model_asset")
-        received = gdown.download(id=MODELS[args.model], output=str(path), quiet=True, fuzzy=False)
-        if not received:
-            raise RuntimeError("publisher_Google_Drive_asset_not_publicly_available")
+        try:
+            received = gdown.download(id=MODELS[args.model], output=str(path), quiet=True)
+            if not received:
+                raise RuntimeError("publisher_Google_Drive_asset_not_publicly_available")
+        except Exception as exc:
+            if not args.report_blocker:
+                raise
+            if path.exists():
+                path.unlink()
+            if args.output.exists():
+                raise ValueError("report_must_be_a_new_file")
+            report = {"schema": "opus-geneva-ild-original-checkpoint-admission/v1",
+                      "architecture": args.model, "publisherDriveFileId": MODELS[args.model],
+                      "checkpointStatus": "unavailable", "reason": type(exc).__name__,
+                      "trueTrainedForward": False, "clinicalValidation": False,
+                      "trustedForAutomaticClinicalRouting": False}
+            args.output.write_text(json.dumps(report, indent=2) + "\n")
+            print(json.dumps(report))
+            return
     elif args.file:
         path = args.file
     else:
