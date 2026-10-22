@@ -1,0 +1,24 @@
+name: Verify NIH original bone lesion model LFS pointers
+on:
+  pull_request:
+    paths:
+      - scripts/verify-nih-bone-lesion-original-weights.py
+      - .github/workflows/nih-bone-lesion-checkpoints.yml
+permissions:
+  contents: read
+jobs:
+  original-bone-weights:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m py_compile scripts/verify-nih-bone-lesion-original-weights.py
+      - run: python scripts/verify-nih-bone-lesion-original-weights.py --output /tmp/nih-bone-lfs.json --download-original
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nih-bone-original-lfs-provenance
+          path: /tmp/nih-bone-lfs.json
+          retention-days: 14
