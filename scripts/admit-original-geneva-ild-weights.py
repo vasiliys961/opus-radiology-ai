@@ -52,7 +52,7 @@ def main():
         path = args.output.with_suffix(".weights")
         if path.exists():
             raise ValueError("refuse_overwrite_of_existing_model_asset")
-        received = gdown.download(id=MODELS[args.model], output=str(path), quiet=True, fuzzy=False)
+        received = gdown.download(id=MODELS[args.model], output=str(path), quiet=True)
         if not received:
             raise RuntimeError("publisher_Google_Drive_asset_not_publicly_available")
     elif args.file:
