@@ -12,6 +12,7 @@ REQUIRED_FALSE = ("independentValidation", "expertDiceComputed",
                   "ggoHoneycombingUIPNSIPSubtypeClassification", "clinicalUsePermitted",
                   "sourcePixelsOrMasksIncludedInArtifact")
 MAX_ITEMS = 100
+MIN_COMPONENT_VOXELS = 10
 
 def assemble(report):
     if report.get("schema") != "opus-lungscape191-authentic-public-ct-forward/v1":
@@ -53,6 +54,41 @@ def assemble(report):
                            "interpretationStatus":"requires_physician_review",
                            "clinicalDiagnosis":None})
         total+=count
+    components=[]
+    components_by_class={}
+    region_by_class={r["originalModelLabelId"]:r for r in regions}
+    raw_components=report.get("originalMaskConnectedComponentsResearchOnly", [])
+    if report.get("originalMaskComponentAnalysisCompleted") is True:
+        if not isinstance(raw_components,list) or len(raw_components)>400:
+            raise ValueError("invalid bounded original-mask components")
+        for obj in raw_components:
+            if not isinstance(obj,dict) or obj.get("notDiagnosis") is not True or obj.get("connectivity")!=26:
+                raise ValueError("component research safeguards missing")
+            ident=obj.get("originalModelLabelId")
+            voxels=obj.get("voxels")
+            bounds=obj.get("sourceVoxelBoundsInclusive")
+            if not isinstance(ident,int) or str(ident) not in labels or not isinstance(voxels,int) or voxels<MIN_COMPONENT_VOXELS:
+                raise ValueError("invalid original model component")
+            if (not isinstance(bounds,list) or len(bounds)!=2 or any(
+                not isinstance(row,list) or len(row)!=3 or any(not isinstance(v,int) or v<0 for v in row)
+                for row in bounds) or any(a>b for a,b in zip(*bounds))):
+                raise ValueError("invalid source component voxel coordinates")
+            parent_region=region_by_class.get(ident)
+            if parent_region is None or voxels>parent_region["voxels"]:
+                raise ValueError("component lacks enclosing original mask class")
+            pl,ph=parent_region["sourceVoxelBoundsInclusive"]
+            if any(bounds[0][i]<pl[i] or bounds[1][i]>ph[i] for i in range(3)):
+                raise ValueError("component lies outside source-bound original class")
+            components_by_class[ident]=components_by_class.get(ident,0)+voxels
+            if components_by_class[ident]>parent_region["voxels"]:
+                raise ValueError("component voxel counts exceed original mask class")
+            components.append({"modelClassId":ident,"sourceModelLabel":str(labels[str(ident)]),
+                               "sourceVoxelBoundsInclusive":bounds,
+                               "candidateVoxelCount":voxels,
+                               "sourceVoxelComponentCentroid":obj.get("sourceVoxelComponentCentroid"),
+                               "sourceRasMmComponentCentroidOnlyWhenVerified":obj.get("sourceRasMmComponentCentroid"),
+                               "volumeMlOnlyWhenOriginalUnitsVerified":obj.get("volumeMl"),
+                               "interpretationStatus":"requires_physician_review","clinicalDiagnosis":None})
     if total != report.get("observedNonbackgroundModelVoxels"):
         raise ValueError("aggregate model voxel count not reconciled")
     return {"schema":"opus-physician-research-candidates/v1",
@@ -62,7 +98,9 @@ def assemble(report):
             "modelForwardVerified":True,"sourceGeometryVerified":True,
             "independentAccuracyValidated":False,"notRunDoesNotMeanNegative":True,
             "possibleTrainingOverlap":True,"expertComparisonNotPermittedFromIncompatibleOntology":True,
-            "candidates":candidates,"totalNonbackgroundVoxels":total,
+            "candidates":candidates,"individualMaskComponents":components,
+            "sourceMaskComponentExtractionCompleted":report.get("originalMaskComponentAnalysisCompleted") is True,
+            "totalNonbackgroundVoxels":total,
             "physicianReportText":None,"patientClinicalUseAllowed":False}
 
 def main():

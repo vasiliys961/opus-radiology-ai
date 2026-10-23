@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import sys
 from lungscape191_lesion_components import inspect_components
+from lungscape191_streaming_components import inspect_streaming_components
 from lungscape191_native_evidence import (
     MAX_FILE_BYTES, MAX_VOXELS, installed_label_map, inspect_native_prediction,
 )
@@ -114,6 +115,9 @@ def run(input_file, results, output_dir, *, device="cpu", execute=False, fold="a
         raise RuntimeError("source CT changed during prediction: no mask binding")
     native_evidence = inspect_native_prediction(source, output, original_labels)
     separate_candidate_evidence = inspect_components(source, output, original_labels)
+    if (not separate_candidate_evidence["componentAnalysisCompleted"] and
+            separate_candidate_evidence["componentAnalysisReason"] == "bounded_volume_limit"):
+        separate_candidate_evidence = inspect_streaming_components(source, output, original_labels)
     report = {"status": "research_mask_generated", "source_sha256": source_hash,
               "mask_sha256": sha256(output), "model": "LungSCAPE Dataset191",
               "model_dataset_json_sha256": sha256(dataset_json),

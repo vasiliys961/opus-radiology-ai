@@ -1,0 +1,24 @@
+name: LungSCAPE original mask streaming components
+on:
+  pull_request:
+    paths:
+      - scripts/lungscape191_streaming_components.py
+      - scripts/test_lungscape191_streaming_components.py
+      - scripts/run-lungscape191-research.py
+      - scripts/bind-lungscape191-real-public-evidence.py
+      - scripts/lungscape191_physician_candidates.py
+      - .github/workflows/lungscape191-streaming-components.yml
+permissions:
+  contents: read
+jobs:
+  components:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install "numpy<3" scipy nibabel
+      - run: python -m py_compile scripts/lungscape191_streaming_components.py scripts/run-lungscape191-research.py scripts/bind-lungscape191-real-public-evidence.py scripts/lungscape191_physician_candidates.py
+      - run: python scripts/test_lungscape191_streaming_components.py
+      - run: python scripts/test_lungscape191_physician_candidates.py
