@@ -86,6 +86,7 @@ export default function LungscapeSourceSliceReview({source,candidates}:{source:F
    return()=>{active=false;abort.abort();};
  },[source,k,candidates]);
  return <div><p>Локальный просмотр исходного среза k — зелёные прямоугольники показывают общие границы всех вокселей соответствующего класса модели, а не отдельные очаги или контуры сегментации.</p>
+ <div aria-label="Классы модели">{candidates.map((box,i)=><button key={i} type="button" onClick={()=>setK(Math.max(0,Math.min(max,Math.round((box.sourceVoxelBoundsInclusive[0][2]+box.sourceVoxelBoundsInclusive[1][2])/2))))}>Класс {box.modelClassId}: показать центр диапазона k ({box.sourceVoxelBoundsInclusive[0][2]}–{box.sourceVoxelBoundsInclusive[1][2]})</button>)}</div>
  <label>Срез k: {k} / {max}<input type="range" min={0} max={max} value={Math.min(k,max)} onChange={e=>setK(Number(e.target.value))}/></label>
  {error&&<p role="alert">{error}</p>}
  <canvas ref={canvas} style={{maxWidth:"100%",height:"auto",imageRendering:"pixelated"}} aria-label="Исходная КТ с прямоугольниками кандидатов LungSCAPE191"/>
