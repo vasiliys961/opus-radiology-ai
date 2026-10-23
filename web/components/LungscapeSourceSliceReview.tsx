@@ -58,7 +58,7 @@ async function readPlane(file:File,k:number,signal:AbortSignal){
  if(!hdr||!slice||used!==slice.length)throw Error("Данные среза NIfTI усечены");
  return {hdr,slice};
 }
-export default function LungscapeSourceSliceReview({source,candidates}:{source:File;candidates:LungscapeBox[]}){
+export default function LungscapeSourceSliceReview({source,candidates,individual=false}:{source:File;candidates:LungscapeBox[];individual?:boolean}){
  const [k,setK]=useState(0),[max,setMax]=useState(0),[error,setError]=useState("");
  const canvas=useRef<HTMLCanvasElement>(null);
  useEffect(()=>{let active=true;const abort=new AbortController();setError("");
@@ -85,7 +85,7 @@ export default function LungscapeSourceSliceReview({source,candidates}:{source:F
    }catch(e){if(active)setError(e instanceof Error?e.message:"Ошибка NIfTI среза");}})();
    return()=>{active=false;abort.abort();};
  },[source,k,candidates]);
- return <div><p>Локальный просмотр исходного среза k — зелёные прямоугольники показывают общие границы всех вокселей соответствующего класса модели, а не отдельные очаги или контуры сегментации.</p>
+ return <div><p>Локальный просмотр исходного среза k — зелёные прямоугольники показывают {individual?"границы отдельных 26-связных компонентов оригинальной маски":"общие границы всех вокселей соответствующего класса модели"}. Это не точные контуры и не клинические диагнозы.</p>
  <div aria-label="Классы модели">{candidates.map((box,i)=><button key={i} type="button" onClick={()=>setK(Math.max(0,Math.min(max,Math.round((box.sourceVoxelBoundsInclusive[0][2]+box.sourceVoxelBoundsInclusive[1][2])/2))))}>Класс {box.modelClassId}: показать центр диапазона k ({box.sourceVoxelBoundsInclusive[0][2]}–{box.sourceVoxelBoundsInclusive[1][2]})</button>)}</div>
  <label>Срез k: {k} / {max}<input type="range" min={0} max={max} value={Math.min(k,max)} onChange={e=>setK(Number(e.target.value))}/></label>
  {error&&<p role="alert">{error}</p>}
