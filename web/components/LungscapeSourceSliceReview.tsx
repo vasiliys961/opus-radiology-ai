@@ -70,7 +70,7 @@ export default function LungscapeSourceSliceReview({source,candidates,individual
     for(let y=0;y<ny;y++)for(let x=0;x<nx;x++){
       const i=x+y*nx;const raw=hdr.type===4?v.getInt16(i*2,true):v.getFloat32(i*4,true);
       const hu=raw*hdr.scale+hdr.intercept;
-      const gray=Number.isFinite(hu)?Math.max(0,Math.min(255,Math.round((hu+150)/450*255))):0;
+      const gray=Number.isFinite(hu)?Math.max(0,Math.min(255,Math.round((hu+1350)/1500*255))):0;
       const q=((ny-1-y)*nx+x)*4;image.data[q]=gray;image.data[q+1]=gray;image.data[q+2]=gray;image.data[q+3]=255;
     }
     const el=canvas.current;if(!el)return;el.width=nx;el.height=ny;
@@ -90,5 +90,5 @@ export default function LungscapeSourceSliceReview({source,candidates,individual
  <label>Срез k: {k} / {max}<input type="range" min={0} max={max} value={Math.min(k,max)} onChange={e=>setK(Number(e.target.value))}/></label>
  {error&&<p role="alert">{error}</p>}
  <canvas ref={canvas} style={{maxWidth:"100%",height:"auto",imageRendering:"pixelated"}} aria-label="Исходная КТ с прямоугольниками кандидатов LungSCAPE191"/>
- <p>Только после подтверждения SHA-256 источника; без привязки к произвольной DICOM-серии. Не для клинического заключения.</p></div>;
+ <p>Окно лёгких: WL −600 HU / WW 1500 HU. Только после подтверждения SHA-256 источника; без привязки к произвольной DICOM-серии. Не для клинического заключения.</p></div>;
 }
