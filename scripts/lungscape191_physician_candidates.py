@@ -6,6 +6,7 @@ clinical pattern classification, or automated diagnosis.
 """
 import argparse
 import json
+import re
 from pathlib import Path
 
 REQUIRED_FALSE = ("independentValidation", "expertDiceComputed",
@@ -24,6 +25,9 @@ def assemble(report):
     sha = report.get("sourceSha256")
     if not isinstance(sha,str) or len(sha)!=64 or any(c not in "0123456789abcdef" for c in sha):
         raise ValueError("missing source CT provenance")
+    original_mask_sha=report.get("originalPredictionSha256")
+    if not isinstance(original_mask_sha,str) or not re.fullmatch("[a-f0-9]{64}",original_mask_sha):
+        raise ValueError("original model mask provenance missing")
     labels = report.get("originalModelLabelMap")
     regions = report.get("originalModelRegionsNotClinicalDiagnoses")
     if not isinstance(labels, dict) or not isinstance(regions,list) or len(regions)>MAX_ITEMS:
@@ -92,7 +96,7 @@ def assemble(report):
     if total != report.get("observedNonbackgroundModelVoxels"):
         raise ValueError("aggregate model voxel count not reconciled")
     return {"schema":"opus-physician-research-candidates/v1",
-            "modality":"CT","sourceSha256":sha,"model":"LungSCAPE191",
+            "modality":"CT","sourceSha256":sha,"originalPredictionSha256":original_mask_sha,"model":"LungSCAPE191",
             "caseResearchOnly":report.get("publicResearchCase"),
             "findingStatus":"research_candidates_not_diagnosis",
             "modelForwardVerified":True,"sourceGeometryVerified":True,
