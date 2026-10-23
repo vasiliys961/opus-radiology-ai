@@ -64,6 +64,7 @@ export default function LungscapeSourceSliceReview({source,candidates}:{source:F
  useEffect(()=>{let active=true;const abort=new AbortController();setError("");
    void (async()=>{try{
     const {hdr,slice}=await readPlane(source,k,abort.signal);if(!active)return;
+    if(candidates.some(box=>box.sourceVoxelBoundsInclusive.some((bound,i)=>bound.some((v,axis)=>!Number.isSafeInteger(v)||v<0||v>=hdr.dim[axis]))))throw Error("Кандидат выходит за оригинальную сетку исходной КТ");
     setMax(hdr.dim[2]-1);
     const [nx,ny]=hdr.dim;const image=new ImageData(nx,ny),v=new DataView(slice.buffer);
     for(let y=0;y<ny;y++)for(let x=0;x<nx;x++){
