@@ -5,13 +5,14 @@ import dynamic from "next/dynamic";
 const LungscapeSourceSliceReview = dynamic(() => import("./LungscapeSourceSliceReview"), {ssr:false});
 
 type Candidate = {modelClassId:number;sourceModelLabel:string;candidateVoxelCount:number;sourceVoxelBoundsInclusive:number[][];volumeMlOnlyWhenOriginalUnitsVerified:number|null;clinicalDiagnosis:null;interpretationStatus:string};
-type Report={schema:string;model:string;sourceSha256:string;patientClinicalUseAllowed:false;independentAccuracyValidated:false;sourceGeometryVerified:true;findingStatus:string;candidates:Candidate[];individualMaskComponents?:Candidate[];sourceMaskComponentExtractionCompleted?:boolean};
+type Report={schema:string;model:string;sourceSha256:string;originalPredictionSha256:string;patientClinicalUseAllowed:false;independentAccuracyValidated:false;sourceGeometryVerified:true;findingStatus:string;candidates:Candidate[];individualMaskComponents?:Candidate[];sourceMaskComponentExtractionCompleted?:boolean};
 
 function validate(value:unknown):Report {
   if (!value || typeof value !== "object") throw Error("Некорректный JSON");
   const q=value as Record<string,unknown>;
   if(q.schema!=="opus-physician-research-candidates/v1"||q.model!=="LungSCAPE191"||q.patientClinicalUseAllowed!==false||q.independentAccuracyValidated!==false||q.sourceGeometryVerified!==true||q.findingStatus!=="research_candidates_not_diagnosis")throw Error("Это не подтверждённый исследовательский отчёт LungSCAPE191");
   if(typeof q.sourceSha256!=="string"||!/^[0-9a-f]{64}$/.test(q.sourceSha256))throw Error("Отсутствует SHA-256 источника");
+  if(typeof q.originalPredictionSha256!=="string"||!/^[0-9a-f]{64}$/.test(q.originalPredictionSha256))throw Error("Отсутствует SHA-256 оригинальной маски");
   if(!Array.isArray(q.candidates)||q.candidates.length>100)throw Error("Некорректное количество кандидатов");
   if(q.individualMaskComponents!==undefined&&(!Array.isArray(q.individualMaskComponents)||q.individualMaskComponents.length>400))throw Error("Недопустимый массив компонентов маски");
   for(const k of [...q.candidates,...(Array.isArray(q.individualMaskComponents)?q.individualMaskComponents:[])]){
@@ -24,9 +25,10 @@ export default function LungscapePhysicianEvidencePanel(){
  const [problem,setProblem]=useState("");
  const [sourceVerified,setSourceVerified]=useState(false);
  const [verifiedFile,setVerifiedFile]=useState<File|null>(null);
+ const [verifiedMask,setVerifiedMask]=useState<File|null>(null);
  const [verifying,setVerifying]=useState(false);
  async function open(e:ChangeEvent<HTMLInputElement>){
-  setReport(null);setProblem("");setSourceVerified(false);setVerifiedFile(null);
+  setReport(null);setProblem("");setSourceVerified(false);setVerifiedFile(null);setVerifiedMask(null);
   const file=e.target.files?.[0];e.target.value="";
   if(!file)return;
   if(file.size>128_000){setProblem("Файл превышает лимит 128 КБ");return;}
@@ -57,6 +59,26 @@ export default function LungscapePhysicianEvidencePanel(){
    }catch(err){setProblem(err instanceof Error?err.message:"Ошибка проверки источника");}
    finally{setVerifying(false);}
  }
+ async function verifyMask(e:ChangeEvent<HTMLInputElement>){
+   setVerifiedMask(null);setProblem("");
+   const mask=e.target.files?.[0];e.target.value="";
+   if(!mask||!sourceVerified||!report)return;
+   if(mask.size>1024*1024*1024){setProblem("Файл маски превышает 1 ГБ");return;}
+   setVerifying(true);
+   try{
+     const reader=mask.stream().getReader(),digest=sha256.create();let received=0;
+     try{for(;;){const item=await reader.read();if(item.done)break;
+       received+=item.value.byteLength;
+       if(received>1024*1024*1024)throw Error("Размер маски превышает лимит");
+       digest.update(item.value);
+     }}finally{reader.releaseLock();}
+     if(received!==mask.size)throw Error("Файл маски прочитан не полностью");
+     const hash=Array.from(digest.digest(),n=>n.toString(16).padStart(2,"0")).join("");
+     if(hash!==report.originalPredictionSha256)throw Error("SHA-256 маски не соответствует исходному предсказанию LungSCAPE191");
+     setVerifiedMask(mask);
+   }catch(err){setProblem(err instanceof Error?err.message:"Ошибка проверки маски");}
+   finally{setVerifying(false);}
+ }
  return <section aria-label="LungSCAPE191 исследовательские находки">
   <h3>LungSCAPE191 · результаты для врачебной проверки</h3>
   <p>Загрузите только числовой JSON из GitHub Actions. Данные пациентов не передаются. Это не диагноз и не подтверждение отсутствия патологии.</p>
@@ -65,9 +87,11 @@ export default function LungscapePhysicianEvidencePanel(){
   {report&&<div><p>Исходная КТ SHA-256: <code>{report.sourceSha256}</code></p>
   <label>Подтвердить исходный NIfTI .nii.gz по SHA-256 <input type="file" accept=".nii.gz,.nii" onChange={e=>void verifySource(e)} disabled={verifying}/></label>
   <p role="status">{sourceVerified?"✓ SHA-256 исходной КТ совпадает с отчётом. Геометрическая привязка к DICOM ещё не подтверждена.":verifying?"Проверка SHA-256…":"Исходная КТ ещё не подтверждена: координаты не применять к текущей серии."}</p>
+  {sourceVerified&&<label>Оригинальная маска модели NIfTI .nii.gz (необязательно) <input type="file" accept=".nii,.nii.gz" onChange={e=>void verifyMask(e)} disabled={verifying}/></label>}
+  {verifiedMask&&<p role="status">✓ SHA-256 оригинального предсказания совпадает. Для заливки пикселей требуется дополнительная проверка геометрии.</p>}
   <p>Исследовательские области классов: {report.candidates.length}; связанных 3D-компонентов маски: {report.individualMaskComponents?.length??"не подсчитаны"}. Независимая клиническая точность не установлена.</p>
   <ol>{sourceVerified && (report.individualMaskComponents?.length?report.individualMaskComponents:report.candidates).map((k,i)=><li key={i}>Класс модели {k.modelClassId}: {k.sourceModelLabel}. {k.candidateVoxelCount} вокселей. Границы IJK: {JSON.stringify(k.sourceVoxelBoundsInclusive)}. {k.volumeMlOnlyWhenOriginalUnitsVerified===null?"Объём в мл не подтверждён.":`Объём ${k.volumeMlOnlyWhenOriginalUnitsVerified} мл.`} Требуется врачебная оценка.</li>)}</ol>
-  {verifiedFile && <LungscapeSourceSliceReview source={verifiedFile} candidates={report.individualMaskComponents?.length?report.individualMaskComponents:report.candidates} individual={!!report.individualMaskComponents?.length}/>}
+  {verifiedFile && <LungscapeSourceSliceReview source={verifiedFile} mask={verifiedMask} candidates={report.individualMaskComponents?.length?report.individualMaskComponents:report.candidates} individual={!!report.individualMaskComponents?.length}/>}
   <p>Наложение на текущую DICOM-серию отключено: необходима независимая проверка идентичности исходной КТ и геометрии.</p></div>}
  </section>;
 }
