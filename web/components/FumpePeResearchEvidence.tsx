@@ -35,7 +35,7 @@ function parse(value:unknown):Report {
     throw Error("Находка не прошла проверку");
    const [lo,hi]=obj.originalSourceVoxelBoundsInclusive;
    if(!Array.isArray(lo)||!Array.isArray(hi)||lo.length!==3||hi.length!==3||
-   lo.some((x:number,i:number)=>!Number.isSafeInteger(x)||x<0||x>hi[i]||hi[i]>=Number(v.originalFullVolumeShape[i])))
+   lo.some((x:number,i:number)=>!Number.isSafeInteger(x)||x<0||x>hi[i]||hi[i]>=Number((v.originalFullVolumeShape as number[])[i])))
      throw Error("Находка выходит за пределы исходной КТ");
  }
  return v as unknown as Report;
