@@ -67,7 +67,7 @@ export default function LungscapePhysicianEvidencePanel(){
   <p role="status">{sourceVerified?"✓ SHA-256 исходной КТ совпадает с отчётом. Геометрическая привязка к DICOM ещё не подтверждена.":verifying?"Проверка SHA-256…":"Исходная КТ ещё не подтверждена: координаты не применять к текущей серии."}</p>
   <p>Исследовательские области классов: {report.candidates.length}; связанных 3D-компонентов маски: {report.individualMaskComponents?.length??"не подсчитаны"}. Независимая клиническая точность не установлена.</p>
   <ol>{sourceVerified && (report.individualMaskComponents?.length?report.individualMaskComponents:report.candidates).map((k,i)=><li key={i}>Класс модели {k.modelClassId}: {k.sourceModelLabel}. {k.candidateVoxelCount} вокселей. Границы IJK: {JSON.stringify(k.sourceVoxelBoundsInclusive)}. {k.volumeMlOnlyWhenOriginalUnitsVerified===null?"Объём в мл не подтверждён.":`Объём ${k.volumeMlOnlyWhenOriginalUnitsVerified} мл.`} Требуется врачебная оценка.</li>)}</ol>
-  {verifiedFile && <LungscapeSourceSliceReview source={verifiedFile} candidates={report.individualMaskComponents?.length?report.individualMaskComponents:report.candidates}/>}
+  {verifiedFile && <LungscapeSourceSliceReview source={verifiedFile} candidates={report.individualMaskComponents?.length?report.individualMaskComponents:report.candidates} individual={!!report.individualMaskComponents?.length}/>}
   <p>Наложение на текущую DICOM-серию отключено: необходима независимая проверка идентичности исходной КТ и геометрии.</p></div>}
  </section>;
 }
