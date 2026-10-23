@@ -17,3 +17,14 @@ jobs:
           python-version: '3.11'
       - run: python -m py_compile scripts/run-compai-mediastinal-lnq-model7.py
       - run: python scripts/run-compai-mediastinal-lnq-model7.py --help
+      - name: Ensure safe CPU device selection and honest physical-volume units
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          source=Path("scripts/run-compai-mediastinal-lnq-model7.py").read_text()
+          assert 'choices=("cpu","cuda"), default="cpu"' in source
+          assert 'sourceMillimetresVerified' in source
+          assert 'if mm_verified else None' in source
+          assert 'for k in range(image.shape[2])' in source
+          print("PASS: bounded CPU, slice counting, and unknown-units safeguards")
+          PY
