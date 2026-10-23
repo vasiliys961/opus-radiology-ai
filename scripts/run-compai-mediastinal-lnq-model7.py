@@ -30,6 +30,7 @@ def main():
     p.add_argument("--dataset", required=True, help="CompAI ORIGINAL nnUNet dataset identifier")
     p.add_argument("--configuration", default="3d_fullres")
     p.add_argument("--fold", choices=("all",), default="all")
+    p.add_argument("--device", choices=("cpu","cuda"), default="cpu")
     p.add_argument("--output", type=Path, required=True)
     a = p.parse_args()
 
@@ -37,14 +38,16 @@ def main():
     import numpy as np
     import torch
 
-    if not torch.cuda.is_available():
-        raise RuntimeError("An isolated CUDA executor is required")
+    if a.device == "cuda" and not torch.cuda.is_available():
+        raise RuntimeError("CUDA requested but unavailable; CPU is a separate opt-in option")
     source = a.ct.resolve()
     if not source.is_file() or source.suffixes[-2:] != [".nii", ".gz"]:
         raise ValueError("Original deidentified chest CT NIfTI is required")
     reference = nib.load(str(source))
-    if reference.ndim != 3 or not np.isfinite(reference.affine).all():
-        raise ValueError("Non-3D or invalid source CT")
+    if (reference.ndim != 3 or not np.isfinite(reference.affine).all()
+            or any(d < 2 or d > 2048 for d in reference.shape)
+            or int(np.prod(reference.shape)) > 180_000_000):
+        raise ValueError("Non-3D, excessive size or invalid source CT")
     model_root = a.nnunet_results.resolve()
     candidates = list(model_root.glob("Dataset*"))
     target = [x for x in candidates if x.name == a.dataset]
@@ -73,7 +76,8 @@ def main():
     cmd = [sys.executable, "-m", "nnunetv2.inference.predict_from_raw_data",
            "-i", str(input_folder), "-o", str(out_folder), "-d", a.dataset,
            "-c", a.configuration, "-f", str(a.fold), "-chk",
-           "checkpoint_final.pth", "-device", "cuda", "--disable_tta"]
+           "checkpoint_final.pth", "-device", a.device, "-npp", "1", "-nps", "1",
+           "--disable_tta"]
     subprocess.run(cmd, check=True, env=environment, timeout=3600)
     path = out_folder / "case.nii.gz"
     if not path.is_file():
@@ -81,17 +85,27 @@ def main():
     image = nib.load(str(path))
     if image.shape != reference.shape or not np.allclose(image.affine, reference.affine, atol=1e-3, rtol=0):
         raise ValueError("Predicted mask not bound to source physical CT geometry")
-    mask = np.asarray(image.dataobj)
-    if not np.isin(mask, [0, 1]).all():
-        raise ValueError("Original mediastinal LN prediction expected binary")
-    voxels = int(np.count_nonzero(mask))
+    voxels = 0
+    for k in range(image.shape[2]):
+        plane = np.asarray(image.dataobj[:, :, k])
+        if not np.isfinite(plane).all() or not np.isin(plane, [0, 1]).all():
+            raise ValueError("Original mediastinal LN prediction expected finite binary values")
+        voxels += int(np.count_nonzero(plane))
+    source_units = reference.header.get_xyzt_units()[0]
+    prediction_units = image.header.get_xyzt_units()[0]
+    if source_units != prediction_units and source_units != "unknown" and prediction_units != "unknown":
+        raise ValueError("Contradictory explicit NIfTI spatial units")
+    mm_verified = source_units == "mm"
     report = {"schema": "opus-compai-lnq-model7-original-forward/v1",
               "originalModel": "CompAI MediastinalLymphNodeSegmentation",
               "source": "https://gitlab.lrz.de/compai/MediastinalLymphNodeSegmentation",
               "sourceCTSha256": sha256(source), "checkpointSha256": sha256(checkpoint),
               "maskSha256": sha256(path), "fold": a.fold,
               "candidateVoxels": voxels,
-              "candidateVolumeMl": float(voxels * abs(np.linalg.det(image.affine[:3, :3])) / 1000),
+              "candidateVolumeMl": (float(voxels * abs(np.linalg.det(image.affine[:3, :3])) / 1000)
+                                    if mm_verified else None),
+              "sourceSpatialUnits":source_units,"sourceMillimetresVerified":mm_verified,
+              "inferenceDevice":a.device,
               "actualOriginalForward": True, "malignancyDetected": None,
               "clinicalValidation": False, "physicianReviewRequired": True}
     (a.output / "evidence.json").write_text(json.dumps(report, indent=2) + "\n")
