@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+from lungscape191_streaming_components import inspect_streaming_components
 
 
 def sha256(path):
@@ -96,17 +97,26 @@ def main():
     if source_units != prediction_units and source_units != "unknown" and prediction_units != "unknown":
         raise ValueError("Contradictory explicit NIfTI spatial units")
     mm_verified = source_units == "mm"
+    nodes = inspect_streaming_components(source, path, {0:"background",1:"mediastinal lymph-node candidate"})
+    if not nodes.get("componentAnalysisCompleted"):
+        raise ValueError("Native mediastinal node localization exceeded bounded analysis limits")
+    candidate_regions = nodes["candidateComponents"]
     report = {"schema": "opus-compai-lnq-model7-original-forward/v1",
               "originalModel": "CompAI MediastinalLymphNodeSegmentation",
               "source": "https://gitlab.lrz.de/compai/MediastinalLymphNodeSegmentation",
               "sourceCTSha256": sha256(source), "checkpointSha256": sha256(checkpoint),
               "maskSha256": sha256(path), "fold": a.fold,
               "candidateVoxels": voxels,
+              "originalMaskComponents": candidate_regions,
+              "originalMaskComponentsCount": len(candidate_regions),
+              "minimumReportedComponentVoxels": nodes["minimumReportedComponentVoxels"],
+              "tinyOrOmittedComponentsAreNotNegativeFindings": True,
               "candidateVolumeMl": (float(voxels * abs(np.linalg.det(image.affine[:3, :3])) / 1000)
                                     if mm_verified else None),
               "sourceSpatialUnits":source_units,"sourceMillimetresVerified":mm_verified,
               "inferenceDevice":a.device,
               "actualOriginalForward": True, "malignancyDetected": None,
+              "sourceNativeLocalizationVerified": True,
               "clinicalValidation": False, "physicianReviewRequired": True}
     (a.output / "evidence.json").write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report))
