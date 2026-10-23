@@ -1,6 +1,8 @@
 "use client";
 import {useState, type ChangeEvent} from "react";
 import {sha256} from "@noble/hashes/sha2.js";
+import dynamic from "next/dynamic";
+const LungscapeSourceSliceReview = dynamic(() => import("./LungscapeSourceSliceReview"), {ssr:false});
 
 type Candidate = {modelClassId:number;sourceModelLabel:string;candidateVoxelCount:number;sourceVoxelBoundsInclusive:number[][];volumeMlOnlyWhenOriginalUnitsVerified:number|null;clinicalDiagnosis:null;interpretationStatus:string};
 type Report={schema:string;model:string;sourceSha256:string;patientClinicalUseAllowed:false;independentAccuracyValidated:false;sourceGeometryVerified:true;findingStatus:string;candidates:Candidate[]};
@@ -20,16 +22,17 @@ export default function LungscapePhysicianEvidencePanel(){
  const [report,setReport]=useState<Report|null>(null);
  const [problem,setProblem]=useState("");
  const [sourceVerified,setSourceVerified]=useState(false);
+ const [verifiedFile,setVerifiedFile]=useState<File|null>(null);
  const [verifying,setVerifying]=useState(false);
  async function open(e:ChangeEvent<HTMLInputElement>){
-  setReport(null);setProblem("");setSourceVerified(false);
+  setReport(null);setProblem("");setSourceVerified(false);setVerifiedFile(null);
   const file=e.target.files?.[0];e.target.value="";
   if(!file)return;
   if(file.size>128_000){setProblem("Файл превышает лимит 128 КБ");return;}
   try{setReport(validate(JSON.parse(await file.text())))}catch(err){setProblem(err instanceof Error?err.message:"Неизвестная ошибка");}
  }
  async function verifySource(e:ChangeEvent<HTMLInputElement>){
-   setSourceVerified(false);setProblem("");
+   setSourceVerified(false);setVerifiedFile(null);setProblem("");
    const source=e.target.files?.[0];e.target.value="";
    if(!source || !report)return;
    // Streaming digest avoids full-volume allocation on 8 GiB Macs.
@@ -49,7 +52,7 @@ export default function LungscapePhysicianEvidencePanel(){
      if(received!==source.size)throw Error("Неполный файл источника");
      const hash=Array.from(digest.digest()).map(x=>x.toString(16).padStart(2,"0")).join("");
      if(hash!==report.sourceSha256)throw Error("SHA-256 исходной КТ не совпадает с отчётом. Находки нельзя привязать к этой КТ.");
-     setSourceVerified(true);
+     setVerifiedFile(source);setSourceVerified(true);
    }catch(err){setProblem(err instanceof Error?err.message:"Ошибка проверки источника");}
    finally{setVerifying(false);}
  }
@@ -63,6 +66,7 @@ export default function LungscapePhysicianEvidencePanel(){
   <p role="status">{sourceVerified?"✓ SHA-256 исходной КТ совпадает с отчётом. Геометрическая привязка к DICOM ещё не подтверждена.":verifying?"Проверка SHA-256…":"Исходная КТ ещё не подтверждена: координаты не применять к текущей серии."}</p>
   <p>Исследовательские кандидаты: {report.candidates.length}. Независимая клиническая точность не установлена.</p>
   <ol>{sourceVerified && report.candidates.map((k,i)=><li key={i}>Класс модели {k.modelClassId}: {k.sourceModelLabel}. {k.candidateVoxelCount} вокселей. Границы IJK: {JSON.stringify(k.sourceVoxelBoundsInclusive)}. {k.volumeMlOnlyWhenOriginalUnitsVerified===null?"Объём в мл не подтверждён.":`Объём ${k.volumeMlOnlyWhenOriginalUnitsVerified} мл.`} Требуется врачебная оценка.</li>)}</ol>
+  {verifiedFile && <LungscapeSourceSliceReview source={verifiedFile} candidates={report.candidates}/>}
   <p>Наложение на текущую DICOM-серию отключено: необходима независимая проверка идентичности исходной КТ и геометрии.</p></div>}
  </section>;
 }
