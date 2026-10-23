@@ -1,0 +1,19 @@
+name: Yandex Disk model archive contract
+on:
+  pull_request:
+    paths:
+      - scripts/yandex_model_weights.py
+      - scripts/test_yandex_model_weights.py
+      - .github/workflows/yandex-model-cache.yml
+permissions:
+  contents: read
+jobs:
+  verify-model-archive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m py_compile scripts/yandex_model_weights.py scripts/test_yandex_model_weights.py
+      - run: python scripts/test_yandex_model_weights.py -v
