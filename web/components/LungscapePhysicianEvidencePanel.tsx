@@ -1,5 +1,6 @@
 "use client";
 import {useState, type ChangeEvent} from "react";
+import {sha256} from "@noble/hashes/sha2.js";
 
 type Candidate = {modelClassId:number;sourceModelLabel:string;candidateVoxelCount:number;sourceVoxelBoundsInclusive:number[][];volumeMlOnlyWhenOriginalUnitsVerified:number|null;clinicalDiagnosis:null;interpretationStatus:string};
 type Report={schema:string;model:string;sourceSha256:string;patientClinicalUseAllowed:false;independentAccuracyValidated:false;sourceGeometryVerified:true;findingStatus:string;candidates:Candidate[]};
@@ -31,12 +32,22 @@ export default function LungscapePhysicianEvidencePanel(){
    setSourceVerified(false);setProblem("");
    const source=e.target.files?.[0];e.target.value="";
    if(!source || !report)return;
-   // Browser digest is whole-file; protect low-RAM machines from full-file allocation.
-   if(source.size>256*1024*1024){setProblem("Исходная КТ больше 256 МБ: используйте отдельную потоковую проверку SHA-256; загрузка в память запрещена.");return;}
+   // Streaming digest avoids full-volume allocation on 8 GiB Macs.
+   if(source.size>1024*1024*1024){setProblem("Исходная КТ превышает безопасный предел 1 ГБ.");return;}
    setVerifying(true);
    try{
-     const bytes=await source.arrayBuffer();
-     const hash=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",bytes))).map(x=>x.toString(16).padStart(2,"0")).join("");
+     const reader=source.stream().getReader();
+     const digest=sha256.create();
+     let received=0;
+     try{
+       for(;;){const chunk=await reader.read();if(chunk.done)break;
+         received+=chunk.value.byteLength;
+         if(received>1024*1024*1024)throw Error("Размер источника превышает лимит");
+         digest.update(chunk.value);
+       }
+     }finally{reader.releaseLock();}
+     if(received!==source.size)throw Error("Неполный файл источника");
+     const hash=Array.from(digest.digest()).map(x=>x.toString(16).padStart(2,"0")).join("");
      if(hash!==report.sourceSha256)throw Error("SHA-256 исходной КТ не совпадает с отчётом. Находки нельзя привязать к этой КТ.");
      setSourceVerified(true);
    }catch(err){setProblem(err instanceof Error?err.message:"Ошибка проверки источника");}
