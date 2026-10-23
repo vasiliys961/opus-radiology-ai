@@ -1,0 +1,70 @@
+name: Verify genuine MONAI pancreatic tumor pretrained bundle for future real inference
+on:
+  push:
+    branches:
+      - research/real-monai-pancreatic-tumor
+    paths:
+      - .github/workflows/real-monai-pancreatic-tumor.yml
+permissions:
+  contents: read
+jobs:
+  provision-original-weights:
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Resource preflight
+        run: |
+          python - <<'PY'
+          import shutil
+          from pathlib import Path
+          mem=int(next(x.split()[1] for x in Path('/proc/meminfo').read_text().splitlines() if x.startswith('MemAvailable:')))*1024
+          disk=shutil.disk_usage('.').free
+          print('RAM GiB',round(mem/2**30,2),'disk GiB',round(disk/2**30,2))
+          assert mem>=10*2**30 and disk>=8*2**30
+          PY
+      - name: Install original MONAI and pinned CPU torch
+        run: |
+          set -euo pipefail
+          python -m pip install --no-cache-dir torch==2.6.0 torchvision==0.21.0 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --no-cache-dir "monai==1.4.0" "fire==0.6.0" "nibabel==5.3.2" "numpy==1.26.4" "PyYAML==6.0.2" "requests==2.32.3"
+      - name: Download genuine pretrained original bundle, not synthetic weights
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=10s 650s \
+            python -m monai.bundle download "pancreas_ct_dints_segmentation" \
+              --bundle_dir "$RUNNER_TEMP/opus-pancreas-bundles"
+      - name: Verify published label 2 pancreatic tumor and official pretrained checkpoint
+        run: |
+          python - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          root=Path(os.environ['RUNNER_TEMP'])/'opus-pancreas-bundles'
+          metas=list(root.rglob('metadata.json'))
+          candidates=[x for x in metas if 'pancreas_ct_dints_segmentation' in str(x)]
+          assert candidates,'Official MONAI pancreas bundle metadata missing'
+          meta=json.loads(candidates[0].read_text())
+          print('Original model bundle',meta.get('name'),meta.get('version'))
+          assert meta.get('name') in ('Pancreas and Tumor DiNTS Segmentation','Pancreas CT DiNTS segmentation'), 'Unexpected official bundle identity'
+          print('Official label_classes',meta.get('label_classes')); print('Official pred_classes',meta.get('pred_classes'))
+          mapping=' '.join((str(meta.get('label_classes','')),str(meta.get('pred_classes','')))).lower()
+          assert ('pancreas' in mapping and ('tumor' in mapping or 'tumour' in mapping)), 'Original downloaded bundle cannot prove pancreatic tumor class'
+          files=list(root.rglob('*.pt'))+list(root.rglob('*.pth'))+list(root.rglob('*.ckpt'))
+          large=[p for p in files if p.is_file() and not p.is_symlink() and p.stat().st_size>10*1024**2]
+          if not large:raise RuntimeError('No genuine large pretrained pancreatic tumor weights downloaded')
+          for p in large:
+              h=hashlib.sha256()
+              with p.open('rb') as f:
+                  for chunk in iter(lambda:f.read(1024*1024),b''):h.update(chunk)
+              print(json.dumps({'officialFile':p.name,'bytes':p.stat().st_size,
+                                'observedSha256':h.hexdigest()}))
+          print(json.dumps({'trainedBundlePreflight':True,
+                            'realPublicPancreaticTumorInferenceCompleted':False,
+                            'clinicalValidation':False}))
+          PY
+      - name: Delete download and weights, no source images used
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/opus-pancreas-bundles"
