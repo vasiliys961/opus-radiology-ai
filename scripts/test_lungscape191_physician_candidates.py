@@ -8,7 +8,7 @@ base={
  "independentValidation":False,"expertDiceComputed":False,
  "ggoHoneycombingUIPNSIPSubtypeClassification":False,"clinicalUsePermitted":False,
  "sourcePixelsOrMasksIncludedInArtifact":False,
- "sourceSha256":"a"*64,"publicResearchCase":"coronacases_003",
+ "sourceSha256":"a"*64,"originalPredictionSha256":"b"*64,"publicResearchCase":"coronacases_003",
  "originalModelLabelMap":{"0":"background","1":"high attenuation"},
  "observedNonbackgroundModelVoxels":31,
  "originalModelRegionsNotClinicalDiagnoses":[{
