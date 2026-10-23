@@ -55,6 +55,8 @@ def assemble(report):
                            "clinicalDiagnosis":None})
         total+=count
     components=[]
+    components_by_class={}
+    region_by_class={r["originalModelLabelId"]:r for r in regions}
     raw_components=report.get("originalMaskConnectedComponentsResearchOnly", [])
     if report.get("originalMaskComponentAnalysisCompleted") is True:
         if not isinstance(raw_components,list) or len(raw_components)>400:
@@ -71,6 +73,15 @@ def assemble(report):
                 not isinstance(row,list) or len(row)!=3 or any(not isinstance(v,int) or v<0 for v in row)
                 for row in bounds) or any(a>b for a,b in zip(*bounds))):
                 raise ValueError("invalid source component voxel coordinates")
+            parent_region=region_by_class.get(ident)
+            if parent_region is None or voxels>parent_region["voxels"]:
+                raise ValueError("component lacks enclosing original mask class")
+            pl,ph=parent_region["sourceVoxelBoundsInclusive"]
+            if any(bounds[0][i]<pl[i] or bounds[1][i]>ph[i] for i in range(3)):
+                raise ValueError("component lies outside source-bound original class")
+            components_by_class[ident]=components_by_class.get(ident,0)+voxels
+            if components_by_class[ident]>parent_region["voxels"]:
+                raise ValueError("component voxel counts exceed original mask class")
             components.append({"modelClassId":ident,"sourceModelLabel":str(labels[str(ident)]),
                                "sourceVoxelBoundsInclusive":bounds,
                                "candidateVoxelCount":voxels,
