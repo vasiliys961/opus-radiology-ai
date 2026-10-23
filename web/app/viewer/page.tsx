@@ -24,6 +24,7 @@ const ColonCancerResearchResults = dynamic(() => import("../../components/ColonC
 const PathologyCoverageResearch = dynamic(() => import("../../components/PathologyCoverageResearch"), {ssr:false});
 const MorphometryEvidenceReview = dynamic(() => import("../../components/MorphometryEvidenceReview"), {ssr:false});
 
+const FumpePeResearchEvidence = dynamic(() => import("../../components/FumpePeResearchEvidence"), {ssr:false});
 const LungscapePhysicianEvidencePanel = dynamic(() => import("../../components/LungscapePhysicianEvidencePanel"), {ssr:false});
 
 const CornerstoneStack = dynamic(() => import("../../components/CornerstoneStack"), {
@@ -121,6 +122,7 @@ export default function ViewerPage() {
           <ChestEffusionResearchResults key={"fluid-"+(selected?.key??"empty")} isChestCT={!!selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="CHEST")}/>
           <IldGgoExpertResearch key={"ild-"+(selected?.key??"empty")} isChestCT={!!selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="CHEST")}/>
           <LungscapePhysicianEvidencePanel />
+          <FumpePeResearchEvidence />
           <IldPatternResearch key={"ild-pattern-"+(selected?.key??"empty")} isChestCT={!!selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="CHEST")}/>
           <ChestExtraPulmonaryResearch key={"chest-extra-"+(selected?.key??"empty")} isChestCT={!!selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="CHEST")}/>
           <ThoracicMassResearch key={"intrathoracic-masses-"+(selected?.key??"empty")} series={selected??null}/>
