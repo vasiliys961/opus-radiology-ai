@@ -50,6 +50,8 @@ def bind(source, weights, forward):
         "originalPredictionSha256": forward["mask_sha256"],
         "originalModelLabelMap": forward["labelMapFromInstalledModel"],
         "originalModelRegionsNotClinicalDiagnoses": forward["regionsByOriginalModelLabelNotConnectedLesions"],
+        "originalMaskComponentAnalysisCompleted": forward.get("componentAnalysisCompleted") is True,
+        "originalMaskConnectedComponentsResearchOnly": forward.get("candidateComponents", []) if forward.get("componentAnalysisCompleted") is True else [],
         "observedNonbackgroundModelVoxels": forward["observedNonbackgroundModelVoxels"],
         "verifiedNativeGrid": True,
         "realOriginalTrainedForward": True,
