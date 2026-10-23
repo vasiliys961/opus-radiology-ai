@@ -24,7 +24,8 @@ jobs:
           python-version: '3.11'
       - run: python3 -m unittest discover -s scripts -p 'test-cln-msd-original-positive-public-ct.py'
   original-positive-reference:
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    # Run the actual research source and pretrained inference BEFORE merging; never count a green contract alone.
+    if: github.event_name == 'pull_request' || github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -45,7 +46,8 @@ jobs:
           if-no-files-found: error
           retention-days: 7
   actual-original-CPU-model:
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    # Run the actual research source and pretrained inference BEFORE merging; never count a green contract alone.
+    if: github.event_name == 'pull_request' || github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     needs: original-positive-reference
     runs-on: ubuntu-latest
     timeout-minutes: 42
@@ -60,10 +62,26 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install CPU-only PyTorch then original nnU-Net v2 runtime
+      - name: Install and retain CPU-only PyTorch with original nnU-Net v2 runtime
         run: |
-          python3 -m pip install 'torch==2.5.1+cpu' --index-url https://download.pytorch.org/whl/cpu
-          python3 -m pip install 'nnunetv2==2.7.0' 'huggingface_hub==0.35.3' 'nibabel==5.3.2' 'psutil==7.0.0'
+          set -euo pipefail
+          python3 -m pip install --no-cache-dir \
+            'torch==2.5.1+cpu' 'torchvision==0.20.1+cpu' \
+            --index-url https://download.pytorch.org/whl/cpu
+          # Dependency resolution previously replaced CPU torch with CUDA torch 2.14,
+          # wasting limited runner RAM/disk before the actual trained forward.
+          python3 -m pip install --no-cache-dir \
+            'nnunetv2==2.7.0' 'huggingface_hub==0.35.3' \
+            'nibabel==5.3.2' 'psutil==7.0.0' \
+            'torch==2.5.1+cpu' 'torchvision==0.20.1+cpu' \
+            --extra-index-url https://download.pytorch.org/whl/cpu
+          python3 -m pip check
+          python3 - <<'PY'
+          import torch
+          assert torch.__version__ == '2.5.1+cpu', 'original_CPU_runtime_was_replaced'
+          assert torch.version.cuda is None, 'CUDA_dependencies_wrongly_installed_in_CPU_worker'
+          print('Isolated real original CLN CPU torch:', torch.__version__)
+          PY
       - name: ONE true pretrained CPU prediction against public original expert-positive CT
         run: |
           python3 scripts/cln-msd-original-positive-public-ct.py --mode infer --workdir "$RUNNER_TEMP/cln-positive" --report "$RUNNER_TEMP/cln-positive-true-voxel-metrics.json" --memory-gib 6 --timeout-sec 1500
