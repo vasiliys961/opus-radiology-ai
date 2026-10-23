@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - scripts/run-compai-mediastinal-lnq-model7.py
+      - scripts/lungscape191_streaming_components.py
       - .github/workflows/compai-lnq-original-contract.yml
 permissions:
   contents: read
@@ -17,6 +18,17 @@ jobs:
           python-version: '3.11'
       - run: python -m py_compile scripts/run-compai-mediastinal-lnq-model7.py
       - run: python scripts/run-compai-mediastinal-lnq-model7.py --help
+      - name: Assert original binary-mask localization uses bounded native coordinates
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          content=Path("scripts/run-compai-mediastinal-lnq-model7.py").read_text()
+          assert "inspect_streaming_components(source, path" in content
+          assert '"sourceNativeLocalizationVerified": True' in content
+          assert '"originalMaskComponents": candidate_regions' in content
+          assert '"clinicalValidation": False' in content
+          print("PASS: original model source-bound components contract")
+          PY
       - name: Ensure safe CPU device selection and honest physical-volume units
         run: |
           python - <<'PY'
