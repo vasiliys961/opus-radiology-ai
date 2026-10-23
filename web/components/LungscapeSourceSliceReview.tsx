@@ -85,7 +85,7 @@ export default function LungscapeSourceSliceReview({source,candidates}:{source:F
    }catch(e){if(active)setError(e instanceof Error?e.message:"Ошибка NIfTI среза");}})();
    return()=>{active=false;abort.abort();};
  },[source,k,candidates]);
- return <div><p>Локальный просмотр исходного среза k — зелёные прямоугольники показывают только границы классов модели, не контуры сегментации.</p>
+ return <div><p>Локальный просмотр исходного среза k — зелёные прямоугольники показывают общие границы всех вокселей соответствующего класса модели, а не отдельные очаги или контуры сегментации.</p>
  <label>Срез k: {k} / {max}<input type="range" min={0} max={max} value={Math.min(k,max)} onChange={e=>setK(Number(e.target.value))}/></label>
  {error&&<p role="alert">{error}</p>}
  <canvas ref={canvas} style={{maxWidth:"100%",height:"auto",imageRendering:"pixelated"}} aria-label="Исходная КТ с прямоугольниками кандидатов LungSCAPE191"/>
