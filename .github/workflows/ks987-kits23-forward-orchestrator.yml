@@ -1,0 +1,28 @@
+name: KS987 kidney tumor real-forward orchestration contract
+on:
+  pull_request:
+    paths:
+      - scripts/run-ks987-kits23-real-forward.py
+      - docs/KS987_KITS23_REAL_FORWARD.md
+      - .github/workflows/ks987-kits23-forward-orchestrator.yml
+permissions:
+  contents: read
+jobs:
+  research-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile actual chained research executable
+        run: python -m py_compile scripts/run-ks987-kits23-real-forward.py
+      - name: Check explicit non-execution gate
+        run: |
+          python scripts/run-ks987-kits23-real-forward.py --help | grep -- --execute-original-public-forward
+          if python scripts/run-ks987-kits23-real-forward.py --ct /missing --expert /missing --nnunet-results /missing --output /tmp/never; then
+            echo 'UNSAFE: Original-model forward started without explicit gate'
+            exit 1
+          fi
+          test ! -e /tmp/never
