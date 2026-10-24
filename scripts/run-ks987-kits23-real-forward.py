@@ -59,6 +59,10 @@ def execute(ct: Path, expert: Path, model_results: Path, output: Path, device: s
         "voxelTP": scores["voxelTP"], "voxelFP": scores["voxelFP"],
         "voxelFN": scores["voxelFN"], "voxelDice": scores["voxelDice"],
         "expertTumorComponentMatching": scores["expertTumorComponentMatching"],
+        "sourceNativeTumorCandidates": scores["predictedNativeTumorCandidates"],
+        "sourceNativeGeometryVerified": True,
+        "expertLabelId": 2,
+        "originalModelPredictionLabelId": 1,
         "independentValidation": False, "trainingOverlapExcluded": False,
         "clinicalValidation": False, "patientUseAllowed": False,
     }
