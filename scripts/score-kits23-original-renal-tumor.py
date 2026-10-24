@@ -64,6 +64,38 @@ def compare_renal_tumor_components(pred, truth, minimum_prediction_voxels=10):
             "matchRule":"greedy descending voxel intersection, unique expert and prediction",
             "independentFROC":None,"clinicalValidation":False}
 
+def localize_tumor_instances(pred, source_affine, *, min_voxels=10):
+    """Localize genuine native-grid model tumor components, no malignancy assertion."""
+    import numpy as np
+    from scipy import ndimage
+    arr=np.asarray(pred)
+    aff=np.asarray(source_affine,dtype=float)
+    if (arr.ndim!=3 or arr.size>MAX_VOXELS or
+        aff.shape!=(4,4) or not np.isfinite(aff).all() or
+        abs(np.linalg.det(aff[:3,:3]))<1e-8 or
+        not 1<=min_voxels<=100):
+        raise ValueError("invalid_native_tumor_localization_grid")
+    labels,n=ndimage.label(arr!=0,structure=ndimage.generate_binary_structure(3,3))
+    if n>100000:raise ValueError("unbounded_native_lesion_count")
+    ml=abs(float(np.linalg.det(aff[:3,:3])))/1000
+    findings=[]
+    for number,region in enumerate(ndimage.find_objects(labels),1):
+        if region is None:continue
+        coords=np.argwhere(labels[region]==number)
+        if len(coords)<min_voxels:continue
+        center=coords.mean(axis=0)+[slice_.start for slice_ in region]
+        ras=(aff@np.r_[center,1])[:3]
+        findings.append({
+            "sourceNativeVoxelBoundsInclusive":[[int(p.start),int(p.stop-1)] for p in region],
+            "sourceNativeCentroidIJK":[round(float(x),3) for x in center],
+            "sourceRASCentroidMm":[round(float(x),3) for x in ras],
+            "candidateVoxels":len(coords),
+            "candidateVolumeMl":round(len(coords)*ml,5),
+            "malignancyConfirmed":False,
+        })
+        if len(findings)>256:raise ValueError("excessive_native_tumor_candidates")
+    return sorted(findings,key=lambda x:x["candidateVoxels"],reverse=True)
+
 def score(source_path, expert_path, prediction_path, *, checkpoint_path):
     import nibabel as nib
     import numpy as np
@@ -98,6 +130,7 @@ def score(source_path, expert_path, prediction_path, *, checkpoint_path):
     expert_tumor = np.asarray(expert.dataobj)==2
     predicted_tumor = np.asarray(pred.dataobj)==1
     components = compare_renal_tumor_components(predicted_tumor,expert_tumor)
+    localized = localize_tumor_instances(predicted_tumor,src.affine)
     for z in range(src.shape[2]):
         a = np.asarray(expert.dataobj[:,:,z])
         b = np.asarray(pred.dataobj[:,:,z])
@@ -137,6 +170,7 @@ def score(source_path, expert_path, prediction_path, *, checkpoint_path):
         "voxelTP":tp,"voxelFP":fp,"voxelFN":fn,
         "voxelDice":round(dice,9),
         "expertTumorComponentMatching":components,
+        "predictedNativeTumorCandidates":localized,
         "voxelRecall":round(tp/expert_n,9),
         "predictedNativeVoxelBoundsInclusive":[lo.tolist(),hi.tolist()] if pred_n else None,
         "predictedTumorVolumeMl":round(pred_n*abs(float(np.linalg.det(src.affine[:3,:3])))/1000,5) if mm else None,
