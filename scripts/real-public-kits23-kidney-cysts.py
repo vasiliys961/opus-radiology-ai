@@ -247,7 +247,8 @@ def evaluate(folder,model_mask,weights,out):
       "oneSourceCystDice":round(2*tp/denom,6) if denom else None,
       "oneSourceCystVoxelRecall":round(tp/(tp+fn),6),
       "independentModelTrainingHoldout":False,
-      "lesionLevelSensitivity":None,"singleCaseLesionEvidence":lesion,\n      "clinicalValidation":False,
+      "lesionLevelSensitivity":None,"singleCaseLesionEvidence":lesion,
+      "clinicalValidation":False,
       "noCystDiagnosisPermitted":False}
     out.write_text(json.dumps(report,indent=2))
     print(json.dumps({k:report[k] for k in
