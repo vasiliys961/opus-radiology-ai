@@ -19,6 +19,7 @@ type RenalReport={
  falseCystVoxelsInsideExpertTumor:number;
  oneSourceCystDice:number|null;
  oneSourceCystVoxelRecall:number;
+ singleCaseLesionEvidence?:{expertConnectedCysts:number;expertComponentsOverlappedByCandidates:number;oneSourceLesionRecall:number|null;candidateComponents:{sourceVoxelBoundsInclusive:number[][];centroidSourceIJK:number[];centroidWorldCoordinate:number[];worldCoordinateUnits:string;predictedVoxels:number;overlapsExpertCyst:boolean;cystDiagnosisProven:false}[]};
 };
 function readReport(raw:unknown):RenalReport {
  if(!raw||typeof raw!=="object")throw Error("Требуется числовой JSON-отчёт");
@@ -86,6 +87,11 @@ export default function RenalCystResearchEvidence(){
   <p>Одно исследование: Dice {data.oneSourceCystDice===null?"не рассчитан":data.oneSourceCystDice.toFixed(3)}; полнота по вокселям {data.oneSourceCystVoxelRecall.toFixed(3)}. Клиническая чувствительность и специфичность неизвестны.</p>
   <label>Проверить исходную публичную КТ (.nii.gz) <input disabled={busy} type="file" accept=".nii,.gz" onChange={e=>void verify(e)}/></label>
   <p role="status">{verified?"Совпадение SHA-256 подтверждено":"Привязка к исходной КТ не подтверждена"}</p>
+  {verified&&data.singleCaseLesionEvidence&&<div>
+   <p>3D-локализация · экспертных компонентов: {data.singleCaseLesionEvidence.expertConnectedCysts}; пересечено кандидатов с экспертной разметкой: {data.singleCaseLesionEvidence.expertComponentsOverlappedByCandidates}; полнота одного исследования: {data.singleCaseLesionEvidence.oneSourceLesionRecall?.toFixed(3)??"не рассчитана"}.</p>
+   <ol>{data.singleCaseLesionEvidence.candidateComponents.slice(0,50).map((c,i)=><li key={i}>Кандидат {i+1}: IJK {c.centroidSourceIJK.join(", ")}, координаты {c.centroidWorldCoordinate.join(", ")} ({c.worldCoordinateUnits}), {c.predictedVoxels} вокселей; экспертное пересечение: {c.overlapsExpertCyst?"да":"нет"}.</li>)}</ol>
+   {data.singleCaseLesionEvidence.candidateComponents.length>50&&<p>Показаны первые 50 компонентов.</p>}
+  </div>}
   {verified&&<p>TP: {data.truePositiveCystVoxels}; FP: {data.falsePositiveCystVoxels}; FN: {data.falseNegativeCystVoxels}; ошибочное включение опухоли: {data.falseCystVoxelsInsideExpertTumor} вокселей.</p>}
  </div>}
  </section>;
