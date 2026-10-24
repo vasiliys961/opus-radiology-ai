@@ -4,6 +4,7 @@ on:
     paths:
       - scripts/score-kits23-original-renal-tumor.py
       - scripts/test_score_kits23_original_renal_tumor.py
+      - scripts/test_kits23_renal_tumor_native_instances.py
       - docs/KITS23_TUMOR_NATIVE_SCORING.md
       - .github/workflows/kits23-original-renal-tumor-scorer.yml
 permissions:
@@ -23,5 +24,7 @@ jobs:
           python scripts/score-kits23-original-renal-tumor.py --help | grep -- --checkpoint
       - name: Install lightweight NIfTI scoring dependencies
         run: python -m pip install 'numpy==2.2.6' 'nibabel==5.3.2' 'scipy==1.15.3'
+      - name: Verify native renal tumor 3D localization
+        run: python -m unittest discover -s scripts -p 'test_kits23_renal_tumor_native_instances.py' -v
       - name: Run fail-closed source provenance checks
         run: python -m unittest discover -s scripts -p 'test_score_kits23_original_renal_tumor.py' -v
