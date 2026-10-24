@@ -117,6 +117,51 @@ def fetch_case(folder):
         for f in files.values():f.unlink(missing_ok=True)
     raise ValueError("no_cyst_positive_reference_in_bounded_candidate_selection")
 
+def lesion_evidence(pred, truth, affine, *, spatial_mm_verified):
+    """26-connected source-native cyst candidates; expert overlap is research only."""
+    import numpy as np
+    from scipy import ndimage
+    if pred.shape != truth.shape or pred.ndim != 3:
+        raise ValueError("source_native_lesion_grid_mismatch")
+    structure=ndimage.generate_binary_structure(3,3)
+    pred_labels,n_pred=ndimage.label(pred,structure=structure)
+    gt_labels,n_gt=ndimage.label(truth,structure=structure)
+    if max(n_pred,n_gt)>10000:
+        raise ValueError("unbounded_cyst_component_count")
+    boxes=ndimage.find_objects(pred_labels)
+    candidates=[]
+    matched=set()
+    for ident,region in enumerate(boxes,1):
+        if region is None:continue
+        voxels=np.argwhere(pred_labels[region]==ident)
+        if len(voxels)<3:continue
+        offsets=np.array([r.start for r in region])
+        centroid=voxels.mean(axis=0)+offsets
+        gt_ids=np.unique(gt_labels[region][pred_labels[region]==ident])
+        hits=[int(k) for k in gt_ids if k>0]
+        matched.update(hits)
+        world=(affine@np.r_[centroid,1])[:3]
+        candidates.append({
+          "sourceVoxelBoundsInclusive":[[int(r.start),int(r.stop-1)] for r in region],
+          "centroidSourceIJK":[round(float(v),3) for v in centroid],
+          "centroidWorldCoordinate":[round(float(v),3) for v in world],
+          "worldCoordinateUnits":"mm" if spatial_mm_verified else "unverified",
+          "predictedVoxels":int(len(voxels)),
+          "overlapsExpertCyst":bool(hits),
+          "expertComponentsOverlapped":len(hits),
+          "cystDiagnosisProven":False,
+        })
+        if len(candidates)>512:
+            raise ValueError("too_many_cyst_candidates")
+    return {
+      "expertConnectedCysts":int(n_gt),
+      "predictedConnectedCystCandidatesMin3Voxels":len(candidates),
+      "expertComponentsOverlappedByCandidates":len(matched),
+      "oneSourceLesionRecall":round(len(matched)/n_gt,6) if n_gt else None,
+      "candidateComponents":candidates,
+      "independentValidation":False,
+    }
+
 def evaluate(folder,model_mask,weights,out):
     import numpy as np
     import nibabel as nib
@@ -172,6 +217,8 @@ def evaluate(folder,model_mask,weights,out):
     fn=int(np.count_nonzero(~pred&truth))
     kidneyWrong=int(np.count_nonzero(pred&(gt==1)))
     tumorWrong=int(np.count_nonzero(pred&(gt==2)))
+    lesion=lesion_evidence(pred,truth,source.affine,
+        spatial_mm_verified=source.header.get_xyzt_units()[0]=="mm")
     denom=2*tp+fp+fn
     report={
       "schema":SCHEMA,
@@ -200,7 +247,8 @@ def evaluate(folder,model_mask,weights,out):
       "oneSourceCystDice":round(2*tp/denom,6) if denom else None,
       "oneSourceCystVoxelRecall":round(tp/(tp+fn),6),
       "independentModelTrainingHoldout":False,
-      "lesionLevelSensitivity":None,"clinicalValidation":False,
+      "lesionLevelSensitivity":None,"singleCaseLesionEvidence":lesion,
+      "clinicalValidation":False,
       "noCystDiagnosisPermitted":False}
     out.write_text(json.dumps(report,indent=2))
     print(json.dumps({k:report[k] for k in
