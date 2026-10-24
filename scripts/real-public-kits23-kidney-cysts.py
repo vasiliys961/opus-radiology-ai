@@ -217,7 +217,9 @@ def evaluate(folder,model_mask,weights,out):
     fn=int(np.count_nonzero(~pred&truth))
     kidneyWrong=int(np.count_nonzero(pred&(gt==1)))
     tumorWrong=int(np.count_nonzero(pred&(gt==2)))
-    lesion=lesion_evidence(pred,truth,source.affine,\n        spatial_mm_verified=source.header.get_xyzt_units()[0]=="mm")\n    denom=2*tp+fp+fn
+    lesion=lesion_evidence(pred,truth,source.affine,
+        spatial_mm_verified=source.header.get_xyzt_units()[0]=="mm")
+    denom=2*tp+fp+fn
     report={
       "schema":SCHEMA,
       "task":"kidney_cysts",
