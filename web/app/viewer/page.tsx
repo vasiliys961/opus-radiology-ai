@@ -26,6 +26,7 @@ const MorphometryEvidenceReview = dynamic(() => import("../../components/Morphom
 
 const RenalCalculusResearchEvidence = dynamic(() => import("../../components/RenalCalculusResearchEvidence"), {ssr:false});
 const RenalNeoplasmThreePhaseEvidence = dynamic(() => import("../../components/RenalNeoplasmThreePhaseEvidence"), {ssr:false});
+const KiTS23RenalTumorEvidence = dynamic(() => import("../../components/KiTS23RenalTumorEvidence"), {ssr:false});
 const RenalCystResearchEvidence = dynamic(() => import("../../components/RenalCystResearchEvidence"), {ssr:false});
 const FumpePeResearchEvidence = dynamic(() => import("../../components/FumpePeResearchEvidence"), {ssr:false});
 const LungscapePhysicianEvidencePanel = dynamic(() => import("../../components/LungscapePhysicianEvidencePanel"), {ssr:false});
@@ -127,6 +128,7 @@ export default function ViewerPage() {
           <LungscapePhysicianEvidencePanel />
           <FumpePeResearchEvidence />
           <RenalCystResearchEvidence />
+          <KiTS23RenalTumorEvidence />
           <RenalNeoplasmThreePhaseEvidence />
           <RenalCalculusResearchEvidence />
           <IldPatternResearch key={"ild-pattern-"+(selected?.key??"empty")} isChestCT={!!selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="CHEST")}/>
