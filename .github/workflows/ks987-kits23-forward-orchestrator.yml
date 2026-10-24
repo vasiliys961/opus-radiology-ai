@@ -18,6 +18,14 @@ jobs:
           python-version: '3.11'
       - name: Compile actual chained research executable
         run: python -m py_compile scripts/run-ks987-kits23-real-forward.py
+      - name: Confirm genuine forward report includes native lesion geometry
+        run: |
+          python - <<'PY'
+          import pathlib
+          source=pathlib.Path("scripts/run-ks987-kits23-real-forward.py").read_text()
+          assert 'scores["predictedNativeTumorCandidates"]' in source
+          assert '"sourceNativeGeometryVerified": True' in source
+          PY
       - name: Check explicit non-execution gate
         run: |
           python scripts/run-ks987-kits23-real-forward.py --help | grep -- --execute-original-public-forward
