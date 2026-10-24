@@ -30,6 +30,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Compile genuine cyst evaluation before heavyweight inference
+        run: python -m py_compile scripts/real-public-kits23-kidney-cysts.py
       - name: RAM/disk research host gate
         run: |
           python - <<'PY'
