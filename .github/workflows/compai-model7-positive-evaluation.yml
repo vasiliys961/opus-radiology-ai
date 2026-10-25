@@ -1,0 +1,31 @@
+name: CompAI Model7 genuine positive expert evaluation gate
+on:
+  pull_request:
+    paths:
+      - scripts/evaluate-compai-model7-positive-case.py
+      - .github/workflows/compai-model7-positive-evaluation.yml
+permissions:
+  contents: read
+jobs:
+  evaluation-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m py_compile scripts/evaluate-compai-model7-positive-case.py
+      - run: python scripts/evaluate-compai-model7-positive-case.py --help
+      - name: Refuse missing original CT, weights and expert
+        run: |
+          python scripts/evaluate-compai-model7-positive-case.py --ct /tmp/absent_ct.nii.gz --expert /tmp/absent_expert.nii.gz --nnunet-results /tmp/absent_weights --output /tmp/compai-missing-evidence && exit 1 || test -f /tmp/compai-missing-evidence/INCOMPLETE_EVALUATION
+      - name: Verify original forward, hashes and nonclinical gating remain required
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          s=Path("scripts/evaluate-compai-model7-positive-case.py").read_text()
+          for k in ('run-compai-mediastinal-lnq-model7.py', 'score-compai-model7-expert.py', 'sourceCTSha256', 'predictionMaskSha256', '"clinicalValidation": False', 'positiveCaseVerified', 'independentHoldoutVerified'):
+              assert k in s, k
+          print('PASS: real forward and expert evaluation contract (no real inference implied)')
+          PY
