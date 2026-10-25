@@ -1,0 +1,21 @@
+name: CompAI Model7 expert native-mask scoring contract
+on:
+  pull_request:
+    paths:
+      - scripts/score-compai-model7-expert.py
+      - scripts/test-score-compai-model7-expert.py
+      - .github/workflows/compai-model7-expert-score.yml
+permissions:
+  contents: read
+jobs:
+  score-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install 'numpy<3' 'nibabel<6'
+      - run: python -m py_compile scripts/score-compai-model7-expert.py scripts/test-score-compai-model7-expert.py
+      - run: python scripts/test-score-compai-model7-expert.py
