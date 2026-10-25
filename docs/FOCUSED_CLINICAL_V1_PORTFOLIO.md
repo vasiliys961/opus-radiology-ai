@@ -84,3 +84,32 @@ of anatomy-only masks, HU cutoffs, unlicensed weights or external cloud inferenc
    models and clearly stop unsupported protocols.
 4. Then independently validate and widen coverage; prioritize positive expert cases
    rather than more adapter-only PRs.
+
+## OWNER DECISION — 2026-10-25: FINISH EXISTING DETECTORS; GEMINI + OPUS ASSIST FOR REMAINDER
+This supersedes the earlier suggestion to begin the new-region waitlist. **No
+new specialized detector streams, even for the 16 requested pathologies, until
+owner explicitly reauthorizes.** The immediate goal is to finish and integrate
+the existing 18 core targets, address very low-accuracy research models and
+deliver a complete physician review workflow.
+
+Two evidence paths, never conflated:
+1. **Specialist model**: compatible modality/protocol, pinned rights-cleared original
+   weights and source-native mask/candidate coordinates. Missing or failed model
+   must stay unavailable/unknown rather than negative.
+2. **Independent Gemini and Claude Opus vision review**: optional research-only
+   interpretation of explicitly selected, source-linked deidentified images/MPR.
+   Models should independently describe findings and uncertainty; they DO NOT
+   manufacture unobserved volumes, claim full CT/MRI coverage from a sparse montage,
+   infer absent pathologies as excluded, or replace specialist voxel segmentation.
+   Disagreements remain visible to the physician in Evidence JSON.
+
+Default patient-cloud transmission remains **OFF**. Real patient imaging transfer
+requires demonstrated tag AND pixel de-identification, clinician authorization,
+a lawful processing basis, jurisdiction/provider retention review and explicit
+per-study consent/activation. No credentials or PHI in CI/GitHub logs.
+
+Delivery first: selected DICOM -> protocol checks -> compatible available
+specialist jobs -> explicitly bounded anonymized vision inputs only when authorized
+-> independently attributed Gemini/Opus results -> disagreement-aware Evidence
+-> source-linked physician MPR -> editable clinician-approved preliminary report.
+Offline worker and expert physician assessment always remain possible without LLMs.
