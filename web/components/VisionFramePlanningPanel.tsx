@@ -5,6 +5,7 @@ import type { DicomSeries } from "../lib/dicom-series";
 import { planVisionFrameSamples, MAX_VISION_SAMPLE_FRAMES,
   type VisionFramePlan } from "../lib/vision-frame-plan";
 import { useAnalysisSound } from "./AnalysisSoundProvider";
+import { planBudgetedVisionReview } from "../lib/vision-budget-plan";
 import { decodeDicomPreview } from "../lib/dicom-lite";
 import { MAX_PRIVACY_PIXELS } from "../lib/vision-privacy";
 import VisionPrivacyPreparation from "./VisionPrivacyPreparation";
@@ -22,6 +23,7 @@ export default function VisionFramePlanningPanel({
   capturedLaa950?:CapturedLocalLaa950|null;
 }) {
   const [requested, setRequested] = useState(4);
+  const [targetFrame, setTargetFrame] = useState("");
   const [report, setReport] = useState<VisionFramePlan | null>(null);
   const [notice, setNotice] = useState("");
   const [thumbnails, setThumbnails] = useState<Record<string, { url?: string; error?: string }>>({});
@@ -43,6 +45,17 @@ export default function VisionFramePlanningPanel({
     // Never silently choose some other series when a specific series is selected.
     return planVisionFrameSamples(series, activeSeriesKey, requested);
   }, [series, activeSeriesKey, requested]);
+  const fullVolumeCost = useMemo(() => {
+    if (choice.status !== "ready-for-local-preview" || !choice.seriesKey) return null;
+    const selected = series.find(s => s.key === choice.seriesKey);
+    if (!selected || !selected.members.length) return null;
+    const index = targetFrame.trim() === "" ? null : Number(targetFrame) - 1;
+    if (index !== null && (!Number.isSafeInteger(index) || index < 0 || index >= selected.members.length)) return null;
+    try {
+      return planBudgetedVisionReview({frameCount: selected.members.length,
+        flaggedIndices: index === null ? [] : [index]});
+    } catch { return null; }
+  }, [choice, series, targetFrame]);
   useEffect(() => {
     setReport(null);
     setNotice("");
@@ -108,6 +121,31 @@ export default function VisionFramePlanningPanel({
       <button type="button" onClick={prepare} disabled={choice.status !== "ready-for-local-preview"}>
         Сформировать план
       </button>
+    </div>
+    <div className="ora-vision-budget-preview" aria-label="Бюджет полного обзора Gemini">
+      <strong>Двухэтапный обзор всей серии — локальный расчёт</strong>
+      <p>Отдельно от выборки 2–4 кадров рассчитываем просмотр каждого среза в низком
+        разрешении и выборочный повторный просмотр соседних кадров в высоком разрешении.</p>
+      <label htmlFor="ora-target-frame">Подозрительный срез (номер от 1, необязательно)
+        <input id="ora-target-frame" type="number" min="1" step="1"
+          value={targetFrame} onChange={e => setTargetFrame(e.target.value)}
+          placeholder="Пока не отмечен" />
+      </label>
+      {fullVolumeCost ? <>
+        <p>План: {fullVolumeCost.overviewIndices.length} кадров обзорно,
+          {fullVolumeCost.targetedIndices.length} кадров прицельно.</p>
+        <p>Предварительная стоимость Gemini: <strong>
+          ${fullVolumeCost.estimatedGeminiUSD.toFixed(3)}</strong> за исследование
+          (тариф и число токенов — настраиваемые предположения, не счёт провайдера).</p>
+        {fullVolumeCost.requiresExplicitBudgetApproval ?
+          <p role="status">Выше предварительного порога ${fullVolumeCost.maxGeminiUSD.toFixed(2)}.
+            Для будущего реального запроса потребуется отдельное разрешение расходов.</p> :
+          <p>Ниже ориентировочного порога ${fullVolumeCost.maxGeminiUSD.toFixed(2)}.</p>}
+        <p>Обзор всех срезов пока <strong>только запланирован</strong>.
+          Изображения не декодировались для полного обзора, AI не запускался,
+          облачная передача заблокирована. Отсутствие отметок не исключает патологию.</p>
+      </> : <p role="status">План полного обзора недоступен: проверьте DICOM-геометрию
+        и номер подозрительного среза.</p>}
     </div>
     {choice.status === "blocked" && <div className="ora-vision-plan-blocked" role="status">
       <strong>План пока недоступен</strong>
