@@ -6,6 +6,7 @@ import { planVisionFrameSamples, MAX_VISION_SAMPLE_FRAMES,
   type VisionFramePlan } from "../lib/vision-frame-plan";
 import { useAnalysisSound } from "./AnalysisSoundProvider";
 import { planBudgetedVisionReview } from "../lib/vision-budget-plan";
+import { createVisionBatches, accountReportedVisionUsage } from "../lib/vision-batch-ledger";
 import { decodeDicomPreview } from "../lib/dicom-lite";
 import { MAX_PRIVACY_PIXELS } from "../lib/vision-privacy";
 import VisionPrivacyPreparation from "./VisionPrivacyPreparation";
@@ -56,6 +57,11 @@ export default function VisionFramePlanningPanel({
         flaggedIndices: index === null ? [] : [index]});
     } catch { return null; }
   }, [choice, series, targetFrame]);
+  const batchPreview = useMemo(() => {
+    if (!fullVolumeCost) return null;
+    const batches = createVisionBatches(fullVolumeCost);
+    return { batches, ledger: accountReportedVisionUsage(fullVolumeCost, batches, []) };
+  }, [fullVolumeCost]);
   useEffect(() => {
     setReport(null);
     setNotice("");
@@ -134,6 +140,7 @@ export default function VisionFramePlanningPanel({
       {fullVolumeCost ? <>
         <p>План: {fullVolumeCost.overviewIndices.length} кадров обзорно,
           {fullVolumeCost.targetedIndices.length} кадров прицельно.</p>
+        {batchPreview && <p>Пакетов по 12 срезов: {batchPreview.batches.length}. Фактически обработано: {batchPreview.ledger.processedOverviewFrames} из {batchPreview.ledger.plannedFrames}. Подтверждённый расход API: {batchPreview.ledger.totalUSD.toFixed(3)} USD (вызовов пока не было).</p>}
         <p>Предварительная стоимость Gemini: <strong>
           ${fullVolumeCost.estimatedGeminiUSD.toFixed(3)}</strong> за исследование
           (тариф и число токенов — настраиваемые предположения, не счёт провайдера).</p>
