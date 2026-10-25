@@ -122,7 +122,7 @@ export default function VisionFramePlanningPanel({
         Сформировать план
       </button>
     </div>
-    <div className="ora-vision-plan-result" aria-label="Бюджет полного обзора Gemini">
+    <div className="ora-vision-budget-preview" aria-label="Бюджет полного обзора Gemini">
       <strong>Двухэтапный обзор всей серии — локальный расчёт</strong>
       <p>Отдельно от выборки 2–4 кадров рассчитываем просмотр каждого среза в низком
         разрешении и выборочный повторный просмотр соседних кадров в высоком разрешении.</p>
