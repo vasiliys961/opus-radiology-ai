@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import { planBudgetedVisionReview } from "./vision-budget-plan";
+import { planBudgetedVisionReview } from "./vision-budget-plan.ts";
 
 const normal = planBudgetedVisionReview({frameCount:300,flaggedIndices:[0,10,299]});
 assert.equal(normal.overviewIndices.length,300);
