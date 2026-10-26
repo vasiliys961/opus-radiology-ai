@@ -22,7 +22,6 @@ export function combineVisionBatchEvidence(
       throw new Error("Invalid unique source frame");
     source.set(f.index,f);
   }
-  const expected = new Set<number>();
   const seenIndices = new Set<number>();
   const allFindings: EvidenceJson["findings"] = [];
   const warnings: string[] = [];
@@ -39,7 +38,7 @@ export function combineVisionBatchEvidence(
     const permitted = new Set(batch.indices.map(n=>{
       const f=source.get(n)!; return f.seriesUid+"|"+f.sopInstanceUid+"|"+f.frameIndex;
     }));
-    for(const n of batch.indices) {seenIndices.add(n); expected.add(n);}
+    for(const n of batch.indices) {seenIndices.add(n);}
     for(const f of item.evidence.findings){
       const key=f.source.seriesUid+"|"+f.source.sopInstanceUid+"|"+f.source.frameIndex;
       if(!permitted.has(key)) throw new Error("Model observation references an unreviewed DICOM frame");
@@ -57,11 +56,12 @@ export function combineVisionBatchEvidence(
   const overviewBatches=batches.filter(b=>b.pass==="overview").length;
   const overviewDone=completed.filter(x=>batches[x.batchIndex]?.pass==="overview").length;
   const completedAllOverview=overviewDone===overviewBatches;
+  if (allFindings.length > 500) throw new Error("Too many findings to represent safely");
   return {
     schema:"opus-evidence/v1",modality,
     coverage:completed.length?"partially_assessed":"not_assessed",
     seriesReviewed:[...new Set([...seenIndices].map(n=>source.get(n)!.seriesUid))],
-    findings:allFindings.slice(0,500),
+    findings:allFindings,
     warnings:[
       "Research-only, source-frame-bound vision output; no independent clinical validation.",
       completedAllOverview?"All planned overview frame batches received results; no claim of complete clinical assessment.":
