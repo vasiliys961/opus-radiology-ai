@@ -44,10 +44,30 @@ def imported_script(name, module):
 
 
 def check_origin(origin):
-    u=urlsplit(origin)
-    if (u.scheme!="http" or u.hostname not in {"127.0.0.1","localhost"} or
-        not u.port or u.path or u.query or u.fragment or u.username or u.password):
-        raise ValueError("exact_local_ui_origin_required")
+    """Allow a *single operator-specified* UI origin, never wildcard CORS.
+
+    Loopback development uses HTTP with an explicit port. Production UI may
+    be an HTTPS domain (e.g. a deployed Vercel app); only that exact configured
+    origin gets credentials to this strictly loopback-bound research worker.
+    """
+    import re
+    if not isinstance(origin,str) or len(origin)>255:
+        raise ValueError("exact_ui_origin_required")
+    try:
+        u=urlsplit(origin)
+        port=u.port
+    except ValueError as exc:
+        raise ValueError("invalid_ui_origin_port") from exc
+    host=u.hostname
+    loopback=host in {"127.0.0.1","localhost"}
+    https_host=(u.scheme=="https" and isinstance(host,str) and
+                "." in host and
+                all(re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?",part)
+                    for part in host.split(".")))
+    if (not ((u.scheme=="http" and loopback and port is not None) or https_host) or
+        u.path or u.query or u.fragment or u.username or u.password or
+        u.geturl()!=origin or "*" in origin):
+        raise ValueError("exact_ui_origin_required")
 
 
 def digest_file(path):

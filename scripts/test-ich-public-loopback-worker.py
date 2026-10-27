@@ -8,9 +8,12 @@ spec=importlib.util.spec_from_file_location("opus_ich_public_worker",p)
 worker=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(worker)
 
-for allowed in ("http://localhost:3000","http://127.0.0.1:3000"):
+for allowed in ("http://localhost:3000","http://127.0.0.1:3000",
+                "https://doctor-opus-ecg.vercel.app","https://radiology.example.org:8443"):
  worker.check_origin(allowed)
 for denied in ("https://localhost:3000","http://example.com:3000",
+               "https://*.example.org","https://example.org/","https://example.org?x=1",
+               "https://user:pass@example.org","https://example..org",
                "http://localhost:3000/unsafe","http://localhost",
                "http://user:password@localhost:3000","http://localhost:3000?key=1"):
  try:worker.check_origin(denied)
