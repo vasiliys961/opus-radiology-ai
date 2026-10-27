@@ -1,0 +1,16 @@
+import {strict as assert} from "node:assert";
+import {bindLocalIchToDicom} from "./ich-native-dicom-binding.ts";
+import type {DicomSeries,TechnicalDicomMetadata} from "./dicom-series.ts";
+const base={modality:"CT",bodyRegion:"HEAD",imageRole:"PRIMARY",seriesUid:"1.2.3",numberOfFrames:1} as TechnicalDicomMetadata;
+const series:DicomSeries={key:"x",label:"head",modality:"CT",spatiallySorted:true,volumeReady:true,sliceSpacingMm:1,warning:null,members:[0,1,2].map(i=>({id:"file"+i,name:"slice",metadata:{...base,sopInstanceUid:"1.2.3."+(i+4)}}))};
+const hash="a".repeat(64);
+const worker={schema:"opus-local-ich-native-slices/v1" as const,modelId:"ich",modelVersion:"1",inputSha256:hash,verifiedSourceInputSha256:hash,orderedSopInstanceUids:["1.2.3.4","1.2.3.5","1.2.3.6"],candidates:[{sourceFrameIndex:1,sign:"suspected hyperdensity",anatomy:"brain"}]};
+const r=bindLocalIchToDicom(series,worker);
+assert.equal(r.navigation[0].memberId,"file1");
+assert.equal(r.evidence.findings[0].source.sopInstanceUid,"1.2.3.5");
+assert.equal(r.evidence.findings[0].status,"requires_recheck");
+assert.throws(()=>bindLocalIchToDicom(series,{...worker,verifiedSourceInputSha256:"b".repeat(64)}));
+assert.throws(()=>bindLocalIchToDicom(series,{...worker,orderedSopInstanceUids:[...worker.orderedSopInstanceUids].reverse()}));
+assert.throws(()=>bindLocalIchToDicom(series,{...worker,candidates:[{...worker.candidates[0],sourceFrameIndex:5}]}));
+assert.equal(bindLocalIchToDicom(series,{...worker,candidates:[]}).evidence.coverage,"not_assessed");
+console.log("PASS ICH exact DICOM SOP source binding");
