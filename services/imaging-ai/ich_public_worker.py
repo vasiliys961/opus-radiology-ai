@@ -82,7 +82,7 @@ def create_app(*,dicom_dir,public_manifest,model_dir,token,origin,
     if sys.platform!="linux":
         raise ValueError("linux_isolated_research_host_required")
     check_origin(origin)
-    if not 1024<=port<=65535 or not secrets.token_urlsafe(1):
+    if not 1024<=port<=65535:
         raise ValueError("bad_worker_configuration")
     if not isinstance(token,str) or not 32<=len(token)<=128:
         raise ValueError("random_worker_token_required")
@@ -90,6 +90,7 @@ def create_app(*,dicom_dir,public_manifest,model_dir,token,origin,
     converter=imported_script("prepare-ich-public-dicom-hu.py","ich_converter")
     original=imported_script("run-ianpan-ich-research.py","original_ich_ianpan")
     expected,_=source_manifest_sha(converter,dicom_dir,public_manifest)
+    expected_manifest_digest=digest_file(public_manifest)
     # This is a real byte-for-byte model asset check, not a Python mock.
     try:
         original.verify_model_files(model_dir)
@@ -174,14 +175,33 @@ def create_app(*,dicom_dir,public_manifest,model_dir,token,origin,
                                                        stderr=asyncio.subprocess.DEVNULL,
                                                        env=env,start_new_session=True)
             job["process"]=proc
-            try:
-                await asyncio.wait_for(proc.wait(),timeout=MAX_RUNTIME_SECONDS)
-            except asyncio.TimeoutError:
+            started=asyncio.get_running_loop().time()
+            rss_limit=12*1024**3
+            pressure=0
+            while proc.returncode is None:
+                try:
+                    await asyncio.wait_for(proc.wait(),timeout=2.0)
+                    break
+                except asyncio.TimeoutError:
+                    pass
+                if asyncio.get_running_loop().time()-started>MAX_RUNTIME_SECONDS:
+                    job["reason"]="model_timeout"
+                    break
+                try:
+                    root_process=psutil.Process(proc.pid)
+                    total_rss=sum(p.memory_info().rss for p in
+                                  [root_process,*root_process.children(recursive=True)])
+                except (psutil.NoSuchProcess,psutil.AccessDenied):
+                    total_rss=0
+                pressure=pressure+1 if psutil.virtual_memory().available<1024**3 else 0
+                if total_rss>rss_limit or pressure>=3:
+                    job["reason"]="model_resource_budget_exceeded"
+                    break
+            if job.get("reason"):
                 try:os.killpg(proc.pid,signal.SIGKILL)
                 except ProcessLookupError:pass
                 await proc.wait()
                 job["state"]="failed"
-                job["reason"]="model_timeout"
                 return
             if proc.returncode!=0:
                 job["state"]="failed"
@@ -217,7 +237,9 @@ def create_app(*,dicom_dir,public_manifest,model_dir,token,origin,
             payload=json.loads(body)
             checked_job_input(payload,expected)
             # A second source byte check at execution time; no image bytes accepted.
-            source_manifest_sha(converter,dicom_dir,public_manifest)
+            again,_=source_manifest_sha(converter,dicom_dir,public_manifest)
+            if again!=expected or digest_file(public_manifest)!=expected_manifest_digest:
+                raise ValueError("original_public_source_changed")
         except (ValueError,TypeError,KeyError,json.JSONDecodeError):
             raise HTTPException(422,"source_manifest_or_authorized_public_rights_failed") from None
         job_dir=root/str(uuid.uuid4())
