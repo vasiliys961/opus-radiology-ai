@@ -68,7 +68,7 @@ export default function VisionFramePlanningPanel({
       signal??new AbortController().signal,setIchWorkerNotice),
   }:null;
   const registered=installedDetectorRegistry({
-    capturedSpecialist,capturedLaa950,ichRuntime,publicResearchAuthorized,
+    capturedSpecialist,capturedLaa950,ichRuntime,publicResearchAuthorized:publicResearchAuthorized||ichResearchConfirmed,
     ianpanRuntime:liveIanpanRuntime,
   });
   const choice = useMemo(() => {
@@ -170,8 +170,15 @@ export default function VisionFramePlanningPanel({
           checkedRuntime={
             ready:true,modelId:IANPAN_MODEL_ID,modelRevision:IANPAN_MODEL_REVISION,
             dataPolicy:"public-reference-only",
-            run:(s,signal)=>runPublicIchWorker(sessionSnapshot,s,fileById,
-              signal??controller.signal,setIchWorkerNotice),
+            run:async (s,signal)=>{
+              try{return await runPublicIchWorker(sessionSnapshot,s,fileById,
+                signal??controller.signal,setIchWorkerNotice);}
+              catch(error){
+                if(!controller.signal.aborted)
+                  setIchWorkerNotice("ICH worker отказал: "+(error instanceof Error?error.message:"инференс недоступен"));
+                throw error;
+              }
+            },
           };
           setIchWorkerReady(true);
         }catch(error){
