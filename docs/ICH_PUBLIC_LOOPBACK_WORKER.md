@@ -74,6 +74,33 @@ download is cleaned up. Once installed, normal model inference uses offline
 mode; no browser or patient data participate in this download. Do not set the
 provisioning flag without verifying the model use rights.
 
+## Published HTTPS browser access to local ICH worker
+
+The worker still listens exclusively at `127.0.0.1:8766` (or an SSH local
+port forward). If the radiology web UI is hosted at a public HTTPS address,
+start the worker with its **exact origin** and no trailing slash, e.g.:
+
+```bash
+python services/imaging-ai/ich_public_worker.py \
+  --dicom-dir /approved-public-dicom/ct \
+  --public-manifest /approved-public-dicom/authorization.json \
+  --model-dir /verified-ianpan-weights \
+  --origin https://doctor-opus-ecg.vercel.app --port 8766
+```
+
+This does **not** permit any other website, wildcard origins, arbitrary HTTP
+origins, publicly bound ports or credentialed cookies. A long session token
+is required; it is kept only in the browser tab. Browser versions may also
+require permission for local network access (Private Network Access). HTTPS
+browser to HTTP loopback is only permitted where browsers treat loopback as
+potentially trustworthy. If the production site origin changes, explicitly
+restart the worker with the new exact origin after verifying the website.
+
+The new ASGI integration test checks browser CORS preflight, exact Host/Origin,
+bearer authorization and rejection of unapproved studies. It deliberately
+uses synthetic files and a stub readiness verifier: **no original model was
+executed by CI**.
+
 ## Connection to the unified CT/MR launch
 
 The main DICOM workstation's existing **Запустить единый анализ КТ/МРТ**
