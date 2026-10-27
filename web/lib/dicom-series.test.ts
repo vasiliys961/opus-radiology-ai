@@ -271,3 +271,61 @@ test("Invalid or absent DICOM CT rescale cannot silently default to 1/0",()=>{
  const alternative=parseDicomSeriesHeader(syntheticHeader({slope:"1",intercept:"-1024",unit:"SUV"}));
  assert.equal(alternative.rescaleUnit,"OTHER");
 });
+
+
+/** DICOM PS3.16 CID 4031, not free-text SeriesDescription or image pixels. */
+function codedAnatomyHeader(code:string,scheme:string,bodyPart?:string):ArrayBuffer {
+  const chunks:Buffer[]=[Buffer.alloc(128),Buffer.from("DICM")];
+  const element=(group:number,tag:number,vr:string,data:Buffer):Buffer=>{
+    const padded=data.length+(data.length%2);
+    const long=vr==="SQ"||vr==="OW";
+    const h=Buffer.alloc(long?12:8);
+    h.writeUInt16LE(group,0);h.writeUInt16LE(tag,2);h.write(vr,4,"ascii");
+    if(long)h.writeUInt32LE(padded,8);
+    else h.writeUInt16LE(padded,6);
+    return Buffer.concat([h,data,Buffer.alloc(padded-data.length)]);
+  };
+  const itemBody=Buffer.concat([
+    element(0x0008,0x0100,"SH",Buffer.from(code)),
+    element(0x0008,0x0102,"SH",Buffer.from(scheme)),
+    element(0x0008,0x0104,"LO",Buffer.from("Untrusted Code Meaning: unrelated")),
+  ]);
+  const item=Buffer.alloc(8);
+  item.writeUInt16LE(0xfffe,0);item.writeUInt16LE(0xe000,2);
+  item.writeUInt32LE(itemBody.length,4);
+  chunks.push(element(0x0002,0x0010,"UI",Buffer.from("1.2.840.10008.1.2.1")));
+  if(bodyPart)chunks.push(element(0x0018,0x0015,"CS",Buffer.from(bodyPart)));
+  chunks.push(element(0x0008,0x2218,"SQ",Buffer.concat([item,itemBody])));
+  chunks.push(element(0x0008,0x0060,"CS",Buffer.from("CT")));
+  chunks.push(element(0x0008,0x0018,"UI",Buffer.from("1.2.840.999.3")));
+  chunks.push(element(0x0020,0x000d,"UI",Buffer.from("1.2.840.999.1")));
+  chunks.push(element(0x0020,0x000e,"UI",Buffer.from("1.2.840.999.2")));
+  chunks.push(element(0x7fe0,0x0010,"OW",Buffer.alloc(0)));
+  return Uint8Array.from(Buffer.concat(chunks)).buffer;
+}
+test("exact SCT and SRT Head codes establish HEAD despite missing BodyPartExamined",async()=>{
+  for(const [code,scheme] of [["69536005","SCT"],["T-D1100","SRT"]] as const){
+    const file=new File([codedAnatomyHeader(code,scheme)],"public-head.dcm");
+    const technical=await readDicomSeriesHeader(file);
+    assert.equal(technical.bodyRegion,"HEAD");
+    assert.equal(technical.sopInstanceUid,"1.2.840.999.3");
+    assert.equal(technical.seriesUid,"1.2.840.999.2");
+    assert.equal(Object.hasOwn(technical,"patientName"),false);
+  }
+});
+test("Head and Neck, arbitrary terminology and conflicting body-part remain blocked",async()=>{
+  for(const [code,scheme,bodyPart] of [
+    ["774007","SCT",undefined],
+    ["69536005","untrusted",undefined],
+    ["wrong","SCT",undefined],
+    ["69536005","SCT","CHEST"],
+  ] as const){
+    const file=new File([codedAnatomyHeader(code,scheme,bodyPart)],"no-head-claim.dcm");
+    const technical=await readDicomSeriesHeader(file);
+    assert.equal(technical.bodyRegion,null,`Unverified region: ${code}/${scheme}/${bodyPart}`);
+  }
+});
+test("matching explicit body part and coded anatomy are consistent",async()=>{
+ const file=new File([codedAnatomyHeader("69536005","SCT","HEAD")],"head.dcm");
+ assert.equal((await readDicomSeriesHeader(file)).bodyRegion,"HEAD");
+});
