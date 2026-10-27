@@ -51,15 +51,30 @@ The worker serves `GET /v1/ich/capabilities`,
 All routes require the bearer token and exact local Origin. Do not store token
 in Git, browser localStorage, URL, logs or GitHub Actions.
 
-## Unfinished application connection
+## Connection to the unified CT/MR launch
 
-The browser's unified-launch component does **not yet** invoke this new worker.
-The next increment must verify the worker's model-source capabilities, compute
-SHA-256 for the open local DICOM `File` objects, compare immutable public source
-identity, and use its returned original-source `EvidenceJson` through existing
-`dispatchDicomDetectors` — with cancellation and per-SOP review. The current
-worker itself is functional only after the authorized data/model prerequisites
-are provisioned, and real end-to-end inference in this worker remains untested.
+The main DICOM workstation's existing **Запустить единый анализ КТ/МРТ**
+now supports this optional worker without a second run button.
+Open the **Дополнительно · настоящий ICH-детектор** section in the
+existing Gemini Orchestra panel, set the `127.0.0.1:8766` endpoint and
+session token, and attest that the opened DICOM is exactly the licensed
+public study already approved and stored on the worker host.
 
-Default CI is synthetic contract testing. Never infer clinical sensitivity,
-negative hemorrhage diagnosis or model accuracy from a successful API call.
+At launch, the browser checks every official original ianpan asset SHA-256
+reported by the worker, recomputes SHA-256 of each opened source DICOM file
+locally, and sends only those hashes to the isolated worker. The worker
+re-checks its private study manifest and source bytes, then invokes the
+original pretrained model. New Evidence returns to the existing
+`dispatchDicomDetectors` with original series/SOP UID verification and
+physician click-through to the original DICOM slice.
+
+Without installed original weights, >=10 GiB available Linux RAM, an exact
+approved public DICOM source match or a worker session, the ICH route remains
+**not executed**, and other available local/Cloud-authorized routes are not
+fabricated or disabled. A source check box alone does not independently
+validate deidentification, rights or clinical use.
+
+**Real acceptance still pending:** no production/provisioned-host run of
+this new worker-plus-browser transport has been observed, no independent
+ICH truth masks scored, and no patient research or clinical use authorized.
+Synthetic CI verifies protocol and dispatcher integrity only.
