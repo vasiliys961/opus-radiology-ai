@@ -357,7 +357,23 @@ export async function readDicomSeriesHeader(file: File): Promise<TechnicalDicomM
   const header = await file.slice(0, HEADER_BYTES).arrayBuffer();
   try {
     const indexed = parseDicomSeriesHeader(header);
-    if (indexed.studyUid || indexed.seriesUid || indexed.sopInstanceUid) return indexed;
+    if (indexed.studyUid || indexed.seriesUid || indexed.sopInstanceUid) {
+      if (indexed.bodyRegion) return indexed;
+      // BodyPartExamined missing/unsupported or coded SQ encountered. Read
+      // its standard coded anatomy with the bounded full parser, but only
+      // accept when ALL source UIDs still refer to the same original DICOM.
+      try {
+        const size=Math.min(file.size,MAX_COMPLEX_HEADER_BYTES);
+        const contents=size<=HEADER_BYTES?header:await file.slice(0,size).arrayBuffer();
+        const full=await parseComplexDicomHeader(contents);
+        if(full.studyUid===indexed.studyUid &&
+           full.seriesUid===indexed.seriesUid &&
+           full.sopInstanceUid===indexed.sopInstanceUid &&
+           full.modality===indexed.modality)
+          return {...indexed,bodyRegion:full.bodyRegion};
+      }catch{ /* Unrecognized coding cannot establish an anatomy. */ }
+      return indexed;
+    }
     // Metadata may be incomplete because the handwritten reader reached the
     // limit before the relevant technical tags.
   } catch { /* Complex SQ or raw dataset: try the standards-aware parser. */ }
