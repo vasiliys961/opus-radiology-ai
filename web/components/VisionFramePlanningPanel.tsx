@@ -77,6 +77,12 @@ export default function VisionFramePlanningPanel({
     setThumbnails({});
   }, [series, activeSeriesKey, requested]);
   useEffect(() => {
+    // Automatically prepare the bounded local preview when a CT/MR series opens.
+    // This does not authorize provider calls or send any pixels off device.
+    if(universal.status==="eligible_for_authorization"&&
+       choice.status==="ready-for-local-preview")setReport(choice);
+  },[universal,choice]);
+  useEffect(() => {
     if (!report) return;
     let cancelled = false;
     setThumbnails({});
@@ -134,7 +140,7 @@ export default function VisionFramePlanningPanel({
         </select>
       </label>
       <button type="button" onClick={prepare} disabled={choice.status !== "ready-for-local-preview"}>
-        Сформировать план
+        Обновить локальный план
       </button>
     </div>
     <div className="ora-vision-budget-preview" role="status" aria-label="Универсальный анализ КТ и МРТ">
