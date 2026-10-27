@@ -154,7 +154,7 @@ export default function VisionFramePlanningPanel({
           <p>Не подключено или заблокировано направлений: {detectorResult.blocked.length}.</p>
           {detectorResult.blocked.map(item => <p key={item.target}>{item.target}: {item.reason === "No registered executable model" ? "исполнитель с проверенными весами пока не подключён" : item.reason}</p>)}
           <p>Отсутствие результатов моделей не исключает патологию. Изображения никуда не передавались.</p>
-        </div>
+        </div>}
       </> : <p role="status">{consilium.reason}</p>}
     </div>
     <div className="ora-vision-budget-preview" aria-label="Бюджет полного обзора Gemini">
