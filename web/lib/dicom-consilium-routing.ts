@@ -35,5 +35,6 @@ export function routeDicomConsilium(series:DicomSeries|null):DicomConsiliumRoute
     contrast:members.every(x=>x.contrastAgentDeclared===true)?"yes":"unknown",
   });
   return {status:"ready",specialists:assignments.map(x=>x.specialty),
-    detectorTargets:[...new Set(assignments.flatMap(x=>x.compatibleDetectorTargets))],reason:null};
+    detectorTargets:[...new Set([...assignments.flatMap(x=>x.compatibleDetectorTargets),
+      ...(region==="CHEST"&&series.modality==="CT"?["lung-low-attenuation-quantification"]:[])])],reason:null};
 }
