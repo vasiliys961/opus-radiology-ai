@@ -8,6 +8,7 @@ import { useAnalysisSound } from "./AnalysisSoundProvider";
 import { routeDicomConsilium } from "../lib/dicom-consilium-routing";
 import {routeUniversalCtMrVision} from "../lib/universal-ct-mr-vision-route";
 import { dispatchDicomDetectors, type DetectorDispatch } from "../lib/dicom-detector-dispatch";
+import {createLocalDetectorReview} from "../lib/local-detector-physician-review";
 import {installedDetectorRegistry,type InstalledIchRuntime,type InstalledIanpanRuntime} from "../lib/installed-detector-registry";
 import {checkPublicIchWorker,runPublicIchWorker,IANPAN_MODEL_ID,IANPAN_MODEL_REVISION} from "../lib/public-ich-worker";
 import { planBudgetedVisionReview } from "../lib/vision-budget-plan";
@@ -201,6 +202,29 @@ export default function VisionFramePlanningPanel({
       .finally(()=>{if(!controller.signal.aborted)setDetectorBusy(false);});
     setNotice("Единый маршрут запущен: проверяем локальные модели; разрешённые Gemini/Opus требуют отдельного обезличивания и подтверждения.");
   };
+  const exportLocalDetectorReview=()=>{
+    const selected=series.find(s=>s.key===activeSeriesKey)??null;
+    if(!selected||!detectorResult||detectorBusy){
+      setNotice("Нет завершённого локального исследования для врачебного экспорта.");
+      return;
+    }
+    try{
+      const report=createLocalDetectorReview(selected,detectorResult,new Date().toISOString());
+      const json=JSON.stringify(report,null,2);
+      if(new TextEncoder().encode(json).byteLength>2*1024*1024)
+        throw Error("Export exceeds 2 MiB");
+      const objectUrl=URL.createObjectURL(new Blob([json],{type:"application/json"}));
+      try{
+        const link=document.createElement("a");
+        link.href=objectUrl;link.download="opus-local-detector-physician-draft.json";
+        document.body.appendChild(link);link.click();link.remove();
+      }finally{window.setTimeout(()=>URL.revokeObjectURL(objectUrl),1000);}
+      setNotice("Исследовательский черновик сохранён локально. В нём содержатся исходные DICOM UID; не загружайте файл в публичные сервисы.");
+    }catch{
+      setNotice("Источник или происхождение модели изменились: экспорт локального заключения запрещён.");
+    }
+  };
+
   const prepare = () => {
     if (choice.status === "blocked") {
       setNotice("Локальный план не составлен: " + choice.blockers.join(" "));
@@ -289,6 +313,11 @@ export default function VisionFramePlanningPanel({
             </p>;
           })}
 
+          <p>Неподписанный локальный врачебный черновик сохраняет фактические исполнители, неподтверждённые находки, отсутствующие модели и координаты исходных DICOM. Отрицательное заключение из пустого результата не формируется.</p>
+          <button type="button" onClick={exportLocalDetectorReview} disabled={detectorBusy}>
+            Сохранить локальный врачебный черновик Evidence
+          </button>
+          <p>Файл содержит исходные SOP UID и предназначен только для локального врачебного просмотра. В облако не отправляется.</p>
           <p>R231/LAA−950 — количественный исследовательский показатель, не диагностический детектор эмфиземы. Отсутствие результатов не исключает патологию. Изображения никуда не передавались.</p>
         </div>}
       </> : <p role="status">{consilium.reason}</p>}
