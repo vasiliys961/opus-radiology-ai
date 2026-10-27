@@ -8,7 +8,8 @@ import { useAnalysisSound } from "./AnalysisSoundProvider";
 import { routeDicomConsilium } from "../lib/dicom-consilium-routing";
 import {routeUniversalCtMrVision} from "../lib/universal-ct-mr-vision-route";
 import { dispatchDicomDetectors, type DetectorDispatch } from "../lib/dicom-detector-dispatch";
-import {installedDetectorRegistry,type InstalledIchRuntime} from "../lib/installed-detector-registry";
+import {installedDetectorRegistry,type InstalledIchRuntime,type InstalledIanpanRuntime} from "../lib/installed-detector-registry";
+import {checkPublicIchWorker,runPublicIchWorker,IANPAN_MODEL_ID,IANPAN_MODEL_REVISION} from "../lib/public-ich-worker";
 import { planBudgetedVisionReview } from "../lib/vision-budget-plan";
 import { createVisionBatches, accountReportedVisionUsage } from "../lib/vision-batch-ledger";
 import { decodeDicomPreview } from "../lib/dicom-lite";
@@ -39,6 +40,11 @@ export default function VisionFramePlanningPanel({
   const [detectorBusy, setDetectorBusy] = useState(false);
   const detectorController=useRef<AbortController|null>(null);
   const [unifiedStarted,setUnifiedStarted] = useState(false);
+  const [ichEndpoint,setIchEndpoint]=useState("http://127.0.0.1:8766");
+  const [ichToken,setIchToken]=useState("");
+  const [ichResearchConfirmed,setIchResearchConfirmed]=useState(false);
+  const [ichWorkerReady,setIchWorkerReady]=useState(false);
+  const [ichWorkerNotice,setIchWorkerNotice]=useState("");
   const [thumbnails, setThumbnails] = useState<Record<string, { url?: string; error?: string }>>({});
   const { completionChime } = useAnalysisSound();
   let specialistFacts=null, specialistWarning="";
@@ -54,7 +60,17 @@ export default function VisionFramePlanningPanel({
       series.find(x=>x.key===activeSeriesKey),capturedSpecialist,capturedLaa950);
     }catch{laaWarning="Показатель LAA−950 не совпадает с текущей КТ и маской R231; не использовать.";}
   }
-  const registered=installedDetectorRegistry({capturedSpecialist,capturedLaa950,ichRuntime,publicResearchAuthorized});
+  const session={endpoint:ichEndpoint,token:ichToken};
+  const liveIanpanRuntime:InstalledIanpanRuntime|null=ichWorkerReady&&ichResearchConfirmed ? {
+    ready:true,modelId:IANPAN_MODEL_ID,modelRevision:IANPAN_MODEL_REVISION,
+    dataPolicy:"public-reference-only",
+    run:(s,signal)=>runPublicIchWorker(session,s,fileById,
+      signal??new AbortController().signal,setIchWorkerNotice),
+  }:null;
+  const registered=installedDetectorRegistry({
+    capturedSpecialist,capturedLaa950,ichRuntime,publicResearchAuthorized,
+    ianpanRuntime:liveIanpanRuntime,
+  });
   const choice = useMemo(() => {
     // Never silently choose some other series when a specific series is selected.
     return planVisionFrameSamples(series, activeSeriesKey, requested);
@@ -81,6 +97,8 @@ export default function VisionFramePlanningPanel({
     // Prevent a previous patient/study result from arriving after source change.
     detectorController.current?.abort();
     setDetectorBusy(false);
+    setIchWorkerReady(false);
+    setIchWorkerNotice("");
     setReport(null);
     setDetectorResult(null);
     setUnifiedStarted(false);
@@ -135,11 +153,46 @@ export default function VisionFramePlanningPanel({
     setReport(choice.status==="ready-for-local-preview"?choice:null);
     setDetectorResult(null);
     setDetectorBusy(true);
-    void dispatchDicomDetectors(selected,registered.executors,controller.signal)
-      .then(result=>{if(!controller.signal.aborted)setDetectorResult(result);})
-      .catch(()=>{if(!controller.signal.aborted)setNotice("Локальные детекторы недоступны. Универсальный Vision остаётся доступен после разрешения.");})
+    setIchWorkerReady(false);
+    setIchWorkerNotice("");
+    const sessionSnapshot={endpoint:ichEndpoint,token:ichToken};
+    void (async()=>{
+      let checkedRuntime:InstalledIanpanRuntime|null=null;
+      let reason="";
+      // One existing launch: an optional authentic model runs only if the
+      // curator's exact public DICOM bytes are installed on a trusted worker.
+      if(ichResearchConfirmed && ichToken && selected.modality==="CT" &&
+          selected.members.every(m=>m.metadata.bodyRegion==="HEAD")){
+        try{
+          setIchWorkerNotice("Проверяем оригинальные ICH-веса на изолированном worker...");
+          await checkPublicIchWorker(sessionSnapshot,controller.signal);
+          if(controller.signal.aborted)return;
+          checkedRuntime={
+            ready:true,modelId:IANPAN_MODEL_ID,modelRevision:IANPAN_MODEL_REVISION,
+            dataPolicy:"public-reference-only",
+            run:(s,signal)=>runPublicIchWorker(sessionSnapshot,s,fileById,
+              signal??controller.signal,setIchWorkerNotice),
+          };
+          setIchWorkerReady(true);
+        }catch(error){
+          if(controller.signal.aborted)return;
+          reason=error instanceof Error?error.message:"ICH worker недоступен.";
+          setIchWorkerNotice("ICH не запущен: "+reason);
+        }
+      }
+      const actual=installedDetectorRegistry({
+        capturedSpecialist,capturedLaa950,ichRuntime,
+        publicResearchAuthorized:publicResearchAuthorized||ichResearchConfirmed,
+        ianpanRuntime:checkedRuntime,
+      });
+      const result=await dispatchDicomDetectors(selected,actual.executors,controller.signal);
+      if(controller.signal.aborted)return;
+      setDetectorResult(result);
+      if(reason)setNotice("Локальная часть: "+reason+" Другие совместимые исполнители проверены.");
+    })()
+      .catch(()=>{if(!controller.signal.aborted)setNotice("Локальный этап не завершился. Отсутствие Evidence не исключает патологию.");})
       .finally(()=>{if(!controller.signal.aborted)setDetectorBusy(false);});
-    setNotice("Единый маршрут запущен локально: проверяем детекторы и готовим обезличенные копии для Gemini + Opus. Облачный запрос возможен только после проверки и разрешения.");
+    setNotice("Единый маршрут запущен: проверяем локальные модели; разрешённые Gemini/Opus требуют отдельного обезличивания и подтверждения.");
   };
   const prepare = () => {
     if (choice.status === "blocked") {
@@ -181,6 +234,23 @@ export default function VisionFramePlanningPanel({
         {detectorBusy?"Запускаем локальный этап…":"Запустить единый анализ КТ/МРТ"}
       </button>
       {unifiedStarted&&<p role="status">Локальный этап выполнен или выполняется. Для облачного этапа ниже проверьте OCR, снимки и разрешения провайдера; без этого анализ моделей не запускается. Частичная выборка не равна оценке всей серии.</p>}
+      <details>
+        <summary>Дополнительно · настоящий ICH-детектор на исследовательском Linux worker</summary>
+        <p>Только разрешённая публичная КТ, заранее установленная на worker. В браузере вычисляются SHA-256 файлов; сами DICOM-пиксели не передаются. Не подходит для исследований пациентов.</p>
+        <label>Адрес локального SSH-туннеля ICH worker
+          <input type="text" value={ichEndpoint} disabled={detectorBusy}
+            onChange={e=>{setIchEndpoint(e.target.value);setIchWorkerReady(false);}} />
+        </label>
+        <label>Сессионный токен ICH worker
+          <input type="password" autoComplete="off" value={ichToken} disabled={detectorBusy}
+            onChange={e=>{setIchToken(e.target.value);setIchWorkerReady(false);}} />
+        </label>
+        <label><input type="checkbox" checked={ichResearchConfirmed} disabled={detectorBusy}
+          onChange={e=>{setIchResearchConfirmed(e.target.checked);setIchWorkerReady(false);}} />
+          Подтверждаю: это разрешённая публичная КТ, точно совпадающая с предварительно проверенными данными worker; не пациентское исследование.</label>
+        {ichWorkerNotice&&<p role="status">{ichWorkerNotice}</p>}
+        <p>Запуск ICH не требует второй кнопки: после настройки он входит в «Запустить единый анализ КТ/МРТ» выше.</p>
+      </details>
     </div>
     <div className="ora-vision-budget-preview" role="status" aria-label="Универсальный анализ КТ и МРТ">
       <strong>Gemini + Opus · универсальный анализ {universal.modality==="CT"?"КТ":universal.modality==="MR"?"МРТ":"DICOM"}</strong>
