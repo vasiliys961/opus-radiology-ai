@@ -25,7 +25,7 @@ function parseObservations(value:unknown, imageIds:readonly string[]):{
   const v=value as Record<string,unknown>;
   const strings=(x:unknown,max:number,chars:number):x is string[]=>Array.isArray(x)&&
     x.length<=max&&x.every(s=>typeof s==="string"&&s.length>0&&s.length<=chars);
-  if (!strings(v.reviewedImageIds,4,100)||v.reviewedImageIds.length!==imageIds.length||
+  if (!strings(v.reviewedImageIds,4,100)||!Array.isArray(v.reviewedImageIds)||v.reviewedImageIds.length!==imageIds.length||
       new Set(v.reviewedImageIds).size!==imageIds.length||
       !imageIds.every(id=>v.reviewedImageIds.includes(id))||
       !strings(v.limitations,12,500)||!Array.isArray(v.observations)||v.observations.length>18)
