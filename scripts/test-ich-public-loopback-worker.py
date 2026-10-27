@@ -32,4 +32,21 @@ deny({**payload,"originalDicomSha256":["nonhex"]*8})
 deny({**payload,"originalDicomSha256":shas[:-1]})
 deny({**payload,"originalDicomSha256":shas+["f"*64]})
 deny(payload,sorted(shas[:-1]+["f"*64]))
-print("PASS public ICH loopback origin and immutable source SHA gate; no trained model tested")
+# No implicit weight downloads; never repair/rewrite an incomplete model cache.
+from tempfile import TemporaryDirectory
+with TemporaryDirectory() as root:
+ from pathlib import Path
+ p=Path(root)/"ianpan"
+ try:
+  worker.provision_original_ich_weights(p,public_model_rights_reviewed=False)
+ except ValueError as error:
+  assert "license_review_required" in str(error)
+ else:raise AssertionError("publisher_weights_download_without_license_approval")
+ assert not p.exists()
+ p.mkdir()
+ try:
+  worker.provision_original_ich_weights(p,public_model_rights_reviewed=True)
+ except ValueError as error:
+  assert "existing_model_cache_unverified" in str(error)
+ else:raise AssertionError("incomplete_model_directory_wrongly_accepted")
+print("PASS public ICH immutable source + opt-in official model cache; no model downloaded")

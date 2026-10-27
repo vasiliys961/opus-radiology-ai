@@ -77,6 +77,42 @@ def checked_job_input(payload,expected):
         raise ValueError("opened_dicom_does_not_match_preapproved_public_reference")
 
 
+def provision_original_ich_weights(model_dir, *, public_model_rights_reviewed):
+    """One-time opt-in pinned publisher asset provisioning, without patient data.
+
+    No update of an existing incomplete/corrupt model directory is allowed.
+    Publisher revision and each checkpoint are checked by the original runner.
+    Inference thereafter operates in offline mode.
+    """
+    if not public_model_rights_reviewed:
+        raise ValueError("explicit_publisher_model_license_review_required")
+    if sys.platform!="linux":
+        raise ValueError("isolated_linux_model_provisioning_required")
+    model_dir=Path(model_dir)
+    if (model_dir.is_symlink() or model_dir.parent.is_symlink() or
+        not model_dir.parent.is_dir()):
+        raise ValueError("safe_existing_model_cache_parent_required")
+    original=imported_script("run-ianpan-ich-research.py","publisher_ianpan_provision")
+    if model_dir.exists():
+        if not model_dir.is_dir():
+            raise ValueError("invalid_existing_model_cache")
+        try:
+            original.verify_model_files(model_dir)
+        except (ValueError,OSError) as exc:
+            raise ValueError("existing_model_cache_unverified_choose_new_directory") from exc
+        return "existing_original_assets_verified"
+    model_dir.mkdir(mode=0o700)
+    try:
+        # The publisher snapshot has a fixed revision and allowlist of only
+        # inference.py and original Safetensors, followed by byte SHA checks.
+        original.obtain_model(model_dir,download=True)
+        original.verify_model_files(model_dir)
+        return "publisher_assets_pinned_and_verified"
+    except BaseException:
+        shutil.rmtree(model_dir,ignore_errors=True)
+        raise
+
+
 def create_app(*,dicom_dir,public_manifest,model_dir,token,origin,
                port=8766,scratch_dir=None):
     if sys.platform!="linux":
@@ -295,9 +331,16 @@ def main():
     p.add_argument("--port",type=int,default=8766)
     p.add_argument("--scratch-dir",type=Path)
     p.add_argument("--token-env",default="OPUS_ICH_WORKER_TOKEN")
+    p.add_argument("--provision-original-weights",action="store_true",
+                   help="One-time pinned publisher model download to an empty local cache")
+    p.add_argument("--public-model-rights-reviewed",action="store_true",
+                   help="Explicit authorization for this publisher's original research weights")
     a=p.parse_args()
     token=os.environ.get(a.token_env)
     if not token:raise SystemExit("Set a random >=32-character token in the selected environment variable")
+    if a.provision_original_weights:
+        provision_original_ich_weights(a.model_dir,
+            public_model_rights_reviewed=a.public_model_rights_reviewed)
     app=create_app(dicom_dir=a.dicom_dir,public_manifest=a.public_manifest,
                    model_dir=a.model_dir,origin=a.origin,port=a.port,token=token,
                    scratch_dir=a.scratch_dir)
