@@ -4,11 +4,15 @@ on:
     paths:
       - "scripts/prepare-ich-public-dicom-hu.py"
       - "scripts/test-prepare-ich-public-dicom-hu.py"
+      - "scripts/run-public-ich-dicom-evidence.py"
+      - "scripts/test-run-public-ich-dicom-evidence.py"
       - ".github/workflows/ich-public-dicom-hu.yml"
   push:
     paths:
       - "scripts/prepare-ich-public-dicom-hu.py"
       - "scripts/test-prepare-ich-public-dicom-hu.py"
+      - "scripts/run-public-ich-dicom-evidence.py"
+      - "scripts/test-run-public-ich-dicom-evidence.py"
       - ".github/workflows/ich-public-dicom-hu.yml"
 permissions:
   contents: read
@@ -22,5 +26,6 @@ jobs:
         with:
           python-version: "3.11"
       - run: python -m pip install --no-cache-dir "numpy==2.2.6" "nibabel==5.3.2" "pydicom==3.0.1"
-      - run: python -m py_compile scripts/prepare-ich-public-dicom-hu.py scripts/test-prepare-ich-public-dicom-hu.py
+      - run: python -m py_compile scripts/prepare-ich-public-dicom-hu.py scripts/test-prepare-ich-public-dicom-hu.py scripts/run-public-ich-dicom-evidence.py scripts/test-run-public-ich-dicom-evidence.py
       - run: python scripts/test-prepare-ich-public-dicom-hu.py
+      - run: python scripts/test-run-public-ich-dicom-evidence.py
