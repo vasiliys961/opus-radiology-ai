@@ -217,7 +217,7 @@ export default function VisionFramePlanningPanel({
             <div className="ora-vision-plan-thumb-placeholder">
               {thumbnails[frame.fileId]?.error ?? "Готовим миниатюру локально…"}
             </div>}
-          <button type="button" onClick={() => onOpenSlice(frame.fileId)}>Открыть исходный срез</button>
+          <button type="button" onClick={() => onOpenSlice(frame.fileId)}>Открыть срез Vision в DICOM</button>
         </div>)}
       </div>
       <p>Охват: только отдельные кадры. Количественные измерения, диагнозы и
