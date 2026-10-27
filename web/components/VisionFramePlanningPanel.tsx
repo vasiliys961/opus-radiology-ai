@@ -7,6 +7,7 @@ import { planVisionFrameSamples, MAX_VISION_SAMPLE_FRAMES,
 import { useAnalysisSound } from "./AnalysisSoundProvider";
 import { routeDicomConsilium } from "../lib/dicom-consilium-routing";
 import { dispatchDicomDetectors, type DetectorDispatch } from "../lib/dicom-detector-dispatch";
+import { localLaa950Executor } from "../lib/local-laa950-evidence-executor";
 import { planBudgetedVisionReview } from "../lib/vision-budget-plan";
 import { createVisionBatches, accountReportedVisionUsage } from "../lib/vision-batch-ledger";
 import { decodeDicomPreview } from "../lib/dicom-lite";
@@ -144,8 +145,8 @@ export default function VisionFramePlanningPanel({
         <button type="button" disabled={detectorBusy} onClick={() => {
           const selected = series.find(s => s.key === activeSeriesKey) ?? null;
           setDetectorBusy(true);
-          // No verified pathology executors have yet been registered in this panel.
-          void dispatchDicomDetectors(selected, []).then(setDetectorResult)
+          // Registered local quantitative research executor, not a pathology model.
+          void dispatchDicomDetectors(selected, [localLaa950Executor(capturedSpecialist,capturedLaa950)]).then(setDetectorResult)
             .catch(() => setNotice("Проверка исполнителей не завершилась."))
             .finally(() => setDetectorBusy(false));
         }}>{detectorBusy ? "Проверяем…" : "Проверить доступные локальные детекторы"}</button>
@@ -153,7 +154,8 @@ export default function VisionFramePlanningPanel({
           <p>Реально выполнено диагностических моделей: {detectorResult.executed.length}. Получено Evidence: {detectorResult.evidence.length}.</p>
           <p>Не подключено или заблокировано направлений: {detectorResult.blocked.length}.</p>
           {detectorResult.blocked.map(item => <p key={item.target}>{item.target}: {item.reason === "No registered executable model" ? "исполнитель с проверенными весами пока не подключён" : item.reason}</p>)}
-          <p>Отсутствие результатов моделей не исключает патологию. Изображения никуда не передавались.</p>
+          {detectorResult.evidence.flatMap(e => e.warnings).map((warning,i)=><p key={i}>{warning}</p>)}
+          <p>R231/LAA−950 — количественный исследовательский показатель, не диагностический детектор эмфиземы. Отсутствие результатов не исключает патологию. Изображения никуда не передавались.</p>
         </div>}
       </> : <p role="status">{consilium.reason}</p>}
     </div>
