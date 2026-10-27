@@ -33,4 +33,18 @@ assert.equal(empty.evidence.length,0);
 const missing=await dispatchDicomDetectors({...series,members:[{...series.members[0],
  metadata:{...metadata,sopInstanceUid:null}}]},[valid]);
 assert.equal(missing.executed.length,0);
-console.log("PASS registered detector execution and source-gated evidence");
+const rejectedHuman=await dispatchDicomDetectors(series,[{...valid,run:async()=>({
+ ...evidence,findings:[{...evidence.findings[0],status:"verified_by_human" as const}],
+})}]);
+assert.equal(rejectedHuman.executed.length,0);
+const rejectedFullCoverage=await dispatchDicomDetectors(series,[{...valid,run:async()=>({
+ ...evidence,coverage:"assessed" as const,
+})}]);
+assert.equal(rejectedFullCoverage.executed.length,0);
+const rejectedProvider=await dispatchDicomDetectors(series,[{...valid,run:async()=>({
+ ...evidence,findings:[{...evidence.findings[0],model:{
+  ...evidence.findings[0].model,provider:"research" as const}}],
+})}]);
+assert.equal(rejectedProvider.executed.length,0);
+assert.equal(result.evidence[0].findings[0].status,"requires_recheck");
+console.log("PASS registered detector execution, status and DICOM evidence gates");
