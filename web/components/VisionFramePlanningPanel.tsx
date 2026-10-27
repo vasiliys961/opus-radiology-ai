@@ -8,7 +8,7 @@ import { useAnalysisSound } from "./AnalysisSoundProvider";
 import { routeDicomConsilium } from "../lib/dicom-consilium-routing";
 import {routeUniversalCtMrVision} from "../lib/universal-ct-mr-vision-route";
 import { dispatchDicomDetectors, type DetectorDispatch } from "../lib/dicom-detector-dispatch";
-import { localLaa950Executor } from "../lib/local-laa950-evidence-executor";
+import {installedDetectorRegistry,type InstalledIchRuntime} from "../lib/installed-detector-registry";
 import { planBudgetedVisionReview } from "../lib/vision-budget-plan";
 import { createVisionBatches, accountReportedVisionUsage } from "../lib/vision-batch-ledger";
 import { decodeDicomPreview } from "../lib/dicom-lite";
@@ -18,7 +18,7 @@ import {sameSeriesR231Facts,type CapturedLocalSpecialist} from "../lib/same-seri
 import {sameSeriesLaa950ForReview,type CapturedLocalLaa950} from "../lib/same-series-laa950-review";
 
 export default function VisionFramePlanningPanel({
-  series, activeSeriesKey, fileById, onOpenSlice,capturedSpecialist,capturedLaa950,
+  series, activeSeriesKey, fileById, onOpenSlice,capturedSpecialist,capturedLaa950,ichRuntime,publicResearchAuthorized=false,
 }: {
   series: readonly DicomSeries[];
   activeSeriesKey: string | null;
@@ -26,6 +26,9 @@ export default function VisionFramePlanningPanel({
   onOpenSlice: (fileId: string) => void;
   capturedSpecialist?:CapturedLocalSpecialist|null;
   capturedLaa950?:CapturedLocalLaa950|null;
+  /** Present only when a verified local ICH worker is really connected. */
+  ichRuntime?:InstalledIchRuntime|null;
+  publicResearchAuthorized?:boolean;
 }) {
   const [requested, setRequested] = useState(4);
   const autoPreparedSeriesKey = useRef<string | null>(null);
@@ -34,6 +37,7 @@ export default function VisionFramePlanningPanel({
   const [notice, setNotice] = useState("");
   const [detectorResult, setDetectorResult] = useState<DetectorDispatch | null>(null);
   const [detectorBusy, setDetectorBusy] = useState(false);
+  const detectorController=useRef<AbortController|null>(null);
   const [unifiedStarted,setUnifiedStarted] = useState(false);
   const [thumbnails, setThumbnails] = useState<Record<string, { url?: string; error?: string }>>({});
   const { completionChime } = useAnalysisSound();
@@ -50,6 +54,7 @@ export default function VisionFramePlanningPanel({
       series.find(x=>x.key===activeSeriesKey),capturedSpecialist,capturedLaa950);
     }catch{laaWarning="Показатель LAA−950 не совпадает с текущей КТ и маской R231; не использовать.";}
   }
+  const registered=installedDetectorRegistry({capturedSpecialist,capturedLaa950,ichRuntime,publicResearchAuthorized});
   const choice = useMemo(() => {
     // Never silently choose some other series when a specific series is selected.
     return planVisionFrameSamples(series, activeSeriesKey, requested);
@@ -73,6 +78,9 @@ export default function VisionFramePlanningPanel({
     return { batches, ledger: accountReportedVisionUsage(fullVolumeCost, batches, []) };
   }, [fullVolumeCost]);
   useEffect(() => {
+    // Prevent a previous patient/study result from arriving after source change.
+    detectorController.current?.abort();
+    setDetectorBusy(false);
     setReport(null);
     setDetectorResult(null);
     setUnifiedStarted(false);
@@ -120,14 +128,17 @@ export default function VisionFramePlanningPanel({
   const startUnified = () => {
     const selected=series.find(s=>s.key===activeSeriesKey)??null;
     if(!selected||universal.status!=="eligible_for_authorization")return;
+    detectorController.current?.abort();
+    const controller=new AbortController();
+    detectorController.current=controller;
     setUnifiedStarted(true);
     setReport(choice.status==="ready-for-local-preview"?choice:null);
+    setDetectorResult(null);
     setDetectorBusy(true);
-    void dispatchDicomDetectors(selected,[
-      localLaa950Executor(capturedSpecialist,capturedLaa950),
-    ]).then(setDetectorResult)
-      .catch(()=>setNotice("Локальные детекторы недоступны. Универсальный Vision остаётся доступен после разрешения."))
-      .finally(()=>setDetectorBusy(false));
+    void dispatchDicomDetectors(selected,registered.executors,controller.signal)
+      .then(result=>{if(!controller.signal.aborted)setDetectorResult(result);})
+      .catch(()=>{if(!controller.signal.aborted)setNotice("Локальные детекторы недоступны. Универсальный Vision остаётся доступен после разрешения.");})
+      .finally(()=>{if(!controller.signal.aborted)setDetectorBusy(false);});
     setNotice("Единый маршрут запущен локально: проверяем детекторы и готовим обезличенные копии для Gemini + Opus. Облачный запрос возможен только после проверки и разрешения.");
   };
   const prepare = () => {
@@ -182,20 +193,25 @@ export default function VisionFramePlanningPanel({
         <p>Выбранные специалисты Gemini: {consilium.specialists.join(", ")}.</p>
         <p>Диагностические направления-кандидаты: {consilium.detectorTargets.join(", ")}.</p>
         <p>Claude Opus сопоставляет независимые результаты детекторов и визуальных специалистов после их фактического выполнения.</p>
-        <p>Статус: локальный маршрут сформирован; ниже доступна проверка наличия исполнителей без передачи изображений.</p>
-        <button type="button" disabled={detectorBusy} onClick={() => {
-          const selected = series.find(s => s.key === activeSeriesKey) ?? null;
-          setDetectorBusy(true);
-          // Registered local quantitative research executor, not a pathology model.
-          void dispatchDicomDetectors(selected, [localLaa950Executor(capturedSpecialist,capturedLaa950)]).then(setDetectorResult)
-            .catch(() => setNotice("Проверка исполнителей не завершилась."))
-            .finally(() => setDetectorBusy(false));
-        }}>{detectorBusy ? "Проверяем…" : "Проверить доступные локальные детекторы"}</button>
+        <p>Статус: зарегистрировано {registered.executors.length} реально доступных локальных исполнителей. Запуск выполняется единой кнопкой выше, без передачи DICOM в облако.</p>
+        {registered.unavailable.filter(item=>consilium.detectorTargets.includes(item.target)).map(item=>
+          <p key={item.target} role="status">{item.target}: {item.reason}</p>)}
         {detectorResult && <div role="status">
-          <p>Реально выполнено диагностических моделей: {detectorResult.executed.length}. Получено Evidence: {detectorResult.evidence.length}.</p>
+          <p>Выполнено локальных исполнителей: {detectorResult.executed.length}; из них патологических детекторов: {detectorResult.executed.filter(target=>target!=="lung-low-attenuation-quantification").length}. Получено Evidence: {detectorResult.evidence.length}.</p>
           <p>Не подключено или заблокировано направлений: {detectorResult.blocked.length}.</p>
           {detectorResult.blocked.map(item => <p key={item.target}>{item.target}: {item.reason === "No registered executable model" ? "исполнитель с проверенными весами пока не подключён" : item.reason}</p>)}
           {detectorResult.evidence.flatMap(e => e.warnings).map((warning,i)=><p key={i}>{warning}</p>)}
+          {detectorResult.evidence.flatMap(e=>e.findings).map((finding,i)=>{
+            const source=series.find(s=>s.key===activeSeriesKey)?.members.find(m=>
+              m.metadata.seriesUid===finding.source.seriesUid &&
+              m.metadata.sopInstanceUid===finding.source.sopInstanceUid);
+            return <p key={finding.findingId+"-"+i}>
+              <strong>{finding.anatomy}: {finding.sign}</strong> · кандидат, требует проверки врача.
+              {source ? <button type="button" onClick={()=>onOpenSlice(source.id)}>Открыть исходный DICOM-срез</button> :
+                " Исходный DICOM-срез недоступен; навигация заблокирована."}
+            </p>;
+          })}
+
           <p>R231/LAA−950 — количественный исследовательский показатель, не диагностический детектор эмфиземы. Отсутствие результатов не исключает патологию. Изображения никуда не передавались.</p>
         </div>}
       </> : <p role="status">{consilium.reason}</p>}
