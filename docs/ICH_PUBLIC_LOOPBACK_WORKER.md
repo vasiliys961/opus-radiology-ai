@@ -51,6 +51,29 @@ The worker serves `GET /v1/ich/capabilities`,
 All routes require the bearer token and exact local Origin. Do not store token
 in Git, browser localStorage, URL, logs or GitHub Actions.
 
+### Optional verified first-run model installation
+
+On an isolated Linux machine where the original ianpan checkpoint research
+license has been explicitly reviewed, the worker can provision its original
+publisher assets once:
+
+```bash
+python services/imaging-ai/ich_public_worker.py \
+  --dicom-dir /approved-public-dicom/ct \
+  --public-manifest /approved-public-dicom/authorization.json \
+  --model-dir /isolated-models/new-empty-ianpan-cache \
+  --origin http://localhost:3000 --port 8766 \
+  --provision-original-weights --public-model-rights-reviewed
+```
+
+The selected model cache must be **absent** or already complete and byte-verified.
+The installer downloads from the exact publisher revision and verifies every
+original Safetensors and inference.py SHA-256. A partial/corrupt existing
+directory is **rejected rather than silently updated**, and a failed new
+download is cleaned up. Once installed, normal model inference uses offline
+mode; no browser or patient data participate in this download. Do not set the
+provisioning flag without verifying the model use rights.
+
 ## Connection to the unified CT/MR launch
 
 The main DICOM workstation's existing **Запустить единый анализ КТ/МРТ**
