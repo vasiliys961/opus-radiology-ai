@@ -44,6 +44,6 @@ assert.equal(denied.batch.state,"budget_exhausted");
 assert.equal(denied.clinicalStatus,"not_generated");
 assert.equal(reports,1);
 await assert.rejects(()=>runBudgetedBatchConsilium(
-  planBudgetedVisionReview({frameCount:3}),frames,{modality:"MR",regions:["brain"]},[],
+  planBudgetedVisionReview({frameCount:3}),frames,{modality:"MR",regions:["brain"]},[evidence(0)],
   async()=>{throw new Error("No network");},base));
 console.log("PASS batch consilium evidence, single Opus call, no-report on zero coverage and modality guard");
