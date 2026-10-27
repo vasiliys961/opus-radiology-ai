@@ -16,6 +16,7 @@ import AiEvidenceReview from "../components/AiEvidenceReview";
 import StudyIntelligencePanel from "../components/StudyIntelligencePanel";
 import VisionFramePlanningPanel from "../components/VisionFramePlanningPanel";
 import CtHuRoiPanel from "../components/CtHuRoiPanel";
+import DicomCaliperPanel from "../components/DicomCaliperPanel";
 import type {CapturedLocalSpecialist} from "../lib/same-series-r231-cloud-evidence";
 import type {CapturedLocalLaa950} from "../lib/same-series-laa950-review";
 import CtSlabSelection from "../components/CtSlabSelection";
@@ -387,6 +388,9 @@ export default function Home() {
             </div>
             <div className="ora-finding-strip"><div className="ora-finding-icon"><Icon name="sparkles" size={21}/></div><div><strong>Локальная сегментация и Evidence</strong><p>В MPR доступны импорт масок и Lungmask R231 при установленном worker и весах. R231 разрешён только для открытой исследовательской КТ; полнота охвата и клиническая точность не подтверждены.</p></div><span className="ora-coming-soon">RESEARCH</span></div>
             <CtHuRoiPanel file={active?.kind==="dicom"?active.file:null}
+              metadata={active?.kind==="dicom"?active.dicomMeta??null:null}
+              seriesKey={activeSeries?.key??null}/>
+            <DicomCaliperPanel file={active?.kind==="dicom"?active.file:null}
               metadata={active?.kind==="dicom"?active.dicomMeta??null:null}
               seriesKey={activeSeries?.key??null}/>
             <VisionFramePlanningPanel
