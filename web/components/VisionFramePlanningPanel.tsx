@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { DicomSeries } from "../lib/dicom-series";
 import { planVisionFrameSamples, MAX_VISION_SAMPLE_FRAMES,
   type VisionFramePlan } from "../lib/vision-frame-plan";
@@ -28,6 +28,7 @@ export default function VisionFramePlanningPanel({
   capturedLaa950?:CapturedLocalLaa950|null;
 }) {
   const [requested, setRequested] = useState(4);
+  const autoPreparedSeriesKey = useRef<string | null>(null);
   const [targetFrame, setTargetFrame] = useState("");
   const [report, setReport] = useState<VisionFramePlan | null>(null);
   const [notice, setNotice] = useState("");
@@ -79,9 +80,13 @@ export default function VisionFramePlanningPanel({
   useEffect(() => {
     // Automatically prepare the bounded local preview when a CT/MR series opens.
     // This does not authorize provider calls or send any pixels off device.
-    if(universal.status==="eligible_for_authorization"&&
-       choice.status==="ready-for-local-preview")setReport(choice);
-  },[universal,choice]);
+    if(activeSeriesKey && autoPreparedSeriesKey.current!==activeSeriesKey &&
+       universal.status==="eligible_for_authorization" &&
+       choice.status==="ready-for-local-preview"){
+      autoPreparedSeriesKey.current=activeSeriesKey;
+      setReport(choice);
+    }
+  },[universal,choice,activeSeriesKey]);
   useEffect(() => {
     if (!report) return;
     let cancelled = false;
