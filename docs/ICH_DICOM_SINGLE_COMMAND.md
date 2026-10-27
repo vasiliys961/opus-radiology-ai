@@ -25,6 +25,20 @@ The newly created output directory is private. `private-native-evidence.json` co
 
 This source linkage is established in the local research executor on compatible real DICOM input, but does **not** connect to the browser unified-start button; the ICH model is not installed inside the current loopback R231 worker. No real user-selected DICOM study has yet passed through this new combined command. There is no independent clinical sensitivity/Dice established by this integration.
 
+
+## Physical slice identity
+
+For every model ROI the executor now verifies the original NIfTI RAS affine and
+the projected native voxel bounding box, converts its four corners to DICOM LPS,
+and matches one **unique physical DICOM image plane** using original
+ImagePositionPatient, ImageOrientationPatient, PixelSpacing and image dimensions.
+It rejects outside-FOV, discrepant ROI world coordinates, unknown slice geometry
+and ambiguous co-planar images. The model's NIfTI k value is *not* treated as an
+index into a DICOM filename/SOP array. All original DICOM SHA digests are
+rechecked after inference, as is the converted source NIfTI digest. CI includes a
+reverse-order test but remains synthetic; a real positive licensed case is
+still necessary for acceptance.
+
 ## Acceptance
 
 - The default CI exercises converter geometry and synthetic binding safety contracts, **not** original model forward.
