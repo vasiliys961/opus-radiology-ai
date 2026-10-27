@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { DicomSeries } from "../lib/dicom-series";
 import { planVisionFrameSamples, MAX_VISION_SAMPLE_FRAMES,
   type VisionFramePlan } from "../lib/vision-frame-plan";
 import { useAnalysisSound } from "./AnalysisSoundProvider";
 import { routeDicomConsilium } from "../lib/dicom-consilium-routing";
+import {routeUniversalCtMrVision} from "../lib/universal-ct-mr-vision-route";
 import { dispatchDicomDetectors, type DetectorDispatch } from "../lib/dicom-detector-dispatch";
 import { localLaa950Executor } from "../lib/local-laa950-evidence-executor";
 import { planBudgetedVisionReview } from "../lib/vision-budget-plan";
@@ -27,6 +28,7 @@ export default function VisionFramePlanningPanel({
   capturedLaa950?:CapturedLocalLaa950|null;
 }) {
   const [requested, setRequested] = useState(4);
+  const autoPreparedSeriesKey = useRef<string | null>(null);
   const [targetFrame, setTargetFrame] = useState("");
   const [report, setReport] = useState<VisionFramePlan | null>(null);
   const [notice, setNotice] = useState("");
@@ -52,6 +54,7 @@ export default function VisionFramePlanningPanel({
     return planVisionFrameSamples(series, activeSeriesKey, requested);
   }, [series, activeSeriesKey, requested]);
   const consilium = useMemo(() => routeDicomConsilium(series.find(s => s.key === activeSeriesKey) ?? null), [series, activeSeriesKey]);
+  const universal = useMemo(() => routeUniversalCtMrVision(series.find(s => s.key === activeSeriesKey) ?? null), [series, activeSeriesKey]);
   const fullVolumeCost = useMemo(() => {
     if (choice.status !== "ready-for-local-preview" || !choice.seriesKey) return null;
     const selected = series.find(s => s.key === choice.seriesKey);
@@ -74,6 +77,16 @@ export default function VisionFramePlanningPanel({
     setNotice("");
     setThumbnails({});
   }, [series, activeSeriesKey, requested]);
+  useEffect(() => {
+    // Automatically prepare the bounded local preview when a CT/MR series opens.
+    // This does not authorize provider calls or send any pixels off device.
+    if(activeSeriesKey && autoPreparedSeriesKey.current!==activeSeriesKey &&
+       universal.status==="eligible_for_authorization" &&
+       choice.status==="ready-for-local-preview"){
+      autoPreparedSeriesKey.current=activeSeriesKey;
+      setReport(choice);
+    }
+  },[universal,choice,activeSeriesKey]);
   useEffect(() => {
     if (!report) return;
     let cancelled = false;
@@ -134,6 +147,11 @@ export default function VisionFramePlanningPanel({
       <button type="button" onClick={prepare} disabled={choice.status !== "ready-for-local-preview"}>
         Сформировать план
       </button>
+    </div>
+    <div className="ora-vision-budget-preview" role="status" aria-label="Универсальный анализ КТ и МРТ">
+      <strong>Gemini + Opus · универсальный анализ {universal.modality==="CT"?"КТ":universal.modality==="MR"?"МРТ":"DICOM"}</strong>
+      <p>{universal.reason}</p>
+      <p>Универсальный маршрут не зависит от установленных детекторов. Подготовка кадров и отдельное разрешение облачной передачи выполняются ниже; готовность маршрута не означает, что изображения уже проанализированы.</p>
     </div>
     <div className="ora-vision-budget-preview" aria-label="Локальный маршрут диагностического консилиума">
       <strong>Диагностический консилиум · автоматический маршрут</strong>
@@ -204,7 +222,7 @@ export default function VisionFramePlanningPanel({
             <div className="ora-vision-plan-thumb-placeholder">
               {thumbnails[frame.fileId]?.error ?? "Готовим миниатюру локально…"}
             </div>}
-          <button type="button" onClick={() => onOpenSlice(frame.fileId)}>Открыть исходный срез</button>
+          <button type="button" onClick={() => onOpenSlice(frame.fileId)}>Открыть срез Vision в DICOM</button>
         </div>)}
       </div>
       <p>Охват: только отдельные кадры. Количественные измерения, диагнозы и
