@@ -7,6 +7,8 @@
  * module cannot verify the worker's installed bytes on its own.
  */
 import type {DetectorExecutor} from "./dicom-detector-dispatch.ts";
+import type {EvidenceJson} from "./evidence-json.ts";
+import {IANPAN_MODEL_ID,IANPAN_MODEL_REVISION} from "./public-ich-worker.ts";
 import {createLocalIchExecutor,type TrustedLocalIchRun} from "./local-ich-detector-executor.ts";
 import {localLaa950Executor} from "./local-laa950-evidence-executor.ts";
 import type {CapturedLocalSpecialist} from "./same-series-r231-cloud-evidence.ts";
@@ -26,7 +28,17 @@ export type InstalledIchRuntime = {
   run: TrustedLocalIchRun;
 };
 
+export type InstalledIanpanRuntime = {
+  ready:boolean;
+  modelId:typeof IANPAN_MODEL_ID;
+  modelRevision:typeof IANPAN_MODEL_REVISION;
+  dataPolicy:"public-reference-only";
+  /** Only construct after exact worker capability SHA checks. */
+  run:(series:import("./dicom-series.ts").DicomSeries,signal?:AbortSignal)=>Promise<EvidenceJson>;
+};
+
 export type InstalledDetectorInputs = {
+  ianpanRuntime?:InstalledIanpanRuntime|null;
   capturedSpecialist?: CapturedLocalSpecialist | null;
   capturedLaa950?: CapturedLocalLaa950 | null;
   ichRuntime?: InstalledIchRuntime | null;
@@ -44,8 +56,28 @@ export function installedDetectorRegistry(inputs: InstalledDetectorInputs): Inst
   const executors: DetectorExecutor[]=[];
   const unavailable: {target: string; reason: string}[]=[];
   const ich=inputs.ichRuntime;
+  const ianpan=inputs.ianpanRuntime;
   if (!inputs.publicResearchAuthorized) {
     unavailable.push({target:"intracerebral-hemorrhage",reason:"Public research source not authorized; patient-mode ICH unavailable"});
+  } else if (ianpan && ianpan.ready && ianpan.dataPolicy==="public-reference-only" &&
+      ianpan.modelId===IANPAN_MODEL_ID && ianpan.modelRevision===IANPAN_MODEL_REVISION &&
+      typeof ianpan.run==="function") {
+    executors.push({
+      target:"intracerebral-hemorrhage",modality:"CT",
+      eligible:series=>series.modality==="CT" && series.volumeReady && series.spatiallySorted &&
+        series.members.length>=8 && series.members.length<=64 &&
+        series.members.every(m=>m.metadata.bodyRegion==="HEAD"&&
+          m.metadata.imageRole!=="LOCALIZER"&&m.metadata.imageRole!=="DERIVED"&&
+          !!m.metadata.sopInstanceUid&&!!m.metadata.seriesUid&&
+          (!m.metadata.numberOfFrames||m.metadata.numberOfFrames===1)),
+      run:async (series,signal)=>{
+        const evidence=await ianpan.run(series,signal);
+        if(evidence.findings.some(f=>f.model.id!==IANPAN_MODEL_ID ||
+            f.model.version!==IANPAN_MODEL_REVISION || f.model.provider!=="local"))
+          throw Error("Unexpected ICH publisher model in source Evidence");
+        return evidence;
+      },
+    });
   } else if (!ich || !ich.ready || ich.dataPolicy!=="public-reference-only" ||
       ich.modelId!=="samihs-ich-binary-ct" ||
       ich.checkpointSha256!==OFFICIAL_SAMIHS_CHECKPOINT_SHA256 ||
