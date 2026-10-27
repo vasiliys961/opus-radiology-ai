@@ -35,6 +35,7 @@ export async function dispatchDicomDetectors(
   const members=series.members.map(m=>m.metadata);
   const allowedSeries=new Set(members.map(m=>m.seriesUid).filter((s):s is string=>!!s));
   const allowedSop=new Set(members.map(m=>m.sopInstanceUid).filter((s):s is string=>!!s));
+  const allowedSources=new Set(members.map(m=>m.seriesUid+"|"+m.sopInstanceUid));
   if (allowedSeries.size!==1 || allowedSop.size!==members.length)
     return {executed:[],evidence:[],blocked:[{target:"study",reason:"Source DICOM UIDs unverified"}]};
   const allTargets=new Set(route.detectorTargets);
@@ -56,13 +57,19 @@ export async function dispatchDicomDetectors(
     try {
       const evidence=await model.run(series,signal);
       if (!validateEvidenceJson(evidence)||evidence.modality!==series.modality||
+          evidence.coverage==="assessed"||
+          evidence.findings.some(f=>f.status==="verified_by_human" ||
+            f.status==="rejected" || f.model.provider!=="local" ||
+            !allowedSources.has(f.source.seriesUid+"|"+f.source.sopInstanceUid))||
           evidence.seriesReviewed.some(uid=>!allowedSeries.has(uid))||
           evidence.findings.some(f=>!f.source.sopInstanceUid ||
             !allowedSop.has(f.source.sopInstanceUid)||
             f.source.frameIndex!==0 || !allowedSeries.has(f.source.seriesUid)))
         throw new Error("Unverified model source");
       result.executed.push(target);
-      result.evidence.push(evidence);
+      result.evidence.push({...evidence,coverage:evidence.coverage==="not_assessed"?"not_assessed":"partially_assessed",
+        findings:evidence.findings.map(f=>({...f,status:"requires_recheck" as const,
+          limitations:[...f.limitations,"Model observation requires independent physician review"].slice(0,20)}))});
     } catch {
       result.blocked.push({target,reason:"Execution failed or provenance was invalid"});
     }
