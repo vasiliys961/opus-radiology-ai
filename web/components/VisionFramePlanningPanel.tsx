@@ -5,6 +5,7 @@ import type { DicomSeries } from "../lib/dicom-series";
 import { planVisionFrameSamples, MAX_VISION_SAMPLE_FRAMES,
   type VisionFramePlan } from "../lib/vision-frame-plan";
 import { useAnalysisSound } from "./AnalysisSoundProvider";
+import { routeDicomConsilium } from "../lib/dicom-consilium-routing";
 import { planBudgetedVisionReview } from "../lib/vision-budget-plan";
 import { createVisionBatches, accountReportedVisionUsage } from "../lib/vision-batch-ledger";
 import { decodeDicomPreview } from "../lib/dicom-lite";
@@ -46,6 +47,7 @@ export default function VisionFramePlanningPanel({
     // Never silently choose some other series when a specific series is selected.
     return planVisionFrameSamples(series, activeSeriesKey, requested);
   }, [series, activeSeriesKey, requested]);
+  const consilium = useMemo(() => routeDicomConsilium(series.find(s => s.key === activeSeriesKey) ?? null), [series, activeSeriesKey]);
   const fullVolumeCost = useMemo(() => {
     if (choice.status !== "ready-for-local-preview" || !choice.seriesKey) return null;
     const selected = series.find(s => s.key === choice.seriesKey);
@@ -127,6 +129,15 @@ export default function VisionFramePlanningPanel({
       <button type="button" onClick={prepare} disabled={choice.status !== "ready-for-local-preview"}>
         Сформировать план
       </button>
+    </div>
+    <div className="ora-vision-budget-preview" aria-label="Локальный маршрут диагностического консилиума">
+      <strong>Диагностический консилиум · автоматический маршрут</strong>
+      {consilium.status === "ready" ? <>
+        <p>Выбранные специалисты Gemini: {consilium.specialists.join(", ")}.</p>
+        <p>Диагностические направления-кандидаты: {consilium.detectorTargets.join(", ")}.</p>
+        <p>Claude Opus сопоставляет независимые результаты детекторов и визуальных специалистов после их фактического выполнения.</p>
+        <p>Статус: подготовлен локальный маршрут. Облачный анализ и детекторы из этой панели ещё не запускаются.</p>
+      </> : <p role="status">{consilium.reason}</p>}
     </div>
     <div className="ora-vision-budget-preview" aria-label="Бюджет полного обзора Gemini">
       <strong>Двухэтапный обзор всей серии — локальный расчёт</strong>
