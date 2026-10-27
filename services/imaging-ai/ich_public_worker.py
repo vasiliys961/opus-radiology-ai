@@ -106,6 +106,8 @@ def create_app(*,dicom_dir,public_manifest,model_dir,token,origin,
 
     async def cleanup(job):
         if not job:return
+        # Never cancel the coroutine midway through subprocess creation.
+        await job["spawnReady"].wait()
         p=job.get("process")
         if p and p.returncode is None:
             try:os.killpg(p.pid,signal.SIGKILL)
@@ -170,11 +172,14 @@ def create_app(*,dicom_dir,public_manifest,model_dir,token,origin,
             env.update({"HF_HUB_OFFLINE":"1","TRANSFORMERS_OFFLINE":"1",
                         "HF_HUB_DISABLE_TELEMETRY":"1","OMP_NUM_THREADS":"2","OPENBLAS_NUM_THREADS":"1",
                         "PYTHONUNBUFFERED":"1"})
-            proc=await asyncio.create_subprocess_exec(*cmd,cwd=str(SCRIPTS.parent),
-                                                       stdout=asyncio.subprocess.DEVNULL,
-                                                       stderr=asyncio.subprocess.DEVNULL,
-                                                       env=env,start_new_session=True)
-            job["process"]=proc
+            try:
+                proc=await asyncio.create_subprocess_exec(*cmd,cwd=str(SCRIPTS.parent),
+                                                           stdout=asyncio.subprocess.DEVNULL,
+                                                           stderr=asyncio.subprocess.DEVNULL,
+                                                           env=env,start_new_session=True)
+                job["process"]=proc
+            finally:
+                job["spawnReady"].set()
             started=asyncio.get_running_loop().time()
             rss_limit=12*1024**3
             pressure=0
@@ -221,6 +226,9 @@ def create_app(*,dicom_dir,public_manifest,model_dir,token,origin,
         except Exception:
             job["state"]="failed"
             job["reason"]="inference_or_provenance_validation_failed"
+        finally:
+            # Set even if subprocess admission failed before spawn.
+            job["spawnReady"].set()
 
     @app.post("/v1/ich/jobs",status_code=201)
     async def create_job(request:Request):
@@ -244,7 +252,7 @@ def create_app(*,dicom_dir,public_manifest,model_dir,token,origin,
             raise HTTPException(422,"source_manifest_or_authorized_public_rights_failed") from None
         job_dir=root/str(uuid.uuid4())
         job_dir.mkdir(mode=0o700)
-        job={"id":job_dir.name,"directory":job_dir,"state":"running","evidence":None,"process":None}
+        job={"id":job_dir.name,"directory":job_dir,"state":"running","evidence":None,"process":None,"spawnReady":asyncio.Event()}
         current["job"]=job
         job["task"]=asyncio.create_task(infer(job))
         return {"schema":"opus-public-ich-job-status/v1","jobId":job["id"],"state":"running"}
