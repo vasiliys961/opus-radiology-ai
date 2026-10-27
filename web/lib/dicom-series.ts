@@ -157,6 +157,7 @@ export function parseDicomSeriesHeader(buffer: ArrayBuffer): TechnicalDicomMetad
   let offset = 132;
   let explicit = true;
   let meta = true;
+  let codedAnatomySequencePresent = false;
 
   while (offset + 8 <= bytes.byteLength) {
     const group = view.getUint16(offset, true);
@@ -196,6 +197,7 @@ export function parseDicomSeriesHeader(buffer: ArrayBuffer): TechnicalDicomMetad
     }
     const getText = () => ascii(bytes, valueOffset, length);
     switch (tag) {
+      case 0x00082218: codedAnatomySequencePresent = true; break;
       case 0x00020010: result.transferSyntax = getText(); break;
       case 0x00080060: result.modality = getText().slice(0, 16); break;
       case 0x00080008: result.imageRole = imageRole(getText()); break;
@@ -246,6 +248,9 @@ export function parseDicomSeriesHeader(buffer: ArrayBuffer): TechnicalDicomMetad
     }
     offset = valueOffset + length;
   }
+  // A coded anatomical region can contradict BodyPartExamined. The cheap
+  // reader must delegate any SQ to dicom-parser instead of trusting one tag.
+  if (codedAnatomySequencePresent) result.bodyRegion = null;
   return result;
 }
 
@@ -257,6 +262,22 @@ export function parseDicomSeriesHeader(buffer: ArrayBuffer): TechnicalDicomMetad
  * We ask dicom-parser to stop BEFORE Pixel Data: compressed pixel streams are
  * not decoded and patient-identifying tags are never returned or logged.
  */
+/** DICOM CID 4031: exact code/scheme only, never CodeMeaning free text.
+ * SCT 69536005 = Head, SRT T-D1100 = retired mapping to same anatomy.
+ * Head and neck is intentionally NOT interpreted as a head-only NCCT.
+ */
+function codedHeadRegion(sequence: unknown): "HEAD" | null {
+  if (!sequence || typeof sequence !== "object") return null;
+  const items=(sequence as {items?:unknown}).items;
+  if(!Array.isArray(items)||items.length!==1)return null;
+  const item=items[0] as {dataSet?:{string:(tag:string)=>string|undefined}}|undefined;
+  if(!item?.dataSet || typeof item.dataSet.string!=="function")return null;
+  const scheme=item.dataSet.string("x00080102")?.trim().toUpperCase();
+  const code=item.dataSet.string("x00080100")?.trim();
+  return (scheme==="SCT"&&code==="69536005") ||
+    (scheme==="SRT"&&code==="T-D1100") ? "HEAD":null;
+}
+
 async function parseComplexDicomHeader(buffer: ArrayBuffer): Promise<TechnicalDicomMetadata> {
   const parserModule = await import('dicom-parser');
   const dicomParser = parserModule.default ?? parserModule;
@@ -287,6 +308,14 @@ async function parseComplexDicomHeader(buffer: ArrayBuffer): Promise<TechnicalDi
   const frames = number('x00280008');
   const rows = dataSet.uint16('x00280010');
   const columns = dataSet.uint16('x00280011');
+  const declaredRaw=str('x00180015');
+  const declared=allowedRegion(declaredRaw);
+  const sequence=(dataSet.elements as Record<string,unknown>)['x00082218'];
+  const coded=codedHeadRegion(sequence);
+  // A present but unknown BodyPartExamined or conflicting independent code
+  // cannot silently be turned into a verified head CT.
+  const region=declaredRaw&&!declared ? null :
+    declared&&coded&&declared!==coded ? null : (declared??coded);
   const result: TechnicalDicomMetadata = {
     sopInstanceUid: str('x00080018'),
     studyUid: str('x0020000d'),
@@ -305,7 +334,7 @@ async function parseComplexDicomHeader(buffer: ArrayBuffer): Promise<TechnicalDi
     rescaleUnit:rescaleUnit(str('x00281054')),
     transferSyntax: str('x00020010') ?? (hasPart10 ? '' : rawSyntax),
     imageRole: imageRole(str('x00080008')),
-    bodyRegion: allowedRegion(str('x00180015')),
+    bodyRegion: region,
     mrSequenceCodes: scanCodes(str('x00180020')),
     repetitionTimeMs: boundedDs(str('x00180080')),
     echoTimeMs: boundedDs(str('x00180081')),
@@ -328,7 +357,23 @@ export async function readDicomSeriesHeader(file: File): Promise<TechnicalDicomM
   const header = await file.slice(0, HEADER_BYTES).arrayBuffer();
   try {
     const indexed = parseDicomSeriesHeader(header);
-    if (indexed.studyUid || indexed.seriesUid || indexed.sopInstanceUid) return indexed;
+    if (indexed.studyUid || indexed.seriesUid || indexed.sopInstanceUid) {
+      if (indexed.bodyRegion) return indexed;
+      // BodyPartExamined missing/unsupported or coded SQ encountered. Read
+      // its standard coded anatomy with the bounded full parser, but only
+      // accept when ALL source UIDs still refer to the same original DICOM.
+      try {
+        const size=Math.min(file.size,MAX_COMPLEX_HEADER_BYTES);
+        const contents=size<=HEADER_BYTES?header:await file.slice(0,size).arrayBuffer();
+        const full=await parseComplexDicomHeader(contents);
+        if(full.studyUid===indexed.studyUid &&
+           full.seriesUid===indexed.seriesUid &&
+           full.sopInstanceUid===indexed.sopInstanceUid &&
+           full.modality===indexed.modality)
+          return {...indexed,bodyRegion:full.bodyRegion};
+      }catch{ /* Unrecognized coding cannot establish an anatomy. */ }
+      return indexed;
+    }
     // Metadata may be incomplete because the handwritten reader reached the
     // limit before the relevant technical tags.
   } catch { /* Complex SQ or raw dataset: try the standards-aware parser. */ }
