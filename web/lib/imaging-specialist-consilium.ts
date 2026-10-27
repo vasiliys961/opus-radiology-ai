@@ -62,7 +62,7 @@ export function assignImagingSpecialists(profile:ImagingStudyProfile):Specialist
       (profile.contrast !== undefined && !["yes","no","unknown"].includes(profile.contrast)))
     throw new Error("Unsupported or unverified study profile");
   const selected=new Set<ImagingSpecialty>();
-  for (const region of profile.regions) for (const specialty of regionMap[region]) selected.add(specialty);
+  for (const region of profile.regions as ImagingStudyProfile["regions"]) for (const specialty of regionMap[region]) selected.add(specialty);
   return [...selected].map(specialty=>({
     specialty,compatibleDetectorTargets:specialties[specialty].detectors,
     prompt:shared+" "+specialties[specialty].focus+
