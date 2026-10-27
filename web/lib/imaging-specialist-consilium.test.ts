@@ -1,0 +1,17 @@
+import { strict as assert } from "node:assert";
+import { assignImagingSpecialists, CONSILIUM_OPUS_PROMPT } from "./imaging-specialist-consilium.ts";
+const head=assignImagingSpecialists({modality:"MR",regions:["brain"],sequences:["FLAIR","DWI","ADC"]});
+assert.deepEqual(head.map(x=>x.specialty),["neuroradiology"]);
+assert.ok(head[0].compatibleDetectorTargets.includes("white-matter-hyperintensities"));
+assert.match(head[0].prompt,/Do not infer absent pathology/);
+const chest=assignImagingSpecialists({modality:"CT",regions:["chest"],contrast:"unknown"});
+assert.deepEqual(chest.map(x=>x.specialty),["thoracic","vascular"]);
+assert.ok(chest[1].compatibleDetectorTargets.includes("pulmonary-embolism"));
+assert.match(chest[1].prompt,/CTPA/);
+const multi=assignImagingSpecialists({modality:"CT",regions:["chest","abdomen","chest"]});
+assert.deepEqual(multi.map(x=>x.specialty),["thoracic","vascular","abdominal"]);
+assert.throws(()=>assignImagingSpecialists({modality:"CT",regions:["unknown" as "brain"]}));
+assert.throws(()=>assignImagingSpecialists({modality:"MR",regions:[]}));
+assert.match(CONSILIUM_OPUS_PROMPT,/independent specialist-model Evidence/);
+assert.match(CONSILIUM_OPUS_PROMPT,/conflicting or not-assessed/);
+console.log("PASS modality/region routing, selected expertise and evidence-first prompts");
