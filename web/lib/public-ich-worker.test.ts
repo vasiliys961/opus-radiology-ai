@@ -1,7 +1,7 @@
 import {strict as assert} from "node:assert";
 import {validatedPublicIchCapabilities,originalDicomDigests,
   IANPAN_MODEL_ID,IANPAN_MODEL_REVISION} from "./public-ich-worker.ts";
-import {installedDetectorRegistry} from "./installed-detector-registry.ts";
+import {installedDetectorRegistry,type InstalledIanpanRuntime} from "./installed-detector-registry.ts";
 import {dispatchDicomDetectors} from "./dicom-detector-dispatch.ts";
 import type {DicomSeries,TechnicalDicomMetadata} from "./dicom-series.ts";
 import type {EvidenceJson} from "./evidence-json.ts";
@@ -54,7 +54,7 @@ const ev:EvidenceJson={schema:"opus-evidence/v1",modality:"CT",
  source:{seriesUid:"1.2.3",sopInstanceUid:"1.2.3.6",frameIndex:0,slicePositionMm:2},
  measurements:{diameterMm:null,volumeMl:null},
  model:{id:IANPAN_MODEL_ID,version:IANPAN_MODEL_REVISION,provider:"local"},limitations:[]}]};
-const connected={ready:true,modelId:IANPAN_MODEL_ID,modelRevision:IANPAN_MODEL_REVISION,
+const connected:InstalledIanpanRuntime={ready:true,modelId:IANPAN_MODEL_ID,modelRevision:IANPAN_MODEL_REVISION,
  dataPolicy:"public-reference-only" as const,run:async()=>ev};
 assert.equal(installedDetectorRegistry({ianpanRuntime:connected}).executors.length,0);
 const reg=installedDetectorRegistry({ianpanRuntime:connected,publicResearchAuthorized:true});
