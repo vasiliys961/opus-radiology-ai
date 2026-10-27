@@ -8,6 +8,7 @@ import importlib.util
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import time
 from types import SimpleNamespace
 from fastapi.testclient import TestClient
 
@@ -82,5 +83,64 @@ with TemporaryDirectory() as directory:
             json={"schema":"opus-public-ich-job/v1","dataPolicy":"patient",
                   "originalDicomSha256":["0"*64]*8})
         assert bad_job.status_code==422
-        assert "job" not in (bad_job.text.lower().split("detail")[0])
-print("PASS real ASGI HTTP/CORS/auth/source rejection for exact HTTPS UI; mocked fixtures only")
+        # Synthetic accepted lifecycle: run a STUB process to exercise the
+        # actual HTTP POST -> status -> Evidence -> DELETE handlers.
+        # It does NOT deserialize or execute any ICH model.
+        source_digests,_=worker.source_manifest_sha(
+            FixtureConverter(),dicom,authorization)
+        original_spawn=worker.asyncio.create_subprocess_exec
+        original_memory=worker.psutil.virtual_memory
+        worker.psutil.virtual_memory=lambda:SimpleNamespace(
+            available=20*1024**3)
+        class StubCompletedProcess:
+            returncode=0
+            pid=-1
+            async def wait(self):return 0
+        async def synthetic_model_process(*args,**kwargs):
+            output=Path(args[args.index("--output-dir")+1])
+            output.mkdir(mode=0o700)
+            (output/"private-native-evidence.json").write_text(json.dumps({
+                "schema":"opus-evidence/v1","modality":"CT",
+                "coverage":"not_assessed","seriesReviewed":[],
+                "findings":[],"warnings":["SYNTHETIC HTTP LIFECYCLE ONLY"],
+            }),encoding="utf-8")
+            return StubCompletedProcess()
+        worker.asyncio.create_subprocess_exec=synthetic_model_process
+        try:
+            good=client.post("/v1/ich/jobs",headers=request_headers(),
+                json={"schema":"opus-public-ich-job/v1",
+                      "dataPolicy":"public-reference-only",
+                      "originalDicomSha256":source_digests})
+            assert good.status_code==201,good.text
+            job=good.json()
+            assert job["schema"]=="opus-public-ich-job-status/v1"
+            job_id=job["jobId"]
+            for _ in range(50):
+                status=client.get("/v1/ich/jobs/"+job_id,
+                                  headers=request_headers())
+                assert status.status_code==200
+                if status.json()["state"]=="succeeded":break
+                assert status.json()["state"]=="running",status.text
+                time.sleep(.02)
+            else:raise AssertionError("synthetic_HTTP_job_never_completed")
+            ev=client.get("/v1/ich/jobs/"+job_id+"/evidence",
+                          headers=request_headers())
+            assert ev.status_code==200
+            assert ev.json()["coverage"]=="not_assessed"
+            assert not ev.json()["findings"]
+            rejected_parallel=client.post("/v1/ich/jobs",
+                 headers=request_headers(),json={
+                    "schema":"opus-public-ich-job/v1",
+                    "dataPolicy":"public-reference-only",
+                    "originalDicomSha256":source_digests})
+            assert rejected_parallel.status_code==409
+            deleted=client.delete("/v1/ich/jobs/"+job_id,
+                                  headers=request_headers())
+            assert deleted.status_code==200
+            assert deleted.json()["deleted"] is True
+            assert client.get("/v1/ich/jobs/"+job_id,
+                    headers=request_headers()).status_code==404
+        finally:
+            worker.asyncio.create_subprocess_exec=original_spawn
+            worker.psutil.virtual_memory=original_memory
+print("PASS ASGI HTTPS/CORS/auth/source and synthetic job lifecycle contract; NO trained model executed")
