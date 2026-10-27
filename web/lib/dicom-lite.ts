@@ -16,7 +16,7 @@ export type DicomPreviewMetadata = {
   windowWidth: number | null;
 };
 
-type DicomFrame = {
+export type DicomFrame = {
   metadata: DicomPreviewMetadata;
   pixelOffset: number;
   pixelLength: number;
@@ -174,6 +174,84 @@ export function parseDicomFrame(buffer: ArrayBuffer): DicomFrame {
     metadata: { width, height, bitsAllocated: bitsAllocated as 8 | 16, transferSyntax: syntax, modality, instanceNumber, windowCenter, windowWidth },
     bytes: buffer, pixelOffset, pixelLength, signed, bitsStored, highBit, slope, intercept, inverse,
   };
+}
+
+/** Direct clinical-useful quantitative tool: actual ORIGINAL DICOM CT pixel
+ * values inside physician-selected circular ROI, not a simulated detector.
+ * Rescale slope/intercept are verified against independent header metadata.
+ * Never implies osteoporosis, fibrosis, steatosis or malignant lesions.
+ */
+import type {TechnicalDicomMetadata} from "./dicom-series.ts";
+export type CtRoiMeasurement={
+  center:{x:number;y:number};radiusPixels:number;pixelCount:number;
+  spacingMm:[number,number];areaMm2:number;
+  rescaleType:"HU";
+  meanHu:number;medianHu:number;stdDevHu:number;p10Hu:number;p90Hu:number;
+  minHu:number;maxHu:number;
+  histogram:{lowHu:number;highHu:number;count:number}[];
+};
+export function measureCtDicomCircularRoi(
+ frame:DicomFrame, header:TechnicalDicomMetadata,
+ x:number,y:number,radius:number,
+):CtRoiMeasurement {
+ const m=frame.metadata;
+ const spacing=header.pixelSpacing;
+ if (m.modality!=="CT"||header.modality!=="CT"||
+     header.rescaleUnit!=="HU"||
+     typeof header.rescaleSlope!=="number"||!Number.isFinite(header.rescaleSlope)||
+     header.rescaleSlope<=0||
+     typeof header.rescaleIntercept!=="number"||!Number.isFinite(header.rescaleIntercept)||
+     !spacing||spacing.length!==2||
+     !spacing.every(v=>Number.isFinite(v)&&v>=.1&&v<=5)||
+     header.rows!==m.height||header.columns!==m.width||
+     Math.abs(frame.slope-header.rescaleSlope)>1e-7||
+     Math.abs(frame.intercept-header.rescaleIntercept)>1e-5) {
+   throw new DicomPreviewError("Для измерения HU нужна исходная КТ с подтверждёнными Rescale Slope/Intercept, Rescale Type=HU и PixelSpacing.");
+ }
+ if(![x,y,radius].every(Number.isFinite)||radius<2||radius>64||
+    x-radius<0||y-radius<0||x+radius>=m.width||y+radius>=m.height)
+   throw new DicomPreviewError("Круг ROI должен целиком находиться внутри исходного КТ-среза.");
+ const values:number[]=[];
+ const data=new DataView(frame.bytes);
+ const modulus=2**frame.bitsStored,signBit=modulus/2;
+ const byteSize=m.bitsAllocated/8, divisor=2**(frame.highBit+1-frame.bitsStored);
+ const ymin=Math.ceil(y-radius),ymax=Math.floor(y+radius);
+ const xmin=Math.ceil(x-radius),xmax=Math.floor(x+radius);
+ for(let row=ymin;row<=ymax;row++)for(let col=xmin;col<=xmax;col++){
+   if((row-y)**2+(col-x)**2>radius**2)continue;
+   const offset=frame.pixelOffset+(row*m.width+col)*byteSize;
+   let raw=m.bitsAllocated===8?data.getUint8(offset):data.getUint16(offset,true);
+   raw=Math.floor(raw/divisor)%modulus;
+   if(frame.signed&&raw>=signBit)raw-=modulus;
+   const hu=raw*frame.slope+frame.intercept;
+   if(!Number.isFinite(hu)||hu< -2048||hu>10000)
+     throw new DicomPreviewError("Некорректные или неподдерживаемые значения плотности исходной КТ.");
+   values.push(hu);
+ }
+ if(values.length<12)throw new DicomPreviewError("ROI слишком мал для измерения.");
+ values.sort((a,b)=>a-b);
+ const n=values.length,sum=values.reduce((a,b)=>a+b,0),mean=sum/n;
+ const percentile=(fraction:number)=>{
+   const index=(n-1)*fraction,k=Math.floor(index),remainder=index-k;
+   return values[k]*(1-remainder)+values[Math.min(n-1,k+1)]*remainder;
+ };
+ const variance=values.reduce((a,v)=>a+(v-mean)**2,0)/n;
+ const min=values[0],max=values[n-1];
+ const bins=16;
+ const counts=Array.from({length:bins},()=>0);
+ for(const value of values)counts[Math.min(bins-1,Math.floor((value-min)/(max-min||1)*bins))]++;
+ const round=(v:number)=>Math.round(v*100)/100;
+ return {
+   center:{x:round(x),y:round(y)},radiusPixels:radius,pixelCount:n,
+   spacingMm:[spacing[0],spacing[1]],
+   areaMm2:round(n*spacing[0]*spacing[1]),rescaleType:"HU",
+   meanHu:round(mean),medianHu:round(percentile(.5)),stdDevHu:round(Math.sqrt(variance)),
+   p10Hu:round(percentile(.1)),p90Hu:round(percentile(.9)),
+   minHu:round(min),maxHu:round(max),
+   histogram:counts.map((count,i)=>({
+     lowHu:round(min+(max-min)*i/bins),highHu:round(min+(max-min)*(i+1)/bins),count,
+   })),
+ };
 }
 
 /** Renders a single image, preserving the original pixels in memory (no cropping). */

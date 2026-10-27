@@ -1,3 +1,26 @@
+## OWNER'S IMMEDIATE PERMANENT PRIORITY — 2026-10-28: BUILD CLINICAL FUNCTIONALITY
+
+**MANDATORY FOR ALL FUTURE CHATS, AGENTS, CURSOR AND CODEX.** The owner explicitly
+requires: **«ХРЕНАЧИТЬ ФУНКЦИОНАЛ» — deliver working medical functionality, not
+technical niceties.** Select the next task by its directly testable physician
+benefit, not by the number of protocols, audits, wrappers, schemas, mock
+contracts, synthetic CI workflows or panels it creates. Real CT/MR
+diagnostic detectors with genuine trained weights and source-localized
+pathology take highest priority. Practical physician tools (real-source
+measurements, ROI, navigation and useful on-screen findings) are next when
+heavy trained inference cannot yet be run. Finish each usable feature in
+the actual browser workflow, not as an unconnected research script.
+
+For each meaningful PR require this answer: **what new task can the doctor
+perform on an actual CT/MR study AFTER this merge, that was impossible BEFORE?**
+If the answer is "no new task", do not prioritize it except to fix a
+demonstrated block of a working medical function. Never declare a model
+installed because its runner, test or endpoint exists; authentic original
+checkpoint forward and positive case comparison are separate evidence
+requirements. Keep user interactions minimal; write code, test, merge green
+PRs, continue. Preserve clinical provenance and patient privacy without
+letting unnecessary scaffolding consume feature-development time.
+
 ## FIXED STRATEGIC ROUTE — CONTINUE CLINICAL DETECTOR DEVELOPMENT (2026-10-20)
 
 **MANDATORY:** Before selecting a task, read the complete
