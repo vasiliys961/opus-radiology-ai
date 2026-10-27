@@ -6,6 +6,7 @@ import { planVisionFrameSamples, MAX_VISION_SAMPLE_FRAMES,
   type VisionFramePlan } from "../lib/vision-frame-plan";
 import { useAnalysisSound } from "./AnalysisSoundProvider";
 import { routeDicomConsilium } from "../lib/dicom-consilium-routing";
+import { dispatchDicomDetectors, type DetectorDispatch } from "../lib/dicom-detector-dispatch";
 import { planBudgetedVisionReview } from "../lib/vision-budget-plan";
 import { createVisionBatches, accountReportedVisionUsage } from "../lib/vision-batch-ledger";
 import { decodeDicomPreview } from "../lib/dicom-lite";
@@ -28,6 +29,8 @@ export default function VisionFramePlanningPanel({
   const [targetFrame, setTargetFrame] = useState("");
   const [report, setReport] = useState<VisionFramePlan | null>(null);
   const [notice, setNotice] = useState("");
+  const [detectorResult, setDetectorResult] = useState<DetectorDispatch | null>(null);
+  const [detectorBusy, setDetectorBusy] = useState(false);
   const [thumbnails, setThumbnails] = useState<Record<string, { url?: string; error?: string }>>({});
   const { completionChime } = useAnalysisSound();
   let specialistFacts=null, specialistWarning="";
@@ -66,6 +69,7 @@ export default function VisionFramePlanningPanel({
   }, [fullVolumeCost]);
   useEffect(() => {
     setReport(null);
+    setDetectorResult(null);
     setNotice("");
     setThumbnails({});
   }, [series, activeSeriesKey, requested]);
@@ -136,7 +140,21 @@ export default function VisionFramePlanningPanel({
         <p>Выбранные специалисты Gemini: {consilium.specialists.join(", ")}.</p>
         <p>Диагностические направления-кандидаты: {consilium.detectorTargets.join(", ")}.</p>
         <p>Claude Opus сопоставляет независимые результаты детекторов и визуальных специалистов после их фактического выполнения.</p>
-        <p>Статус: подготовлен локальный маршрут. Облачный анализ и детекторы из этой панели ещё не запускаются.</p>
+        <p>Статус: локальный маршрут сформирован; ниже доступна проверка наличия исполнителей без передачи изображений.</p>
+        <button type="button" disabled={detectorBusy} onClick={() => {
+          const selected = series.find(s => s.key === activeSeriesKey) ?? null;
+          setDetectorBusy(true);
+          // No verified pathology executors have yet been registered in this panel.
+          void dispatchDicomDetectors(selected, []).then(setDetectorResult)
+            .catch(() => setNotice("Проверка исполнителей не завершилась."))
+            .finally(() => setDetectorBusy(false));
+        }}>{detectorBusy ? "Проверяем…" : "Проверить доступные локальные детекторы"}</button>
+        {detectorResult && <div role="status">
+          <p>Реально выполнено диагностических моделей: {detectorResult.executed.length}. Получено Evidence: {detectorResult.evidence.length}.</p>
+          <p>Не подключено или заблокировано направлений: {detectorResult.blocked.length}.</p>
+          {detectorResult.blocked.map(item => <p key={item.target}>{item.target}: {item.reason === "No registered executable model" ? "исполнитель с проверенными весами пока не подключён" : item.reason}</p>)}
+          <p>Отсутствие результатов моделей не исключает патологию. Изображения никуда не передавались.</p>
+        </div>
       </> : <p role="status">{consilium.reason}</p>}
     </div>
     <div className="ora-vision-budget-preview" aria-label="Бюджет полного обзора Gemini">
