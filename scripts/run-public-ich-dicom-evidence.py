@@ -30,7 +30,7 @@ def load_script(filename, name):
 
 
 def source_order(paths):
-    """Rebuild sorted DICOM source plane order; never derive identity from file order."""
+    """Source planes including physical LPS geometry; do not infer k -> SOP UID."""
     import numpy as np
     import pydicom
     items = []
@@ -40,21 +40,96 @@ def source_order(paths):
         column = np.asarray([float(v) for v in ds.ImageOrientationPatient[3:]], dtype=float)
         normal = np.cross(row, column)
         position = np.asarray([float(v) for v in ds.ImagePositionPatient], dtype=float)
-        if not np.isfinite(normal).all() or not np.isfinite(position).all():
+        spacing = [float(v) for v in ds.PixelSpacing]
+        rows, columns = int(ds.Rows), int(ds.Columns)
+        if (not all(np.isfinite(x).all() for x in (row,column,normal,position)) or
+            abs(np.linalg.norm(row)-1)>0.001 or
+            abs(np.linalg.norm(column)-1)>0.001 or
+            abs(float(row @ column))>0.001 or
+            not all(0.1 <= value <= 5 for value in spacing) or
+            not (128 <= rows <= 512 and 128 <= columns <= 512)):
             raise ValueError("invalid_dicom_source_plane")
-        items.append((float(position @ normal), str(ds.SeriesInstanceUID), str(ds.SOPInstanceUID)))
-    items.sort(key=lambda a: a[0])
-    if len(items) < 8 or len(items) > 64 or len({s[2] for s in items}) != len(items):
-        raise ValueError("invalid_source_sop_order")
-    if len({s[1] for s in items}) != 1:
-        raise ValueError("mixed_source_dicom_series")
-    if any(abs(items[i+1][0]-items[i][0]) < 0.1 for i in range(len(items)-1)):
-        raise ValueError("ambiguous_dicom_source_slice_order")
-    return [{"slicePositionMm":pos, "seriesUid":series, "sopInstanceUid":sop}
-            for pos,series,sop in items]
+        items.append({
+            "slicePositionMm":float(position @ normal),
+            "seriesUid":str(ds.SeriesInstanceUID),
+            "sopInstanceUid":str(ds.SOPInstanceUID),
+            "imagePositionLpsMm":position.tolist(),
+            "rowDirectionLps":row.tolist(),
+            "columnDirectionLps":column.tolist(),
+            "pixelSpacingMm":spacing,
+            "rows":rows,"columns":columns,
+        })
+    items.sort(key=lambda x:x["slicePositionMm"])
+    if (len(items)<8 or len(items)>64 or
+        len({s["sopInstanceUid"] for s in items})!=len(items) or
+        len({s["seriesUid"] for s in items})!=1 or
+        any(abs(items[i+1]["slicePositionMm"]-items[i]["slicePositionMm"])<0.1
+            for i in range(len(items)-1))):
+        raise ValueError("invalid_source_dicom_identity_or_slice_order")
+    return items
 
 
-def bind_model_to_native_evidence(report, native, source_sha, model_id="ianpan/ct-head-hemorrhage-detection"):
+def resolve_source_plane(roi,native,affine_ras,source_dimensions_xyz):
+    """Match native ROI to EXACT DICOM SOP using RAS→LPS plane geometry.
+
+    The original DICOM order, acquisition direction and NIfTI k orientation
+    must never be inferred from an array index. Require one unique plane and
+    verify that ROI actually falls inside that DICOM image's physical FOV.
+    """
+    import numpy as np
+    dims = source_dimensions_xyz
+    if (not isinstance(dims,(list,tuple)) or len(dims)!=3 or
+        any(type(v) is not int or v<8 or v>512 for v in dims) or
+        len(native)!=dims[2]):
+        raise ValueError("inconsistent_nifti_dicom_source_shape")
+    affine = np.asarray(affine_ras,dtype=float)
+    if (affine.shape!=(4,4) or not np.isfinite(affine).all() or
+        not np.allclose(affine[3],[0,0,0,1],atol=1e-6) or
+        abs(np.linalg.det(affine[:3,:3]))<1e-6):
+        raise ValueError("invalid_source_nifti_ras_affine")
+    bounds=roi.get("boundingBoxNativeNiftiXYZ")
+    if (not isinstance(bounds,list) or len(bounds)!=6 or
+        any(type(v) is not int for v in bounds) or
+        any(bounds[i]<0 or bounds[i]>bounds[i+3] or bounds[i+3]>=dims[i]
+            for i in range(3)) or bounds[2]!=bounds[5]):
+        raise ValueError("unverified_single_source_slice_ich_roi")
+    x0,y0,k,x1,y1,_ = bounds
+    voxel = np.asarray([[x,y,k,1.] for x in (x0,x1) for y in (y0,y1)],dtype=float)
+    world_ras=(affine @ voxel.T).T[:,:3]
+    world_box=roi.get("boundingBoxWorldRasMm")
+    expected=np.r_[world_ras.min(axis=0),world_ras.max(axis=0)]
+    if (not isinstance(world_box,list) or len(world_box)!=6 or
+        not np.isfinite(np.asarray(world_box,dtype=float)).all() or
+        not np.allclose(world_box,expected,atol=.05,rtol=0)):
+        raise ValueError("model_world_roi_disagrees_with_original_nifti_affine")
+    world_lps=world_ras*np.asarray([-1.,-1.,1.])
+    matches=[]
+    for plane in native:
+        position=np.asarray(plane["imagePositionLpsMm"],dtype=float)
+        row=np.asarray(plane["rowDirectionLps"],dtype=float)
+        col=np.asarray(plane["columnDirectionLps"],dtype=float)
+        spacing=np.asarray(plane["pixelSpacingMm"],dtype=float)
+        if (position.shape!=(3,) or row.shape!=(3,) or col.shape!=(3,) or spacing.shape!=(2,) or
+            not all(np.isfinite(v).all() for v in (position,row,col,spacing)) or
+            np.any(spacing<=0)):
+            raise ValueError("invalid_source_dicom_plane_metadata")
+        normal=np.cross(row,col)
+        displacement=world_lps-position
+        distance=np.abs(displacement @ normal)
+        if float(np.max(distance))>.05:
+            continue
+        xx=(displacement @ row)/spacing[1]  # columns
+        yy=(displacement @ col)/spacing[0]  # rows
+        if (float(np.min(xx))>=-.25 and float(np.max(xx))<=plane["columns"]-1+.25 and
+            float(np.min(yy))>=-.25 and float(np.max(yy))<=plane["rows"]-1+.25):
+            matches.append(plane)
+    if len(matches)!=1:
+        raise ValueError("roi_does_not_match_one_exact_original_dicom_plane")
+    return matches[0]
+
+
+def bind_model_to_native_evidence(report, native, source_sha, affine_ras, source_dimensions_xyz,
+                                  model_id="ianpan/ct-head-hemorrhage-detection"):
     """Local projection of a genuine model result. No masks or fake normal findings."""
     if (not isinstance(report,dict) or report.get("schema")!="opus-ianpan-genuine-public-ich-research/v1" or
         report.get("status")!="genuine_pretrained_inference_requires_independent_validation" or
@@ -63,6 +138,7 @@ def bind_model_to_native_evidence(report, native, source_sha, model_id="ianpan/c
         report.get("source",{}).get("niftiSha256")!=source_sha or
         report.get("source",{}).get("sourceOriginalDicomHURescaleIndependentlyVerified") is not True or
         report.get("source",{}).get("modelOrderedSliceCount")!=len(native) or
+        report.get("source",{}).get("sourceDimensionsXYZ")!=list(source_dimensions_xyz) or
         report.get("readyForClinicalUse") is not False or
         not SHA.fullmatch(source_sha)):
         raise ValueError("unverified_original_ich_inference_or_source")
@@ -87,19 +163,10 @@ def bind_model_to_native_evidence(report, native, source_sha, model_id="ianpan/c
             continue
         if not isinstance(roi,dict) or roi.get("projectionMethod") != "vendor_e6d89c2_lps_reorientation_center_pad_inverse_v1":
             raise ValueError("unknown_source_geometry_projection")
-        bounds = roi.get("boundingBoxNativeNiftiXYZ")
-        if (not isinstance(bounds,list) or len(bounds)!=6 or
-            any(type(x) is not int for x in bounds) or
-            any(bounds[i]>bounds[i+3] for i in range(3)) or
-            bounds[2]!=bounds[5]):
-            raise ValueError("unverified_single_source_slice_ich_roi")
-        k = bounds[2]
-        if not 0 <= k < len(native):
-            raise ValueError("source_dicom_plane_out_of_range")
+        slice_ = resolve_source_plane(roi,native,affine_ras,source_dimensions_xyz)
         score = item.get("rawUncalibratedScore")
         if type(score) not in (int,float) or not 0<=score<=1:
             raise ValueError("invalid_original_ich_score")
-        slice_ = native[k]
         if len(findings)>=128:
             raise ValueError("too_many_native_ich_findings")
         findings.append({
@@ -145,13 +212,23 @@ def run_pipeline(args):
         proof = args.output_dir / "source-hu-evidence.json"
         converted = converter.convert(args.dicom_dir,args.public_manifest,nii,proof)
         native = source_order(paths)
+        # Re-check every original source DICOM byte before reporting source UIDs.
+        converter.authorize_series(args.dicom_dir,args.public_manifest)
         if converted["conversionEvidence"]["originalDicomSliceCount"]!=len(native):
             raise ValueError("source_dicom_slices_changed")
         original = runner.run(argparse.Namespace(
             source=nii,manifest=proof,model_dir=args.model_dir,
             output=args.output_dir/"actual-original-model.json",device=args.device,
             download_pretrained=args.download_pretrained))
-        result = bind_model_to_native_evidence(original,native,converted["sourceNiftiSha256"])
+        # Fail if the model runner or another process modified the verified HU source.
+        if converter.file_sha(nii)!=converted["sourceNiftiSha256"]:
+            raise ValueError("source_nifti_changed_during_inference")
+        converter.authorize_series(args.dicom_dir,args.public_manifest)
+        import nibabel as nib
+        image=nib.load(str(nii))
+        result = bind_model_to_native_evidence(
+            original,native,converted["sourceNiftiSha256"],
+            image.affine,list(image.shape))
         evidence_path = args.output_dir/"private-native-evidence.json"
         evidence_path.write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding="utf-8")
         evidence_path.chmod(0o600)
