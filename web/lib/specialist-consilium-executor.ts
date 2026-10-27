@@ -25,9 +25,10 @@ function parseObservations(value:unknown, imageIds:readonly string[]):{
   const v=value as Record<string,unknown>;
   const strings=(x:unknown,max:number,chars:number):x is string[]=>Array.isArray(x)&&
     x.length<=max&&x.every(s=>typeof s==="string"&&s.length>0&&s.length<=chars);
-  if (!strings(v.reviewedImageIds,4,100)||!Array.isArray(v.reviewedImageIds)||v.reviewedImageIds.length!==imageIds.length||
-      new Set(v.reviewedImageIds).size!==imageIds.length||
-      !imageIds.every(id=>v.reviewedImageIds.includes(id))||
+  const reviewed=v.reviewedImageIds;
+  if (!strings(reviewed,4,100)||reviewed.length!==imageIds.length||
+      new Set(reviewed).size!==imageIds.length||
+      !imageIds.every(id=>reviewed.includes(id))||
       !strings(v.limitations,12,500)||!Array.isArray(v.observations)||v.observations.length>18)
     throw new Error("Incomplete specialist source coverage");
   const seen=new Set<string>();
@@ -43,7 +44,7 @@ function parseObservations(value:unknown, imageIds:readonly string[]):{
     seen.add(o.id);
     return o as unknown as SpecialistObservation;
   });
-  return {reviewedImageIds:v.reviewedImageIds,observations,limitations:v.limitations};
+  return {reviewedImageIds:reviewed,observations,limitations:v.limitations};
 }
 export async function runSpecialistConsilium(
   input:VisionInput, profile:ImagingStudyProfile, detectorEvidence:readonly EvidenceJson[],
