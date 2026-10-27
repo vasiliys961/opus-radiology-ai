@@ -1,0 +1,14 @@
+import {strict as assert} from "node:assert";
+import {routeUniversalCtMrVision} from "./universal-ct-mr-vision-route.ts";
+import type {DicomSeries,TechnicalDicomMetadata} from "./dicom-series.ts";
+const meta={modality:"CT",imageRole:"PRIMARY",seriesUid:"1.2.3",sopInstanceUid:"1.2.3.4"} as TechnicalDicomMetadata;
+const ct:DicomSeries={key:"s",label:"x",modality:"CT",members:[{id:"f",name:"file",metadata:meta}],spatiallySorted:false,volumeReady:false,sliceSpacingMm:null,warning:null};
+const result=routeUniversalCtMrVision(ct);
+assert.equal(result.status,"eligible_for_authorization");
+assert.equal(result.hasExecutedInference,false);
+const mr=routeUniversalCtMrVision({...ct,modality:"MR",members:[{...ct.members[0],metadata:{...meta,modality:"MR"}}]});
+assert.equal(mr.status,"eligible_for_authorization");
+assert.equal(routeUniversalCtMrVision({...ct,members:[{...ct.members[0],metadata:{...meta,seriesUid:null}}]}).status,"blocked");
+assert.equal(routeUniversalCtMrVision({...ct,members:[{...ct.members[0],metadata:{...meta,imageRole:"LOCALIZER"}}]}).status,"blocked");
+assert.equal(routeUniversalCtMrVision(null).status,"blocked");
+console.log("PASS universal CT/MR Vision eligibility independent of detector availability");
