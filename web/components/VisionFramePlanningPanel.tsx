@@ -145,7 +145,7 @@ export default function VisionFramePlanningPanel({
         </select>
       </label>
       <button type="button" onClick={prepare} disabled={choice.status !== "ready-for-local-preview"}>
-        Обновить локальный план
+        Сформировать план
       </button>
     </div>
     <div className="ora-vision-budget-preview" role="status" aria-label="Универсальный анализ КТ и МРТ">
