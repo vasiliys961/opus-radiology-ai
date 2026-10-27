@@ -55,7 +55,7 @@ const regionMap:Record<ImagingStudyProfile["regions"][number],readonly ImagingSp
 export function assignImagingSpecialists(profile:ImagingStudyProfile):SpecialistAssignment[] {
   if (!profile || !["CT","MR"].includes(profile.modality) ||
       !Array.isArray(profile.regions) || !profile.regions.length ||
-      profile.regions.some(r=>!Object.hasOwn(regionMap,r)) ||
+      profile.regions.some((r: string)=>!Object.hasOwn(regionMap,r)) ||
       (profile.sequences !== undefined &&
        (!Array.isArray(profile.sequences) || profile.sequences.length>32 ||
         profile.sequences.some(s=>typeof s!=="string" || s.length>100))) ||
