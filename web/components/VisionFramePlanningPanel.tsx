@@ -34,6 +34,7 @@ export default function VisionFramePlanningPanel({
   const [notice, setNotice] = useState("");
   const [detectorResult, setDetectorResult] = useState<DetectorDispatch | null>(null);
   const [detectorBusy, setDetectorBusy] = useState(false);
+  const [unifiedStarted,setUnifiedStarted] = useState(false);
   const [thumbnails, setThumbnails] = useState<Record<string, { url?: string; error?: string }>>({});
   const { completionChime } = useAnalysisSound();
   let specialistFacts=null, specialistWarning="";
@@ -74,6 +75,7 @@ export default function VisionFramePlanningPanel({
   useEffect(() => {
     setReport(null);
     setDetectorResult(null);
+    setUnifiedStarted(false);
     setNotice("");
     setThumbnails({});
   }, [series, activeSeriesKey, requested]);
@@ -115,6 +117,19 @@ export default function VisionFramePlanningPanel({
     void render();
     return () => { cancelled = true; };
   }, [report, fileById]);
+  const startUnified = () => {
+    const selected=series.find(s=>s.key===activeSeriesKey)??null;
+    if(!selected||universal.status!=="eligible_for_authorization")return;
+    setUnifiedStarted(true);
+    setReport(choice.status==="ready-for-local-preview"?choice:null);
+    setDetectorBusy(true);
+    void dispatchDicomDetectors(selected,[
+      localLaa950Executor(capturedSpecialist,capturedLaa950),
+    ]).then(setDetectorResult)
+      .catch(()=>setNotice("Локальные детекторы недоступны. Универсальный Vision остаётся доступен после разрешения."))
+      .finally(()=>setDetectorBusy(false));
+    setNotice("Единый маршрут запущен локально: проверяем детекторы и готовим обезличенные копии для Gemini + Opus. Облачный запрос возможен только после проверки и разрешения.");
+  };
   const prepare = () => {
     if (choice.status === "blocked") {
       setNotice("Локальный план не составлен: " + choice.blockers.join(" "));
@@ -147,6 +162,14 @@ export default function VisionFramePlanningPanel({
       <button type="button" onClick={prepare} disabled={choice.status !== "ready-for-local-preview"}>
         Сформировать план
       </button>
+    </div>
+    <div className="ora-vision-budget-preview" aria-label="Единый запуск КТ МРТ">
+      <strong>Единый анализ · детекторы + Gemini + Opus</strong>
+      <p>Одна точка входа: запуск доступных локальных моделей, затем проверка копий и разрешённый вызов Gemini + Opus в этой же панели.</p>
+      <button type="button" disabled={detectorBusy||universal.status!=="eligible_for_authorization"} onClick={startUnified}>
+        {detectorBusy?"Запускаем локальный этап…":"Запустить единый анализ КТ/МРТ"}
+      </button>
+      {unifiedStarted&&<p role="status">Локальный этап выполнен или выполняется. Для облачного этапа ниже проверьте OCR, снимки и разрешения провайдера; без этого анализ моделей не запускается. Частичная выборка не равна оценке всей серии.</p>}
     </div>
     <div className="ora-vision-budget-preview" role="status" aria-label="Универсальный анализ КТ и МРТ">
       <strong>Gemini + Opus · универсальный анализ {universal.modality==="CT"?"КТ":universal.modality==="MR"?"МРТ":"DICOM"}</strong>
