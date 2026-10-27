@@ -182,6 +182,40 @@ export function parseDicomFrame(buffer: ArrayBuffer): DicomFrame {
  * Never implies osteoporosis, fibrosis, steatosis or malignant lesions.
  */
 import type {TechnicalDicomMetadata} from "./dicom-series.ts";
+/** Direct 2-point distance on actual CT/MR DICOM pixel grid. PixelSpacing
+ * gives row (y) and column (x) millimeters; no guessed screen zoom scale.
+ * In-plane length only, not a 3-D lesion diameter or volume.
+ */
+export type DicomCaliperMeasurement={
+  start:{x:number;y:number};end:{x:number;y:number};
+  deltaPixels:{x:number;y:number};
+  spacingMm:[number,number];lengthMm:number;
+};
+export function measureDicomInPlaneCaliper(
+  header:TechnicalDicomMetadata,
+  start:{x:number;y:number},end:{x:number;y:number},
+):DicomCaliperMeasurement {
+  const spacing=header.pixelSpacing;
+  if ((header.modality!=="CT"&&header.modality!=="MR")||
+      !header.rows||!header.columns||!Number.isSafeInteger(header.rows)||
+      !Number.isSafeInteger(header.columns)||!spacing||
+      !spacing.every(v=>Number.isFinite(v)&&v>=.1&&v<=5))
+    throw new DicomPreviewError("Нет подтверждённой PixelSpacing и исходной геометрии КТ/МРТ.");
+  for(const point of [start,end]){
+    if(!Number.isFinite(point.x)||!Number.isFinite(point.y)||
+        point.x<0||point.x>=header.columns||point.y<0||point.y>=header.rows)
+      throw new DicomPreviewError("Обе точки должны лежать на исходном DICOM-срезе.");
+  }
+  const dx=end.x-start.x,dy=end.y-start.y;
+  const mm=Math.hypot(dx*spacing[1],dy*spacing[0]);
+  if(!Number.isFinite(mm)||mm<0.1||mm>2500)
+    throw new DicomPreviewError("Слишком короткий или недостоверный размер.");
+  return {
+    start:{x:start.x,y:start.y},end:{x:end.x,y:end.y},
+    deltaPixels:{x:dx,y:dy},spacingMm:[spacing[0],spacing[1]],
+    lengthMm:Math.round(mm*100)/100,
+  };
+}
 export type CtRoiMeasurement={
   center:{x:number;y:number};radiusPixels:number;pixelCount:number;
   spacingMm:[number,number];areaMm2:number;
