@@ -6,6 +6,7 @@ import { planVisionFrameSamples, MAX_VISION_SAMPLE_FRAMES,
   type VisionFramePlan } from "../lib/vision-frame-plan";
 import { useAnalysisSound } from "./AnalysisSoundProvider";
 import { routeDicomConsilium } from "../lib/dicom-consilium-routing";
+import {routeUniversalCtMrVision} from "../lib/universal-ct-mr-vision-route";
 import { dispatchDicomDetectors, type DetectorDispatch } from "../lib/dicom-detector-dispatch";
 import { localLaa950Executor } from "../lib/local-laa950-evidence-executor";
 import { planBudgetedVisionReview } from "../lib/vision-budget-plan";
@@ -52,6 +53,7 @@ export default function VisionFramePlanningPanel({
     return planVisionFrameSamples(series, activeSeriesKey, requested);
   }, [series, activeSeriesKey, requested]);
   const consilium = useMemo(() => routeDicomConsilium(series.find(s => s.key === activeSeriesKey) ?? null), [series, activeSeriesKey]);
+  const universal = useMemo(() => routeUniversalCtMrVision(series.find(s => s.key === activeSeriesKey) ?? null), [series, activeSeriesKey]);
   const fullVolumeCost = useMemo(() => {
     if (choice.status !== "ready-for-local-preview" || !choice.seriesKey) return null;
     const selected = series.find(s => s.key === choice.seriesKey);
@@ -134,6 +136,11 @@ export default function VisionFramePlanningPanel({
       <button type="button" onClick={prepare} disabled={choice.status !== "ready-for-local-preview"}>
         Сформировать план
       </button>
+    </div>
+    <div className="ora-vision-budget-preview" role="status" aria-label="Универсальный анализ КТ и МРТ">
+      <strong>Gemini + Opus · универсальный анализ {universal.modality==="CT"?"КТ":universal.modality==="MR"?"МРТ":"DICOM"}</strong>
+      <p>{universal.reason}</p>
+      <p>Универсальный маршрут не зависит от установленных детекторов. Подготовка кадров и отдельное разрешение облачной передачи выполняются ниже; готовность маршрута не означает, что изображения уже проанализированы.</p>
     </div>
     <div className="ora-vision-budget-preview" aria-label="Локальный маршрут диагностического консилиума">
       <strong>Диагностический консилиум · автоматический маршрут</strong>
