@@ -14,4 +14,17 @@ assert.throws(()=>assignImagingSpecialists({modality:"CT",regions:["unknown" as 
 assert.throws(()=>assignImagingSpecialists({modality:"MR",regions:[]}));
 assert.match(CONSILIUM_OPUS_PROMPT,/independent specialist-model Evidence/);
 assert.match(CONSILIUM_OPUS_PROMPT,/conflicting or not-assessed/);
-console.log("PASS modality/region routing, selected expertise and evidence-first prompts");
+const abdominal=assignImagingSpecialists({modality:"CT",regions:["abdomen"]});
+assert.match(abdominal[0].prompt,/gallbladder stones/);
+assert.match(abdominal[0].prompt,/retroperitoneal lymph nodes/);
+assert.match(head[0].prompt,/demyelination/);
+assert.match(chest[0].prompt,/ILD patterns/);
+assert.match(chest[1].prompt,/cardiac chamber size/);
+const musculoskeletal=assignImagingSpecialists({modality:"MR",regions:["spine","joints"]});
+assert.match(musculoskeletal[0].prompt,/osteonecrosis/);
+assert.match(musculoskeletal[0].prompt,/osteoporosis/);
+const pelvic=assignImagingSpecialists({modality:"MR",regions:["pelvis"]});
+assert.match(pelvic[0].prompt,/PI-RADS/);
+for(const assignment of [...head,...chest,...abdominal,...musculoskeletal,...pelvic])
+  assert.match(assignment.prompt,/not proof that any model ran/);
+console.log("PASS six expert competencies, protocol limits and evidence-first routes");
