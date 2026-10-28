@@ -105,6 +105,7 @@ def convert_flair(folder: Path, output: Path, *, protocol_confirmed: bool):
         for block in iter(lambda:stream.read(1024*1024),b""):sha.update(block)
     return {"sourceFLAIRSHA256":sha.hexdigest(),"dimensions":dimensions,
             "sliceSpacingMm":dz,"sourceSOPInstanceUIDs":[x[5] for x in frames],
+            "sourceDicomSHA256":[hashlib.sha256(Path(x[0].filename).read_bytes()).hexdigest() for x in frames],
             "protocolConfirmedByOperator":True,"nativeGeometryPreserved":True,
             "researchOnly":True,"modelInferenceCompleted":False}
 
