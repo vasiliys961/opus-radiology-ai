@@ -8,6 +8,7 @@ import "./viewer.css";
 import type {WorkerSession} from "../../lib/local-worker";
 
 const NoduleBoundResearchView = dynamic(() => import("../../components/NoduleBoundResearchView"), {ssr:false});
+const DirectIchDicomDetector = dynamic(() => import("../../components/DirectIchDicomDetector"), {ssr:false});
 const NativeCtResearchExport = dynamic(() => import("../../components/NativeCtResearchExport"), {ssr:false});
 
 const NiftiCtResearchView = dynamic(() => import("../../components/NiftiCtResearchView"), {
@@ -138,6 +139,7 @@ export default function ViewerPage() {
           <IldPatternResearch key={"ild-pattern-"+(selected?.key??"empty")} isChestCT={!!selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="CHEST")}/>
           <ChestExtraPulmonaryResearch key={"chest-extra-"+(selected?.key??"empty")} isChestCT={!!selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="CHEST")}/>
           <ThoracicMassResearch key={"intrathoracic-masses-"+(selected?.key??"empty")} series={selected??null}/>
+          {selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="HEAD") && <DirectIchDicomDetector key={"ich-"+selected.key} series={selected} files={indexedById}/>}
           {selected && <NativeCtResearchExport key={"native-export-"+selected.key} series={selected} files={selectedFiles} onPreparedSource={(file,session)=>{setPreparedMonaiSession(session??null);setPreparedMonaiSource(file);setSourceMode("nodules");}}/> }
           <button type="button" className="cs-clear" disabled={reading || indexed.length === 0} onClick={() => { setIndexed([]); setPreparedMonaiSource(null);setPreparedMonaiSession(null); setCurrentSeriesKey(""); setMessage("Список очищен, файлы на диске не изменены."); }}>Очистить загруженное</button>
         </aside>
