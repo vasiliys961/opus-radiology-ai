@@ -57,6 +57,20 @@ then click the analysis button. After the real model succeeds, click candidates
 to jump to corresponding original slices. No manually prepared report JSON is
 required; that remains as an optional offline import.
 
+
+## Reader assessment on real model candidates
+
+The physician can now open each model candidate on the original NIfTI axial
+slice and mark it **«Подозрительный · проверить»**, **«Отклонить кандидата»**
+or leave it **unreviewed**. This classification pertains only to the displayed
+model candidates; even if all are rejected, it does not establish a normal CT.
+A source-SHA-bound local unsigned reader review is downloadable as JSON,
+containing the exact model checkpoint digest, score, proposed mm coordinates,
+reader decisions, unresolved counts and explicit clinical limitations.
+No original CT pixels, names, network requests or stored credentials are part
+of this export. Reader assessment does not establish histology, malignancy or
+independent source-coordinate accuracy.
+
 ## Limits not hidden by successful CI
 
 - **No arbitrary DICOM series support yet.** This only operates on an existing
