@@ -1,6 +1,7 @@
 "use client";
 import {useEffect,useMemo,useRef,useState} from "react";
 import {executeRealNodule} from "../lib/live-nodule-worker";
+import {createNodulePhysicianReview,type ReaderNoduleDecision} from "../lib/monai-nodule-physician-review";
 import {readNoduleNiftiHeader,parseBoundNoduleReport,verifyNoduleSource,
   readNoduleAxial,type NoduleNativeSource,type BoundNoduleReport} from "../lib/live-nodule-report";
 
@@ -21,10 +22,11 @@ export default function NoduleBoundResearchView({initialSource=null}:{initialSou
  const [workerEndpoint,setWorkerEndpoint]=useState("http://127.0.0.1:8767");
  const [workerToken,setWorkerToken]=useState("");
  const [publicConfirmed,setPublicConfirmed]=useState(false);
+ const [readerDecisions,setReaderDecisions]=useState<Record<number,ReaderNoduleDecision>>({});
  const canvas=useRef<HTMLCanvasElement|null>(null);
  const serial=useRef(0),controller=useRef<AbortController|null>(null);
  useEffect(()=>()=>{serial.current++;controller.current?.abort();},[]);
- const reset=()=>{serial.current++;controller.current?.abort();setBusy(false);setReady(null);setError("");setStatus("");};
+ const reset=()=>{serial.current++;controller.current?.abort();setBusy(false);setReady(null);setReaderDecisions({});setError("");setStatus("");};
  useEffect(()=>{
    reset();setSource(initialSource);setReportFile(null);setPublicConfirmed(false);
  // Initial source is controlled by parent current open file, so stale findings
@@ -36,7 +38,7 @@ export default function NoduleBoundResearchView({initialSource=null}:{initialSou
  async function open(){
    if(!source||!reportFile||busy)return;
    const revision=++serial.current;controller.current?.abort();const active=new AbortController();
-   controller.current=active;setBusy(true);setError("");setReady(null);setStatus("Проверка NIfTI и отчёта…");
+   controller.current=active;setBusy(true);setError("");setReady(null);setReaderDecisions({});setStatus("Проверка NIfTI и отчёта…");
    try{
      if(reportFile.size>1024*1024)throw Error("JSON отчёта MONAI слишком большой.");
      const header=await readNoduleNiftiHeader(source);
@@ -53,7 +55,7 @@ export default function NoduleBoundResearchView({initialSource=null}:{initialSou
    const version=++serial.current;
    controller.current?.abort();
    const ctrl=new AbortController();controller.current=ctrl;
-   setBusy(true);setError("");setReady(null);setStatus("Проверяем подлинный checkpoint MONAI...");
+   setBusy(true);setError("");setReady(null);setReaderDecisions({});setStatus("Проверяем подлинный checkpoint MONAI...");
    try{
      const result=await executeRealNodule(
        {endpoint:workerEndpoint,token:workerToken},source,ctrl.signal,setStatus);
@@ -65,6 +67,31 @@ export default function NoduleBoundResearchView({initialSource=null}:{initialSou
        setError(e instanceof Error?e.message:"MONAI не смог выполнить настоящий инференс.");
    }finally{
      if(version===serial.current)setBusy(false);
+   }
+ }
+ function setAssessment(index:number,decision:ReaderNoduleDecision|null){
+   setReaderDecisions(old=>{
+     const next={...old};
+     if(decision===null)delete next[index];
+     else next[index]=decision;
+     return next;
+   });
+ }
+ function exportReviewedCandidates(){
+   if(!ready)return;
+   try{
+     const doc=createNodulePhysicianReview(
+       ready.report,ready.source,readerDecisions,new Date().toISOString());
+     const content=JSON.stringify(doc,null,2);
+     const url=URL.createObjectURL(new Blob([content],{type:"application/json"}));
+     try{
+       const link=document.createElement("a");
+       link.href=url;link.download="opus-monai-reader-nodule-candidates.json";
+       document.body.appendChild(link);link.click();link.remove();
+     }finally{window.setTimeout(()=>URL.revokeObjectURL(url),1000);}
+     setStatus("Оценка кандидатов сохранена локально. Она не является подписанным клиническим заключением.");
+   }catch(error){
+     setError(error instanceof Error?error.message:"Не удалось сохранить врачебную оценку.");
    }
  }
  useEffect(()=>{
@@ -178,15 +205,38 @@ export default function NoduleBoundResearchView({initialSource=null}:{initialSou
           <input type="range" min={0} max={ready.source.dimensions[2]-1} step={1} value={slice} onChange={e=>setSlice(+e.target.value)}/>
         </label>
         <div className="cs-nodule-candidates">
-          {candidates.map(c=><button key={c.index} type="button" onClick={()=>setSlice(Math.max(0,Math.min(ready.source.dimensions[2]-1,Math.round(c.nativeVoxelIndexHypothesis![2]))))}>
-            <b>#{c.index+1} · score {c.score.toFixed(3)}</b>
-            <span>Срез {Math.round(c.nativeVoxelIndexHypothesis![2])+1} · модельный box {c.extentModelMm.map(n=>n.toFixed(1)).join("×")} мм</span>
-            <small>Нажмите для перехода к кандидату</small>
-          </button>)}
+          {candidates.map(c=><div key={c.index} style={{padding:"8px 0",borderBottom:"1px solid #64748b"}}>
+            <button type="button" onClick={()=>setSlice(Math.max(0,Math.min(ready.source.dimensions[2]-1,Math.round(c.nativeVoxelIndexHypothesis![2]))))}>
+              <b>#{c.index+1} · score {c.score.toFixed(3)}</b>
+              <span>Срез {Math.round(c.nativeVoxelIndexHypothesis![2])+1} · модельный box {c.extentModelMm.map(n=>n.toFixed(1)).join("×")} мм</span>
+              <small>Открыть исходный срез кандидата</small>
+            </button>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:6}}>
+              <button type="button" aria-pressed={readerDecisions[c.index]==="suspicious_on_review"}
+                onClick={()=>setAssessment(c.index,"suspicious_on_review")}>
+                Подозрительный · проверить
+              </button>
+              <button type="button" aria-pressed={readerDecisions[c.index]==="dismissed_on_review"}
+                onClick={()=>setAssessment(c.index,"dismissed_on_review")}>
+                Отклонить кандидата
+              </button>
+              {readerDecisions[c.index]&&<button type="button"
+                onClick={()=>setAssessment(c.index,null)}>Снять оценку</button>}
+            </div>
+          </div>)}
         </div>
         {!candidates.length&&<p>При данном пороге нет кандидатов с координатами внутри сетки. Отсутствие патологий НЕ доказано.</p>}
       </aside>
     </div>
+    <div className="cs-nodule-stats" role="status">
+      Врачебный просмотр кандидатов: подозрительных — {Object.values(readerDecisions).filter(v=>v==="suspicious_on_review").length};
+      отклонено — {Object.values(readerDecisions).filter(v=>v==="dismissed_on_review").length};
+      без оценки — {ready.report.candidates.length-Object.values(readerDecisions).length}.
+    </div>
+    <button type="button" onClick={exportReviewedCandidates}>
+      Сохранить оценку находок врача (JSON)
+    </button>
+    <p><small>Оценка относится только к обнаруженным кандидатам и не исключает пропущенную моделью патологию. Отчёт остаётся локальным.</small></p>
     <p role="note" className="cs-bottom-note">Оригинальные данные совпали по SHA и NIfTI-аффинной геометрии. Однако MONAI world → исходные координаты пока не прошли независимое визуальное подтверждение; изображения не привязаны к DICOM SOP. Модель не валидирована внешней FROC, чувствительностью и специфичностью. Врач обязательно подтверждает каждую возможную находку.</p>
     <button type="button" className="cs-clear" onClick={()=>{reset();setSource(null);setReportFile(null);}}>Закрыть и очистить исследование</button>
   </>}
