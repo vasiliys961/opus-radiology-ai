@@ -6,6 +6,7 @@ import {createFullCtReader} from "../lib/full-ct-decoder";
 import {saveExactNativeCt,publicNoduleAdmission,
   type LocalFileWriter,type NativeCtExportProof} from "../lib/native-ct-research-export";
 import {acquireBrowserCompute} from "../lib/browser-compute-slot";
+import {prepareDicomMonaiFile} from "../lib/dicom-monai-direct";
 
 type LocalFileHandle={createWritable():Promise<LocalFileWriter>;getFile?:()=>Promise<File>};
 type LocalSavePicker={
@@ -96,6 +97,27 @@ export default function NativeCtResearchExport({
      if(revision===generation.current)setBusy(false);
    }
  }
+ async function runDirect(){
+   if(busy||!authorized||!!unsupported)return;
+   const revision=++generation.current,controller=new AbortController();
+   active.current=controller;setBusy(true);setError("");setProof(null);
+   let release:(()=>void)|undefined;
+   try{
+     release=acquireBrowserCompute("native-ct-export");
+     const file=await prepareDicomMonaiFile(series,files,controller.signal,message=>{
+       if(revision===generation.current)setStatus(message);
+     });
+     if(controller.signal.aborted||revision!==generation.current)return;
+     if(!onPreparedSource)throw Error("Вкладка MONAI не подключена к открытому DICOM.");
+     onPreparedSource(file);
+   }catch(e){
+     if(revision===generation.current)setError(e instanceof Error?e.message:"Не удалось подготовить текущую КТ для MONAI.");
+   }finally{
+     release?.();
+     if(active.current===controller)active.current=null;
+     if(revision===generation.current)setBusy(false);
+   }
+ }
  function manifest(){
    if(!proof)return;
    const data=publicNoduleAdmission(proof);
@@ -104,9 +126,13 @@ export default function NativeCtResearchExport({
    a.click();setTimeout(()=>URL.revokeObjectURL(url),400);
  }
  return <details className="cs-nodule-export">
-   <summary>Экспорт исходной КТ для настоящих детекторов MONAI / task315</summary>
+   <summary>Анализ открытой DICOM-КТ · MONAI RetinaNet</summary>
    <p>Оригинальный DICOM → точный NIfTI (float32 HU). Без облака и без накопления всей КТ в RAM.
      Источник остаётся на вашем компьютере; после записи сразу откроется MONAI для запуска настоящего инференса на подходящем Linux CPU.</p>
+   <button type="button" disabled={!!unsupported||!authorized||busy||!onPreparedSource} onClick={()=>void runDirect()}>
+     Открыть текущую DICOM-КТ в MONAI без сохранения NIfTI
+   </button>
+   <p>Прямой путь готовит исходный HU-объём во внутреннем хранилище браузера и передаёт его панели MONAI. При подключённом приватном Linux-worker модель запускается там; дополнительная ручная подготовка NIfTI не требуется.</p>
    {!supported&&<p role="status">Для больших файлов требуется Chromium/Chrome с локальной потоковой записью на диск. Safari в этом режиме не поддерживается; лимит памяти не увеличиваем.</p>}
    {unsupported&&<p role="status">Экспорт недоступен: {unsupported}</p>}
    <label><input type="checkbox" checked={authorized} disabled={busy||!!proof}
@@ -114,7 +140,7 @@ export default function NativeCtResearchExport({
      Подтверждаю: только публичная, обезличенная КТ грудной клетки с разрешённым использованием. Это весь предоставленный набор срезов, но полнота анатомии не доказана.
    </label>
    <button type="button" disabled={!supported||!!unsupported||!authorized||busy||!!proof} onClick={()=>void run()}>
-     Сохранить исходную КТ и открыть детектор MONAI
+     Дополнительно · сохранить NIfTI на диск
    </button>
    {busy&&<button type="button" onClick={()=>active.current?.abort()}>Отменить экспорт</button>}
    {error&&<p role="alert">{error}</p>}
