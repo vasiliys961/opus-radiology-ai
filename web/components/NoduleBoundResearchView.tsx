@@ -92,7 +92,13 @@ export default function NoduleBoundResearchView({initialSource=null}:{initialSou
        const zUnit=Math.hypot(header.affineLps[2],header.affineLps[6],header.affineLps[10]);
        if(Math.abs(center[2]-slice)*zUnit>model.extentModelMm[2]/2+zUnit)continue;
        const x=center[0],y=center[1];
-       ctx.beginPath();ctx.arc(x,y,Math.max(5,model.extentModelMm[0]/3),0,2*Math.PI);
+       // Original geometry, not display zoom: scale reported model mm by
+       // native NIfTI pixel pitch. Research box remains a candidate.
+       const dx=Math.hypot(header.affineLps[0],header.affineLps[4],header.affineLps[8]);
+       const dy=Math.hypot(header.affineLps[1],header.affineLps[5],header.affineLps[9]);
+       const rx=Math.max(3,Math.min(120,model.extentModelMm[0]/(2*dx)));
+       const ry=Math.max(3,Math.min(120,model.extentModelMm[1]/(2*dy)));
+       ctx.beginPath();ctx.ellipse(x,y,rx,ry,0,0,2*Math.PI);
        ctx.strokeStyle="#ff734e";ctx.lineWidth=2;ctx.stroke();
        ctx.beginPath();ctx.moveTo(x-9,y);ctx.lineTo(x+9,y);
        ctx.moveTo(x,y-9);ctx.lineTo(x,y+9);ctx.stroke();
