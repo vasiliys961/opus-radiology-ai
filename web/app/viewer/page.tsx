@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useMemo, useRef, useState, type ChangeEvent } from "react";
 import { groupDicomSeries, readDicomSeriesHeader, type DicomSeries } from "../../lib/dicom-series";
+import { diagnosticRoutes,type DiagnosticPath } from "../../lib/diagnostic-routes";
 import { validateViewerFileSelection } from "../../lib/viewer-limits";
 import "./viewer.css";
 import type {WorkerSession} from "../../lib/local-worker";
@@ -46,6 +47,7 @@ export default function ViewerPage() {
   const [sourceMode,setSourceMode] = useState<"dicom"|"nifti"|"nodules"|"colon"|"coverage"|"morphometry">("dicom");
   const [indexed, setIndexed] = useState<Indexed[]>([]);
   const [currentSeriesKey, setCurrentSeriesKey] = useState("");
+  const [activeDiagnostic,setActiveDiagnostic]=useState<DiagnosticPath|null>(null);
   const [wmhSlice,setWmhSlice]=useState<number|undefined>(undefined);
   const [preparedMonaiSource,setPreparedMonaiSource]=useState<File|null>(null);
   const [preparedMonaiSession,setPreparedMonaiSession]=useState<WorkerSession|null>(null);
@@ -57,6 +59,16 @@ export default function ViewerPage() {
   const indexedById = useMemo(() => new Map(indexed.map((item) => [item.id, item.file])), [indexed]);
   const selectedFiles = useMemo(() => selected?.members.map((item) => indexedById.get(item.id)).filter((file): file is File => !!file) ?? [], [selected, indexedById]);
 
+  const diagnosticOptions=selected?diagnosticRoutes(selected,selectedFiles.length):[];
+  function chooseDiagnostic(){
+    const route=diagnosticOptions.find(x=>x.state!=="not-supported");
+    setActiveDiagnostic(route?.id??null);
+    if(route?.id==="nodule"){
+      document.getElementById("clinical-native-export")?.scrollIntoView({behavior:"smooth",block:"start"});
+    }else if(route){
+      document.getElementById("clinical-"+route.id)?.scrollIntoView({behavior:"smooth",block:"start"});
+    }
+  }
   async function loadFiles(input: FileList | null) {
     if (!input || reading) return;
     const files = Array.from(input);
@@ -79,7 +91,7 @@ export default function ViewerPage() {
         }
       }
       // Replace, rather than merge, series so stale patient data cannot persist.
-      setIndexed(parsed);
+      setActiveDiagnostic(null);setIndexed(parsed);
       setPreparedMonaiSource(null);setPreparedMonaiSession(null);
       setWmhSlice(undefined);setCurrentSeriesKey("");
       const mostCommon = [...reasons.entries()].sort((a, b) => b[1] - a[1])[0];
@@ -126,9 +138,10 @@ export default function ViewerPage() {
           <div className="cs-message" role="status">{reading ? "Идёт индексация…" : message}</div>
           {series.length > 0 && <>
             <h3>Серии ({series.length})</h3>
-            <div className="cs-series-list">{series.map((s) => <button type="button" className={selected?.key === s.key ? "cs-series active" : "cs-series"} key={s.key} onClick={() => {setWmhSlice(undefined);setCurrentSeriesKey(s.key);}}>{s.label}</button>)}</div>
+            <div className="cs-series-list">{series.map((s) => <button type="button" className={selected?.key === s.key ? "cs-series active" : "cs-series"} key={s.key} onClick={() => {setActiveDiagnostic(null);setWmhSlice(undefined);setCurrentSeriesKey(s.key);}}>{s.label}</button>)}</div>
           </>}
           {selected && <div className="cs-geometry"><h3>Контроль геометрии</h3><p>{selected.spatiallySorted ? "✓ Пространственный порядок подтверждён" : "⚠ Порядок условный"}</p><p>{selected.volumeReady ? `✓ Предварительная геометрия для будущего 3D · ${selected.sliceSpacingMm?.toFixed(2)} мм` : "3D/MPR НЕ РАЗРЕШЕНЫ"}</p>{selected.warning && <p>{selected.warning}</p>}</div>}
+          {selected&&<section className="cs-geometry" aria-label="Единый диагностический запуск"><h3>Анализировать исследование · v2</h3><p>Автоматический выбор доступного специализированного диагностического пути по модальности и анатомии. Оригинальная модель запускается только после проверки протокола, прав на исследование и наличия весов.</p><button type="button" className="cs-outline" disabled={!diagnosticOptions.some(x=>x.state!=="not-supported")} onClick={chooseDiagnostic}>Анализировать выбранную серию</button>{diagnosticOptions.length===0?<p role="status">Для этой области реальный исполнитель ещё не подключён. Анализ не выполнялся.</p>:diagnosticOptions.map(route=><p key={route.id} role="status"><strong>{route.name}</strong> · {route.state==="not-supported"?"Недоступен":route.state==="needs-protocol"?"Требуется подтверждение протокола":"Доступен для подготовки"}: {route.reason}</p>)}{activeDiagnostic&&<p role="status">Выбран маршрут {activeDiagnostic.toUpperCase()}. Подтвердите допустимость исследования и запустите оригинальный исполнитель в открывшемся разделе. Сама маршрутизация не означает выполнения модели.</p>}</section>}
           <LungNoduleResearchResults key={selected?.key ?? "empty"} isChestCT={!!selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="CHEST")}/>
           <ChestEffusionResearchResults key={"fluid-"+(selected?.key??"empty")} isChestCT={!!selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="CHEST")}/>
           <IldGgoExpertResearch key={"ild-"+(selected?.key??"empty")} isChestCT={!!selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="CHEST")}/>
@@ -141,9 +154,9 @@ export default function ViewerPage() {
           <IldPatternResearch key={"ild-pattern-"+(selected?.key??"empty")} isChestCT={!!selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="CHEST")}/>
           <ChestExtraPulmonaryResearch key={"chest-extra-"+(selected?.key??"empty")} isChestCT={!!selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="CHEST")}/>
           <ThoracicMassResearch key={"intrathoracic-masses-"+(selected?.key??"empty")} series={selected??null}/>
-          {selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="HEAD") && <DirectIchDicomDetector key={"ich-"+selected.key} series={selected} files={indexedById}/>}
-          {selected && selected.modality==="MR" && <WmhSourceReview key={"wmh-"+selected.key} series={selected} files={indexedById} onNavigate={setWmhSlice}/>}
-          {selected && <NativeCtResearchExport key={"native-export-"+selected.key} series={selected} files={selectedFiles} onPreparedSource={(file,session)=>{setPreparedMonaiSession(session??null);setPreparedMonaiSource(file);setSourceMode("nodules");}}/> }
+          {selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="HEAD") && <div id="clinical-ich"><DirectIchDicomDetector key={"ich-"+selected.key} series={selected} files={indexedById}/></div>}
+          {selected && selected.modality==="MR" && <div id="clinical-wmh"><WmhSourceReview key={"wmh-"+selected.key} series={selected} files={indexedById} onNavigate={setWmhSlice}/></div>}
+          {selected && <div id="clinical-native-export"><NativeCtResearchExport key={"native-export-"+selected.key} series={selected} files={selectedFiles} onPreparedSource={(file,session)=>{setPreparedMonaiSession(session??null);setPreparedMonaiSource(file);setSourceMode("nodules");}}/></div> }
           <button type="button" className="cs-clear" disabled={reading || indexed.length === 0} onClick={() => { setIndexed([]); setPreparedMonaiSource(null);setPreparedMonaiSession(null); setCurrentSeriesKey(""); setMessage("Список очищен, файлы на диске не изменены."); }}>Очистить загруженное</button>
         </aside>
         <div className="cs-stage">
