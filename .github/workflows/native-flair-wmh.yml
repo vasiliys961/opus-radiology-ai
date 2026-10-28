@@ -1,0 +1,20 @@
+name: Native FLAIR DICOM to WMH
+on:
+  pull_request:
+    paths:
+      - 'services/imaging-ai/brain_flair_dicom_to_nifti.py'
+      - 'services/imaging-ai/test_brain_flair_dicom_to_nifti.py'
+      - 'scripts/run-wmh-on-dicom-flair.py'
+      - '.github/workflows/native-flair-wmh.yml'
+  workflow_dispatch:
+jobs:
+  mr-dicom-native-geometry:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install numpy nibabel pydicom
+      - run: python -m unittest discover -s services/imaging-ai -p test_brain_flair_dicom_to_nifti.py -v
+      - run: python -m py_compile services/imaging-ai/brain_flair_dicom_to_nifti.py scripts/run-wmh-on-dicom-flair.py
