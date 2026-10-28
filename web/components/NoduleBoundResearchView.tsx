@@ -19,7 +19,7 @@ export default function NoduleBoundResearchView({initialSource=null}:{initialSou
  const [score,setScore]=useState(0.5);
  const [windowPreset,setWindowPreset]=useState<"lung"|"soft"|"bone">("lung");
  const [showMarks,setShowMarks]=useState(true);
- const [workerEndpoint,setWorkerEndpoint]=useState("http://127.0.0.1:8767");
+ const [workerEndpoint,setWorkerEndpoint]=useState("http://127.0.0.1:8768");
  const [workerToken,setWorkerToken]=useState("");
  const [publicConfirmed,setPublicConfirmed]=useState(false);
  const [readerDecisions,setReaderDecisions]=useState<Record<number,ReaderNoduleDecision>>({});
@@ -158,7 +158,7 @@ export default function NoduleBoundResearchView({initialSource=null}:{initialSou
       </label>
       <label><input type="checkbox" checked={publicConfirmed} disabled={busy}
         onChange={e=>setPublicConfirmed(e.target.checked)}/>
-        Подтверждаю: исследование публичное, законно разрешённое и точно совпадает с источником на worker;
+        Подтверждаю: исследование публичное, законно разрешённое и полностью обезличено и разрешено для локальной передачи worker;
         не является пациентским исследованием.</label>
       <button type="button" disabled={!source||!workerToken||!publicConfirmed||busy}
         onClick={()=>void runWorker()}>
@@ -177,7 +177,7 @@ export default function NoduleBoundResearchView({initialSource=null}:{initialSou
     </button>
     </details>
     <p>Для первого запуска нужна установленная оригинальная модель MONAI на изолированном Linux CPU. <a href="https://github.com/vasiliys961/opus-radiology-ai/blob/main/docs/MONAI_BOUND_NODULE_CT.md" target="_blank" rel="noreferrer">Настройка подлинного детектора</a>.</p>
-    <p>Никакая КТ не передаётся в ChatGPT, OpenRouter, Polza или GitHub. Файл остаётся локальным в браузере. Эта панель НЕ запускает MONAI на Mac и не превращает исследовательский JSON в диагноз.</p>
+    <p>Никакая КТ не передаётся в ChatGPT, OpenRouter, Polza или GitHub. При выборе нового приватного worker КТ передаётся только на локальный Linux-worker. Эта панель НЕ запускает MONAI на Mac и не превращает исследовательский JSON в диагноз.</p>
   </div>
   {error&&<p role="alert" className="cs-nodule-error">{error}</p>}
   {status&&<p role="status" className="cs-message">{status}</p>}
