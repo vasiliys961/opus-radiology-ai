@@ -38,7 +38,7 @@ export default function NoduleBoundResearchView({initialSource=null}:{initialSou
  async function open(){
    if(!source||!reportFile||busy)return;
    const revision=++serial.current;controller.current?.abort();const active=new AbortController();
-   controller.current=active;setBusy(true);setError("");setReady(null);setStatus("Проверка NIfTI и отчёта…");
+   controller.current=active;setBusy(true);setError("");setReady(null);setReaderDecisions({});setStatus("Проверка NIfTI и отчёта…");
    try{
      if(reportFile.size>1024*1024)throw Error("JSON отчёта MONAI слишком большой.");
      const header=await readNoduleNiftiHeader(source);
@@ -55,7 +55,7 @@ export default function NoduleBoundResearchView({initialSource=null}:{initialSou
    const version=++serial.current;
    controller.current?.abort();
    const ctrl=new AbortController();controller.current=ctrl;
-   setBusy(true);setError("");setReady(null);setStatus("Проверяем подлинный checkpoint MONAI...");
+   setBusy(true);setError("");setReady(null);setReaderDecisions({});setStatus("Проверяем подлинный checkpoint MONAI...");
    try{
      const result=await executeRealNodule(
        {endpoint:workerEndpoint,token:workerToken},source,ctrl.signal,setStatus);
