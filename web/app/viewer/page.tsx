@@ -8,6 +8,7 @@ import "./viewer.css";
 import type {WorkerSession} from "../../lib/local-worker";
 
 const NoduleBoundResearchView = dynamic(() => import("../../components/NoduleBoundResearchView"), {ssr:false});
+const WmhSourceReview = dynamic(() => import("../../components/WmhSourceReview"), {ssr:false});
 const DirectIchDicomDetector = dynamic(() => import("../../components/DirectIchDicomDetector"), {ssr:false});
 const NativeCtResearchExport = dynamic(() => import("../../components/NativeCtResearchExport"), {ssr:false});
 
@@ -45,6 +46,7 @@ export default function ViewerPage() {
   const [sourceMode,setSourceMode] = useState<"dicom"|"nifti"|"nodules"|"colon"|"coverage"|"morphometry">("dicom");
   const [indexed, setIndexed] = useState<Indexed[]>([]);
   const [currentSeriesKey, setCurrentSeriesKey] = useState("");
+  const [wmhSlice,setWmhSlice]=useState<number|undefined>(undefined);
   const [preparedMonaiSource,setPreparedMonaiSource]=useState<File|null>(null);
   const [preparedMonaiSession,setPreparedMonaiSession]=useState<WorkerSession|null>(null);
   const [message, setMessage] = useState("Выберите папку с DICOM-файлами или набор отдельных файлов.");
@@ -79,7 +81,7 @@ export default function ViewerPage() {
       // Replace, rather than merge, series so stale patient data cannot persist.
       setIndexed(parsed);
       setPreparedMonaiSource(null);setPreparedMonaiSession(null);
-      setCurrentSeriesKey("");
+      setWmhSlice(undefined);setCurrentSeriesKey("");
       const mostCommon = [...reasons.entries()].sort((a, b) => b[1] - a[1])[0];
       setMessage(`Проиндексировано ${parsed.length} DICOM; пропущено ${rejected}.${mostCommon ? ` Основная причина (${mostCommon[1]}): ${mostCommon[0]}.` : ""} Изображения остаются на вашем Mac.`);
     } finally { setReading(false); }
@@ -124,7 +126,7 @@ export default function ViewerPage() {
           <div className="cs-message" role="status">{reading ? "Идёт индексация…" : message}</div>
           {series.length > 0 && <>
             <h3>Серии ({series.length})</h3>
-            <div className="cs-series-list">{series.map((s) => <button type="button" className={selected?.key === s.key ? "cs-series active" : "cs-series"} key={s.key} onClick={() => setCurrentSeriesKey(s.key)}>{s.label}</button>)}</div>
+            <div className="cs-series-list">{series.map((s) => <button type="button" className={selected?.key === s.key ? "cs-series active" : "cs-series"} key={s.key} onClick={() => {setWmhSlice(undefined);setCurrentSeriesKey(s.key);}}>{s.label}</button>)}</div>
           </>}
           {selected && <div className="cs-geometry"><h3>Контроль геометрии</h3><p>{selected.spatiallySorted ? "✓ Пространственный порядок подтверждён" : "⚠ Порядок условный"}</p><p>{selected.volumeReady ? `✓ Предварительная геометрия для будущего 3D · ${selected.sliceSpacingMm?.toFixed(2)} мм` : "3D/MPR НЕ РАЗРЕШЕНЫ"}</p>{selected.warning && <p>{selected.warning}</p>}</div>}
           <LungNoduleResearchResults key={selected?.key ?? "empty"} isChestCT={!!selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="CHEST")}/>
@@ -140,11 +142,12 @@ export default function ViewerPage() {
           <ChestExtraPulmonaryResearch key={"chest-extra-"+(selected?.key??"empty")} isChestCT={!!selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="CHEST")}/>
           <ThoracicMassResearch key={"intrathoracic-masses-"+(selected?.key??"empty")} series={selected??null}/>
           {selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="HEAD") && <DirectIchDicomDetector key={"ich-"+selected.key} series={selected} files={indexedById}/>}
+          {selected && selected.modality==="MR" && <WmhSourceReview key={"wmh-"+selected.key} series={selected} files={indexedById} onNavigate={setWmhSlice}/>}
           {selected && <NativeCtResearchExport key={"native-export-"+selected.key} series={selected} files={selectedFiles} onPreparedSource={(file,session)=>{setPreparedMonaiSession(session??null);setPreparedMonaiSource(file);setSourceMode("nodules");}}/> }
           <button type="button" className="cs-clear" disabled={reading || indexed.length === 0} onClick={() => { setIndexed([]); setPreparedMonaiSource(null);setPreparedMonaiSession(null); setCurrentSeriesKey(""); setMessage("Список очищен, файлы на диске не изменены."); }}>Очистить загруженное</button>
         </aside>
         <div className="cs-stage">
-          {selectedFiles.length ? <CornerstoneStack key={selected?.key} files={selectedFiles} modality={selected?.modality}/> : <div className="cs-placeholder"><span>✚</span><strong>Область DICOM-изображений</strong><p>Выберите файлы или папку DICOM, чтобы проверить работу Cornerstone3D.</p></div>}
+          {selectedFiles.length ? <CornerstoneStack key={selected?.key} files={selectedFiles} modality={selected?.modality} selectedIndex={wmhSlice}/> : <div className="cs-placeholder"><span>✚</span><strong>Область DICOM-изображений</strong><p>Выберите файлы или папку DICOM, чтобы проверить работу Cornerstone3D.</p></div>}
           <div className="cs-bottom-note">Важное ограничение: 2D-просмотр не означает подтверждение точности измерений, реконструкции, правильной геометрии или отсутствия патологии. Сжатые кодеки проверяются отдельно на тестовых наборах.</div>
         </div>
       </div>
