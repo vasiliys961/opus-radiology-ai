@@ -5,10 +5,13 @@ import { useMemo, useRef, useState, type ChangeEvent } from "react";
 import { groupDicomSeries, readDicomSeriesHeader, type DicomSeries } from "../../lib/dicom-series";
 import { validateViewerFileSelection } from "../../lib/viewer-limits";
 import "./viewer.css";
+import "../radiology.css";
+import {AnalysisSoundProvider} from "../../components/AnalysisSoundProvider";
 import type {WorkerSession} from "../../lib/local-worker";
 
 const NoduleBoundResearchView = dynamic(() => import("../../components/NoduleBoundResearchView"), {ssr:false});
 const WmhSourceReview = dynamic(() => import("../../components/WmhSourceReview"), {ssr:false});
+const VisionFramePlanningPanel = dynamic(() => import("../../components/VisionFramePlanningPanel"), {ssr:false});
 const UnifiedDicomStudyAnalysis = dynamic(() => import("../../components/UnifiedDicomStudyAnalysis"), {ssr:false});
 const DirectIchDicomDetector = dynamic(() => import("../../components/DirectIchDicomDetector"), {ssr:false});
 const NativeCtResearchExport = dynamic(() => import("../../components/NativeCtResearchExport"), {ssr:false});
@@ -48,6 +51,7 @@ export default function ViewerPage() {
   const [indexed, setIndexed] = useState<Indexed[]>([]);
   const [currentSeriesKey, setCurrentSeriesKey] = useState("");
   const [wmhSlice,setWmhSlice]=useState<number|undefined>(undefined);
+  const [visionOpen,setVisionOpen]=useState(false);
   const [preparedMonaiSource,setPreparedMonaiSource]=useState<File|null>(null);
   const [preparedMonaiSession,setPreparedMonaiSession]=useState<WorkerSession|null>(null);
   const [message, setMessage] = useState("Выберите папку с DICOM-файлами или набор отдельных файлов.");
@@ -55,6 +59,7 @@ export default function ViewerPage() {
 
   const series = useMemo(() => groupDicomSeries(indexed.map((item) => ({ id: item.id, name: item.file.name, metadata: item.header }))), [indexed]);
   const selected: DicomSeries | undefined = series.find((item) => item.key === currentSeriesKey) ?? series[0];
+  const visionSeries = useMemo(()=>selected?[selected]:[],[selected]);
   const indexedById = useMemo(() => new Map(indexed.map((item) => [item.id, item.file])), [indexed]);
   const selectedFiles = useMemo(() => selected?.members.map((item) => indexedById.get(item.id)).filter((file): file is File => !!file) ?? [], [selected, indexedById]);
 
@@ -82,7 +87,7 @@ export default function ViewerPage() {
       // Replace, rather than merge, series so stale patient data cannot persist.
       setIndexed(parsed);
       setPreparedMonaiSource(null);setPreparedMonaiSession(null);
-      setWmhSlice(undefined);setCurrentSeriesKey("");
+      setWmhSlice(undefined);setCurrentSeriesKey("");setVisionOpen(false);
       const mostCommon = [...reasons.entries()].sort((a, b) => b[1] - a[1])[0];
       setMessage(`Проиндексировано ${parsed.length} DICOM; пропущено ${rejected}.${mostCommon ? ` Основная причина (${mostCommon[1]}): ${mostCommon[0]}.` : ""} Изображения остаются на вашем Mac.`);
     } finally { setReading(false); }
@@ -127,7 +132,7 @@ export default function ViewerPage() {
           <div className="cs-message" role="status">{reading ? "Идёт индексация…" : message}</div>
           {series.length > 0 && <>
             <h3>Серии ({series.length})</h3>
-            <div className="cs-series-list">{series.map((s) => <button type="button" className={selected?.key === s.key ? "cs-series active" : "cs-series"} key={s.key} onClick={() => {setWmhSlice(undefined);setCurrentSeriesKey(s.key);}}>{s.label}</button>)}</div>
+            <div className="cs-series-list">{series.map((s) => <button type="button" className={selected?.key === s.key ? "cs-series active" : "cs-series"} key={s.key} onClick={() => {setWmhSlice(undefined);setVisionOpen(false);setCurrentSeriesKey(s.key);}}>{s.label}</button>)}</div>
           </>}
           {selected && <div className="cs-geometry"><h3>Контроль геометрии</h3><p>{selected.spatiallySorted ? "✓ Пространственный порядок подтверждён" : "⚠ Порядок условный"}</p><p>{selected.volumeReady ? `✓ Предварительная геометрия для будущего 3D · ${selected.sliceSpacingMm?.toFixed(2)} мм` : "3D/MPR НЕ РАЗРЕШЕНЫ"}</p>{selected.warning && <p>{selected.warning}</p>}</div>}
           {selected && <UnifiedDicomStudyAnalysis key={"unified-"+selected.key} series={selected} files={indexedById}
@@ -150,10 +155,25 @@ export default function ViewerPage() {
           {selected && selected.modality==="MR" && <WmhSourceReview key={"wmh-"+selected.key} series={selected} files={indexedById} onNavigate={setWmhSlice}/>}
           {selected && <NativeCtResearchExport key={"native-export-"+selected.key} series={selected} files={selectedFiles} onPreparedSource={(file,session)=>{setPreparedMonaiSession(session??null);setPreparedMonaiSource(file);setSourceMode("nodules");}}/> }
           </details>
-          <button type="button" className="cs-clear" disabled={reading || indexed.length === 0} onClick={() => { setIndexed([]); setPreparedMonaiSource(null);setPreparedMonaiSession(null); setCurrentSeriesKey(""); setMessage("Список очищен, файлы на диске не изменены."); }}>Очистить загруженное</button>
+          <button type="button" className="cs-clear" disabled={reading || indexed.length === 0} onClick={() => { setIndexed([]); setPreparedMonaiSource(null);setPreparedMonaiSession(null); setCurrentSeriesKey(""); setVisionOpen(false); setMessage("Список очищен, файлы на диске не изменены."); }}>Очистить загруженное</button>
         </aside>
         <div className="cs-stage">
           {selectedFiles.length ? <CornerstoneStack key={selected?.key} files={selectedFiles} modality={selected?.modality} selectedIndex={wmhSlice}/> : <div className="cs-placeholder"><span>✚</span><strong>Область DICOM-изображений</strong><p>Выберите файлы или папку DICOM, чтобы проверить работу Cornerstone3D.</p></div>}
+          {selected && (selected.modality==="CT"||selected.modality==="MR") && <section className="cs-geometry" aria-label="Подготовка Gemini и Opus по открытому DICOM">
+            <h3>Gemini Vision + Claude Opus · просмотр отдельных кадров</h3>
+            <p>Используется именно выбранная исходная серия. Сначала локальный план и проверка обезличенных PNG-копий; платный вызов только после отдельного разрешения. Без доступа к модели исходная КТ/МРТ остаётся доступной.</p>
+            <button type="button" disabled={reading} onClick={()=>setVisionOpen(v=>!v)}>
+              {visionOpen?"Закрыть подготовку кадров":"Подготовить кадры для Gemini + Opus"}
+            </button>
+            {visionOpen && <AnalysisSoundProvider>
+              <VisionFramePlanningPanel key={"vision-"+selected.key} series={visionSeries}
+                activeSeriesKey={selected.key} fileById={indexedById}
+                onOpenSlice={id=>{
+                  const index=selected.members.findIndex(m=>m.id===id);
+                  if(index>=0)setWmhSlice(index);
+                }}/>
+            </AnalysisSoundProvider>}
+          </section>}
           <div className="cs-bottom-note">Важное ограничение: 2D-просмотр не означает подтверждение точности измерений, реконструкции, правильной геометрии или отсутствия патологии. Сжатые кодеки проверяются отдельно на тестовых наборах.</div>
         </div>
       </div>
