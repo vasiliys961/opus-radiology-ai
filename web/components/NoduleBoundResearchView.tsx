@@ -1,6 +1,7 @@
 "use client";
 import {useEffect,useMemo,useRef,useState} from "react";
 import {executeRealNodule} from "../lib/live-nodule-worker";
+import type {WorkerSession} from "../lib/local-worker";
 import {createNodulePhysicianReview,type ReaderNoduleDecision} from "../lib/monai-nodule-physician-review";
 import {readNoduleNiftiHeader,parseBoundNoduleReport,verifyNoduleSource,
   readNoduleAxial,type NoduleNativeSource,type BoundNoduleReport} from "../lib/live-nodule-report";
@@ -8,7 +9,7 @@ import {readNoduleNiftiHeader,parseBoundNoduleReport,verifyNoduleSource,
 /** A real NIfTI CT + the EXACT same-source completed pretrained MONAI report.
  * All file reading, SHA, rendering and candidate selection stay browser-local.
  */
-export default function NoduleBoundResearchView({initialSource=null}:{initialSource?:File|null}){
+export default function NoduleBoundResearchView({initialSource=null,initialAutoSession=null}:{initialSource?:File|null;initialAutoSession?:WorkerSession|null}){
  const [source,setSource]=useState<File|null>(null);
  const [reportFile,setReportFile]=useState<File|null>(null);
  const [ready,setReady]=useState<{source:NoduleNativeSource;report:BoundNoduleReport}|null>(null);
@@ -33,6 +34,30 @@ export default function NoduleBoundResearchView({initialSource=null}:{initialSou
  // must disappear as soon as source changes.
  // eslint-disable-next-line react-hooks/exhaustive-deps
  },[initialSource]);
+ // Source and token are explicitly supplied by the physician from the DICOM action.
+ // Do not persist the token or trigger inference for manually opened NIfTI.
+ useEffect(()=>{
+   if(!initialSource||!initialAutoSession)return;
+   const version=++serial.current;
+   controller.current?.abort();
+   const ctrl=new AbortController();controller.current=ctrl;
+   setWorkerEndpoint(initialAutoSession.endpoint);
+   setWorkerToken(initialAutoSession.token);
+   setPublicConfirmed(true);
+   setBusy(true);setReady(null);setReaderDecisions({});setError("");
+   setStatus("Прямой запуск оригинальной MONAI RetinaNet из открытого DICOM...");
+   void executeRealNodule(initialAutoSession,initialSource,ctrl.signal,message=>{
+     if(!ctrl.signal.aborted&&version===serial.current)setStatus(message);
+   }).then(result=>{
+     if(ctrl.signal.aborted||version!==serial.current)return;
+     setReady(result);setSlice(0);
+     setStatus("MONAI завершил инференс: исследовательские кандидаты доступны врачу.");
+   }).catch(error=>{
+     if(!ctrl.signal.aborted&&version===serial.current)
+       setError(error instanceof Error?error.message:"Прямой инференс MONAI не завершён.");
+   }).finally(()=>{if(version===serial.current)setBusy(false);});
+   return ()=>{ctrl.abort();};
+ },[initialSource,initialAutoSession]);
  const candidates=useMemo(()=>ready?.report.candidates.filter(c=>c.score>=score&&c.nativeVoxelIndexHypothesis)
    .sort((a,b)=>b.score-a.score)??[],[ready,score]);
  async function open(){
