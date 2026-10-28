@@ -7,6 +7,7 @@ import {saveExactNativeCt,publicNoduleAdmission,
   type LocalFileWriter,type NativeCtExportProof} from "../lib/native-ct-research-export";
 import {acquireBrowserCompute} from "../lib/browser-compute-slot";
 import {prepareDicomMonaiFile} from "../lib/dicom-monai-direct";
+import type {WorkerSession} from "../lib/local-worker";
 
 type LocalFileHandle={createWritable():Promise<LocalFileWriter>;getFile?:()=>Promise<File>};
 type LocalSavePicker={
@@ -20,9 +21,11 @@ type LocalSavePicker={
  */
 export default function NativeCtResearchExport({
   series,files,onPreparedSource,
-}:{series:DicomSeries;files:File[];onPreparedSource?:(file:File)=>void}){
+}:{series:DicomSeries;files:File[];onPreparedSource?:(file:File,autoSession?:WorkerSession)=>void}){
  const [supported,setSupported]=useState(false);
  const [authorized,setAuthorized]=useState(false);
+ const [workerEndpoint,setWorkerEndpoint]=useState("http://127.0.0.1:8768");
+ const [workerToken,setWorkerToken]=useState("");
  const [busy,setBusy]=useState(false);
  const [status,setStatus]=useState("");
  const [error,setError]=useState("");
@@ -98,7 +101,7 @@ export default function NativeCtResearchExport({
    }
  }
  async function runDirect(){
-   if(busy||!authorized||!!unsupported)return;
+   if(busy||!authorized||!!unsupported||!workerToken)return;
    const revision=++generation.current,controller=new AbortController();
    active.current=controller;setBusy(true);setError("");setProof(null);
    let release:(()=>void)|undefined;
@@ -109,7 +112,7 @@ export default function NativeCtResearchExport({
      });
      if(controller.signal.aborted||revision!==generation.current)return;
      if(!onPreparedSource)throw Error("Вкладка MONAI не подключена к открытому DICOM.");
-     onPreparedSource(file);
+     onPreparedSource(file,{endpoint:workerEndpoint,token:workerToken});
    }catch(e){
      if(revision===generation.current)setError(e instanceof Error?e.message:"Не удалось подготовить текущую КТ для MONAI.");
    }finally{
@@ -129,10 +132,12 @@ export default function NativeCtResearchExport({
    <summary>Анализ открытой DICOM-КТ · MONAI RetinaNet</summary>
    <p>Оригинальный DICOM → точный NIfTI (float32 HU). Без облака и без накопления всей КТ в RAM.
      Источник остаётся на вашем компьютере; после записи сразу откроется MONAI для запуска настоящего инференса на подходящем Linux CPU.</p>
-   <button type="button" disabled={!!unsupported||!authorized||busy||!onPreparedSource} onClick={()=>void runDirect()}>
-     Открыть текущую DICOM-КТ в MONAI без сохранения NIfTI
+   <label>Локальный Linux MONAI worker <input type="text" value={workerEndpoint} disabled={busy} onChange={e=>setWorkerEndpoint(e.target.value)}/></label>
+   <label>Токен worker (только в памяти вкладки) <input type="password" autoComplete="off" value={workerToken} disabled={busy} onChange={e=>setWorkerToken(e.target.value)}/></label>
+   <button type="button" disabled={!!unsupported||!authorized||!workerToken||busy||!onPreparedSource} onClick={()=>void runDirect()}>
+     Анализировать текущую DICOM-КТ настоящим MONAI
    </button>
-   <p>Прямой путь готовит исходный HU-объём во внутреннем хранилище браузера и передаёт его панели MONAI. При подключённом приватном Linux-worker модель запускается там; дополнительная ручная подготовка NIfTI не требуется.</p>
+   <p>Прямой путь готовит исходный HU-объём во внутреннем хранилище браузера и передаёт его панели MONAI. После подготовки модель запускается автоматически на указанном приватном Linux-worker; дополнительная кнопка MONAI не требуется.</p>
    {!supported&&<p role="status">Для больших файлов требуется Chromium/Chrome с локальной потоковой записью на диск. Safari в этом режиме не поддерживается; лимит памяти не увеличиваем.</p>}
    {unsupported&&<p role="status">Экспорт недоступен: {unsupported}</p>}
    <label><input type="checkbox" checked={authorized} disabled={busy||!!proof}
