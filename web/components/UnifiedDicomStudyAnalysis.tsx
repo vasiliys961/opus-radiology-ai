@@ -124,10 +124,12 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
  }
  async function saveUnsignedDraft(){
    if(!ich&&!wmh||!draftText.trim()||exporting)return;
+   const revision=serial.current;
    setExporting(true);setError("");
    try{
      const digests:NativeDicomDigest[]=[];
      for(const member of series.members){
+       if(revision!==serial.current)throw Error("Исследование изменилось во время сохранения.");
        const file=files.get(member.id),sop=member.metadata.sopInstanceUid;
        if(!file||!sop)throw Error("Отсутствует оригинальный DICOM для локального сохранения.");
        // One original DICOM file in memory at a time; no upload or persistence.
@@ -137,6 +139,7 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
      }
      const input=ich?{kind:"ianpan-ich" as const,result:ich}:
        {kind:"wmh-flair" as const,result:wmh!};
+     if(revision!==serial.current)throw Error("Исследование изменилось во время сохранения.");
      const draft=createNativePhysicianDraft(series,input,decisions,draftText,digests,new Date().toISOString());
      const url=URL.createObjectURL(new Blob([JSON.stringify(draft,null,2)],{type:"application/json"}));
      try{
