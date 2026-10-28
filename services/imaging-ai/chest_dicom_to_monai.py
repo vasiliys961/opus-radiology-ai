@@ -107,7 +107,7 @@ def convert_dicom_chest(folder:Path,output:Path,*,public_rights=False,deidentifi
                 if px.shape!=(dims[1],dims[0]):raise ValueError("unexpected_decoded_pixel_shape")
                 hu=px.astype(np.float32)*float(ds.RescaleSlope)+float(ds.RescaleIntercept)
                 if not np.all(np.isfinite(hu)):raise ValueError("nonfinite_ct_hu")
-                dest.write(np.ascontiguousarray(hu.T,dtype="<f4").tobytes())
+                dest.write(np.ascontiguousarray(hu,dtype="<f4").tobytes())
         if Path(tmp).stat().st_size!=352+total*4:raise ValueError("truncated_nifti_output")
         os.replace(tmp,output)
     finally:
