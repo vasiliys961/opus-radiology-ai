@@ -22,7 +22,8 @@ test("only pinned real pretrained MONAI worker is eligible",()=>{
    assert.equal(readyOriginalNoduleWorker({...cap,[field]:false}),false,field);
  }
  assert.equal(readyOriginalNoduleWorker({...cap,patientMode:true}),false);
- assert.equal(readyOriginalNoduleWorker({...cap,imageUpload:true}),false);
+ assert.equal(readyOriginalNoduleWorker({...cap,imageUpload:true}),true);
+ assert.equal(readyOriginalNoduleWorker({...cap,imageUpload:"true"}),false);
  assert.equal(readyOriginalNoduleWorker({...cap,dataPolicy:"patient"}),false);
  assert.equal(readyOriginalNoduleWorker(null),false);
 });
