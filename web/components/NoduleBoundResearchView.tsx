@@ -24,7 +24,7 @@ export default function NoduleBoundResearchView({initialSource=null}:{initialSou
  const canvas=useRef<HTMLCanvasElement|null>(null);
  const serial=useRef(0),controller=useRef<AbortController|null>(null);
  useEffect(()=>()=>{serial.current++;controller.current?.abort();},[]);
- const reset=()=>{serial.current++;controller.current?.abort();setReady(null);setError("");setStatus("");};
+ const reset=()=>{serial.current++;controller.current?.abort();setBusy(false);setReady(null);setError("");setStatus("");};
  useEffect(()=>{
    reset();setSource(initialSource);setReportFile(null);setPublicConfirmed(false);
  // Initial source is controlled by parent current open file, so stale findings
