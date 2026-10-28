@@ -7,7 +7,7 @@ import {saveExactNativeCt,publicNoduleAdmission,
   type LocalFileWriter,type NativeCtExportProof} from "../lib/native-ct-research-export";
 import {acquireBrowserCompute} from "../lib/browser-compute-slot";
 
-type LocalFileHandle={createWritable():Promise<LocalFileWriter>};
+type LocalFileHandle={createWritable():Promise<LocalFileWriter>;getFile?:()=>Promise<File>};
 type LocalSavePicker={
   showSaveFilePicker(options:{
     suggestedName:string;types:{description:string;accept:Record<string,string[]>}[];
@@ -18,8 +18,8 @@ type LocalSavePicker={
  * Requires a browser supporting streaming file-write (Chromium).
  */
 export default function NativeCtResearchExport({
-  series,files,
-}:{series:DicomSeries;files:File[]}){
+  series,files,onPreparedSource,
+}:{series:DicomSeries;files:File[];onPreparedSource?:(file:File)=>void}){
  const [supported,setSupported]=useState(false);
  const [authorized,setAuthorized]=useState(false);
  const [busy,setBusy]=useState(false);
@@ -70,7 +70,20 @@ export default function NativeCtResearchExport({
        if(revision===generation.current)setStatus("Запись исходной КТ: "+Math.floor(written/total*100)+"%");
      });
      if(revision!==generation.current)return;
-     setProof(result);setStatus("Сохранена точная полная переданная серия CT NIfTI · SHA-256 проверен дважды. Доступен отдельный исследовательский паспорт для MONAI.");
+     setProof(result);setStatus("Исходная КТ NIfTI сохранена, двойной SHA-256 подтверждён.");
+     // The local file remains disk-backed; no entire 3D CT is loaded into JS
+     // or uploaded. Pass the same saved source directly to the actual MONAI viewer.
+     if(onPreparedSource&&handle.getFile){
+       try{
+         const saved=await handle.getFile();
+         if(revision===generation.current&&!controller.signal.aborted&&saved.size===result.writtenBytes){
+           onPreparedSource(saved);
+           setStatus("Открываем эту исходную КТ в реальном детекторе узлов MONAI…");
+         }
+       }catch{
+         setStatus("КТ NIfTI сохранена; автоматическое открытие невозможно. Выберите её во вкладке MONAI.");
+       }
+     }
    }catch(e){
      if(revision===generation.current){
        if(e instanceof DOMException&&e.name==="AbortError")
@@ -93,7 +106,7 @@ export default function NativeCtResearchExport({
  return <details className="cs-nodule-export">
    <summary>Экспорт исходной КТ для настоящих детекторов MONAI / task315</summary>
    <p>Оригинальный DICOM → точный NIfTI (float32 HU). Без облака и без накопления всей КТ в RAM.
-     Источник остаётся на вашем компьютере; инференс выполняется отдельно на подходящем Linux CPU.</p>
+     Источник остаётся на вашем компьютере; после записи сразу откроется MONAI для запуска настоящего инференса на подходящем Linux CPU.</p>
    {!supported&&<p role="status">Для больших файлов требуется Chromium/Chrome с локальной потоковой записью на диск. Safari в этом режиме не поддерживается; лимит памяти не увеличиваем.</p>}
    {unsupported&&<p role="status">Экспорт недоступен: {unsupported}</p>}
    <label><input type="checkbox" checked={authorized} disabled={busy||!!proof}
@@ -101,7 +114,7 @@ export default function NativeCtResearchExport({
      Подтверждаю: только публичная, обезличенная КТ грудной клетки с разрешённым использованием. Это весь предоставленный набор срезов, но полнота анатомии не доказана.
    </label>
    <button type="button" disabled={!supported||!!unsupported||!authorized||busy||!!proof} onClick={()=>void run()}>
-     Сохранить оригинальную КТ NIfTI на этом компьютере
+     Сохранить исходную КТ и открыть детектор MONAI
    </button>
    {busy&&<button type="button" onClick={()=>active.current?.abort()}>Отменить экспорт</button>}
    {error&&<p role="alert">{error}</p>}
