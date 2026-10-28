@@ -43,6 +43,7 @@ export default function ViewerPage() {
   const [sourceMode,setSourceMode] = useState<"dicom"|"nifti"|"nodules"|"colon"|"coverage"|"morphometry">("dicom");
   const [indexed, setIndexed] = useState<Indexed[]>([]);
   const [currentSeriesKey, setCurrentSeriesKey] = useState("");
+  const [preparedMonaiSource,setPreparedMonaiSource]=useState<File|null>(null);
   const [message, setMessage] = useState("Выберите папку с DICOM-файлами или набор отдельных файлов.");
   const [reading, setReading] = useState(false);
 
@@ -74,6 +75,7 @@ export default function ViewerPage() {
       }
       // Replace, rather than merge, series so stale patient data cannot persist.
       setIndexed(parsed);
+      setPreparedMonaiSource(null);
       setCurrentSeriesKey("");
       const mostCommon = [...reasons.entries()].sort((a, b) => b[1] - a[1])[0];
       setMessage(`Проиндексировано ${parsed.length} DICOM; пропущено ${rejected}.${mostCommon ? ` Основная причина (${mostCommon[1]}): ${mostCommon[0]}.` : ""} Изображения остаются на вашем Mac.`);
@@ -102,7 +104,7 @@ export default function ViewerPage() {
         <button type="button" className={sourceMode==="morphometry"?"active":""}
           onClick={()=>setSourceMode("morphometry")}>Морфометрия · 8 модулей</button>
       </div>
-      {sourceMode==="nodules" ? <NoduleBoundResearchView/> : sourceMode==="nifti" ? <NiftiCtResearchView/> : sourceMode==="colon" ? <ColonCancerResearchResults/> : sourceMode==="coverage" ? <PathologyCoverageResearch/> : sourceMode==="morphometry" ? <MorphometryEvidenceReview/> : <>
+      {sourceMode==="nodules" ? <NoduleBoundResearchView initialSource={preparedMonaiSource}/> : sourceMode==="nifti" ? <NiftiCtResearchView/> : sourceMode==="colon" ? <ColonCancerResearchResults/> : sourceMode==="coverage" ? <PathologyCoverageResearch/> : sourceMode==="morphometry" ? <MorphometryEvidenceReview/> : <>
       <div className="cs-intro"><div><div className="cs-kicker">IMAGING LAB / 2D STACK</div><h1>DICOM Viewer <em>β</em></h1><p>Просмотр локальных DICOM-серий с декодированием Cornerstone3D. Без облака, без анализа ИИ.</p></div><span className="cs-watermark">ИССЛЕДОВАТЕЛЬСКИЙ ПРОТОТИП · НЕ ДЛЯ ДИАГНОСТИКИ</span></div>
       <div className="cs-layout">
         <aside className="cs-sidebar">
@@ -134,8 +136,8 @@ export default function ViewerPage() {
           <IldPatternResearch key={"ild-pattern-"+(selected?.key??"empty")} isChestCT={!!selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="CHEST")}/>
           <ChestExtraPulmonaryResearch key={"chest-extra-"+(selected?.key??"empty")} isChestCT={!!selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="CHEST")}/>
           <ThoracicMassResearch key={"intrathoracic-masses-"+(selected?.key??"empty")} series={selected??null}/>
-          {selected && <NativeCtResearchExport key={"native-export-"+selected.key} series={selected} files={selectedFiles}/> }
-          <button type="button" className="cs-clear" disabled={reading || indexed.length === 0} onClick={() => { setIndexed([]); setCurrentSeriesKey(""); setMessage("Список очищен, файлы на диске не изменены."); }}>Очистить загруженное</button>
+          {selected && <NativeCtResearchExport key={"native-export-"+selected.key} series={selected} files={selectedFiles} onPreparedSource={file=>{setPreparedMonaiSource(file);setSourceMode("nodules");}}/> }
+          <button type="button" className="cs-clear" disabled={reading || indexed.length === 0} onClick={() => { setIndexed([]); setPreparedMonaiSource(null); setCurrentSeriesKey(""); setMessage("Список очищен, файлы на диске не изменены."); }}>Очистить загруженное</button>
         </aside>
         <div className="cs-stage">
           {selectedFiles.length ? <CornerstoneStack key={selected?.key} files={selectedFiles} modality={selected?.modality}/> : <div className="cs-placeholder"><span>✚</span><strong>Область DICOM-изображений</strong><p>Выберите файлы или папку DICOM, чтобы проверить работу Cornerstone3D.</p></div>}

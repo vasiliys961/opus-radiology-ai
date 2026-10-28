@@ -31,6 +31,11 @@ const CornerstoneMPR = dynamic(() => import("../components/CornerstoneMPR"), {
   loading: () => <div className="ora-viewer-placeholder ora-viewer-wait">Подготовка режима MPR…</div>,
 });
 
+const LiveNoduleDetection = dynamic(() => import("../components/NoduleBoundResearchView"), {
+  ssr:false,
+  loading:()=> <div className="ora-viewer-placeholder">Подключаем просмотр детекции лёгочных узлов…</div>,
+});
+
 const CornerstoneStack = dynamic(() => import("../components/CornerstoneStack"), {
   ssr: false,
   loading: () => <div className="ora-viewer-placeholder ora-viewer-wait">Запускаем DICOM-движок Cornerstone3D…</div>,
@@ -387,6 +392,8 @@ export default function Home() {
               <div className="ora-viewer-footer"><span><span className="ora-tiny-dot"/> {hasCornerstone ? "Cornerstone3D · локальный экспериментальный просмотр" : dicomPreview?.id === activeId ? `${dicomPreview.metadata.modality || "DICOM"} · ${dicomPreview.metadata.width}×${dicomPreview.metadata.height} · WC ${dicomPreview.metadata.windowCenter ?? "auto"} / WW ${dicomPreview.metadata.windowWidth ?? "auto"}` : "Локальный предпросмотр · исследовательский режим"}</span><span>3D MIP / MPR <b>{mprCheck.eligible ? "экспериментальные" : "недоступны"}</b></span></div>
             </div>
             <div className="ora-finding-strip"><div className="ora-finding-icon"><Icon name="sparkles" size={21}/></div><div><strong>Локальная сегментация и Evidence</strong><p>В MPR доступны импорт масок и Lungmask R231 при установленном worker и весах. R231 разрешён только для открытой исследовательской КТ; полнота охвата и клиническая точность не подтверждены.</p></div><span className="ora-coming-soon">RESEARCH</span></div>
+            {active?.kind==="nifti"&&
+              <LiveNoduleDetection initialSource={active.file}/>}
             <CtHuRoiPanel file={active?.kind==="dicom"?active.file:null}
               metadata={active?.kind==="dicom"?active.dicomMeta??null:null}
               seriesKey={activeSeries?.key??null}/>
