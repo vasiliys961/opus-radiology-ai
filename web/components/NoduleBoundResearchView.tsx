@@ -1,12 +1,13 @@
 "use client";
 import {useEffect,useMemo,useRef,useState} from "react";
+import {executeRealNodule} from "../lib/live-nodule-worker";
 import {readNoduleNiftiHeader,parseBoundNoduleReport,verifyNoduleSource,
   readNoduleAxial,type NoduleNativeSource,type BoundNoduleReport} from "../lib/live-nodule-report";
 
 /** A real NIfTI CT + the EXACT same-source completed pretrained MONAI report.
  * All file reading, SHA, rendering and candidate selection stay browser-local.
  */
-export default function NoduleBoundResearchView(){
+export default function NoduleBoundResearchView({initialSource=null}:{initialSource?:File|null}){
  const [source,setSource]=useState<File|null>(null);
  const [reportFile,setReportFile]=useState<File|null>(null);
  const [ready,setReady]=useState<{source:NoduleNativeSource;report:BoundNoduleReport}|null>(null);
@@ -17,10 +18,19 @@ export default function NoduleBoundResearchView(){
  const [score,setScore]=useState(0.5);
  const [windowPreset,setWindowPreset]=useState<"lung"|"soft"|"bone">("lung");
  const [showMarks,setShowMarks]=useState(true);
+ const [workerEndpoint,setWorkerEndpoint]=useState("http://127.0.0.1:8767");
+ const [workerToken,setWorkerToken]=useState("");
+ const [publicConfirmed,setPublicConfirmed]=useState(false);
  const canvas=useRef<HTMLCanvasElement|null>(null);
  const serial=useRef(0),controller=useRef<AbortController|null>(null);
  useEffect(()=>()=>{serial.current++;controller.current?.abort();},[]);
  const reset=()=>{serial.current++;controller.current?.abort();setReady(null);setError("");setStatus("");};
+ useEffect(()=>{
+   reset();setSource(initialSource);setReportFile(null);setPublicConfirmed(false);
+ // Initial source is controlled by parent current open file, so stale findings
+ // must disappear as soon as source changes.
+ // eslint-disable-next-line react-hooks/exhaustive-deps
+ },[initialSource]);
  const candidates=useMemo(()=>ready?.report.candidates.filter(c=>c.score>=score&&c.nativeVoxelIndexHypothesis)
    .sort((a,b)=>b.score-a.score)??[],[ready,score]);
  async function open(){
@@ -37,6 +47,25 @@ export default function NoduleBoundResearchView(){
      setStatus("Оригинальная КТ и JSON модели связаны по SHA-256 и физической сетке. Координаты — исследовательские кандидаты, требующие ручной проверки.");
    }catch(e){if(revision===serial.current)setError(e instanceof Error?e.message:"Не удалось проверить источник.");}
    finally{if(revision===serial.current)setBusy(false);}
+ }
+ async function runWorker(){
+   if(!source||!publicConfirmed||!workerToken||busy)return;
+   const version=++serial.current;
+   controller.current?.abort();
+   const ctrl=new AbortController();controller.current=ctrl;
+   setBusy(true);setError("");setReady(null);setStatus("Проверяем подлинный checkpoint MONAI...");
+   try{
+     const result=await executeRealNodule(
+       {endpoint:workerEndpoint,token:workerToken},source,ctrl.signal,setStatus);
+     if(ctrl.signal.aborted||version!==serial.current)return;
+     setReady(result);setSlice(0);
+     setStatus("Оригинальный MONAI RetinaNet выполнен. Кандидаты доступны в просмотре КТ.");
+   }catch(e){
+     if(!ctrl.signal.aborted&&version===serial.current)
+       setError(e instanceof Error?e.message:"MONAI не смог выполнить настоящий инференс.");
+   }finally{
+     if(version===serial.current)setBusy(false);
+   }
  }
  useEffect(()=>{
    if(!ready||!source||!canvas.current)return;
@@ -82,13 +111,39 @@ export default function NoduleBoundResearchView(){
     <label>Исходная КТ из Opus · <code>.nii</code> (не ZIP)
       <input type="file" accept=".nii" onChange={e=>{reset();setSource(e.target.files?.[0]??null);e.target.value="";}}/>
     </label>
-    <label>Результат настоящего MONAI · <code>.json</code>
-      <input type="file" accept=".json,application/json" onChange={e=>{reset();setReportFile(e.target.files?.[0]??null);e.target.value="";}}/>
+    <details open>
+      <summary>Запустить настоящую MONAI RetinaNet на исходной КТ</summary>
+      <p>Исполнитель анализирует заранее разрешённую публичную КТ, установленную на частном Linux-worker.
+        Из браузера передаётся только SHA-256 открытого NIfTI, а не пиксели.</p>
+      <label>Локальный адрес MONAI worker
+        <input type="text" value={workerEndpoint} disabled={busy}
+          onChange={e=>setWorkerEndpoint(e.target.value)} />
+      </label>
+      <label>Токен сессии worker
+        <input type="password" autoComplete="off" value={workerToken} disabled={busy}
+          onChange={e=>setWorkerToken(e.target.value)} />
+      </label>
+      <label><input type="checkbox" checked={publicConfirmed} disabled={busy}
+        onChange={e=>setPublicConfirmed(e.target.checked)}/>
+        Подтверждаю: исследование публичное, законно разрешённое и точно совпадает с источником на worker;
+        не является пациентским исследованием.</label>
+      <button type="button" disabled={!source||!workerToken||!publicConfirmed||busy}
+        onClick={()=>void runWorker()}>
+        {busy?"Выполняем инференс…":"Анализировать эту КТ настоящим MONAI"}
+      </button>
+      {busy&&<button type="button" onClick={()=>reset()}>Отменить анализ</button>}
+    </details>
+    <details>
+      <summary>Дополнительно · открыть уже полученный результат (.json)</summary>
+    <label>Результат MONAI, проверенный по текущему исходнику · <code>.json</code>
+      <input type="file" accept=".json,application/json"
+        onChange={e=>{reset();setReportFile(e.target.files?.[0]??null);e.target.value="";}}/>
     </label>
     <button type="button" disabled={!source||!reportFile||busy} onClick={()=>void open()}>
       {busy?"Проверка исходного SHA-256…":"Открыть находки на исходной КТ"}
     </button>
-    <p>Для первого запуска модели используется отдельный Linux CPU с предустановленным официальным checkpoint. <a href="https://github.com/vasiliys961/opus-radiology-ai/blob/feature/live-monai-nodule-source-bound/docs/MONAI_BOUND_NODULE_CT.md" target="_blank" rel="noreferrer">Запуск настоящего детектора и условия безопасности ↗</a>.</p>
+    </details>
+    <p>Для первого запуска нужна установленная оригинальная модель MONAI на изолированном Linux CPU. <a href="https://github.com/vasiliys961/opus-radiology-ai/blob/main/docs/MONAI_BOUND_NODULE_CT.md" target="_blank" rel="noreferrer">Настройка подлинного детектора</a>.</p>
     <p>Никакая КТ не передаётся в ChatGPT, OpenRouter, Polza или GitHub. Файл остаётся локальным в браузере. Эта панель НЕ запускает MONAI на Mac и не превращает исследовательский JSON в диагноз.</p>
   </div>
   {error&&<p role="alert" className="cs-nodule-error">{error}</p>}
