@@ -41,7 +41,7 @@ assert.throws(()=>createNativePhysicianDraft(make("CT"),{kind:"ianpan-ich",resul
 assert.throws(()=>createNativePhysicianDraft(make("CT"),{kind:"ianpan-ich",result:evidence},
  {},"test",[{...hashes[0],sha256:"bad"},hashes[1]],"2026-10-28T00:00:00Z"));
 assert.throws(()=>createNativePhysicianDraft(make("CT"),{kind:"ianpan-ich",result:{
- ...evidence,findings:[{...evidence.findings[0],source:{...evidence.findings[0].source,sopInstanceUid:"foreign"}}]},
+ ...evidence,findings:[{...evidence.findings[0],source:{...evidence.findings[0].source,sopInstanceUid:"foreign"}}]}},
  {},"test",hashes,"2026-10-28T00:00:00Z"));
 assert.throws(()=>createNativePhysicianDraft(make("CT"),{kind:"wmh-flair",result:wmhResult},
  {},"test",hashes,"2026-10-28T00:00:00Z"));
