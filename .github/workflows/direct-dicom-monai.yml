@@ -1,0 +1,27 @@
+name: Direct native DICOM MONAI source execution
+on:
+  pull_request:
+    paths:
+      - "services/imaging-ai/analyze_chest_dicom_monai.py"
+      - "services/imaging-ai/test_analyze_chest_dicom_monai.py"
+      - ".github/workflows/direct-dicom-monai.yml"
+  push:
+    paths:
+      - "services/imaging-ai/analyze_chest_dicom_monai.py"
+      - "services/imaging-ai/test_analyze_chest_dicom_monai.py"
+      - ".github/workflows/direct-dicom-monai.yml"
+permissions:
+  contents: read
+jobs:
+  source-to-genuine-runner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install numpy==2.2.6 pydicom==3.0.1
+      - run: |
+          python -m py_compile services/imaging-ai/analyze_chest_dicom_monai.py services/imaging-ai/test_analyze_chest_dicom_monai.py
+          python services/imaging-ai/test_analyze_chest_dicom_monai.py
