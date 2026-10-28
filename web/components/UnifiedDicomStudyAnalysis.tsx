@@ -8,6 +8,7 @@ import {runPublicIchWorker} from "../lib/public-ich-worker";
 import {call,type WorkerSession} from "../lib/local-worker";
 import {bindWmhToSelectedDicom,type BoundWmh} from "../lib/wmh-source-review";
 import type {EvidenceJson} from "../lib/evidence-json";
+import {createNativePhysicianDraft,type NativeDicomDigest} from "../lib/native-physician-draft";
 
 /** A single primary action that reuses the real DICOM -> MONAI/ianpan/WMH paths.
  * Never advertises a checkpoint as installed until its private worker proves it.
@@ -32,6 +33,8 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
  const [ich,setIch]=useState<EvidenceJson|null>(null);
  const [wmh,setWmh]=useState<BoundWmh|null>(null);
  const [decisions,setDecisions]=useState<Record<string,"accepted"|"rejected">>({});
+ const [draftText,setDraftText]=useState("");
+ const [exporting,setExporting]=useState(false);
  const serial=useRef(0),active=useRef<AbortController|null>(null);
  const preset=plan.route==="monai-nodules"?"http://127.0.0.1:8768":
    plan.route==="ianpan-ich"?"http://127.0.0.1:8766":"http://127.0.0.1:8772";
@@ -39,7 +42,7 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
    serial.current++;active.current?.abort();
    setEndpoint(preset);setToken("");setAuthorized(false);setFlairConfirmed(false);
    setSourceUrl("");setSourceLicense("");setBusy(false);setError("");setStatus("");
-   setIch(null);setWmh(null);setDecisions({});
+   setIch(null);setWmh(null);setDecisions({});setDraftText("");setExporting(false);
    return ()=>{serial.current++;active.current?.abort();};
  },[series,files,preset]);
  const ready=!!plan.route&&authorized&&!!token&&!!endpoint.trim()&&!busy&&
@@ -51,7 +54,7 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
    active.current?.abort();
    const controller=new AbortController();active.current=controller;
    setBusy(true);setStatus("Проверяем совместимость и доступность настоящей модели...");
-   setError("");setIch(null);setWmh(null);setDecisions({});
+   setError("");setIch(null);setWmh(null);setDecisions({});setDraftText("");
    const session:WorkerSession={endpoint,token};
    const progress=(message:string)=>{
      if(version===serial.current&&!controller.signal.aborted)setStatus(message);
@@ -76,6 +79,9 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
          !sop.has(f.source.sopInstanceUid)||!uid.has(f.source.seriesUid)||f.source.frameIndex!==0))
          throw Error("ICH-находки не соответствуют оригинальным DICOM.");
        setIch(evidence);
+       setDraftText("Исследовательская КТ головы: исполнена модель ianpan. Кандидатов на кровоизлияние: "+
+         evidence.findings.length+". Требуется сверка каждого очага с исходной КТ. "+
+         "Отсутствие кандидатов не исключает кровоизлияние; анализ других патологий не проводился.");
        setStatus("Настоящий ianpan выполнен. Кандидаты требуют проверки врача.");
        return;
      }
@@ -104,6 +110,10 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
      const bound=await bindWmhToSelectedDicom(data,series,files);
      if(version!==serial.current||controller.signal.aborted)return;
      setWmh(bound);
+     setDraftText("Исследовательская FLAIR-МРТ головы: выполнен WMH fold 0. "+
+       "Кандидатных гиперинтенсивных компонентов: "+bound.components.length+
+       "; суммарный объём "+bound.totalMl.toFixed(2)+" мл. "+
+       "Изменения неспецифичны; требуется врачебная оценка и дифференциальная интерпретация.");
      setStatus("Оригинальный WMH fold 0 выполнен. Сверены SHA-256 исходных DICOM.");
    }catch(e){
      if(version===serial.current&&!controller.signal.aborted)
@@ -111,6 +121,35 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
    }finally{
      if(version===serial.current)setBusy(false);
    }
+ }
+ async function saveUnsignedDraft(){
+   if(!ich&&!wmh||!draftText.trim()||exporting)return;
+   const revision=serial.current;
+   setExporting(true);setError("");
+   try{
+     const digests:NativeDicomDigest[]=[];
+     for(const member of series.members){
+       if(revision!==serial.current)throw Error("Исследование изменилось во время сохранения.");
+       const file=files.get(member.id),sop=member.metadata.sopInstanceUid;
+       if(!file||!sop)throw Error("Отсутствует оригинальный DICOM для локального сохранения.");
+       // One original DICOM file in memory at a time; no upload or persistence.
+       const bytes=new Uint8Array(await crypto.subtle.digest("SHA-256",await file.arrayBuffer()));
+       const sha=Array.from(bytes,b=>b.toString(16).padStart(2,"0")).join("");
+       digests.push({sopInstanceUid:sop,sha256:sha});
+     }
+     const input=ich?{kind:"ianpan-ich" as const,result:ich}:
+       {kind:"wmh-flair" as const,result:wmh!};
+     if(revision!==serial.current)throw Error("Исследование изменилось во время сохранения.");
+     const draft=createNativePhysicianDraft(series,input,decisions,draftText,digests,new Date().toISOString());
+     const url=URL.createObjectURL(new Blob([JSON.stringify(draft,null,2)],{type:"application/json"}));
+     try{
+       const a=document.createElement("a");a.href=url;
+       a.download="opus-native-unsigned-physician-review.json";
+       document.body.appendChild(a);a.click();a.remove();
+     }finally{window.setTimeout(()=>URL.revokeObjectURL(url),1000);}
+     setStatus("Неподписанный предварительный отчёт с UID и SHA-256 сохранён локально.");
+   }catch(e){setError(e instanceof Error?e.message:"Не удалось сохранить черновик.");}
+   finally{setExporting(false);}
  }
  function cancel(){
    serial.current++;active.current?.abort();active.current=null;
@@ -172,6 +211,19 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
      </div>;
    })}
    {wmh.components.length>100&&<p>Показаны первые 100 очагов.</p>}
+  </div>}
+  {(ich||wmh)&&<div className="cs-geometry" aria-label="Редактируемый предварительный врачебный отчёт">
+   <h3>Предварительное заключение · редактирует врач</h3>
+   <label>Текст черновика
+    <textarea rows={5} maxLength={12000} value={draftText} disabled={exporting}
+      onChange={e=>setDraftText(e.target.value)}/>
+   </label>
+   <button type="button" disabled={exporting||!draftText.trim()} onClick={()=>void saveUnsignedDraft()}>
+     {exporting?"Сверяем SHA-256 исходных DICOM...":"Сохранить неподписанный отчёт и решения врача"}
+   </button>
+   <p>Локальный JSON содержит оригинальные SOP/Series UID, SHA-256 каждого DICOM, версию/источник модели,
+      координаты кандидатов и решения врача. Не загружайте такой файл в публичный GitHub или облачный LLM.
+      Это не подписанное клиническое заключение.</p>
   </div>}
   <p>Gemini Vision и Claude Opus: пока не запускались. Отсутствие анализа не означает норму;
     результаты исследовательские и требуют врачебной оценки.</p>
