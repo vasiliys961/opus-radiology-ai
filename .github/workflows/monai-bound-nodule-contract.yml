@@ -3,11 +3,17 @@ on:
   pull_request:
     paths:
       - "services/imaging-ai/monai_bound_nodule.py"
+      - "services/imaging-ai/monai_nodule_public_worker.py"
+      - "scripts/test-live-monai-nodule-http.py"
+      - "web/lib/live-nodule-worker.ts"
       - "services/imaging-ai/test_monai_bound_nodule.py"
       - ".github/workflows/monai-bound-nodule-contract.yml"
   push:
     paths:
       - "services/imaging-ai/monai_bound_nodule.py"
+      - "services/imaging-ai/monai_nodule_public_worker.py"
+      - "scripts/test-live-monai-nodule-http.py"
+      - "web/lib/live-nodule-worker.ts"
       - "services/imaging-ai/test_monai_bound_nodule.py"
       - ".github/workflows/monai-bound-nodule-contract.yml"
 permissions:
@@ -22,9 +28,13 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install coordinate-math dependency only (NO checkpoint / MONAI)
-        run: python -m pip install numpy==2.2.6
+        run: python -m pip install numpy==2.2.6 fastapi==0.115.12 httpx==0.28.1 psutil==6.1.1
       - name: Validate exact original NIfTI to MetaImage mapping and candidate source bounds
         working-directory: services/imaging-ai
         run: |
           python -m py_compile monai_bound_nodule.py test_monai_bound_nodule.py
           python test_monai_bound_nodule.py
+      - name: Exercise source-bound MONAI worker request/result flow (synthetic only)
+        run: |
+          python -m py_compile services/imaging-ai/monai_nodule_public_worker.py scripts/test-live-monai-nodule-http.py
+          python scripts/test-live-monai-nodule-http.py
