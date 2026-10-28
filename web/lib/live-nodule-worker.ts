@@ -21,7 +21,7 @@ export function readyOriginalNoduleWorker(cap:unknown):boolean {
   c.modelRevision===REVISION&&c.originalWeightsVerified===true&&
   c.mode==="local"&&c.sourceFormat==="original-nifti-uncompressed"&&
   c.dataPolicy==="approved-public-reference-only"&&
-  c.patientMode===false&&c.imageUpload===false&&c.ready===true&&
+  c.patientMode===false&&typeof c.imageUpload==="boolean"&&c.ready===true&&
   c.unvalidatedResearch===true;
 }
 
@@ -71,11 +71,14 @@ export async function executeRealNodule(
  if(!readyOriginalNoduleWorker(cap))
    throw Error("MONAI RetinaNet ещё не установлен/не готов на выделенном Linux-worker.");
  const fileHash=await originalNiftiSha256(source,signal);
+ const uploadEnabled=cap.imageUpload===true;
  let jobId:string|null=null;
  try{
-  const answer=await smallJson(await call(session,"/v1/nodule/jobs",{
-   method:"POST",signal,headers:{"Content-Type":"application/json"},
-   body:JSON.stringify({schema:"opus-monai-nodule-request/v1",
+  const answer=await smallJson(await call(session,uploadEnabled?"/v1/nodule/upload":"/v1/nodule/jobs",{
+   method:"POST",signal,headers:uploadEnabled?{
+    "Content-Type":"application/octet-stream","X-Opus-Source-Sha256":fileHash
+   }:{"Content-Type":"application/json"},
+   body:uploadEnabled?source:JSON.stringify({schema:"opus-monai-nodule-request/v1",
     sourceSha256:fileHash,dataPolicy:"approved-public-reference-only"}),
   }));
   if(answer.schema!=="opus-monai-job/v1"||typeof answer.jobId!=="string"||
