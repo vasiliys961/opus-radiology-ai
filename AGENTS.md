@@ -1,3 +1,57 @@
+## OWNER'S NEW OVERRIDING STRATEGY — 2026-10-28: COMPLETE FUNCTIONAL V2 FIRST
+
+**LATEST OWNER DECISION, HIGHER PRIORITY THAN EARLIER "DETECTOR-BREADTH FIRST" ORDERING.**
+Build the WHOLE, physician-usable CT/MRI diagnostic workflow **before** polishing or
+independently validating every individual detector. Deliver end-to-end functional
+vertical slices, connect existing real modules in one UI, and then deepen accuracy,
+model coverage, performance and clinical validation. "Architecture first" means
+**working integrated functionality**, not mock APIs, empty registries or endless
+technical abstractions. Do not suspend detector development; wire genuine ready
+detectors while completing orchestration. Preserve previous actual clinical features.
+
+**V2 completion target:**
+Open original DICOM study/folder → determine modality, anatomy, CT phase / MR sequence
+(where genuinely supported; otherwise mark uncertain) → automatically choose and
+run **installed/compatible** authentic specialty detectors in available
+browser/local/private CPU/GPU mode → simultaneously attempt permitted Gemini Vision
+review of actual de-identified selected frames (with explicit coverage and budget)
+→ Claude Opus independently reconciles real vision/model evidence and prepares a
+**provisional editable** report with differential, conflicts and uncertainty →
+original-slice/MPR localized findings, quantitative measurements, physician
+accept/reject/edit and final physician sign-off. One primary **"Analyze study"**
+action; manual detector toggles and technical controls in advanced settings.
+Fallback: if one detector/LLM unavailable, continue with available actual tools;
+show explicit "not run / not assessed" states; NEVER fake findings or treat
+absence of a model as a normal examination.
+
+**Order:**
+1. Finish single-study browser UI and unified automatic dispatch for both CT and MRI,
+   using existing real workers (e.g. lung nodules MONAI, ICH, WMH) and source-verified
+   evidence. Avoid asking physicians to create NIfTI, JSON, checkpoints or tokens.
+2. Connect privacy-approved Gemini Vision and Opus synthesis with provider routing,
+   de-identification proof, clinician authority, sensible budget/cost cap and exact
+   frame coverage. Cloud access must be truly authorized, not enabled by a checkbox.
+3. Connect other existing authentic detectors across brain/chest/abdomen/pelvis/spine/
+   MSK; keep unavailable ones visibly disabled with reason, no simulated execution.
+4. Finish physician review/report and clear failure/retry/cancel states.
+5. **Then** optimize and independently validate each detector on permitted positive
+   and negative datasets (Dice, sensitivity/specificity, lesion recall, FROC,
+   FP/study, protocol compatibility, source-grid correctness); clinical release,
+   security and regulatory requirements are separate milestones.
+
+**Nonnegotiable now, not deferred:** valid source identities + geometries,
+patient-data privacy/authorized transfers, checkpoint provenance, bounded memory,
+cancellation, truthful execution status, basic regression tests and successful CI
+before autonomous squash merge. No patient DICOM or secrets in git. No fabrication
+of clinical accuracy. Label v2 before these acceptance criteria as *in progress*.
+
+Every new chat MUST read this block FIRST and the current
+`docs/NEXT_CHAT_CLINICAL_START.md` handoff, verify LIVE main/PR/Actions, and resume
+implementation without routine owner questions. Older references to universal
+clinical-validation-before-integration are superseded by this staged strategy.
+
+---
+
 ## OWNER'S IMMEDIATE PERMANENT PRIORITY — 2026-10-28: BUILD CLINICAL FUNCTIONALITY
 
 **MANDATORY FOR ALL FUTURE CHATS, AGENTS, CURSOR AND CODEX.** The owner explicitly
