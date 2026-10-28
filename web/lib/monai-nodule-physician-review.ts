@@ -64,7 +64,7 @@ export function createNodulePhysicianReview(
      extentModelMm:[...c.extentModelMm],
      nativeVoxelIndexHypothesis:c.nativeVoxelIndexHypothesis===null?null:
        [...c.nativeVoxelIndexHypothesis],
-     readerDecision:decision??"unreviewed",
+     readerDecision:decision??("unreviewed" as const),
    };
  });
  if(Object.keys(decisions).some(k=>!seen.has(Number(k))||
