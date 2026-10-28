@@ -69,7 +69,7 @@ export default function DirectIchDicomDetector({series,files}:{
   {result&&<div>
    <p><strong>Исходная модель завершена. Кандидатов: {result.findings.length}.</strong> Отсутствие кандидатов не исключает кровоизлияние.</p>
    <ul>{result.findings.map((f,i)=><li key={i}>
-    <b>{f.label}</b> · SOP {series.members.findIndex(m=>m.metadata.sopInstanceUid===f.source.sopInstanceUid)+1} из {series.members.length};
+    <b>{f.sign} · {f.anatomy}</b> · SOP {series.members.findIndex(m=>m.metadata.sopInstanceUid===f.source.sopInstanceUid)+1} из {series.members.length};
     статус: требует подтверждения врача.
    </li>)}</ul>
    <p>Модель не прошла независимую клиническую валидацию в данном приложении.</p>
