@@ -97,16 +97,33 @@ export function parseOriginalBrainReport(value:unknown,task:BrainTask,
  }
  return x as unknown as BrainModelReport;
 }
+/** One fixed private server route for either original multi-sequence model. */
+export async function automaticBrainRequest(path:"/v1/brain/capabilities"|"/v1/brain/analyze",init:RequestInit={}):Promise<Response>{
+ const response=await fetch("/api/local-brain",{
+  ...init,method:path.endsWith("/capabilities")?"GET":"POST",
+  credentials:"same-origin",cache:"no-store",redirect:"error",
+ });
+ if(!response.ok)throw Error("Оригинальные MRI модели недоступны (HTTP "+response.status+").");
+ return response;
+}
+export async function checkAutomaticBrainReady(task:BrainTask,signal?:AbortSignal):Promise<boolean>{
+ try{
+  const response=await automaticBrainRequest("/v1/brain/capabilities",{signal});
+  return readyOriginalBrainTask(await response.json(),task);
+ }catch{return false;}
+}
 export async function executeOriginalBrain(
- session:WorkerSession,task:BrainTask,files:Record<string,File>,
+ session:WorkerSession|null,task:BrainTask,files:Record<string,File>,
  confirmed:boolean,signal:AbortSignal,onProgress:(s:string)=>void=()=>{},
 ):Promise<BrainModelReport>{
  if(!confirmed)throw Error("Типы МР-последовательностей не подтверждены врачом.");
+ const invoke=(path:"/v1/brain/capabilities"|"/v1/brain/analyze",init:RequestInit={})=>
+   session?call(session,path,init):automaticBrainRequest(path,init);
  const roles=BRAIN_ROLES[task];
  if(Object.keys(files).sort().join(",")!==[...roles].sort().join(","))
   throw Error("Неполные или дублированные обязательные МР-последовательности.");
  onProgress("Проверяем настоящие исходные веса "+(task==="stroke"?"ISLES22":"BraTS")+"...");
- const cap=await (await call(session,"/v1/brain/capabilities",{signal})).json() as unknown;
+ const cap=await (await invoke("/v1/brain/capabilities",{signal})).json() as unknown;
  if(!readyOriginalBrainTask(cap,task))
   throw Error("Оригинальная модель "+task+" не установлена на Linux worker.");
  const manifestFiles: {role:MrRole;bytes:number;sha256:string}[]=[];
@@ -125,9 +142,10 @@ export async function executeOriginalBrain(
   {type:"application/octet-stream"});
  const native=await readNoduleNiftiHeader(files[task==="stroke"?"dwi":"t1ce"]);
  onProgress("Последовательно передаём подлинные MR DICOM объёмы приватному worker...");
- const response=await call(session,"/v1/brain/analyze",{
+ const response=await invoke("/v1/brain/analyze",{
   method:"POST",signal,headers:{"Content-Type":"application/octet-stream",
-   "X-Opus-MRI-Source-Authorized":"approved-public-nonpatient"},body:packet,
+   "X-Opus-MRI-Source-Authorized":"approved-public-nonpatient",
+   ...(session?{}:{"X-Opus-Public-Research-Authorization":"approved-nonpatient-source"})},body:packet,
  });
  const raw=await response.text();
  if(raw.length>512*1024)throw Error("Слишком большой отчёт настоящей MRI модели.");
