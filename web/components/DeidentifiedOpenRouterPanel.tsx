@@ -8,6 +8,7 @@ import type {LocalLungFacts} from "../lib/local-lung-review";
 import type {LocalSameSeriesLaa950} from "../lib/same-series-laa950-review";
 import {validateSanitizedDetectorBundle,type SanitizedDetectorBundle} from "../lib/detector-consilium-evidence";
 import {bindLocalSanitizedReview,sourceFileForObservation,perFrameModelCoverage} from "../lib/local-cloud-source-navigation";
+import {toSafeXrvScores,type OriginalXrvCxrResult} from "../lib/xrv-original-cxr";
 
 type Props={
   enabledByLocalChecks:boolean;
@@ -15,6 +16,7 @@ type Props={
   prepareReviewedPacket:()=>VisionPrivacyPacket;
   specialistFacts?:LocalLungFacts|null;
   originalDetectorEvidence?:SanitizedDetectorBundle|null;
+  originalCxrEvidence?:OriginalXrvCxrResult|null;
   localLaa950?:LocalSameSeriesLaa950|null;
   specialistLocalBinding?:string;
   originalLocalFileIds:readonly string[];
@@ -23,7 +25,7 @@ type Props={
 type Ready={schema:string;enabled:boolean;productionPatientCloudRelease:false};
 export default function DeidentifiedOpenRouterPanel({
   enabledByLocalChecks,exactReviewedHashes,prepareReviewedPacket,
-  originalLocalFileIds,onOpenOriginalSlice,specialistFacts,specialistLocalBinding,localLaa950,originalDetectorEvidence=null,
+  originalLocalFileIds,onOpenOriginalSlice,specialistFacts,specialistLocalBinding,localLaa950,originalDetectorEvidence=null,originalCxrEvidence=null,
 }:Props){
   const [server,setServer]=useState<Ready|null>(null),[token,setToken]=useState("");
   const [transferAuthorized,setTransferAuthorized]=useState(false);
@@ -31,6 +33,7 @@ export default function DeidentifiedOpenRouterPanel({
   const [readinessNote,setReadinessNote]=useState("");
   const [includeSpecialist,setIncludeSpecialist]=useState(false);
   const [includeDetectors,setIncludeDetectors]=useState(true);
+  const [includeCxr,setIncludeCxr]=useState(true);
   const [result,setResult]=useState<SanitizedModelReview|null>(null);
   const [decisions,setDecisions]=useState<Record<string,LocalObservationAssessment>>({});
   const [clinicalSynthesis,setClinicalSynthesis]=useState("");
@@ -41,6 +44,7 @@ export default function DeidentifiedOpenRouterPanel({
   useEffect(()=>()=>{ctl.current?.abort();},[]);
   useEffect(()=>{setResult(null);setIncludeSpecialist(false);setDecisions({});setClinicalSynthesis("");},[specialistLocalBinding]);
   useEffect(()=>{setResult(null);setIncludeDetectors(true);setTransferAuthorized(false);setDecisions({});setClinicalSynthesis("");},[originalDetectorEvidence]);
+  useEffect(()=>{setResult(null);setIncludeCxr(true);setTransferAuthorized(false);setDecisions({});setClinicalSynthesis("");},[originalCxrEvidence]);
   async function checkReadiness(){
     if(working)return;
     setReadinessNote("");setError("");setServer(null);
@@ -80,6 +84,9 @@ export default function DeidentifiedOpenRouterPanel({
       const sentSpecialist=includeSpecialist&&specialistFacts?specialistFacts:null;
       const sentDetectors=includeDetectors&&originalDetectorEvidence?
         originalDetectorEvidence:null;
+      const sentCxr=includeCxr&&originalCxrEvidence?toSafeXrvScores(originalCxrEvidence):null;
+      if(sentCxr&&packet.frames.some(f=>f.modality!=="CR"&&f.modality!=="DX"))
+        throw Error("XRV scores can only be reviewed with CR/DX images.");
       if(sentDetectors&&(!validateSanitizedDetectorBundle(sentDetectors)||
           !sentDetectors.facts.some(f=>f.status==="completed")||
           sentDetectors.modality!==packet.frames[0]?.modality))
@@ -91,7 +98,8 @@ export default function DeidentifiedOpenRouterPanel({
           acknowledgeProviderHealthDataTerms:true,acknowledgePixelIdentityReviewed:true,
           acknowledgeTwoPaidCalls:true,
           ...(sentSpecialist?{specialistFacts:sentSpecialist}:{}),
-          ...(sentDetectors?{detectorEvidence:sentDetectors}:{})}),
+          ...(sentDetectors?{detectorEvidence:sentDetectors}:{}),
+          ...(sentCxr?{cxrModelEvidence:sentCxr}:{})}),
       });
       const body:unknown=await response.json();
       if(!response.ok)throw Error((body as {error?:string}).error??"OpenRouter недоступен");
@@ -121,6 +129,11 @@ export default function DeidentifiedOpenRouterPanel({
           throw Error("Поставщик AI не вернул тот же обезличенный пакет детекторов.");
       }else if(doc.detectorEvidence)
         throw Error("Модель получила незапрошенные сведения детекторов.");
+      if(sentCxr){
+        if(!doc.cxrModelEvidence||JSON.stringify(doc.cxrModelEvidence)!==JSON.stringify(sentCxr))
+          throw Error("Оценки TorchXRayVision не совпадают с разрешённым набором.");
+      }else if(doc.cxrModelEvidence)
+        throw Error("Незапрошенные оценки TorchXRayVision.");
       // An unbound or changed source makes ALL clinical navigation unavailable.
       bindLocalSanitizedReview(doc,exactReviewedHashes.map(f=>({imageId:f.imageId,reviewedPixelSha256:f.sha256})),originalLocalFileIds);
       setResult(doc);
@@ -185,6 +198,12 @@ export default function DeidentifiedOpenRouterPanel({
       левая {specialistFacts.leftLungMaskMl.toFixed(1)} мл, {specialistFacts.frameCount} срезов.
       Маска, UID и путь исходных DICOM не передаются. Модель R231 размечает
       лёгкие, но не детектирует патологию.</label>}
+    {originalCxrEvidence&&<label><input type="checkbox" checked={includeCxr}
+      disabled={working} onChange={e=>{setIncludeCxr(e.target.checked);setResult(null);}}/>
+      Разрешаю передать шесть некалиброванных показателей TorchXRayVision только
+      Claude Opus ПОСЛЕ независимого разбора рентгенограммы Gemini Vision.
+      Это не диагноз и не вероятность заболевания.
+    </label>}
     {originalDetectorEvidence&&validateSanitizedDetectorBundle(originalDetectorEvidence)&&
       <label><input type="checkbox" disabled={working}
         checked={includeDetectors} onChange={e=>{
@@ -223,6 +242,14 @@ export default function DeidentifiedOpenRouterPanel({
           }catch{setError("Срез больше не совпадает с проверенным исходным DICOM. Повторите локальную привязку.");}
         }}>Открыть исходный DICOM-срез</button>
       </li>)}</ul>
+      {result.cxrModelEvidence&&<section aria-label="Независимый CXR Gemini Vision и выводы TorchXRayVision">
+        <h4>Независимый Gemini Vision → затем Opus + TorchXRayVision</h4>
+        <p>Сначала Gemini видел только изображение. Opus получил шесть оценок
+          после независимого описания; AP/PA-проекция и возможное увеличение
+          сердечной тени требуют отдельной оценки.</p>
+        {Object.entries(result.cxrModelEvidence.labels).map(([k,v])=>
+          <p key={k}>{k}: {v.toFixed(4)} (некалиброванный балл)</p>)}
+      </section>}
       {result.detectorEvidence&&<section aria-label="Числовые находки реальных моделей той же КТ/МРТ">
         <h4>Реальные детекторы · тот же исходный DICOM</h4>
         <p>Gemini Vision и Claude Opus получили только ограниченные числовые сведения.
