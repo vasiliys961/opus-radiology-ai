@@ -88,8 +88,8 @@ function reviewMessages(data:NormalizedCloudPilot,specialist:LocalLungFacts|null
       ((data.modality==="CR"||data.modality==="DX")?
        "This is a radiograph. Independently describe the cardiac silhouette, lung fields, pleura, and image-quality limits. "+
        "Evaluate projection (AP/PA), patient positioning, inspiration and magnification only if visible or ascertainable; "+
-       "if uncertain report unknown. Never infer a cardiothoracic ratio or cardiomegaly diagnosis without "+
-       "sufficient geometric and projection evidence. You have NOT been shown TorchXRayVision scores.":"")},
+       "if uncertain report unknown. Do not invent cardiac enlargement diagnoses or a cardiothoracic ratio without "+
+       "sufficient geometric and projection evidence. Assess the image independently of external classifier outputs.":"")},
     {role:"user",content:[
       {type:"text",text:"Modality "+data.modality+". Sampled frames only: "+frameIds.join(", ")+
         ". Each image has no original DICOM metadata or source file name. Review each independently."+
