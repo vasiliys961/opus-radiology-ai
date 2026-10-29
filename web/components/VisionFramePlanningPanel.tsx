@@ -237,6 +237,7 @@ export default function VisionFramePlanningPanel({
     setNotice("Локальная подготовка завершена. Изображения НЕ анализировались AI и не отправлялись в облако.");
     void completionChime(); // sound only after successful preparation and explicit opt-in
   };
+  const stablePrivacyPreviews=useMemo(()=>report?.frames.map(f=>thumbnails[f.fileId]?.url)??[],[report,thumbnails]);
   return <section className="ora-vision-plan" aria-label="Локальная подготовка кадров для Gemini">
     <div className="ora-vision-plan-head">
       <div><h2>Gemini Orchestra · подготовка кадров</h2>
@@ -392,7 +393,7 @@ export default function VisionFramePlanningPanel({
       {laaWarning&&<p role="status">{laaWarning}</p>}
       <VisionPrivacyPreparation originalDetectorEvidence={originalDetectorEvidence}
         key={JSON.stringify(report.frames.map(f=>f.fileId))+requested}
-        previews={report.frames.map(f=>thumbnails[f.fileId]?.url)}
+        previews={stablePrivacyPreviews}
         modality={series.find(s=>s.key===report.seriesKey)?.modality??""}
         specialistFacts={specialistFacts}
         localLaa950={localLaa950}
