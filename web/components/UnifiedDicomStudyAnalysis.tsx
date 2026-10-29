@@ -239,9 +239,9 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
        setChestSource(nifti);
        const problems:string[]=[];
        let completed=0;
-       if(token.trim()){
+       if(autoMonaiReady||token.trim()){
          try{
-           const result=await executeRealNodule(session,nifti,controller.signal,progress);
+           const result=await executeRealNodule(autoMonaiReady?null:session,nifti,controller.signal,progress);
            if(version!==serial.current||controller.signal.aborted)return;
            setChestNodules(result.report);completed++;
          }catch(e){
@@ -261,10 +261,10 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
          }
        }else problems.push("Плевральный/перикардиальный выпот: нет токена task315; не исследовано.");
        if(ctpaConfirmed){
-         if(peToken.trim()){
+         if(autoPeReady||peToken.trim()){
            try{
              const result=await executeOriginalPeCtp(
-               {endpoint:peEndpoint,token:peToken},nifti,true,controller.signal,progress);
+               autoPeReady?null:{endpoint:peEndpoint,token:peToken},nifti,true,controller.signal,progress);
              if(version!==serial.current||controller.signal.aborted)return;
              setChestPe(result);completed++;
            }catch(e){
@@ -276,10 +276,10 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
          problems.push("ТЭЛА не исследована: тип серии CTPA не подтверждён врачом.");
        }
        if(enhancedChestConfirmed){
-         if(nodeToken.trim()){
+         if(autoNodesReady||nodeToken.trim()){
            try{
              const result=await runOriginalRaidionicsNodes(
-               {endpoint:nodeEndpoint,token:nodeToken},
+               autoNodesReady?null:{endpoint:nodeEndpoint,token:nodeToken},
                nifti,true,controller.signal,progress);
              if(version!==serial.current||controller.signal.aborted)return;
              setChestNodes(result);completed++;
