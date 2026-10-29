@@ -83,6 +83,7 @@ export async function probeOriginalFleet(
 ):Promise<Entry[]>{
  const safeOrigin=loopOrigin(origin);
  if(!safeOrigin)throw Error("Unsafe internal research origin");
+ const allowedOrigin:string=safeOrigin;
  const memo=new Map<string,Promise<{status:Status;body?:unknown}>>();
  async function one(w:Worker):Promise<Status>{
   const token=secrets[w.env]??"";
@@ -94,7 +95,7 @@ export async function probeOriginalFleet(
      const response=await call("http://127.0.0.1:"+w.port+w.path,{
        method:"GET",redirect:"error",cache:"no-store",
        signal:AbortSignal.timeout(2500),
-       headers:{Origin:safeOrigin,Authorization:"Bearer "+token},
+       headers:{Origin:allowedOrigin,Authorization:"Bearer "+token},
      });
      if(!response.ok)return {status:"unreachable" as Status};
      return {status:"ready" as Status,body:await boundedJson(response)};
