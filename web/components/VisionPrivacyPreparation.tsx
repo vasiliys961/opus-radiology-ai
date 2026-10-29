@@ -55,7 +55,7 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
     scan.current=controller;
     setBusy(true);setOcrBusy(true);setError("");
     setOcrNotice("Автоматически очищаем PNG и проверяем OCR всех выбранных кадров локально…");
-    void autoPrepareVisionPrivacy(previews,modality,controller.signal,notice=>{
+    void autoPrepareVisionPrivacy(previews,modality as "CT"|"MR"|"CR"|"DX",controller.signal,notice=>{
       if(version===generation.current&&!controller.signal.aborted)setOcrNotice(notice);
     }).then(result=>{
       if(version!==generation.current||controller.signal.aborted)return;
