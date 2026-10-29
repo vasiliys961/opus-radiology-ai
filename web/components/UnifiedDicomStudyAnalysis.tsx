@@ -7,7 +7,7 @@ import {prepareDicomMonaiFile,prepareDicomCtForPathology} from "../lib/dicom-mon
 import {runOriginalAbdominalModels,checkAutomaticAbdomenReady,type AbdominalStudyResults} from "../lib/real-abdominal-worker";
 import {executeRealNodule} from "../lib/live-nodule-worker";
 import type {BoundNoduleReport} from "../lib/live-nodule-report";
-import {runOriginalEffusionTask315,type OriginalEffusionRun} from "../lib/real-effusion-worker";
+import {runOriginalEffusionTask315,checkAutomaticEffusionReady,type OriginalEffusionRun} from "../lib/real-effusion-worker";
 import {executeOriginalPeCtp,type PeCtpSourceReport} from "../lib/pe-ctpa-direct-worker";
 import {runOriginalRaidionicsNodes,type MediastinalNodeReport} from "../lib/mediastinal-raidionics-worker";
 import {runPublicIchWorker} from "../lib/public-ich-worker";
@@ -40,6 +40,8 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  const [token,setToken]=useState("");
  const [effusionEndpoint,setEffusionEndpoint]=useState("http://127.0.0.1:8774");
  const [effusionToken,setEffusionToken]=useState("");
+ const [autoEffusionReady,setAutoEffusionReady]=useState(false);
+ const [autoEffusionChecking,setAutoEffusionChecking]=useState(false);
  const [peEndpoint,setPeEndpoint]=useState("http://127.0.0.1:8776");
  const [peToken,setPeToken]=useState("");
  const [ctpaConfirmed,setCtpaConfirmed]=useState(false);
@@ -108,6 +110,16 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
    return ()=>{serial.current++;active.current?.abort();};
  },[series,files,preset]);
  const chestPlan=plan.route==="monai-nodules";
+ useEffect(()=>{
+  if(!chestPlan)return;
+  const controller=new AbortController();
+  setAutoEffusionChecking(true);setAutoEffusionReady(false);
+  void checkAutomaticEffusionReady(controller.signal).then(ok=>{
+   if(!controller.signal.aborted)setAutoEffusionReady(ok);
+  }).catch(()=>{if(!controller.signal.aborted)setAutoEffusionReady(false);})
+    .finally(()=>{if(!controller.signal.aborted)setAutoEffusionChecking(false);});
+  return()=>controller.abort();
+ },[chestPlan,series.key]);
  const xrvPlan=plan.route==="xrv-cxr";
  useEffect(()=>{
   if(plan.route!=="totalseg-abdomen")return;
@@ -129,7 +141,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
    return()=>controller.abort();
  },[xrvPlan,series.key]);
  const ready=!!plan.route&&authorized&&!busy&&
-   (xrvPlan?(xrvStatus==="ready"&&xrvChestConfirmed&&sourceUrl.startsWith("https://")):plan.route==="totalseg-abdomen"?(autoAbdomenReady||(!!token&&!!endpoint.trim())):chestPlan?((!!token&&!!endpoint.trim())||(!!effusionToken&&!!effusionEndpoint.trim())||(ctpaConfirmed&&!!peToken&&!!peEndpoint.trim())||(enhancedChestConfirmed&&!!nodeToken&&!!nodeEndpoint.trim())):
+   (xrvPlan?(xrvStatus==="ready"&&xrvChestConfirmed&&sourceUrl.startsWith("https://")):plan.route==="totalseg-abdomen"?(autoAbdomenReady||(!!token&&!!endpoint.trim())):chestPlan?((!!token&&!!endpoint.trim())||(autoEffusionReady||(!!effusionToken&&!!effusionEndpoint.trim()))||(ctpaConfirmed&&!!peToken&&!!peEndpoint.trim())||(enhancedChestConfirmed&&!!nodeToken&&!!nodeEndpoint.trim())):
      (!!token&&!!endpoint.trim()))&&
    (!plan.needsExplicitFlair||(
      brainTask==="wmh"?
@@ -185,10 +197,10 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
            problems.push("MONAI узлы: "+(e instanceof Error?e.message:"исполнитель недоступен"));
          }
        }else problems.push("MONAI узлы: не указан токен исполнителя; не исследовано.");
-       if(effusionToken.trim()){
+       if(autoEffusionReady||effusionToken.trim()){
          try{
            const result=await runOriginalEffusionTask315(
-             {endpoint:effusionEndpoint,token:effusionToken},nifti,controller.signal,progress);
+             (autoEffusionReady?null:{endpoint:effusionEndpoint,token:effusionToken}),nifti,controller.signal,progress);
            if(version!==serial.current||controller.signal.aborted)return;
            setChestEffusion(result);completed++;
          }catch(e){
@@ -417,8 +429,13 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
      </div>}
      {chestPlan&&<div className="cs-geometry">
       <strong>Второй детектор той же КТ: плевральный и перикардиальный выпот</strong>
-      <label>Адрес TotalSegmentator task315 worker <input type="text" value={effusionEndpoint} disabled={busy} onChange={e=>setEffusionEndpoint(e.target.value)}/></label>
-      <label>Токен task315 <input type="password" autoComplete="off" value={effusionToken} disabled={busy} onChange={e=>setEffusionToken(e.target.value)}/></label>
+      <p role="status">{autoEffusionChecking?
+       "Проверяем оригинальную TotalSegmentator task315…":
+       autoEffusionReady?
+       "Оригинальная TotalSegmentator task315 доступна на приватном сервере. Токен врачу не нужен.":
+       "Серверная task315 недоступна; предусмотрен резервный ручной исследовательский режим."}</p>
+      {!autoEffusionReady&&<label>Адрес TotalSegmentator task315 worker <input type="text" value={effusionEndpoint} disabled={busy} onChange={e=>setEffusionEndpoint(e.target.value)}/></label>}
+      {!autoEffusionReady&&<label>Токен task315 <input type="password" autoComplete="off" value={effusionToken} disabled={busy} onChange={e=>setEffusionToken(e.target.value)}/></label>}
       <p>Плевральный и перикардиальный классы выполняет ОДНА оригинальная модель; другая модель на те же классы не запускается.</p>
     </div>}
     {chestPlan&&<div className="cs-geometry">
