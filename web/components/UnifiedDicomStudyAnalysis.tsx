@@ -3,7 +3,8 @@
 import {useEffect,useMemo,useRef,useState} from "react";
 import type {DicomSeries} from "../lib/dicom-series";
 import {planNativeStudyAnalysis} from "../lib/unified-study-dispatch";
-import {prepareDicomMonaiFile} from "../lib/dicom-monai-direct";
+import {prepareDicomMonaiFile,prepareDicomCtForPathology} from "../lib/dicom-monai-direct";
+import {runOriginalAbdominalModels,type AbdominalStudyResults} from "../lib/real-abdominal-worker";
 import {executeRealNodule} from "../lib/live-nodule-worker";
 import type {BoundNoduleReport} from "../lib/live-nodule-report";
 import {runOriginalEffusionTask315,type OriginalEffusionRun} from "../lib/real-effusion-worker";
@@ -32,6 +33,7 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
  const [chestNodules,setChestNodules]=useState<BoundNoduleReport|null>(null);
  const [chestEffusion,setChestEffusion]=useState<OriginalEffusionRun|null>(null);
  const [chestIssues,setChestIssues]=useState<string[]>([]);
+ const [abdomenResult,setAbdomenResult]=useState<AbdominalStudyResults|null>(null);
  const [authorized,setAuthorized]=useState(false);
  const [flairConfirmed,setFlairConfirmed]=useState(false);
  const [sourceUrl,setSourceUrl]=useState("");
@@ -46,11 +48,12 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
  const [exporting,setExporting]=useState(false);
  const serial=useRef(0),active=useRef<AbortController|null>(null);
  const preset=plan.route==="monai-nodules"?"http://127.0.0.1:8768":
-   plan.route==="ianpan-ich"?"http://127.0.0.1:8766":"http://127.0.0.1:8772";
+   plan.route==="ianpan-ich"?"http://127.0.0.1:8766":
+   plan.route==="totalseg-abdomen"?"http://127.0.0.1:8775":"http://127.0.0.1:8772";
  useEffect(()=>{
    serial.current++;active.current?.abort();
    setEndpoint(preset);setToken("");setEffusionEndpoint("http://127.0.0.1:8774");setEffusionToken("");
-   setChestSource(null);setChestNodules(null);setChestEffusion(null);setChestIssues([]);
+   setChestSource(null);setChestNodules(null);setChestEffusion(null);setChestIssues([]);setAbdomenResult(null);
    setAuthorized(false);setFlairConfirmed(false);
    setSourceUrl("");setSourceLicense("");setBusy(false);setError("");setStatus("");
    setIch(null);setWmh(null);setDecisions({});setDraftText("");setExporting(false);
@@ -69,7 +72,7 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
    const controller=new AbortController();active.current=controller;
    setBusy(true);setStatus("Проверяем совместимость и доступность настоящей модели...");
    setError("");setIch(null);setWmh(null);setChestSource(null);setChestNodules(null);
-   setChestEffusion(null);setChestIssues([]);setDecisions({});setDraftText("");
+   setChestEffusion(null);setChestIssues([]);setAbdomenResult(null);setDecisions({});setDraftText("");
    const session:WorkerSession={endpoint,token};
    const progress=(message:string)=>{
      if(version===serial.current&&!controller.signal.aborted)setStatus(message);
@@ -115,6 +118,26 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
        setStatus(completed?
          "Завершено моделей: "+completed+" из 2. Недоступные анализы явно отмечены.":
          "Ни одна патологическая модель не выполнена. Исследование не оценено.");
+       return;
+     }
+     if(plan.route==="totalseg-abdomen"){
+       const original=series.members.map(m=>files.get(m.id));
+       if(original.some(f=>!f))throw Error("Исходная DICOM-КТ брюшной полости больше недоступна.");
+       const nifti=await prepareDicomCtForPathology(
+         series,original as File[],controller.signal,"ABDOMEN",progress);
+       if(version!==serial.current||controller.signal.aborted)return;
+       const result=await runOriginalAbdominalModels(session,nifti,controller.signal,progress);
+       if(version!==serial.current||controller.signal.aborted)return;
+       setAbdomenResult(result);
+       const done=Object.values(result.tasks).filter(x=>x.status==="completed").length;
+       setDraftText("Исследовательская КТ брюшной полости. Исполнены оригинальные "+
+         "патологические модели: "+done+" из 2 (кисты почек, очаги печени). "+
+         "Модельные кандидаты неспецифичны; врач проверяет находки на исходных срезах. "+
+         "Невыполненная модель не означает отрицательный результат.");
+       setStatus(done?
+         "Настоящие TotalSegmentator задачи завершены: "+done+" из 2. "+
+         "Неоценённые задачи показаны отдельно.":
+         "Модели патологии живота не смогли завершить инференс; отсутствие патологии не установлено.");
        return;
      }
      if(plan.route==="ianpan-ich"){
@@ -226,7 +249,7 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
     </>}
     <label><input type="checkbox" checked={authorized} disabled={busy} onChange={e=>setAuthorized(e.target.checked)}/>
      Подтверждаю разрешённый публичный обезличенный исследовательский источник и полномочия на локальный запуск. Пациентские снимки этим маршрутом не передавать.</label>
-    <p>MONAI, task315 и WMH используют разрешённые изображения в loopback worker; ianpan передаёт только SHA-256 и анализирует заранее установленную идентичную публичную КТ. Облачная передача не выполняется.</p>
+    <p>MONAI, task315, TotalSegmentator живота и WMH используют разрешённые изображения в loopback worker; ianpan передаёт только SHA-256 и анализирует заранее установленную идентичную публичную КТ. Облачная передача не выполняется.</p>
    </details>
    <button type="button" disabled={!ready} onClick={()=>void launch()}>
     {busy?"Выполняется реальный анализ...":"Анализировать исследование"}
@@ -236,6 +259,36 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
   </>}
   {status&&<p role="status">{status}</p>}
   {error&&<p role="alert">Не выполнено: {error}</p>}
+  {abdomenResult&&<section className="cs-geometry" aria-label="Кисты почек и очаги печени · исходный DICOM">
+    <h3>КТ живота · две различные оригинальные модели</h3>
+    <p>Одна подготовленная HU-КТ, последовательное выполнение без повторных моделей
+      одной патологии. Исходный объём и отчёты связаны по SHA-256.
+      Координаты срезов — предположительное соответствие DICOM; врач проверяет физическую сетку.</p>
+    {(["kidney_cysts","liver_lesions"] as const).map(task=>{
+      const item=abdomenResult.tasks[task];
+      return <div key={task}>
+        <h4>{task==="kidney_cysts"?"Кисты почек · TotalSegmentator":"Очаги печени · TotalSegmentator"}</h4>
+        {item.status!=="completed"?<p role="status">Не исследовано: {item.reason}. Это не отрицательная находка.</p>:
+          <div>
+            <p>Оригинальная модель выполнена. Кандидаты требуют врачебной оценки.</p>
+            {item.report.proposals.map(c=><div key={c.labelId}>
+              <p><strong>{c.pathologyClass}</strong> · модельных вокселей {c.modelCandidateVoxels};
+                исследовательский объём {c.modelCandidateVolumeMl.toFixed(2)} мл.</p>
+              {c.nativeSliceIndicesK.length>0&&<button type="button" onClick={()=>{
+                const index=c.nativeSliceIndicesK[Math.floor(c.nativeSliceIndicesK.length/2)];
+                if(index>=0&&index<series.members.length)onNavigate(index);
+              }}>Показать предполагаемый соответствующий DICOM-срез</button>}
+              {c.modelCandidateVoxels===0&&<p>Модель не выделила кандидатов; патология не исключена.</p>}
+            </div>)}
+          </div>}
+      </div>;
+    })}
+    <label>Предварительное заключение врача
+      <textarea rows={4} maxLength={12000} value={draftText} onChange={e=>setDraftText(e.target.value)}/>
+    </label>
+    <p>Исследовательские результаты не содержат независимого клинического подтверждения.
+      Обработка Gemini/Opus доступна отдельно после обезличивания и разрешения врача.</p>
+  </section>}
   {chestPlan&&chestIssues.length>0&&<div role="status" className="cs-geometry">
     <strong>Непроверенные направления</strong>
     {chestIssues.map((message,i)=><p key={i}>{message}</p>)}

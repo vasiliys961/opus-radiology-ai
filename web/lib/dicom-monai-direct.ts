@@ -8,17 +8,17 @@ import {createFullCtReader} from "./full-ct-decoder.ts";
 import {prepareFullCtStream} from "./full-ct-stream.ts";
 import {saveExactNativeCt,assertNativeResearchPacket} from "./native-ct-research-export.ts";
 
-const NAME="opus-active-monai-chest-ct.nii";
+const NAMES={CHEST:"opus-active-monai-chest-ct.nii",ABDOMEN:"opus-active-abdomen-ct.nii"} as const;
 type OpfsRoot=Pick<FileSystemDirectoryHandle,"getFileHandle"|"removeEntry">;
 
-export async function prepareDicomMonaiFile(
- series:DicomSeries,files:File[],signal:AbortSignal,
+export async function prepareDicomCtForPathology(
+ series:DicomSeries,files:File[],signal:AbortSignal,region:"CHEST"|"ABDOMEN",
  progress:(message:string)=>void=()=>{},
  storage?:OpfsRoot,
 ):Promise<File>{
  if(series.modality!=="CT"||series.members.length!==files.length||
-    !series.members.every(m=>m.metadata.bodyRegion==="CHEST"))
-   throw Error("Для MONAI нужна полная подтверждённая DICOM-КТ грудной клетки.");
+    !series.members.every(m=>m.metadata.bodyRegion===region))
+   throw Error("Для патологического детектора нужна полная подтверждённая DICOM-КТ выбранной области.");
  if(signal.aborted)throw new DOMException("Анализ отменён.","AbortError");
  if(!storage && (!navigator.storage || typeof navigator.storage.getDirectory!=="function"))
    throw Error("Браузер не поддерживает OPFS: откройте Opus в актуальном Chrome/Chromium.");
@@ -31,7 +31,8 @@ export async function prepareDicomMonaiFile(
  if(signal.aborted)throw new DOMException("Анализ отменён.","AbortError");
  // This fixed internal filename is never a user path or a DICOM identifier.
  // The prior study is replaced, rather than silently reused.
- const handle=await root.getFileHandle(NAME,{create:true});
+ const name=NAMES[region];
+ const handle=await root.getFileHandle(name,{create:true});
  const writer=await handle.createWritable();
  try{
    const proof=await saveExactNativeCt(packet,writer,signal,(done,total)=>{
@@ -41,11 +42,19 @@ export async function prepareDicomMonaiFile(
    const file=await handle.getFile();
    if(file.size!==proof.writtenBytes)
      throw Error("Временная КТ не совпадает с проверенным исходным объёмом.");
-   progress("Полная КТ подготовлена; запускайте MONAI на этом исследовании.");
+   progress("Исходная HU-КТ подготовлена для совместимых патологических моделей.");
    return file;
  }catch(error){
    await writer.abort(error).catch(()=>{});
-   await root.removeEntry(NAME).catch(()=>{});
+   await root.removeEntry(name).catch(()=>{});
    throw error;
  }
+}
+
+/** Legacy MONAI chest route uses exactly the same bounded converter. */
+export async function prepareDicomMonaiFile(
+ series:DicomSeries,files:File[],signal:AbortSignal,
+ progress:(message:string)=>void=()=>{},storage?:OpfsRoot,
+):Promise<File>{
+ return prepareDicomCtForPathology(series,files,signal,"CHEST",progress,storage);
 }
