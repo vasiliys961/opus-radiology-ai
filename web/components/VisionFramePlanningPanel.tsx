@@ -16,11 +16,12 @@ import { createVisionBatches, accountReportedVisionUsage } from "../lib/vision-b
 import { decodeDicomPreview } from "../lib/dicom-lite";
 import { MAX_PRIVACY_PIXELS } from "../lib/vision-privacy";
 import VisionPrivacyPreparation from "./VisionPrivacyPreparation";
+import type {SanitizedDetectorBundle} from "../lib/detector-consilium-evidence";
 import {sameSeriesR231Facts,type CapturedLocalSpecialist} from "../lib/same-series-r231-cloud-evidence";
 import {sameSeriesLaa950ForReview,type CapturedLocalLaa950} from "../lib/same-series-laa950-review";
 
 export default function VisionFramePlanningPanel({
-  series, activeSeriesKey, fileById, onOpenSlice,capturedSpecialist,capturedLaa950,ichRuntime,publicResearchAuthorized=false,
+  series, activeSeriesKey, fileById, onOpenSlice,capturedSpecialist,capturedLaa950,ichRuntime,publicResearchAuthorized=false,originalDetectorEvidence=null,
 }: {
   series: readonly DicomSeries[];
   activeSeriesKey: string | null;
@@ -31,6 +32,7 @@ export default function VisionFramePlanningPanel({
   /** Present only when a verified local ICH worker is really connected. */
   ichRuntime?:InstalledIchRuntime|null;
   publicResearchAuthorized?:boolean;
+  originalDetectorEvidence?:SanitizedDetectorBundle|null;
 }) {
   const [requested, setRequested] = useState(4);
   const autoPreparedSeriesKey = useRef<string | null>(null);
@@ -388,7 +390,8 @@ export default function VisionFramePlanningPanel({
         Только локальный исследовательский контекст: эти цифры не отправляются в OpenRouter
         и не подтверждают диагноз эмфиземы.</p>}
       {laaWarning&&<p role="status">{laaWarning}</p>}
-      <VisionPrivacyPreparation key={JSON.stringify(report.frames.map(f=>f.fileId))+requested}
+      <VisionPrivacyPreparation originalDetectorEvidence={originalDetectorEvidence}
+        key={JSON.stringify(report.frames.map(f=>f.fileId))+requested}
         previews={report.frames.map(f=>thumbnails[f.fileId]?.url)}
         modality={series.find(s=>s.key===report.seriesKey)?.modality??""}
         specialistFacts={specialistFacts}

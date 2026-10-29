@@ -10,6 +10,7 @@ import {parseRoleResponse,parseStrictObject,readCompletionText,
   type RoleResponse} from "./vision-orchestra.ts";
 import type {AiGatewayRequest} from "./ai-gateway.ts";
 import {parseLocalLungFacts,type LocalLungFacts} from "./local-lung-review.ts";
+import {validateSanitizedDetectorBundle,type SanitizedDetectorBundle} from "./detector-consilium-evidence.ts";
 
 export const CLOUD_PILOT_MAX_IMAGE_BASE64=2_000_000;
 export const CLOUD_PILOT_MAX_FRAMES=4;
@@ -34,6 +35,7 @@ export type SanitizedModelReview={
   patientDataCanStillBeSensitive:true;
   researchOnly:true;
   diagnosticAccuracyValidated:false;
+  detectorEvidence?:SanitizedDetectorBundle;
   specialistEvidence?:{
     model:"lungmask-R231";frameCount:number;
     rightLungMaskMl:number;leftLungMaskMl:number;
@@ -66,7 +68,7 @@ export function normalizeReviewedCloudPilot(value:unknown):NormalizedCloudPilot{
     imageId:f.frameId,reviewedPixelSha256:f.sha256,
   }))};
 }
-function reviewMessages(data:NormalizedCloudPilot,specialist:LocalLungFacts|null):AiGatewayRequest["messages"] {
+function reviewMessages(data:NormalizedCloudPilot,specialist:LocalLungFacts|null,detectors:SanitizedDetectorBundle|null):AiGatewayRequest["messages"] {
   const frameIds=data.frames.map(f=>f.imageId);
   return [
     {role:"system",content:
@@ -84,6 +86,14 @@ function reviewMessages(data:NormalizedCloudPilot,specialist:LocalLungFacts|null
     {role:"user",content:[
       {type:"text",text:"Modality "+data.modality+". Sampled frames only: "+frameIds.join(", ")+
         ". Each image has no original DICOM metadata or source file name. Review each independently."+
+        (detectors?" On the SAME selected DICOM study, the physician approved "+
+          "these NUMERIC findings of genuine original pretrained models. "+
+          "No source identifiers, model mask or checkpoint is sent: "+
+          JSON.stringify(detectors.facts)+
+          ". Completed means a model ran, NOT confirmed disease. "+
+          "NOT ASSESSED means unavailable, NEVER normal. Model count zero "+
+          "does not exclude a lesion. Review actual sampled pixels "+
+          "independently from numerical model candidates.": "")+
         (specialist?" On the SAME study, a clinician's LOCAL CPU Lungmask R231 "+
           "anatomy segmentation report states right mask volume="+specialist.rightLungMaskMl.toFixed(2)+
           " mL, left mask volume="+specialist.leftLungMaskMl.toFixed(2)+
@@ -102,18 +112,42 @@ function reviewMessages(data:NormalizedCloudPilot,specialist:LocalLungFacts|null
 export async function reviewSanitizedSamples(
   packet:unknown,call:SanitizedReviewCaller,signal?:AbortSignal,
   localSpecialist:unknown=null,
+  numericDetectors:unknown=null,
 ):Promise<SanitizedModelReview>{
   const checked=normalizeReviewedCloudPilot(packet);
   const ids=checked.frames.map(f=>f.imageId);
   const specialist=localSpecialist===null?null:parseLocalLungFacts(localSpecialist);
   if(specialist&&checked.modality!=="CT")
     throw Error("R231_CT_only_no_MR_model");
-  const messages=reviewMessages(checked,specialist);
-  const [gemini,opus]=await Promise.all([
-    call({provider:"openrouter",role:"vision",model:PILOT_GEMINI,maxTokens:850,messages},signal),
-    call({provider:"openrouter",role:"vision",model:PILOT_OPUS,maxTokens:850,messages},signal),
-  ]);
+  const detectors=numericDetectors===null?null:
+    validateSanitizedDetectorBundle(numericDetectors)?numericDetectors:null;
+  if(numericDetectors!==null&&detectors===null)
+    throw Error("untrusted_pathology_model_fact_bundle");
+  if(detectors&&detectors.modality!==checked.modality)
+    throw Error("current_source_MR_CT_mismatch");
+  if(detectors&&!detectors.facts.some(f=>f.status==="completed"))
+    throw Error("model_evidence_without_actual_completed_task");
+  const messages=reviewMessages(checked,specialist,detectors);
+  // Sequential, not two independent simultaneous calls: Opus receives Gemini's
+  // source-frame-validated observations and the same source-linked model facts.
+  // Only two existing paid requests; no duplicate model inference.
+  const gemini=await call({provider:"openrouter",role:"vision",
+    model:PILOT_GEMINI,maxTokens:850,messages},signal);
   const a=parseRoleResponse(parseStrictObject(readCompletionText(gemini)),"observations",ids);
+  if(signal?.aborted)throw Error("physician_cancelled_before_opus");
+  const opusMessages:AiGatewayRequest["messages"]=[
+    {role:"system",content:String(messages[0].content)+
+      " You are Claude Opus after Gemini Vision. Critically review the same "+
+      "independently supplied original sampled image pixels, the numeric detector "+
+      "facts if any, AND the earlier Gemini source-anchored research observations. "+
+      "Gemini is not a clinical ground truth. Do not vote or invent pathology. "+
+      "Use the SAME strict JSON role observations schema."},
+    {role:"user",content:[...(messages[1].content as Array<Record<string,unknown>>),
+      {type:"text",text:"Prior source-checked Gemini observations, NOT "+
+        "independent clinical validation: "+JSON.stringify(a)}]},
+  ];
+  const opus=await call({provider:"openrouter",role:"vision",
+    model:PILOT_OPUS,maxTokens:850,messages:opusMessages},signal);
   const b=parseRoleResponse(parseStrictObject(readCompletionText(opus)),"observations",ids);
   return {
     schema:"opus-sanitized-cloud-pilot/v1",modality:checked.modality,
@@ -124,6 +158,7 @@ export async function reviewSanitizedSamples(
     callsAttempted:2,originalDicomSent:false,sourceDicomIdentifiersSent:false,
     clinicalReviewRequired:true,deidentificationIndependentlyCertified:false,
     patientDataCanStillBeSensitive:true,researchOnly:true,diagnosticAccuracyValidated:false,
+    ...(detectors?{detectorEvidence:detectors}:{}),
     ...(specialist?{specialistEvidence:{
       model:"lungmask-R231" as const,frameCount:specialist.frameCount,
       rightLungMaskMl:specialist.rightLungMaskMl,

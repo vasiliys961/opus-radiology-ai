@@ -18,15 +18,17 @@ import {createNativePhysicianDraft,type NativeDicomDigest} from "../lib/native-p
 import {prepareNativeBrainMr} from "../lib/brain-native-mr-dicom";
 import {executeOriginalBrain,BRAIN_ROLES,type BrainTask,type BrainModelReport} from "../lib/brain-multisequence-original-worker";
 import DetectorGeminiOpusConsilium from "./DetectorGeminiOpusConsilium";
+import type {SanitizedDetectorBundle} from "../lib/detector-consilium-evidence";
 
 /** A single primary action that reuses the real DICOM -> MONAI/ianpan/WMH paths.
  * Never advertises a checkpoint as installed until its private worker proves it.
  * No automatic cloud image transfer; Gemini/Opus require a separate privacy gate.
  */
-export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMonaiReady,onNavigate}:{
+export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMonaiReady,onNavigate,onDetectorEvidence}:{
  series:DicomSeries;allSeries:ReadonlyArray<DicomSeries>;files:ReadonlyMap<string,File>;
  onMonaiReady:(source:File,session:WorkerSession,completedReport?:BoundNoduleReport)=>void;
  onNavigate:(slice:number)=>void;
+ onDetectorEvidence?:(seriesKey:string,bundle:SanitizedDetectorBundle|null)=>void;
 }){
  const available=useMemo(()=>new Set(files.keys()),[files]);
  const plan=useMemo(()=>planNativeStudyAnalysis(series,available),[series,available]);
@@ -111,6 +113,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
    active.current?.abort();
    const controller=new AbortController();active.current=controller;
    setBusy(true);setStatus("Проверяем совместимость и доступность настоящей модели...");
+   onDetectorEvidence?.(series.key,null);
    setError("");setIch(null);setWmh(null);setBrainResult(null);setChestSource(null);setChestNodules(null);
    setChestEffusion(null);setChestPe(null);setChestNodes(null);setChestIssues([]);setAbdomenResult(null);setDecisions({});setDraftText("");
    const session:WorkerSession={endpoint,token};
@@ -613,7 +616,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
       Это не подписанное клиническое заключение.</p>
   </div>}
   {(chestNodules||chestEffusion||chestPe||chestNodes||abdomenResult||ich||wmh||brainResult)&&
-    <DetectorGeminiOpusConsilium snapshot={{
+    <DetectorGeminiOpusConsilium onBundleReady={bundle=>onDetectorEvidence?.(series.key,bundle)} snapshot={{
       modality:series.modality as "CT"|"MR",
       region:plan.route==="monai-nodules"?"chest":
         plan.route==="totalseg-abdomen"?"abdomen":"brain",

@@ -6,6 +6,7 @@ import type {SanitizedModelReview} from "../lib/sanitized-cloud-review";
 import {buildLocalDualReviewDraft,findingReviewKey,type LocalObservationAssessment} from "../lib/local-dual-vision-physician-draft";
 import type {LocalLungFacts} from "../lib/local-lung-review";
 import type {LocalSameSeriesLaa950} from "../lib/same-series-laa950-review";
+import {validateSanitizedDetectorBundle,type SanitizedDetectorBundle} from "../lib/detector-consilium-evidence";
 import {bindLocalSanitizedReview,sourceFileForObservation,perFrameModelCoverage} from "../lib/local-cloud-source-navigation";
 
 type Props={
@@ -13,6 +14,7 @@ type Props={
   exactReviewedHashes:readonly {imageId:string;sha256:string}[];
   prepareReviewedPacket:()=>VisionPrivacyPacket;
   specialistFacts?:LocalLungFacts|null;
+  originalDetectorEvidence?:SanitizedDetectorBundle|null;
   localLaa950?:LocalSameSeriesLaa950|null;
   specialistLocalBinding?:string;
   originalLocalFileIds:readonly string[];
@@ -21,7 +23,7 @@ type Props={
 type Ready={schema:string;enabled:boolean;productionPatientCloudRelease:false};
 export default function DeidentifiedOpenRouterPanel({
   enabledByLocalChecks,exactReviewedHashes,prepareReviewedPacket,
-  originalLocalFileIds,onOpenOriginalSlice,specialistFacts,specialistLocalBinding,localLaa950,
+  originalLocalFileIds,onOpenOriginalSlice,specialistFacts,specialistLocalBinding,localLaa950,originalDetectorEvidence=null,
 }:Props){
   const [server,setServer]=useState<Ready|null>(null),[token,setToken]=useState("");
   const [clinician,setClinician]=useState(false),[providerRights,setProviderRights]=useState(false);
@@ -29,6 +31,7 @@ export default function DeidentifiedOpenRouterPanel({
   const [working,setWorking]=useState(false),[error,setError]=useState("");
   const [readinessNote,setReadinessNote]=useState("");
   const [includeSpecialist,setIncludeSpecialist]=useState(false);
+  const [includeDetectors,setIncludeDetectors]=useState(false);
   const [result,setResult]=useState<SanitizedModelReview|null>(null);
   const [decisions,setDecisions]=useState<Record<string,LocalObservationAssessment>>({});
   const [clinicalSynthesis,setClinicalSynthesis]=useState("");
@@ -38,6 +41,7 @@ export default function DeidentifiedOpenRouterPanel({
   // This is essential for offline DICOM review and fail-closed browser tests.
   useEffect(()=>()=>{ctl.current?.abort();},[]);
   useEffect(()=>{setResult(null);setIncludeSpecialist(false);setDecisions({});setClinicalSynthesis("");},[specialistLocalBinding]);
+  useEffect(()=>{setResult(null);setIncludeDetectors(false);setDecisions({});setClinicalSynthesis("");},[originalDetectorEvidence]);
   async function checkReadiness(){
     if(working)return;
     setReadinessNote("");setError("");setServer(null);
@@ -62,13 +66,20 @@ export default function DeidentifiedOpenRouterPanel({
          f.sha256!==exactReviewedHashes[i]?.sha256))
         throw Error("Проверенная копия изменилась: повторите проверку.");
       const sentSpecialist=includeSpecialist&&specialistFacts?specialistFacts:null;
+      const sentDetectors=includeDetectors&&originalDetectorEvidence?
+        originalDetectorEvidence:null;
+      if(sentDetectors&&(!validateSanitizedDetectorBundle(sentDetectors)||
+          !sentDetectors.facts.some(f=>f.status==="completed")||
+          sentDetectors.modality!==packet.frames[0]?.modality))
+        throw Error("Пакет патологических детекторов не соответствует проверенным кадрам.");
       const response=await fetch("/api/ai/deidentified-openrouter-review",{
         method:"POST",cache:"no-store",signal:controller.signal,
         headers:{"Content-Type":"application/json","X-Opus-Local-Operator-Token":token},
         body:JSON.stringify({packet,acknowledgeClinicianLawfulDisclosure:true,
           acknowledgeProviderHealthDataTerms:true,acknowledgePixelIdentityReviewed:true,
           acknowledgeTwoPaidCalls:true,
-          ...(sentSpecialist?{specialistFacts:sentSpecialist}:{})}),
+          ...(sentSpecialist?{specialistFacts:sentSpecialist}:{}),
+          ...(sentDetectors?{detectorEvidence:sentDetectors}:{})}),
       });
       const body:unknown=await response.json();
       if(!response.ok)throw Error((body as {error?:string}).error??"OpenRouter недоступен");
@@ -92,6 +103,12 @@ export default function DeidentifiedOpenRouterPanel({
         throw Error("Источник численных данных R231 не подтверждён.");
       if(!sentSpecialist&&doc.specialistEvidence)
         throw Error("Непредусмотренные данные модели в ответе.");
+      if(sentDetectors){
+        if(!doc.detectorEvidence||
+           JSON.stringify(doc.detectorEvidence)!==JSON.stringify(sentDetectors))
+          throw Error("Поставщик AI не вернул тот же обезличенный пакет детекторов.");
+      }else if(doc.detectorEvidence)
+        throw Error("Модель получила незапрошенные сведения детекторов.");
       // An unbound or changed source makes ALL clinical navigation unavailable.
       bindLocalSanitizedReview(doc,exactReviewedHashes.map(f=>({imageId:f.imageId,reviewedPixelSha256:f.sha256})),originalLocalFileIds);
       setResult(doc);
@@ -162,6 +179,17 @@ export default function DeidentifiedOpenRouterPanel({
       левая {specialistFacts.leftLungMaskMl.toFixed(1)} мл, {specialistFacts.frameCount} срезов.
       Маска, UID и путь исходных DICOM не передаются. Модель R231 размечает
       лёгкие, но не детектирует патологию.</label>}
+    {originalDetectorEvidence&&validateSanitizedDetectorBundle(originalDetectorEvidence)&&
+      <label><input type="checkbox" disabled={working}
+        checked={includeDetectors} onChange={e=>{
+          setIncludeDetectors(e.target.checked);setResult(null);
+        }}/>
+        Дополнительно передать Gemini Vision и Opus ТОЛЬКО числовые модельные
+        находки текущей DICOM-серии: завершено {
+          originalDetectorEvidence.facts.filter(f=>f.status==="completed").length
+        } из {originalDetectorEvidence.facts.length} задач.
+        Исходные UID, SHA, координаты и сами маски не передаются.
+      </label>}
     <label><input type="checkbox" disabled={working} checked={paid}
       onChange={e=>setPaid(e.target.checked)}/>
       Разрешаю два платных вызова: Gemini 3.8 Flash и Claude Opus 5.5
@@ -193,6 +221,15 @@ export default function DeidentifiedOpenRouterPanel({
           }catch{setError("Срез больше не совпадает с проверенным исходным DICOM. Повторите локальную привязку.");}
         }}>Открыть исходный DICOM-срез</button>
       </li>)}</ul>
+      {result.detectorEvidence&&<section aria-label="Числовые находки реальных моделей той же КТ/МРТ">
+        <h4>Реальные детекторы · тот же исходный DICOM</h4>
+        <p>Gemini Vision и Claude Opus получили только ограниченные числовые сведения.
+        Модельное совпадение не доказывает клиническую точность.</p>
+        {result.detectorEvidence.facts.map(f=><p key={f.task}>
+          {f.task}: {f.status==="completed"?
+            "модельных кандидатов "+f.candidateCount:"не исследовано"}
+        </p>)}
+      </section>}
       {result.specialistEvidence&&<section aria-label="Объединённые локальные данные R231 и Gemini Opus">
         <h4>Локальный CPU-детектор · Lungmask R231</h4>
         <p>Объёмы сегментации той же выбранной КТ:

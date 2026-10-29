@@ -144,3 +144,47 @@ test("Patient text and forged R231 labels never reach provider; MR cannot reuse 
     assert.equal(calls,0);
   }
 });
+
+
+test("Genuine selected-study model counts join Gemini Vision -> Opus without DICOM identities",async()=>{
+ const bundle={
+  schema:"opus-sanitized-detector-consilium/v1" as const,modality:"CT" as const,
+  region:"chest" as const,
+  facts:[
+   {task:"lung_nodules" as const,status:"completed" as const,candidateCount:2,candidateVolumeMl:null},
+   {task:"pleural_effusion" as const,status:"not_assessed" as const,candidateCount:null,candidateVolumeMl:null},
+   {task:"pericardial_effusion" as const,status:"not_assessed" as const,candidateCount:null,candidateVolumeMl:null},
+   {task:"pulmonary_embolism" as const,status:"not_assessed" as const,candidateCount:null,candidateVolumeMl:null},
+   {task:"mediastinal_nodes" as const,status:"not_assessed" as const,candidateCount:null,candidateVolumeMl:null},
+  ],sourceIdentifiersSent:false as const,sourcePixelsSent:false as const,
+  clinicalValidation:false as const,negativeDiagnosisPermitted:false as const,
+ };
+ const sent:AiGatewayRequest[]=[];
+ const result=await reviewSanitizedSamples(packet(),async req=>{
+  sent.push(req);return answer(req.model===PILOT_GEMINI?"gemini-source-frame":"opus-source-frame");
+ },undefined,null,bundle);
+ assert.equal(sent.length,2);
+ assert.deepEqual(sent.map(x=>x.model),[PILOT_GEMINI,PILOT_OPUS]);
+ const geminiPrompt=JSON.stringify(sent[0].messages);
+ const opusPrompt=JSON.stringify(sent[1].messages);
+ assert.match(geminiPrompt,/lung_nodules/);
+ assert.match(geminiPrompt,/not_assessed/);
+ assert.match(opusPrompt,/gemini-source-frame/);
+ assert.match(opusPrompt,/lung_nodules/);
+ assert.equal(result.detectorEvidence?.facts[0].candidateCount,2);
+ assert.equal(result.sourceDicomIdentifiersSent,false);
+ for(const text of [geminiPrompt,opusPrompt])
+   assert.doesNotMatch(text,/PatientName|SOPInstanceUID|SourceFile|sourceNiftiSha256|modelCheckpoint/);
+});
+test("Wrong modality or forged task statuses never reach either Vision model",async()=>{
+ const wrong={
+  schema:"opus-sanitized-detector-consilium/v1",modality:"MR",region:"chest",
+  facts:[],sourceIdentifiersSent:false,sourcePixelsSent:false,
+  clinicalValidation:false,negativeDiagnosisPermitted:false,
+ };
+ let called=0;
+ await assert.rejects(reviewSanitizedSamples(packet(),async()=>{
+  called++;return answer("should-not-call");
+ },undefined,null,wrong));
+ assert.equal(called,0);
+});
