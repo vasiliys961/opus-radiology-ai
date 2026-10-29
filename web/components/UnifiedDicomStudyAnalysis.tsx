@@ -17,6 +17,7 @@ import type {EvidenceJson} from "../lib/evidence-json";
 import {createNativePhysicianDraft,type NativeDicomDigest} from "../lib/native-physician-draft";
 import {prepareNativeBrainMr} from "../lib/brain-native-mr-dicom";
 import {executeOriginalBrain,BRAIN_ROLES,type BrainTask,type BrainModelReport} from "../lib/brain-multisequence-original-worker";
+import DetectorGeminiOpusConsilium from "./DetectorGeminiOpusConsilium";
 
 /** A single primary action that reuses the real DICOM -> MONAI/ianpan/WMH paths.
  * Never advertises a checkpoint as installed until its private worker proves it.
@@ -611,7 +612,20 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
       координаты кандидатов и решения врача. Не загружайте такой файл в публичный GitHub или облачный LLM.
       Это не подписанное клиническое заключение.</p>
   </div>}
-  <p>Gemini Vision и Claude Opus: пока не запускались. Отсутствие анализа не означает норму;
-    результаты исследовательские и требуют врачебной оценки.</p>
+  {(chestNodules||chestEffusion||chestPe||chestNodes||abdomenResult||ich||wmh||brainResult)&&
+    <DetectorGeminiOpusConsilium snapshot={{
+      modality:series.modality as "CT"|"MR",
+      region:plan.route==="monai-nodules"?"chest":
+        plan.route==="totalseg-abdomen"?"abdomen":"brain",
+      nativeSourceSha256:chestNodules?.source.sha256??
+        chestEffusion?.sourceSha256??
+        chestPe?.sourceNiftiSHA256??
+        chestNodes?.sourceNiftiSHA256??
+        abdomenResult?.sourceNiftiSha256??null,
+      nodules:chestNodules,effusion:chestEffusion,pe:chestPe,nodes:chestNodes,
+      abdomen:abdomenResult,ich,wmh,brain:brainResult,
+    }}/>}
+  <p>Gemini Vision по исходным кадрам выполняется отдельно после обезличивания.
+    В этой версии единый консилиум анализирует только обезличенные числа моделей.</p>
  </section>;
 }
