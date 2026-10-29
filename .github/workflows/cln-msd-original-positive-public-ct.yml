@@ -65,9 +65,18 @@ jobs:
         run: |
           python3 -m pip install 'torch==2.5.1+cpu' --index-url https://download.pytorch.org/whl/cpu
           python3 -m pip install 'nnunetv2==2.7.0' 'huggingface_hub==0.35.3' 'nibabel==5.3.2' 'psutil==7.0.0'
+      - name: Verify memory headroom for genuine nnU-Net 3D CPU forward
+        run: |
+          python3 - <<'PY'
+          import psutil
+          available=psutil.virtual_memory().available
+          print("Available RAM GiB:",round(available/2**30,2))
+          if available < 12*2**30:
+              raise SystemExit("Full-resolution CLN requires at least 12 GiB free RAM on this CPU runner")
+          PY
       - name: ONE true pretrained CPU prediction against public original expert-positive CT
         run: |
-          python3 scripts/cln-msd-original-positive-public-ct.py --mode infer --workdir "$RUNNER_TEMP/cln-positive" --report "$RUNNER_TEMP/cln-positive-true-voxel-metrics.json" --memory-gib 6 --timeout-sec 1500
+          python3 scripts/cln-msd-original-positive-public-ct.py --mode infer --workdir "$RUNNER_TEMP/cln-positive" --report "$RUNNER_TEMP/cln-positive-true-voxel-metrics.json" --memory-gib 11 --timeout-sec 1500
       - name: Export only authentic numeric original weights + CT mask measurements
         uses: actions/upload-artifact@v4
         with:
