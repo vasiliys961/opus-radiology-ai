@@ -1,0 +1,42 @@
+name: Direct original six-head CXR and model provisioning contracts
+on:
+  pull_request:
+    paths:
+      - services/imaging-ai/cxr_xrv_direct_worker.py
+      - services/imaging-ai/test_cxr_xrv_direct_worker.py
+      - scripts/provision_xrv_original_model.py
+      - scripts/test_provision_xrv_original_model.py
+      - web/lib/xrv-original-cxr.ts
+      - web/lib/xrv-original-cxr.test.ts
+      - web/lib/unified-study-dispatch.ts
+      - web/lib/unified-study-dispatch.test.ts
+      - web/app/api/local-xrv/route.ts
+      - web/components/UnifiedDicomStudyAnalysis.tsx
+      - .github/workflows/xrv-direct-worker-ci.yml
+permissions:
+  contents: read
+jobs:
+  original-model-cxr-source-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install only private worker routing interface (not pretrained model)
+        run: python -m pip install 'fastapi>=0.115,<1'
+      - name: Compile original XRV worker and publisher/Yandex model cache
+        run: |
+          python -m py_compile services/imaging-ai/cxr_xrv_direct_worker.py scripts/provision_xrv_original_model.py
+          python -m py_compile services/imaging-ai/test_cxr_xrv_direct_worker.py scripts/test_provision_xrv_original_model.py
+      - name: Exact-original SHA, rights, URL and worker authorization contracts
+        env:
+          PYTHONPATH: scripts:services/imaging-ai
+        run: |
+          python services/imaging-ai/test_cxr_xrv_direct_worker.py -v
+          python scripts/test_provision_xrv_original_model.py -v
+      - name: State the validation boundary
+        run: |
+          echo "Technical tests only; no model inference or clinical sensitivity claim."
+          echo "Actual original trained NIH XRV model execution is tested separately in xrv-pneumothorax-original.yml"

@@ -4,7 +4,7 @@
  */
 import type {DicomSeries} from "./dicom-series.ts";
 
-export type StudyRoute="monai-nodules"|"ianpan-ich"|"wmh-flair"|"totalseg-abdomen";
+export type StudyRoute="monai-nodules"|"ianpan-ich"|"wmh-flair"|"totalseg-abdomen"|"xrv-cxr";
 export type StudyAnalysisPlan={
   route:StudyRoute|null;
   title:string;
@@ -15,8 +15,6 @@ export type StudyAnalysisPlan={
 export function planNativeStudyAnalysis(series:DicomSeries, availableFiles:ReadonlySet<string>):StudyAnalysisPlan{
   const denied=(reason:string):StudyAnalysisPlan=>({route:null,title:"Нет совместимого исполнительного пути",reason,needsExplicitFlair:false});
   if(!series.members.length)return denied("Серия DICOM пуста.");
-  if(!series.volumeReady||!series.spatiallySorted)
-    return denied("Нужна исходная серия с подтверждённым пространственным порядком и геометрией.");
   const uids=new Set(series.members.map(m=>m.metadata.seriesUid));
   if(uids.size!==1||uids.has(null)||series.members.some(m=>
       !m.metadata.sopInstanceUid||!m.metadata.studyUid||
@@ -25,6 +23,16 @@ export function planNativeStudyAnalysis(series:DicomSeries, availableFiles:Reado
       (m.metadata.numberOfFrames!==null&&m.metadata.numberOfFrames!==1)))
     return denied("Неполная, смешанная, производная или не подтверждённая по UID исходная серия.");
   const allRegion=(region:string)=>series.members.every(m=>m.metadata.bodyRegion===region);
+  // Radiography is a SINGLE 2-D image, not a 3-D DICOM CT volume.
+  if((series.modality==="CR"||series.modality==="DX")&&
+      series.members.length===1&&
+      series.members[0].metadata.rows&&series.members[0].metadata.columns&&
+      (series.members[0].metadata.bodyRegion==="CHEST"||
+       series.members[0].metadata.bodyRegion===null))
+    return {route:"xrv-cxr",title:"Рентгенография грудной клетки · одна TorchXRayVision, шесть независимых NIH-выходов",
+      reason:null,needsExplicitFlair:false};
+  if(!series.volumeReady||!series.spatiallySorted)
+    return denied("Нужна исходная серия с подтверждённым пространственным порядком и геометрией.");
   if(series.modality==="CT"&&allRegion("CHEST"))
     return {route:"monai-nodules",title:"Грудная клетка · MONAI узлы, task315 выпоты, PE на CTPA и Raidionics средостение",reason:null,needsExplicitFlair:false};
   if(series.modality==="CT"&&allRegion("ABDOMEN"))

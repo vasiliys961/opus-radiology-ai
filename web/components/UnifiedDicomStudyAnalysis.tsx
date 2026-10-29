@@ -19,6 +19,7 @@ import {prepareNativeBrainMr} from "../lib/brain-native-mr-dicom";
 import {executeOriginalBrain,BRAIN_ROLES,type BrainTask,type BrainModelReport} from "../lib/brain-multisequence-original-worker";
 import DetectorGeminiOpusConsilium from "./DetectorGeminiOpusConsilium";
 import type {SanitizedDetectorBundle} from "../lib/detector-consilium-evidence";
+import {checkOriginalXrvReady,runCxrXrvFromDicom,XRV_CXR_LABELS,type OriginalXrvCxrResult} from "../lib/xrv-original-cxr";
 
 /** A single primary action that reuses the real DICOM -> MONAI/ianpan/WMH paths.
  * Never advertises a checkpoint as installed until its private worker proves it.
@@ -50,6 +51,9 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  const [chestEffusion,setChestEffusion]=useState<OriginalEffusionRun|null>(null);
  const [chestIssues,setChestIssues]=useState<string[]>([]);
  const [abdomenResult,setAbdomenResult]=useState<AbdominalStudyResults|null>(null);
+ const [xrvReport,setXrvReport]=useState<OriginalXrvCxrResult|null>(null);
+ const [xrvStatus,setXrvStatus]=useState<"checking"|"ready"|"unavailable">("checking");
+ const [xrvChestConfirmed,setXrvChestConfirmed]=useState(false);
  const [authorized,setAuthorized]=useState(false);
  const [flairConfirmed,setFlairConfirmed]=useState(false);
  const [sourceUrl,setSourceUrl]=useState("");
@@ -93,14 +97,25 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
    setPeEndpoint("http://127.0.0.1:8776");setPeToken("");setCtpaConfirmed(false);setChestPe(null);
    setNodeEndpoint("http://127.0.0.1:8777");setNodeToken("");setEnhancedChestConfirmed(false);setChestNodes(null);
    setChestSource(null);setChestNodules(null);setChestEffusion(null);setChestPe(null);setChestNodes(null);setChestIssues([]);setAbdomenResult(null);
+   setXrvReport(null);setXrvChestConfirmed(false);
    setAuthorized(false);setFlairConfirmed(false);
    setSourceUrl("");setSourceLicense("");setBusy(false);setError("");setStatus("");
    setIch(null);setWmh(null);setBrainResult(null);setDecisions({});setDraftText("");setExporting(false);
    return ()=>{serial.current++;active.current?.abort();};
  },[series,files,preset]);
  const chestPlan=plan.route==="monai-nodules";
+ const xrvPlan=plan.route==="xrv-cxr";
+ useEffect(()=>{
+   if(!xrvPlan)return;
+   const controller=new AbortController();
+   setXrvStatus("checking");
+   void checkOriginalXrvReady(controller.signal).then(ok=>{
+     if(!controller.signal.aborted)setXrvStatus(ok?"ready":"unavailable");
+   }).catch(()=>{if(!controller.signal.aborted)setXrvStatus("unavailable");});
+   return()=>controller.abort();
+ },[xrvPlan,series.key]);
  const ready=!!plan.route&&authorized&&!busy&&
-   (chestPlan?((!!token&&!!endpoint.trim())||(!!effusionToken&&!!effusionEndpoint.trim())||(ctpaConfirmed&&!!peToken&&!!peEndpoint.trim())||(enhancedChestConfirmed&&!!nodeToken&&!!nodeEndpoint.trim())):
+   (xrvPlan?(xrvStatus==="ready"&&xrvChestConfirmed&&sourceUrl.startsWith("https://")):chestPlan?((!!token&&!!endpoint.trim())||(!!effusionToken&&!!effusionEndpoint.trim())||(ctpaConfirmed&&!!peToken&&!!peEndpoint.trim())||(enhancedChestConfirmed&&!!nodeToken&&!!nodeEndpoint.trim())):
      (!!token&&!!endpoint.trim()))&&
    (!plan.needsExplicitFlair||(
      brainTask==="wmh"?
@@ -116,12 +131,26 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
    setBusy(true);setStatus("Проверяем совместимость и доступность настоящей модели...");
    onDetectorEvidence?.(series.key,null);
    setError("");setIch(null);setWmh(null);setBrainResult(null);setChestSource(null);setChestNodules(null);
-   setChestEffusion(null);setChestPe(null);setChestNodes(null);setChestIssues([]);setAbdomenResult(null);setDecisions({});setDraftText("");
+   setChestEffusion(null);setChestPe(null);setChestNodes(null);setChestIssues([]);setAbdomenResult(null);setXrvReport(null);setDecisions({});setDraftText("");
    const session:WorkerSession={endpoint,token};
    const progress=(message:string)=>{
      if(version===serial.current&&!controller.signal.aborted)setStatus(message);
    };
    try{
+     if(plan.route==="xrv-cxr"){
+       const original=files.get(series.members[0].id);
+       if(!original)throw Error("Исходный рентгеновский DICOM отсутствует.");
+       const result=await runCxrXrvFromDicom(original,sourceUrl,
+         authorized&&xrvChestConfirmed,controller.signal,progress);
+       if(version!==serial.current||controller.signal.aborted)return;
+       setXrvReport(result);
+       setDraftText("Исследовательская рентгенография: оригинальная NIH DenseNet121 "+
+         "выдала шесть некалиброванных оценок. Требуется независимая "+
+         "оценка исходного изображения врачом, Gemini и Opus.");
+       setStatus("Настоящая TorchXRayVision завершена. Шесть модельных NIH-показателей "+
+         "привязаны к исходной рентгенограмме; клиническая точность не подтверждена.");
+       return;
+     }
      if(plan.route==="monai-nodules"){
        // One native HU conversion, TWO truly trained pathology tasks.
        // Each worker runs sequentially: no heavy simultaneous RAM pressure.
@@ -341,15 +370,30 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  }
  return <section className="cs-geometry" aria-label="Единый анализ DICOM">
   <h2>Анализ исследования</h2>
-  <p><strong>{plan.title}</strong> · КТ/МРТ, текущая исходная серия. Автоматический выбор по проверенной анатомии;
+  <p><strong>{plan.title}</strong> · текущая исходная DICOM-серия. Автоматический выбор по известной модальности;
     наличие настоящих весов подтверждается только worker при запуске.</p>
   {plan.reason&&<p role="status">Не запущено: {plan.reason}</p>}
   {plan.route&&<>
    <details>
     <summary>Настройки приватного исполнителя и разрешение</summary>
-    <label>Адрес локального worker <input type="text" value={endpoint} disabled={busy} onChange={e=>setEndpoint(e.target.value)}/></label>
-    <label>Токен worker <input type="password" autoComplete="off" value={token} disabled={busy} onChange={e=>setToken(e.target.value)}/></label>
-    {chestPlan&&<div className="cs-geometry">
+    {!xrvPlan&&<label>Адрес локального worker <input type="text" value={endpoint} disabled={busy} onChange={e=>setEndpoint(e.target.value)}/></label>}
+    {!xrvPlan&&<label>Токен worker <input type="password" autoComplete="off" value={token} disabled={busy} onChange={e=>setToken(e.target.value)}/></label>}
+    {xrvPlan&&<div className="cs-geometry">
+      <strong>Одна оригинальная NIH DenseNet121 · шесть рентгенологических признаков</strong>
+      <p role="status">Проверка весов и Linux worker: {xrvStatus==="checking"?
+        "проверяем":xrvStatus==="ready"?"оригинальные веса проверены SHA-256 и worker доступен":
+        "пока недоступен; обратитесь к администратору сервера"}.</p>
+      <label><input type="checkbox" checked={xrvChestConfirmed} disabled={busy}
+        onChange={e=>setXrvChestConfirmed(e.target.checked)}/>
+        Подтверждаю: это исходная рентгенограмма грудной клетки CR/DX,
+        используемая в разрешённом публичном непациентском исследовании.</label>
+      <label>URL оригинального публичного изображения
+        <input type="url" value={sourceUrl} disabled={busy}
+         onChange={e=>setSourceUrl(e.target.value)}/></label>
+      <p>Модели не нужно передавать DICOM: локально создаётся только растровая копия PNG.
+        Токен и путь к весам хранятся на сервере, не у врача.</p>
+     </div>}
+     {chestPlan&&<div className="cs-geometry">
       <strong>Второй детектор той же КТ: плевральный и перикардиальный выпот</strong>
       <label>Адрес TotalSegmentator task315 worker <input type="text" value={effusionEndpoint} disabled={busy} onChange={e=>setEffusionEndpoint(e.target.value)}/></label>
       <label>Токен task315 <input type="password" autoComplete="off" value={effusionToken} disabled={busy} onChange={e=>setEffusionToken(e.target.value)}/></label>
@@ -436,6 +480,22 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
   </>}
   {status&&<p role="status">{status}</p>}
   {error&&<p role="alert">Не выполнено: {error}</p>}
+  {xrvReport&&<section className="cs-geometry" aria-label="Шесть настоящих модельных показателей TorchXRayVision">
+    <h3>TorchXRayVision NIH DenseNet121 · исследовательская рентгенография</h3>
+    <p>Один обученный детектор, шесть некалиброванных показателей, а не шесть
+      отдельных нейросетей. Ни один показатель не является вероятностью
+      диагноза или доказательством отсутствия болезни.</p>
+    {XRV_CXR_LABELS.map(label=><p key={label}>
+      <strong>{label}</strong>: {xrvReport.labels[label].toFixed(4)}
+    </p>)}
+    <p>Проекция AP/PA и степень увеличения сердечной тени не установлены
+      этой моделью. Gemini сначала должен самостоятельно оценить снимок;
+      Opus сопоставляет его описание с оценками DenseNet121.</p>
+    <label>Предварительный комментарий врача
+      <textarea rows={4} maxLength={12000} value={draftText}
+       onChange={e=>setDraftText(e.target.value)}/>
+    </label>
+  </section>}
   {abdomenResult&&<section className="cs-geometry" aria-label="Кисты почек, очаги печени и поджелудочная · исходный DICOM">
     <h3>КТ живота · три различные оригинальные модели</h3>
     <p>Одна подготовленная HU-КТ, последовательное выполнение без повторных моделей
