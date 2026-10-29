@@ -10,7 +10,7 @@ export type PrivacyReadinessInputs={frames:readonly PrivacyFrame[];ocr:Readonly<
 export function assessPrivacyReadiness({frames,ocr,keptText,busy}:PrivacyReadinessInputs) {
   if(frames.length>4||new Set(frames.map(f=>f.frameId)).size!==frames.length)throw new Error("Неверный набор локальных копий.");
   const rows=frames.map(f=>{
-    if(!/^frame-[1-4]$/.test(f.frameId)||!/^[a-f0-9]{64}$/.test(f.sha256)||!["CT","MR"].includes(f.modality)||
+    if(!/^frame-[1-4]$/.test(f.frameId)||!/^[a-f0-9]{64}$/.test(f.sha256)||!["CT","MR","CR","DX"].includes(f.modality)||
       !Number.isSafeInteger(f.width)||!Number.isSafeInteger(f.height)||f.width<1||f.height<1||f.width*f.height>MAX_PRIVACY_PIXELS||
       !Array.isArray(f.redactions)||f.redactions.length>32)throw new Error("Неверная привязка локальной копии.");
     const found=ocr[f.frameId],current=found?.sha256===f.sha256;
