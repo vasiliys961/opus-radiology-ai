@@ -11,7 +11,7 @@ export type ObservationDecision="unreviewed"|"needs_original_source_recheck"|"re
 export type LocalObservationAssessment={decision:ObservationDecision;note:string};
 export type LocalDualReviewDraft={
  schema:"opus-local-dual-vision-physician-draft/v1";
- provenance:{sourceScope:"sampled-image-frames";modality:"CT"|"MR";
+ provenance:{sourceScope:"sampled-image-frames";modality:"CT"|"MR"|"CR"|"DX";
    sourceImagePixelSHA256:string[];clinicalProvenanceServerVerified:false};
  specialistEvidence:SanitizedModelReview["specialistEvidence"]|null;
  observations:{reviewer:"gemini"|"opus";findingId:string;imageId:string;
@@ -40,7 +40,7 @@ export function buildLocalDualReviewDraft(
  bindLocalSanitizedReview(review,currentLocalFrames,originalPrivateFileIds);
  if(typeof synthesis!=="string"||!BODY.test(synthesis)||
     !Array.isArray(review.results)||review.results.length!==2||
-    (review.modality!=="CT"&&review.modality!=="MR"))
+    (!["CT","MR","CR","DX"].includes(review.modality)))
   throw Error("invalid_local_physician_draft");
  const seen=new Set<string>();
  const observations:LocalDualReviewDraft["observations"]=[];
