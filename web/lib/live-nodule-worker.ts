@@ -95,7 +95,7 @@ export async function executeRealNodule(
  try{
   const answer=await smallJson(await invoke(uploadEnabled?"/v1/nodule/upload":"/v1/nodule/jobs",{
    method:"POST",signal,headers:uploadEnabled?{
-    "Content-Type":"application/octet-stream","X-Opus-Source-Sha256":fileHash
+    "Content-Type":"application/octet-stream","X-Opus-Source-Sha256":fileHash,
     ...(session?{}:{"X-Opus-Public-Research-Authorization":"approved-nonpatient-source"})
    }:{"Content-Type":"application/json"},
    body:uploadEnabled?source:JSON.stringify({schema:"opus-monai-nodule-request/v1",
@@ -123,7 +123,7 @@ export async function executeRealNodule(
   onProgress?.("Настоящий инференс завершён; показываем кандидатов на исходной КТ.");
   return {source:native,report:verified};
  }finally{
-  if(jobId)await call(session,`/v1/nodule/jobs/${jobId}`,{
+  if(jobId)await invoke(`/v1/nodule/jobs/${jobId}`,{
    method:"DELETE",signal:AbortSignal.timeout(10000),
   }).catch(()=>{});
  }
