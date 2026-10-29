@@ -70,7 +70,7 @@ export async function runOriginalEffusionTask315(
  const response=await invoke("/v1/effusion/analyze",{
   method:"POST",signal,headers:{
    "Content-Type":"application/octet-stream","X-Opus-Source-Sha256":sha,
-   "X-Opus-Public-Research-Authorization":"approved-nonpatient-source",
+   ...(session===null?{"X-Opus-Public-Research-Authorization":"approved-nonpatient-source"}:{}),
   },body:source,
  });
  const raw=await readBoundedReport(response);
