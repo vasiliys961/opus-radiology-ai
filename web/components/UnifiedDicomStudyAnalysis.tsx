@@ -16,7 +16,7 @@ import {bindWmhToSelectedDicom,type BoundWmh} from "../lib/wmh-source-review";
 import type {EvidenceJson} from "../lib/evidence-json";
 import {createNativePhysicianDraft,type NativeDicomDigest} from "../lib/native-physician-draft";
 import {prepareNativeBrainMr} from "../lib/brain-native-mr-dicom";
-import {executeOriginalBrain,BRAIN_ROLES,type BrainTask,type BrainModelReport} from "../lib/brain-multisequence-original-worker";
+import {executeOriginalBrain,checkAutomaticBrainReady,BRAIN_ROLES,type BrainTask,type BrainModelReport} from "../lib/brain-multisequence-original-worker";
 import DetectorGeminiOpusConsilium from "./DetectorGeminiOpusConsilium";
 import type {SanitizedDetectorBundle} from "../lib/detector-consilium-evidence";
 import {checkOriginalXrvReady,runCxrXrvFromDicom,XRV_CXR_LABELS,type OriginalXrvCxrResult} from "../lib/xrv-original-cxr";
@@ -79,6 +79,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  const [autoIchChecking,setAutoIchChecking]=useState(false);
  const [wmh,setWmh]=useState<BoundWmh|null>(null);
  const [brainTask,setBrainTask]=useState<"wmh"|BrainTask>("wmh");
+ const [autoBrainReady,setAutoBrainReady]=useState(false);
  const [brainSeriesByRole,setBrainSeriesByRole]=useState<Record<string,string>>({});
  const [brainSequenceApproved,setBrainSequenceApproved]=useState(false);
  const [brainResult,setBrainResult]=useState<BrainModelReport|null>(null);
@@ -119,6 +120,14 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
    return ()=>{serial.current++;active.current?.abort();};
  },[series,files,preset]);
  const chestPlan=plan.route==="monai-nodules";
+ useEffect(()=>{
+  if(plan.route!=="wmh-flair"||brainTask==="wmh")return;
+  const controller=new AbortController();setAutoBrainReady(false);
+  void checkAutomaticBrainReady(brainTask,controller.signal).then(v=>{
+   if(!controller.signal.aborted)setAutoBrainReady(v);
+  }).catch(()=>{if(!controller.signal.aborted)setAutoBrainReady(false);});
+  return()=>controller.abort();
+ },[plan.route,brainTask,series.key]);
  useEffect(()=>{
   if(plan.route!=="wmh-flair")return;
   const controller=new AbortController();setAutoWmhReady(false);
@@ -349,7 +358,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
            chosen,volume as File[],role,controller.signal,progress);
        }
        if(controller.signal.aborted||version!==serial.current)return;
-       const result=await executeOriginalBrain(session,brainTask,sourceFiles,
+       const result=await executeOriginalBrain(autoBrainReady?null:session,brainTask,sourceFiles,
          brainSequenceApproved,controller.signal,progress);
        if(controller.signal.aborted||version!==serial.current)return;
        setBrainResult(result);
@@ -452,7 +461,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
   {plan.route&&<>
    <details>
     <summary>Настройки приватного исполнителя и разрешение</summary>
-    {!xrvPlan&&!(plan.route==="totalseg-abdomen"&&autoAbdomenReady)&&!(chestPlan&&autoMonaiReady)&&!(plan.route==="wmh-flair"&&brainTask==="wmh"&&autoWmhReady)&&<label>Адрес локального worker <input type="text" value={endpoint} disabled={busy} onChange={e=>setEndpoint(e.target.value)}/></label>}
+    {!xrvPlan&&!(plan.route==="totalseg-abdomen"&&autoAbdomenReady)&&!(chestPlan&&autoMonaiReady)&&!(plan.route==="wmh-flair"&&(brainTask==="wmh"?autoWmhReady:autoBrainReady))&&<label>Адрес локального worker <input type="text" value={endpoint} disabled={busy} onChange={e=>setEndpoint(e.target.value)}/></label>}
     {!xrvPlan&&!(plan.route==="totalseg-abdomen"&&autoAbdomenReady)&&!(chestPlan&&autoMonaiReady)&&!(plan.route==="wmh-flair"&&brainTask==="wmh"&&autoWmhReady)&&<label>Токен worker <input type="password" autoComplete="off" value={token} disabled={busy} onChange={e=>setToken(e.target.value)}/></label>}
     {plan.route==="totalseg-abdomen"&&<p role="status">
        КТ живота · автоматическое подключение оригинальных моделей: {
