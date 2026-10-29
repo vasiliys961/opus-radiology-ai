@@ -107,7 +107,7 @@ test("Normalization exposes only synthetic frame IDs, exact hashes and image byt
 });
 
 
-test("Bounded same-study R231 anatomical measurements reach BOTH LLMs with reviewed CT images",async()=>{
+test("R231 anatomical measurements reach Opus only after independent Gemini image inspection",async()=>{
   const facts={schema:"opus-local-r231-facts/v1" as const,model:"lungmask-R231" as const,
     frameCount:32,rightLungMaskMl:1320.25,leftLungMaskMl:1240.75,
     coverage:"not-clinically-verified" as const,masksAreNotPathologyDetectors:true as const};
@@ -116,12 +116,13 @@ test("Bounded same-study R231 anatomical measurements reach BOTH LLMs with revie
     calls.push(req);return answer(req.model===PILOT_GEMINI?"gemini":"opus");
   },undefined,facts);
   assert.equal(calls.length,2);
-  for(const call of calls){
-    const text=JSON.stringify(call.messages);
-    assert.match(text,/1320.25/);assert.match(text,/1240.75/);
-    assert.match(text,/not pathology detection/);
+  const independent=JSON.stringify(calls[0].messages);
+  const compared=JSON.stringify(calls[1].messages);
+  assert.doesNotMatch(independent,/1320.25|1240.75|lungmask-R231/);
+  assert.match(compared,/1320.25/);
+  assert.match(compared,/1240.75/);
+  for(const text of [independent,compared])
     assert.doesNotMatch(text,/sourceIdentitySha256|inputSha256|patientName|SOPInstanceUID|patientUid/i);
-  }
   assert.deepEqual(doc.specialistEvidence,{
     model:"lungmask-R231",frameCount:32,rightLungMaskMl:1320.25,
     leftLungMaskMl:1240.75,clinicalProvenanceServerVerified:false,
@@ -168,10 +169,10 @@ test("Genuine selected-study model counts join Gemini Vision -> Opus without DIC
  assert.deepEqual(sent.map(x=>x.model),[PILOT_GEMINI,PILOT_OPUS]);
  const geminiPrompt=JSON.stringify(sent[0].messages);
  const opusPrompt=JSON.stringify(sent[1].messages);
- assert.match(geminiPrompt,/lung_nodules/);
- assert.match(geminiPrompt,/not_assessed/);
+ assert.doesNotMatch(geminiPrompt,/lung_nodules|not_assessed|candidateCount/);
  assert.match(opusPrompt,/gemini-source-frame/);
  assert.match(opusPrompt,/lung_nodules/);
+ assert.match(opusPrompt,/not_assessed/);
  assert.equal(result.detectorEvidence?.facts[0].candidateCount,2);
  assert.equal(result.sourceDicomIdentifiersSent,false);
  for(const text of [geminiPrompt,opusPrompt])
