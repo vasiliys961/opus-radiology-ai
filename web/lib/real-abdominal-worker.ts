@@ -106,7 +106,7 @@ function validateReport(report:unknown,task:AbdominalTask,expectedSha:string,
     throw Error("Исходные координаты кандидата не подтверждены.");
    const world=record(candidate.worldRasBoundsMm);
    if(!triple(world.rasMinMm)||!triple(world.rasMaxMm)||
-      !world.rasMinMm.every((v,i)=>v<=world.rasMaxMm[i]))
+      !world.rasMinMm.every((v,i)=>v<=(world.rasMaxMm as number[])[i]))
     throw Error("Физическая сетка кандидата некорректна.");
   }
   observed.add(id as number);
