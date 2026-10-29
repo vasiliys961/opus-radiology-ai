@@ -93,14 +93,6 @@ function reviewMessages(data:NormalizedCloudPilot,specialist:LocalLungFacts|null
     {role:"user",content:[
       {type:"text",text:"Modality "+data.modality+". Sampled frames only: "+frameIds.join(", ")+
         ". Each image has no original DICOM metadata or source file name. Review each independently."+
-        (detectors?" On the SAME selected DICOM study, the physician approved "+
-          "these NUMERIC findings of genuine original pretrained models. "+
-          "No source identifiers, model mask or checkpoint is sent: "+
-          JSON.stringify(detectors.facts)+
-          ". Completed means a model ran, NOT confirmed disease. "+
-          "NOT ASSESSED means unavailable, NEVER normal. Model count zero "+
-          "does not exclude a lesion. Review actual sampled pixels "+
-          "independently from numerical model candidates.": "")+
         (specialist?" On the SAME study, a clinician's LOCAL CPU Lungmask R231 "+
           "anatomy segmentation report states right mask volume="+specialist.rightLungMaskMl.toFixed(2)+
           " mL, left mask volume="+specialist.leftLungMaskMl.toFixed(2)+
@@ -140,7 +132,7 @@ export async function reviewSanitizedSamples(
     throw Error("XRV scores only valid for CR/DX radiography");
   if((checked.modality==="CR"||checked.modality==="DX")&&detectors)
     throw Error("CT/MR detector evidence must not be attached to CR/DX");
-  const messages=reviewMessages(checked,specialist,detectors);
+  const messages=reviewMessages(checked,null,null);
   // Sequential, not two independent simultaneous calls: Opus receives Gemini's
   // source-frame-validated observations and the same source-linked model facts.
   // Only two existing paid requests; no duplicate model inference.
@@ -163,6 +155,13 @@ export async function reviewSanitizedSamples(
     {role:"user",content:[...(messages[1].content as Array<Record<string,unknown>>),
       {type:"text",text:"Prior source-checked Gemini observations, NOT "+
         "independent clinical validation: "+JSON.stringify(a)},
+      ...(detectors?[{type:"text",text:"Detector evidence was WITHHELD from the first Gemini image review. "+
+        "Now compare these independent visual observations against the same-study completed and not-assessed "+
+        "numeric model tasks. Completed is not diagnosis, not-assessed is never normal, and zero candidates "+
+        "does not exclude disease: "+JSON.stringify(detectors.facts)}]:[]),
+      ...(specialist?[{type:"text",text:"LOCAL lung anatomy segmentation (not a pathology diagnosis): "+
+        JSON.stringify({rightMl:specialist.rightLungMaskMl,leftMl:specialist.leftLungMaskMl,
+          frameCount:specialist.frameCount})}]:[]),
       ...(cxr?[{type:"text",text:"Only AFTER Gemini independent image review, "+
         "compare these exact six image-level, uncalibrated NIH DenseNet121 scores: "+
         JSON.stringify(cxr)+". Absence of elevated scores does not exclude pathology."}]:[])]},
