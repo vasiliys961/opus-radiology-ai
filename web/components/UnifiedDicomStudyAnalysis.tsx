@@ -370,15 +370,30 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  }
  return <section className="cs-geometry" aria-label="Единый анализ DICOM">
   <h2>Анализ исследования</h2>
-  <p><strong>{plan.title}</strong> · КТ/МРТ, текущая исходная серия. Автоматический выбор по проверенной анатомии;
+  <p><strong>{plan.title}</strong> · текущая исходная DICOM-серия. Автоматический выбор по известной модальности;
     наличие настоящих весов подтверждается только worker при запуске.</p>
   {plan.reason&&<p role="status">Не запущено: {plan.reason}</p>}
   {plan.route&&<>
    <details>
     <summary>Настройки приватного исполнителя и разрешение</summary>
-    <label>Адрес локального worker <input type="text" value={endpoint} disabled={busy} onChange={e=>setEndpoint(e.target.value)}/></label>
-    <label>Токен worker <input type="password" autoComplete="off" value={token} disabled={busy} onChange={e=>setToken(e.target.value)}/></label>
-    {chestPlan&&<div className="cs-geometry">
+    {!xrvPlan&&<label>Адрес локального worker <input type="text" value={endpoint} disabled={busy} onChange={e=>setEndpoint(e.target.value)}/></label>}
+    {!xrvPlan&&<label>Токен worker <input type="password" autoComplete="off" value={token} disabled={busy} onChange={e=>setToken(e.target.value)}/></label>}
+    {xrvPlan&&<div className="cs-geometry">
+      <strong>Одна оригинальная NIH DenseNet121 · шесть рентгенологических признаков</strong>
+      <p role="status">Проверка весов и Linux worker: {xrvStatus==="checking"?
+        "проверяем":xrvStatus==="ready"?"оригинальные веса проверены SHA-256 и worker доступен":
+        "пока недоступен; обратитесь к администратору сервера"}.</p>
+      <label><input type="checkbox" checked={xrvChestConfirmed} disabled={busy}
+        onChange={e=>setXrvChestConfirmed(e.target.checked)}/>
+        Подтверждаю: это исходная рентгенограмма грудной клетки CR/DX,
+        используемая в разрешённом публичном непациентском исследовании.</label>
+      <label>URL оригинального публичного изображения
+        <input type="url" value={sourceUrl} disabled={busy}
+         onChange={e=>setSourceUrl(e.target.value)}/></label>
+      <p>Модели не нужно передавать DICOM: локально создаётся только растровая копия PNG.
+        Токен и путь к весам хранятся на сервере, не у врача.</p>
+     </div>}
+     {chestPlan&&<div className="cs-geometry">
       <strong>Второй детектор той же КТ: плевральный и перикардиальный выпот</strong>
       <label>Адрес TotalSegmentator task315 worker <input type="text" value={effusionEndpoint} disabled={busy} onChange={e=>setEffusionEndpoint(e.target.value)}/></label>
       <label>Токен task315 <input type="password" autoComplete="off" value={effusionToken} disabled={busy} onChange={e=>setEffusionToken(e.target.value)}/></label>
@@ -465,6 +480,22 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
   </>}
   {status&&<p role="status">{status}</p>}
   {error&&<p role="alert">Не выполнено: {error}</p>}
+  {xrvReport&&<section className="cs-geometry" aria-label="Шесть настоящих модельных показателей TorchXRayVision">
+    <h3>TorchXRayVision NIH DenseNet121 · исследовательская рентгенография</h3>
+    <p>Один обученный детектор, шесть некалиброванных показателей, а не шесть
+      отдельных нейросетей. Ни один показатель не является вероятностью
+      диагноза или доказательством отсутствия болезни.</p>
+    {XRV_CXR_LABELS.map(label=><p key={label}>
+      <strong>{label}</strong>: {xrvReport.labels[label].toFixed(4)}
+    </p>)}
+    <p>Проекция AP/PA и степень увеличения сердечной тени не установлены
+      этой моделью. Gemini сначала должен самостоятельно оценить снимок;
+      Opus сопоставляет его описание с оценками DenseNet121.</p>
+    <label>Предварительный комментарий врача
+      <textarea rows={4} maxLength={12000} value={draftText}
+       onChange={e=>setDraftText(e.target.value)}/>
+    </label>
+  </section>}
   {abdomenResult&&<section className="cs-geometry" aria-label="Кисты почек, очаги печени и поджелудочная · исходный DICOM">
     <h3>КТ живота · три различные оригинальные модели</h3>
     <p>Одна подготовленная HU-КТ, последовательное выполнение без повторных моделей
