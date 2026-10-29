@@ -143,7 +143,7 @@ export async function runPublicIchWorker(
     onStatus?.("ICH завершён: исследовательские находки привязаны к исходным срезам.");
     return evidence;
   }finally{
-    if(jobId)await call(session,`/v1/ich/jobs/${jobId}`,{
+    if(jobId)await ichRequest(session,`/v1/ich/jobs/${jobId}`,{
       method:"DELETE",signal:AbortSignal.timeout(10000),
     }).catch(()=>{});
   }
