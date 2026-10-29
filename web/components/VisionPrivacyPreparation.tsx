@@ -46,7 +46,7 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
   const autoAttempt=useRef(false);
   useEffect(()=>{
     if(!autoStartAfterDetectors||autoAttempt.current||!previews.length||previews.some(p=>!p?.startsWith("data:image/png;base64,")))return;
-    if(modality!=="CT"&&modality!=="MR")return;
+    if(!["CT","MR","CR","DX"].includes(modality))return;
     autoAttempt.current=true;
     const controller=new AbortController();
     const version=++generation.current;
@@ -98,9 +98,9 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
     journalRef.current=next;setJournal(next);
   };
   const initialCopies=()=>{
-    if(!["CT","MR"].includes(modality)||!previews.length||previews.length>4||previews.some(p=>!p?.startsWith("data:image/png;base64,")))
+    if(!["CT","MR","CR","DX"].includes(modality)||!previews.length||previews.length>4||previews.some(p=>!p?.startsWith("data:image/png;base64,")))
       throw new Error("Сначала дождитесь локальных PNG-миниатюр всех выбранных срезов.");
-    return previews.map((url,i)=>createPrivacyFrame(pngFromBase64(url!.split(",")[1]),`frame-${i+1}`,modality as "CT"|"MR"));
+    return previews.map((url,i)=>createPrivacyFrame(pngFromBase64(url!.split(",")[1]),`frame-${i+1}`,modality as "CT"|"MR"|"CR"|"DX"));
   };
   const prepare=()=>{
     ++generation.current;setError("");setImportNotice("");
