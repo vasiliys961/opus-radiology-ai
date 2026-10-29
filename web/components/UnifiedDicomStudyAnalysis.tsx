@@ -21,6 +21,7 @@ import DetectorGeminiOpusConsilium from "./DetectorGeminiOpusConsilium";
 import type {SanitizedDetectorBundle} from "../lib/detector-consilium-evidence";
 import {checkOriginalXrvReady,runCxrXrvFromDicom,XRV_CXR_LABELS,type OriginalXrvCxrResult} from "../lib/xrv-original-cxr";
 import CxrIndependentVisionReview from "./CxrIndependentVisionReview";
+import OriginalWorkerFleetReadiness from "./OriginalWorkerFleetReadiness";
 
 /** A single primary action that reuses the real DICOM -> MONAI/ianpan/WMH paths.
  * Never advertises a checkpoint as installed until its private worker proves it.
@@ -371,6 +372,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  }
  return <section className="cs-geometry" aria-label="Единый анализ DICOM">
   <h2>Анализ исследования</h2>
+  <OriginalWorkerFleetReadiness/>
   <p><strong>{plan.title}</strong> · текущая исходная DICOM-серия. Автоматический выбор по известной модальности;
     наличие настоящих весов подтверждается только worker при запуске.</p>
   {plan.reason&&<p role="status">Не запущено: {plan.reason}</p>}
