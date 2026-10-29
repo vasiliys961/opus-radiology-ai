@@ -1,5 +1,6 @@
 /** Private local WMH FLAIR runner bridge. Public nonpatient research only. */
 import {NextRequest,NextResponse} from "next/server";
+import {readyWmhOriginal} from "../../../lib/auto-wmh-ready";
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
 export const maxDuration=800;
@@ -18,13 +19,6 @@ function creds(){
  const origin=process.env.OPUS_LOCAL_WORKER_ORIGIN??"http://127.0.0.1:3000";
  return /^[A-Za-z0-9_-]{32,128}$/.test(token)&&
  /^http:\/\/(127\.0\.0\.1|localhost):[0-9]{1,5}$/.test(origin)?{token,origin}:null;
-}
-export function readyWmhOriginal(x:unknown):boolean{
- if(!x||typeof x!=="object"||Array.isArray(x))return false;
- const v=x as Record<string,unknown>;
- return v.schema==="opus-direct-wmh-worker/v1"&&v.originalModelReady===true&&
- v.patientMode===false&&v.imageUpload===true&&
- v.dataPolicy==="approved-public-research-only"&&v.modelVersion==="1.6.0";
 }
 async function bounded(res:Response,max:number):Promise<unknown>{
  const reader=res.body?.getReader();if(!reader)throw Error("empty");
