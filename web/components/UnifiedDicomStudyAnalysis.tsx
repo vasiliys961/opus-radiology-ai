@@ -194,7 +194,9 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  },[xrvPlan,series.key]);
  const ready=!!plan.route&&authorized&&!busy&&
    (xrvPlan?(xrvStatus==="ready"&&xrvChestConfirmed&&sourceUrl.startsWith("https://")):plan.route==="totalseg-abdomen"?(autoAbdomenReady||(!!token&&!!endpoint.trim())):chestPlan?((autoMonaiReady|| (!!token&&!!endpoint.trim()))||(autoEffusionReady||(!!effusionToken&&!!effusionEndpoint.trim()))||(ctpaConfirmed&&(autoPeReady||(!!peToken&&!!peEndpoint.trim())))||(enhancedChestConfirmed&&(autoNodesReady||(!!nodeToken&&!!nodeEndpoint.trim())))):
-     (!!token&&!!endpoint.trim()))&&
+     (plan.route==="ianpan-ich"?(autoIchReady|| (!!token&&!!endpoint.trim())):
+      plan.route==="wmh-flair"?((brainTask==="wmh"?autoWmhReady:autoBrainReady)|| (!!token&&!!endpoint.trim())):
+      (!!token&&!!endpoint.trim())))&&
    (!plan.needsExplicitFlair||(
      brainTask==="wmh"?
        (flairConfirmed&&sourceUrl.startsWith("https://")&&!!sourceLicense.trim()):
