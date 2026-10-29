@@ -9,6 +9,7 @@ import {executeRealNodule} from "../lib/live-nodule-worker";
 import type {BoundNoduleReport} from "../lib/live-nodule-report";
 import {runOriginalEffusionTask315,type OriginalEffusionRun} from "../lib/real-effusion-worker";
 import {executeOriginalPeCtp,type PeCtpSourceReport} from "../lib/pe-ctpa-direct-worker";
+import {runOriginalRaidionicsNodes,type MediastinalNodeReport} from "../lib/mediastinal-raidionics-worker";
 import {runPublicIchWorker} from "../lib/public-ich-worker";
 import {call,type WorkerSession} from "../lib/local-worker";
 import {bindWmhToSelectedDicom,type BoundWmh} from "../lib/wmh-source-review";
@@ -34,6 +35,10 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
  const [peToken,setPeToken]=useState("");
  const [ctpaConfirmed,setCtpaConfirmed]=useState(false);
  const [chestPe,setChestPe]=useState<PeCtpSourceReport|null>(null);
+ const [nodeEndpoint,setNodeEndpoint]=useState("http://127.0.0.1:8777");
+ const [nodeToken,setNodeToken]=useState("");
+ const [enhancedChestConfirmed,setEnhancedChestConfirmed]=useState(false);
+ const [chestNodes,setChestNodes]=useState<MediastinalNodeReport|null>(null);
  const [chestSource,setChestSource]=useState<File|null>(null);
  const [chestNodules,setChestNodules]=useState<BoundNoduleReport|null>(null);
  const [chestEffusion,setChestEffusion]=useState<OriginalEffusionRun|null>(null);
@@ -59,7 +64,8 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
    serial.current++;active.current?.abort();
    setEndpoint(preset);setToken("");setEffusionEndpoint("http://127.0.0.1:8774");setEffusionToken("");
    setPeEndpoint("http://127.0.0.1:8776");setPeToken("");setCtpaConfirmed(false);setChestPe(null);
-   setChestSource(null);setChestNodules(null);setChestEffusion(null);setChestPe(null);setChestIssues([]);setAbdomenResult(null);
+   setNodeEndpoint("http://127.0.0.1:8777");setNodeToken("");setEnhancedChestConfirmed(false);setChestNodes(null);
+   setChestSource(null);setChestNodules(null);setChestEffusion(null);setChestPe(null);setChestNodes(null);setChestIssues([]);setAbdomenResult(null);
    setAuthorized(false);setFlairConfirmed(false);
    setSourceUrl("");setSourceLicense("");setBusy(false);setError("");setStatus("");
    setIch(null);setWmh(null);setDecisions({});setDraftText("");setExporting(false);
@@ -67,7 +73,7 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
  },[series,files,preset]);
  const chestPlan=plan.route==="monai-nodules";
  const ready=!!plan.route&&authorized&&!busy&&
-   (chestPlan?((!!token&&!!endpoint.trim())||(!!effusionToken&&!!effusionEndpoint.trim())||(ctpaConfirmed&&!!peToken&&!!peEndpoint.trim())):
+   (chestPlan?((!!token&&!!endpoint.trim())||(!!effusionToken&&!!effusionEndpoint.trim())||(ctpaConfirmed&&!!peToken&&!!peEndpoint.trim())||(enhancedChestConfirmed&&!!nodeToken&&!!nodeEndpoint.trim())):
      (!!token&&!!endpoint.trim()))&&
    (!plan.needsExplicitFlair||(flairConfirmed&&sourceUrl.startsWith("https://")&&!!sourceLicense.trim()));
 
@@ -78,7 +84,7 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
    const controller=new AbortController();active.current=controller;
    setBusy(true);setStatus("Проверяем совместимость и доступность настоящей модели...");
    setError("");setIch(null);setWmh(null);setChestSource(null);setChestNodules(null);
-   setChestEffusion(null);setChestPe(null);setChestIssues([]);setAbdomenResult(null);setDecisions({});setDraftText("");
+   setChestEffusion(null);setChestPe(null);setChestNodes(null);setChestIssues([]);setAbdomenResult(null);setDecisions({});setDraftText("");
    const session:WorkerSession={endpoint,token};
    const progress=(message:string)=>{
      if(version===serial.current&&!controller.signal.aborted)setStatus(message);
@@ -130,9 +136,24 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
        }else{
          problems.push("ТЭЛА не исследована: тип серии CTPA не подтверждён врачом.");
        }
+       if(enhancedChestConfirmed){
+         if(nodeToken.trim()){
+           try{
+             const result=await runOriginalRaidionicsNodes(
+               {endpoint:nodeEndpoint,token:nodeToken},
+               nifti,true,controller.signal,progress);
+             if(version!==serial.current||controller.signal.aborted)return;
+             setChestNodes(result);completed++;
+           }catch(e){
+             if(controller.signal.aborted)return;
+             problems.push("Лимфоузлы средостения Raidionics: "+
+               (e instanceof Error?e.message:"исполнитель недоступен"));
+           }
+         }else problems.push("Лимфоузлы средостения: не указан токен ONNX worker; не исследовано.");
+       }else problems.push("Лимфоузлы средостения: контрастная КТ не подтверждена; не исследовано.");
        if(version!==serial.current||controller.signal.aborted)return;
        setChestIssues(problems);
-       const total=ctpaConfirmed?3:2;
+       const total=2+Number(ctpaConfirmed)+Number(enhancedChestConfirmed);
        setDraftText("Исследовательская КТ грудной клетки. Выполнено настоящих патологических моделей: "+
          completed+" из "+total+". Условия оценки ограничены выбранной серией. "+
          "Результаты являются кандидатами, которые обязан проверить врач. "+
@@ -264,6 +285,20 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
       <p>Плевральный и перикардиальный классы выполняет ОДНА оригинальная модель; другая модель на те же классы не запускается.</p>
     </div>}
     {chestPlan&&<div className="cs-geometry">
+      <strong>Четвёртая отдельная задача: лимфоузлы средостения · оригинальный Raidionics</strong>
+      <label><input type="checkbox" checked={enhancedChestConfirmed} disabled={busy}
+        onChange={e=>setEnhancedChestConfirmed(e.target.checked)}/>
+        Врач подтвердил: исследование — контрастная КТ грудной клетки с оценкой средостения.</label>
+      {enhancedChestConfirmed&&<>
+        <label>Адрес Raidionics worker <input type="text" value={nodeEndpoint}
+          disabled={busy} onChange={e=>setNodeEndpoint(e.target.value)}/></label>
+        <label>Токен Raidionics <input type="password" autoComplete="off"
+          value={nodeToken} disabled={busy} onChange={e=>setNodeToken(e.target.value)}/></label>
+      </>}
+      <p>Маска лёгких R231 строится автоматически на той же КТ как анатомическое условие Raidionics.
+        Это НЕ второй патологический детектор. Лимфоузлы не классифицируются как метастазы.</p>
+    </div>}
+    {chestPlan&&<div className="cs-geometry">
       <strong>Третья отдельная задача: ТЭЛА · только подтверждённая CTPA</strong>
       <label><input type="checkbox" checked={ctpaConfirmed} disabled={busy}
         onChange={e=>setCtpaConfirmed(e.target.checked)}/>
@@ -284,7 +319,7 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
     </>}
     <label><input type="checkbox" checked={authorized} disabled={busy} onChange={e=>setAuthorized(e.target.checked)}/>
      Подтверждаю разрешённый публичный обезличенный исследовательский источник и полномочия на локальный запуск. Пациентские снимки этим маршрутом не передавать.</label>
-    <p>MONAI, task315, исследовательский PE, TotalSegmentator живота и WMH используют разрешённые изображения в loopback worker; ianpan передаёт только SHA-256 и анализирует заранее установленную идентичную публичную КТ. Облачная передача не выполняется.</p>
+    <p>MONAI, task315, оригинальный Raidionics, исследовательский PE, TotalSegmentator живота и WMH используют разрешённые изображения в loopback worker; ianpan передаёт только SHA-256 и анализирует заранее установленную идентичную публичную КТ. Облачная передача не выполняется.</p>
    </details>
    <button type="button" disabled={!ready} onClick={()=>void launch()}>
     {busy?"Выполняется реальный анализ...":"Анализировать исследование"}
@@ -354,6 +389,24 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
     {chestSource&&<button type="button" onClick={()=>onMonaiReady(chestSource,{endpoint,token},chestNodules)}>
       Открыть подробный просмотр и врачебную оценку MONAI
     </button>}
+  </div>}
+  {chestNodes&&<div className="cs-geometry" aria-label="Средостение — оригинальный Raidionics">
+    <h3>Лимфоузлы средостения · настоящий Raidionics ONNX</h3>
+    <p>Оригинальный Lungmask R231 подготовил необходимую анатомическую маску,
+      затем выполнен оригинальный ONNX. Это одна задача патологической сегментации,
+      не диагноз метастазов, опухоли или воспаления.</p>
+    <p>Модельных вокселей: {chestNodes.modelPositiveVoxels};
+      отдельных кандидатов: {chestNodes.candidates.length}.</p>
+    {chestNodes.candidates.slice(0,50).map((c,i)=><div key={i}>
+      <p>Лимфоузел-кандидат {i+1}: {c.candidateVolumeMl.toFixed(3)} мл;
+        RAS {c.sourceRASmm.join(", ")} мм.</p>
+      <button type="button" onClick={()=>{
+        const k=Math.round(c.sourceCentroidIJK[2]);
+        if(k>=0&&k<series.members.length)onNavigate(k);
+      }}>Показать предполагаемый исходный DICOM-срез</button>
+    </div>)}
+    {chestNodes.candidates.length>50&&<p>Показаны первые 50 кандидатов.</p>}
+    {chestNodes.candidates.length===0&&<p>Кандидатов нет; отсутствие лимфаденопатии не доказано.</p>}
   </div>}
   {chestPe&&<div className="cs-geometry" aria-label="CTPA — оригинальная модель ТЭЛА">
     <h3>ТЭЛА · настоящий Mazurowski nnU-Net</h3>
