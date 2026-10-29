@@ -1,11 +1,11 @@
 /** Pure original pathology worker readiness; never handles DICOM, pixels or patient data. */
-import {readyOriginalNoduleWorker} from "../../../lib/live-nodule-worker";
-import {readyEffusionTask315} from "../../../lib/real-effusion-worker";
-import {readyOriginalAbdominalWorker} from "../../../lib/real-abdominal-worker";
-import {readyOriginalPeCtpWorker} from "../../../lib/pe-ctpa-direct-worker";
-import {raidionicsOriginalReady} from "../../../lib/mediastinal-raidionics-worker";
-import {readyOriginalBrainTask} from "../../../lib/brain-multisequence-original-worker";
-import {validatedPublicIchCapabilities} from "../../../lib/public-ich-worker";
+import {readyOriginalNoduleWorker} from "./live-nodule-worker";
+import {readyEffusionTask315} from "./real-effusion-worker";
+import {readyOriginalAbdominalWorker} from "./real-abdominal-worker";
+import {readyOriginalPeCtpWorker} from "./pe-ctpa-direct-worker";
+import {raidionicsOriginalReady} from "./mediastinal-raidionics-worker";
+import {readyOriginalBrainTask} from "./brain-multisequence-original-worker";
+import {validatedPublicIchCapabilities} from "./public-ich-worker";
 
 
 type Status="ready"|"not_configured"|"unreachable"|"original_model_unverified";
@@ -63,12 +63,6 @@ const loopOrigin=(val:string)=>{
    return null;
  return val;
 };
-
-const loopOrigin=(val:string)=>{
- if(!/^http:\/\/(?:127\.0\.0\.1|localhost):[0-9]{1,5}$/.test(val))
-   return null;
- return val;
-};
 async function boundedJson(response:Response):Promise<unknown>{
  const stream=response.body?.getReader();
  if(!stream)throw Error("no_capabilities");
@@ -89,7 +83,7 @@ export async function probeOriginalFleet(
 ):Promise<Entry[]>{
  const safeOrigin=loopOrigin(origin);
  if(!safeOrigin)throw Error("Unsafe internal research origin");
- const memo=new Map<string,Promise<Status>>();
+ const memo=new Map<string,Promise<{status:Status;body?:unknown}>>();
  async function one(w:Worker):Promise<Status>{
   const token=secrets[w.env]??"";
   if(!/^[a-zA-Z0-9_\-]{32,128}$/.test(token))return "not_configured";
@@ -102,28 +96,18 @@ export async function probeOriginalFleet(
        signal:AbortSignal.timeout(2500),
        headers:{Origin:safeOrigin,Authorization:"Bearer "+token},
      });
-     if(!response.ok)return "unreachable";
-     const body=await boundedJson(response);
-     return w.ready(body)?"ready":"original_model_unverified";
-    }catch{return "unreachable";}
+     if(!response.ok)return {status:"unreachable" as Status};
+     return {status:"ready" as Status,body:await boundedJson(response)};
+    }catch{return {status:"unreachable" as Status};}
    })());
   }
-  // Shared brain worker is fetched once but each distinct pretrained task
-  // must be validated separately. A returned "ready" for one is NOT enough.
-  if(w.id==="brain_stroke"||w.id==="brain_glioma"){
-   // No shared memo here because readiness validation is task-specific.
-   try{
-    const response=await call("http://127.0.0.1:"+w.port+w.path,{
-      method:"GET",redirect:"error",cache:"no-store",
-      signal:AbortSignal.timeout(2500),
-      headers:{Origin:safeOrigin,Authorization:"Bearer "+token},
-    });
-    if(!response.ok)return "unreachable";
-    return w.ready(await boundedJson(response))?"ready":"original_model_unverified";
-   }catch{return "unreachable";}
-  }
-  return await memo.get(key)!;
+  const probe=await memo.get(key)!;
+  if(probe.status!=="ready")return probe.status;
+  // Brain stroke and glioma MUST validate separate real checkpoint digests,
+  // but reuse the SAME actual worker response instead of two network calls.
+  return w.ready(probe.body)?"ready":"original_model_unverified";
  }
+
  const entries=await Promise.all(WORKERS.map(async w=>({
   id:w.id,status:await one(w),researchOnly:true as const,clinicalValidation:false as const,
  })));
