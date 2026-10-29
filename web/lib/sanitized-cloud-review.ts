@@ -92,8 +92,7 @@ function reviewMessages(data:NormalizedCloudPilot):AiGatewayRequest["messages"] 
        "sufficient geometric and projection evidence. Assess the image independently of external classifier outputs.":"")},
     {role:"user",content:[
       {type:"text",text:"Modality "+data.modality+". Sampled frames only: "+frameIds.join(", ")+
-        ". Each image has no original DICOM metadata or source file name. Review each independently."+
-      ]},
+        ". Each image has no original DICOM metadata or source file name. Review each independently."},
       ...data.frames.flatMap(f=>[
         {type:"text",text:"Synthetic image ID: "+f.imageId},
         {type:"image_url",image_url:{url:"data:image/png;base64,"+f.base64}},
