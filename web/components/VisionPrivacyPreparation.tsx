@@ -4,6 +4,7 @@ import { buildVisionPrivacyPacket,createPrivacyFrame,markPrivacyReview,pngFromBa
   type PrivacyFrame,type PrivacyRectangle } from "../lib/vision-privacy";
 import { redactPrivacyRegions,validatePrivacyRaster } from "../lib/vision-privacy-browser";
 import { scanPrivacyText,type PrivacyOcrResult } from "../lib/privacy-ocr";
+import {autoPrepareVisionPrivacy} from "../lib/auto-privacy-preparation";
 import { appendPrivacyEvent,buildPrivacyReviewBundle,createPrivacyJournal,exportPrivacyJournal,MAX_PRIVACY_EVENTS,
   MAX_PRIVACY_BUNDLE_BYTES,restorePrivacyReviewBundle,type PrivacyAction,type PrivacyJournal } from "../lib/privacy-review-journal";
 import { acquireBrowserCompute } from "../lib/browser-compute-slot";
@@ -39,6 +40,39 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
   const scan=useRef<AbortController|null>(null);
   const generation=useRef(0);
   useEffect(()=>()=>{++generation.current;scan.current?.abort();},[]);
+  // Prepare the SAME already selected four PNGs automatically, entirely offline.
+  // OCR + actual black-pixel masking + second OCR never grants clinical/cloud clearance.
+  const autoAttempt=useRef(false);
+  useEffect(()=>{
+    if(autoAttempt.current||!previews.length||previews.some(p=>!p?.startsWith("data:image/png;base64,")))return;
+    if(modality!=="CT"&&modality!=="MR")return;
+    autoAttempt.current=true;
+    const controller=new AbortController();
+    const version=++generation.current;
+    scan.current=controller;
+    setBusy(true);setOcrBusy(true);setError("");
+    setOcrNotice("Автоматически очищаем PNG и проверяем OCR всех выбранных кадров локально…");
+    void autoPrepareVisionPrivacy(previews,modality,controller.signal,notice=>{
+      if(version===generation.current&&!controller.signal.aborted)setOcrNotice(notice);
+    }).then(result=>{
+      if(version!==generation.current||controller.signal.aborted)return;
+      journalRef.current=result.journal;setJournal(result.journal);
+      setFrames(result.frames);setOcr(result.ocr);setSelected(0);
+      setKeptText({});setRectangle({x:0,y:0,width:1,height:1});
+      setOcrNotice("Локальная обработка завершена: скрыто OCR-областей "+
+        result.redacted+". "+(result.unresolved>0?
+        "В части кадров остались надписи — необходимо ручное решение.":
+        "Все кадры ожидают проверки врача перед передачей."));
+    }).catch(e=>{
+      if(version===generation.current&&!controller.signal.aborted)
+        setError("Автоматическая подготовка не завершена: "+
+          (e instanceof Error?e.message:"ошибка OCR")+
+          ". Кадры не разрешены к облачной передаче; используйте ручную подготовку.");
+    }).finally(()=>{
+      if(version===generation.current){scan.current=null;setBusy(false);setOcrBusy(false);}
+    });
+    return()=>controller.abort();
+  },[previews,modality]);
   const frame=frames[selected];
   const currentOcr=frame&&ocr[frame.frameId]?.sha256===frame.sha256?ocr[frame.frameId]:undefined;
   const unresolvedText=!!currentOcr?.regions.length&&keptText[frame.frameId]!==frame.sha256;
@@ -122,6 +156,24 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
       else {setOcrNotice("");setError(e instanceof Error?e.message:"OCR не завершён.");}
     }}finally{if(version===generation.current){scan.current=null;setBusy(false);setOcrBusy(false);}}
   };
+  const reviewAllExactCopies=(checked:boolean)=>{
+    if(busy||ocrBusy||!journalRef.current||!frames.length)return;
+    if(checked&&!allOcrChecked){
+      setError("Сначала завершите локальный OCR всех копий и устраните найденные надписи.");
+      return;
+    }
+    try{
+      let next=journalRef.current;
+      const updated=frames.map(f=>{
+        for(const kind of ["pixel","visual"] as const){
+          next=appendPrivacyEvent(next,f.frameId,f.sha256,
+            {kind:"review-set",review:kind,checked},new Date().toISOString());
+        }
+        return markPrivacyReview(markPrivacyReview(f,"pixel",checked),"visual",checked);
+      });
+      journalRef.current=next;setJournal(next);setFrames(updated);setError("");
+    }catch(e){setError(e instanceof Error?e.message:"Не удалось подтвердить проверки копий.");}
+  };
   const review=(kind:"pixel"|"visual",checked:boolean)=>{
     if(!frame)return;
     if(checked&&unresolvedText){setError("Сначала скройте найденные надписи или отметьте их как неидентифицирующие после просмотра.");return;}
@@ -153,7 +205,10 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
     }catch(e){setError(e instanceof Error?e.message:"Не удалось сохранить пакет.");}
   };
   return <section className="ora-privacy-preparation" aria-label="Подготовка обезличенных кадров">
-    <h3>Подготовка к облаку · локальные копии</h3>
+    <h3>Автоматическая подготовка обезличенных кадров</h3>
+    <p>После запуска детекторов PNG создаются автоматически: локальный OCR ищет текст,
+      обнаруженные области закрашиваются в копиях, затем OCR повторяется. Оригинальные
+      DICOM не изменяются. Проверка врачом всё равно обязательна.</p>
     <p>В копии остаются только PNG-пиксели выбранных срезов: без DICOM-тегов, исходных UID, имён файлов и клинического текста. Надписи внутри изображения нужно удалить отдельно.</p>
     <button type="button" disabled={busy||previews.some(p=>!p)} onClick={prepare}>{frames.length?"Создать копии заново":"Подготовить копии без метаданных"}</button>
     <label>Восстановить копии с журналом JSON <input type="file" accept=".json,application/json" disabled={busy||previews.some(p=>!p)}
@@ -161,6 +216,24 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
     {importBusy&&<button type="button" onClick={()=>scan.current?.abort()}>Отменить восстановление</button>}
     {importNotice&&<p role="status">{importNotice}</p>}
     {error&&<p role="alert">{error}</p>}
+    {frames.length>0&&<section aria-label="Все исходящие обезличенные копии">
+      <h4>Проверьте все {frames.length} исходящих PNG перед разрешением</h4>
+      <div style={{display:"flex",flexWrap:"wrap",gap:12}}>
+      {frames.map((f,i)=><button type="button" key={f.frameId} disabled={busy}
+        onClick={()=>setSelected(i)} style={{maxWidth:220}}>
+        <img src={"data:image/png;base64,"+f.pngBase64} alt={"Копия "+(i+1)}
+          width={190} style={{width:"100%",height:"auto"}}/>
+        <span>Кадр {i+1}: OCR {ocr[f.frameId]?.sha256===f.sha256?
+          ocr[f.frameId].regions.length+" областей":"не завершён"}</span>
+      </button>)}
+      </div>
+      <label><input type="checkbox" disabled={busy||!allOcrChecked}
+        checked={reviewed} onChange={e=>reviewAllExactCopies(e.target.checked)}/>
+        Я просмотрел ВСЕ показанные PNG-копии, включая края: нет имён,
+        дат, ID, лиц или иных идентифицирующих признаков. Разрешение на передачу
+        провайдеру будет подтверждено отдельно.
+      </label>
+    </section>}
     {frame&&<>
       <label>Копия кадра <select value={selected} disabled={busy} onChange={e=>{setSelected(Number(e.target.value));setError("");setOcrNotice("");}}>
         {frames.map((f,i)=><option key={f.frameId} value={i}>Кадр {i+1} · {f.width}×{f.height}</option>)}
