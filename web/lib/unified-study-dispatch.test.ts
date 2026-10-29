@@ -38,4 +38,20 @@ assert.equal(plan({...head,members:head.members.map((m,i)=>i===1?{
  ...m,metadata:{...m.metadata,sopInstanceUid:null}}:m)}).route,null);
 assert.equal(plan({...mr,members:mr.members.map((m,i)=>i===1?{
  ...m,metadata:{...m.metadata,numberOfFrames:12}}:m)}).route,null);
-console.log("PASS CT chest/CT abdomen/CT head/MR head unified routing, FLAIR consent and source gates");
+const cxr=make("CT","CHEST",1);
+const realCxr={...cxr,modality:"DX",volumeReady:false,spatiallySorted:false,
+ members:cxr.members.map(m=>({...m,metadata:{...m.metadata,
+  modality:"DX",rows:1024,columns:1024,numberOfFrames:1}}))};
+assert.equal(plan(realCxr).route,"xrv-cxr");
+assert.equal(plan({...realCxr,modality:"CR",members:realCxr.members.map(m=>({
+ ...m,metadata:{...m.metadata,modality:"CR"}}))}).route,"xrv-cxr");
+assert.equal(plan({...realCxr,members:[...realCxr.members,...realCxr.members]}).route,null);
+assert.equal(plan({...realCxr,members:realCxr.members.map(m=>({
+ ...m,metadata:{...m.metadata,bodyRegion:"HEAD"}}))}).route,null);
+assert.equal(plan({...realCxr,members:realCxr.members.map(m=>({
+ ...m,metadata:{...m.metadata,imageRole:"DERIVED"}}))}).route,null);
+assert.equal(plan({...realCxr,members:realCxr.members.map(m=>({
+ ...m,metadata:{...m.metadata,numberOfFrames:2}}))}).route,null);
+assert.equal(plan({...realCxr,members:realCxr.members.map(m=>({
+ ...m,metadata:{...m.metadata,rows:null}}))}).route,null);
+console.log("PASS CT/MR and real original 2-D CR/DX routing without pretending CXR is 3-D");
