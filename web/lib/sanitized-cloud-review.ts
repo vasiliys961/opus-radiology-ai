@@ -93,14 +93,7 @@ function reviewMessages(data:NormalizedCloudPilot):AiGatewayRequest["messages"] 
     {role:"user",content:[
       {type:"text",text:"Modality "+data.modality+". Sampled frames only: "+frameIds.join(", ")+
         ". Each image has no original DICOM metadata or source file name. Review each independently."+
-        (specialist?" On the SAME study, a clinician's LOCAL CPU Lungmask R231 "+
-          "anatomy segmentation report states right mask volume="+specialist.rightLungMaskMl.toFixed(2)+
-          " mL, left mask volume="+specialist.leftLungMaskMl.toFixed(2)+
-          " mL, total analyzed source frames="+specialist.frameCount+
-          ". These are unverified SOURCE-BOUND anatomical mask measurements, "+
-          "not pathology detection or quantitative normal ranges. "+
-          "Do not claim this validates visual findings or excludes lung disease. "+
-          "Flag mismatch or possible segmentation failure as uncertainty.":"")},
+      ]},
       ...data.frames.flatMap(f=>[
         {type:"text",text:"Synthetic image ID: "+f.imageId},
         {type:"image_url",image_url:{url:"data:image/png;base64,"+f.base64}},
