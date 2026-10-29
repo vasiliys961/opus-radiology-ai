@@ -12,6 +12,13 @@ spec.loader.exec_module(mod)
 
 
 class OriginalCLNResearchSafety(unittest.TestCase):
+    def test_real_lung_tumor_components_are_source_localized(self):
+        source = Path(__file__).with_name("cln-msd-original-ct-cpu.py").read_text()
+        for field in ("sourceNativeTumorCandidates", "sourceNiftiRasCentroidMm",
+                      "candidateVolumeMl", "sourceVoxelBoundsInclusive",
+                      "expertTumorComponentsMissed", "independentLesionSensitivityValidated"):
+            self.assertIn(field, source)
+
     def test_original_publisher_task_fold_and_cpu_only(self):
         self.assertEqual(mod.REPO, "Lab-Rasool/CLN-Segmenter-MSD-fold0")
         self.assertEqual(mod.TASK, "Dataset502_MSDLung")
