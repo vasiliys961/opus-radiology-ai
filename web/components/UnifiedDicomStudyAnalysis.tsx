@@ -9,7 +9,7 @@ import {executeRealNodule,checkAutomaticMonaiReady} from "../lib/live-nodule-wor
 import type {BoundNoduleReport} from "../lib/live-nodule-report";
 import {runOriginalEffusionTask315,checkAutomaticEffusionReady,type OriginalEffusionRun} from "../lib/real-effusion-worker";
 import {executeOriginalPeCtp,checkAutomaticPeReady,type PeCtpSourceReport} from "../lib/pe-ctpa-direct-worker";
-import {runOriginalRaidionicsNodes,type MediastinalNodeReport} from "../lib/mediastinal-raidionics-worker";
+import {runOriginalRaidionicsNodes,checkAutomaticNodesReady,type MediastinalNodeReport} from "../lib/mediastinal-raidionics-worker";
 import {runPublicIchWorker} from "../lib/public-ich-worker";
 import {call,type WorkerSession} from "../lib/local-worker";
 import {bindWmhToSelectedDicom,type BoundWmh} from "../lib/wmh-source-review";
@@ -52,6 +52,8 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  const [chestPe,setChestPe]=useState<PeCtpSourceReport|null>(null);
  const [nodeEndpoint,setNodeEndpoint]=useState("http://127.0.0.1:8777");
  const [nodeToken,setNodeToken]=useState("");
+ const [autoNodesReady,setAutoNodesReady]=useState(false);
+ const [autoNodesChecking,setAutoNodesChecking]=useState(false);
  const [enhancedChestConfirmed,setEnhancedChestConfirmed]=useState(false);
  const [chestNodes,setChestNodes]=useState<MediastinalNodeReport|null>(null);
  const [chestSource,setChestSource]=useState<File|null>(null);
@@ -122,6 +124,11 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
    if(!controller.signal.aborted)setAutoMonaiReady(ok);
   }).catch(()=>{if(!controller.signal.aborted)setAutoMonaiReady(false);})
    .finally(()=>{if(!controller.signal.aborted)setAutoMonaiChecking(false);});
+  setAutoNodesChecking(true);setAutoNodesReady(false);
+  void checkAutomaticNodesReady(controller.signal).then(ok=>{
+   if(!controller.signal.aborted)setAutoNodesReady(ok);
+  }).catch(()=>{if(!controller.signal.aborted)setAutoNodesReady(false);})
+   .finally(()=>{if(!controller.signal.aborted)setAutoNodesChecking(false);});
   setAutoPeChecking(true);setAutoPeReady(false);
   void checkAutomaticPeReady(controller.signal).then(ok=>{
    if(!controller.signal.aborted)setAutoPeReady(ok);
@@ -155,7 +162,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
    return()=>controller.abort();
  },[xrvPlan,series.key]);
  const ready=!!plan.route&&authorized&&!busy&&
-   (xrvPlan?(xrvStatus==="ready"&&xrvChestConfirmed&&sourceUrl.startsWith("https://")):plan.route==="totalseg-abdomen"?(autoAbdomenReady||(!!token&&!!endpoint.trim())):chestPlan?((autoMonaiReady|| (!!token&&!!endpoint.trim()))||(autoEffusionReady||(!!effusionToken&&!!effusionEndpoint.trim()))||(ctpaConfirmed&&(autoPeReady||(!!peToken&&!!peEndpoint.trim())))||(enhancedChestConfirmed&&!!nodeToken&&!!nodeEndpoint.trim())):
+   (xrvPlan?(xrvStatus==="ready"&&xrvChestConfirmed&&sourceUrl.startsWith("https://")):plan.route==="totalseg-abdomen"?(autoAbdomenReady||(!!token&&!!endpoint.trim())):chestPlan?((autoMonaiReady|| (!!token&&!!endpoint.trim()))||(autoEffusionReady||(!!effusionToken&&!!effusionEndpoint.trim()))||(ctpaConfirmed&&(autoPeReady||(!!peToken&&!!peEndpoint.trim())))||(enhancedChestConfirmed&&(autoNodesReady||(!!nodeToken&&!!nodeEndpoint.trim())))):
      (!!token&&!!endpoint.trim()))&&
    (!plan.needsExplicitFlair||(
      brainTask==="wmh"?
@@ -250,7 +257,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
              problems.push("Лимфоузлы средостения Raidionics: "+
                (e instanceof Error?e.message:"исполнитель недоступен"));
            }
-         }else problems.push("Лимфоузлы средостения: не указан токен ONNX worker; не исследовано.");
+         }else problems.push("Лимфоузлы средостения: оригинальный Raidionics не готов автоматически, ручной worker не настроен; не исследовано.");
        }else problems.push("Лимфоузлы средостения: контрастная КТ не подтверждена; не исследовано.");
        if(version!==serial.current||controller.signal.aborted)return;
        setChestIssues(problems);
@@ -457,7 +464,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
       <label><input type="checkbox" checked={enhancedChestConfirmed} disabled={busy}
         onChange={e=>setEnhancedChestConfirmed(e.target.checked)}/>
         Врач подтвердил: исследование — контрастная КТ грудной клетки с оценкой средостения.</label>
-      {enhancedChestConfirmed&&<>
+      {enhancedChestConfirmed&&<><p role="status">{autoNodesChecking?"Проверяем оригинальный Raidionics…":autoNodesReady?"Raidionics готов автоматически: токен врачу не требуется.":"Raidionics недоступен автоматически; возможен ручной исследовательский запуск."}</p>
         <label>Адрес Raidionics worker <input type="text" value={nodeEndpoint}
           disabled={busy} onChange={e=>setNodeEndpoint(e.target.value)}/></label>
         <label>Токен Raidionics <input type="password" autoComplete="off"

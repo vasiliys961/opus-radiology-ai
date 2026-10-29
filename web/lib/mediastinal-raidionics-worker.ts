@@ -81,23 +81,42 @@ export function parseMediastinalNodeReport(value:unknown,sourceSha:string,
  if(total>Number(x.modelPositiveVoxels))throw Error("Объёмы кандидатов не соответствуют маске.");
  return x as unknown as MediastinalNodeReport;
 }
+/** Server-held token; fixed same-origin route only for public nonpatient research. */
+export async function automaticNodesRequest(path:"/v1/nodes/capabilities"|"/v1/nodes/analyze",init:RequestInit={}):Promise<Response>{
+ const response=await fetch("/api/local-nodes",{
+  ...init,method:path.endsWith("/capabilities")?"GET":"POST",
+  credentials:"same-origin",redirect:"error",cache:"no-store",
+ });
+ if(!response.ok)throw Error("Оригинальный Raidionics недоступен (HTTP "+response.status+").");
+ return response;
+}
+export async function checkAutomaticNodesReady(signal?:AbortSignal):Promise<boolean>{
+ try{
+  const response=await automaticNodesRequest("/v1/nodes/capabilities",{signal});
+  return raidionicsOriginalReady(await response.json());
+ }catch{return false;}
+}
+
 export async function runOriginalRaidionicsNodes(
- session:WorkerSession,source:File,enhancedChestConfirmed:boolean,
+ session:WorkerSession|null,source:File,enhancedChestConfirmed:boolean,
  signal:AbortSignal,onStatus:(s:string)=>void=()=>{},
 ):Promise<MediastinalNodeReport>{
  if(!enhancedChestConfirmed)
   throw Error("Нельзя запускать Raidionics без подтверждённой контрастной КТ средостения.");
+ const invoke=(path:"/v1/nodes/capabilities"|"/v1/nodes/analyze",init:RequestInit={})=>
+  session?call(session,path,init):automaticNodesRequest(path,init);
  const native=await readNoduleNiftiHeader(source);
  onStatus("Проверяем оригинальные ONNX Raidionics и Lungmask R231...");
- const cap=await (await call(session,"/v1/nodes/capabilities",{signal})).json() as unknown;
+ const cap=await (await invoke("/v1/nodes/capabilities",{signal})).json() as unknown;
  if(!raidionicsOriginalReady(cap))
   throw Error("Оригинальные Raidionics / Lungmask веса или память worker недоступны.");
  const hash=await originalNiftiSha256(source,signal);
  onStatus("R231 → настоящая Raidionics CT_LymphNodes на выбранной исходной КТ...");
- const response=await call(session,"/v1/nodes/analyze",{
+ const response=await invoke("/v1/nodes/analyze",{
   method:"POST",signal,headers:{
    "Content-Type":"application/octet-stream","X-Opus-Source-Sha256":hash,
-   "X-Opus-Enhanced-CT-Confirmed":"yes"},body:source});
+   "X-Opus-Enhanced-CT-Confirmed":"yes",
+   ...(session?{}:{"X-Opus-Public-Research-Authorization":"approved-nonpatient-source"})},body:source});
  const raw=await response.text();
  if(raw.length>512*1024)throw Error("Слишком большой Raidionics отчёт.");
  return parseMediastinalNodeReport(JSON.parse(raw),hash,native.dimensions);
