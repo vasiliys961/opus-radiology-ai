@@ -20,6 +20,7 @@ import {executeOriginalBrain,BRAIN_ROLES,type BrainTask,type BrainModelReport} f
 import DetectorGeminiOpusConsilium from "./DetectorGeminiOpusConsilium";
 import type {SanitizedDetectorBundle} from "../lib/detector-consilium-evidence";
 import {checkOriginalXrvReady,runCxrXrvFromDicom,XRV_CXR_LABELS,type OriginalXrvCxrResult} from "../lib/xrv-original-cxr";
+import CxrIndependentVisionReview from "./CxrIndependentVisionReview";
 
 /** A single primary action that reuses the real DICOM -> MONAI/ianpan/WMH paths.
  * Never advertises a checkpoint as installed until its private worker proves it.
@@ -496,6 +497,8 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
        onChange={e=>setDraftText(e.target.value)}/>
     </label>
   </section>}
+  {xrvReport&&<CxrIndependentVisionReview series={series} files={files}
+    report={xrvReport} onNavigate={onNavigate}/>}
   {abdomenResult&&<section className="cs-geometry" aria-label="Кисты почек, очаги печени и поджелудочная · исходный DICOM">
     <h3>КТ живота · три различные оригинальные модели</h3>
     <p>Одна подготовленная HU-КТ, последовательное выполнение без повторных моделей
