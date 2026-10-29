@@ -26,7 +26,7 @@ export function planNativeStudyAnalysis(series:DicomSeries, availableFiles:Reado
     return denied("Неполная, смешанная, производная или не подтверждённая по UID исходная серия.");
   const allRegion=(region:string)=>series.members.every(m=>m.metadata.bodyRegion===region);
   if(series.modality==="CT"&&allRegion("CHEST"))
-    return {route:"monai-nodules",title:"Узлы лёгких · MONAI RetinaNet",reason:null,needsExplicitFlair:false};
+    return {route:"monai-nodules",title:"Узлы лёгких · MONAI + плевральный/перикардиальный выпот · task315",reason:null,needsExplicitFlair:false};
   if(series.modality==="CT"&&allRegion("HEAD")){
     if(series.members.length<8||series.members.length>64)
       return denied("ianpan поддерживает только 8–64 среза исходной КТ головы.");
