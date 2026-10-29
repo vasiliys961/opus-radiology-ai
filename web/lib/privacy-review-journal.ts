@@ -5,7 +5,7 @@ import { buildVisionPrivacyPacket,createPrivacyFrame,pngFromBase64,validatePriva
 
 export const MAX_PRIVACY_EVENTS=128;
 export const MAX_PRIVACY_BUNDLE_BYTES=12*1024*1024;
-type FrameBinding={frameId:string;modality:"CT"|"MR";width:number;height:number;sha256:string};
+type FrameBinding={frameId:string;modality:"CT"|"MR"|"CR"|"DX";width:number;height:number;sha256:string};
 export type PrivacyAction=
   | {kind:"redacted";nextSha256:string;rectangles:PrivacyRectangle[]}
   | {kind:"ocr-started"}
@@ -28,7 +28,7 @@ function time(value:string):string {
     throw new Error("Неверное заявленное время журнала.");return value;
 }
 function binding(f:FrameBinding):FrameBinding {
-  if(!/^frame-[1-4]$/.test(f.frameId)||!["CT","MR"].includes(f.modality)||
+  if(!/^frame-[1-4]$/.test(f.frameId)||!["CT","MR","CR","DX"].includes(f.modality)||
     !Number.isSafeInteger(f.width)||!Number.isSafeInteger(f.height)||f.width<1||f.height<1||f.width*f.height>MAX_PRIVACY_PIXELS)
     throw new Error("Неверная привязка кадра журнала.");
   return {frameId:f.frameId,modality:f.modality,width:f.width,height:f.height,sha256:hash(f.sha256)};

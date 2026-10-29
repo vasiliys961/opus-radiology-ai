@@ -89,9 +89,11 @@ export async function POST(req:NextRequest){
   const keys=Object.keys(v);
   const specialistProvided=Object.hasOwn(v,"specialistFacts");
   const detectorProvided=Object.hasOwn(v,"detectorEvidence");
-  if(keys.length!==allowed.length+(specialistProvided?1:0)+(detectorProvided?1:0)||
+  const cxrProvided=Object.hasOwn(v,"cxrModelEvidence");
+  if(keys.length!==allowed.length+(specialistProvided?1:0)+(detectorProvided?1:0)+(cxrProvided?1:0)||
      !keys.every(k=>allowed.includes(k)||(specialistProvided&&k==="specialistFacts")||
-       (detectorProvided&&k==="detectorEvidence"))||
+       (detectorProvided&&k==="detectorEvidence")||
+       (cxrProvided&&k==="cxrModelEvidence"))||
      !allowed.every(k=>Object.hasOwn(v,k))||
      v.acknowledgeClinicianLawfulDisclosure!==true||
      v.acknowledgeProviderHealthDataTerms!==true||
@@ -107,7 +109,8 @@ export async function POST(req:NextRequest){
     const result=await reviewSanitizedSamples(
       v.packet,callAiGateway,AbortSignal.any([req.signal,AbortSignal.timeout(75_000)]),
       specialistProvided?v.specialistFacts:null,
-      detectorProvided?v.detectorEvidence:null);
+      detectorProvided?v.detectorEvidence:null,
+      cxrProvided?v.cxrModelEvidence:null);
     return NextResponse.json(result,{headers:HEADERS});
   }catch{
     // Never expose model replies, base64 images, user headers, tokens or PHI.

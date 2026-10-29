@@ -3,7 +3,7 @@ import { sha256 } from "@noble/hashes/sha2.js";
 
 export const MAX_PRIVACY_PIXELS=1024*1024,MAX_PRIVACY_PNG_BYTES=2*1024*1024,MAX_PRIVACY_FRAMES=4,MAX_REDACTIONS=32;
 export type PrivacyRectangle={x:number;y:number;width:number;height:number};
-export type PrivacyFrame={frameId:string;modality:"CT"|"MR";width:number;height:number;
+export type PrivacyFrame={frameId:string;modality:"CT"|"MR"|"CR"|"DX";width:number;height:number;
   pngBase64:string;sha256:string;redactions:PrivacyRectangle[];
   pixelReviewSha256:string|null;visualReviewSha256:string|null};
 export type VisionPrivacyPacket={schema:"opus-vision-privacy/v1";packetId:string;
@@ -71,8 +71,8 @@ export function validatePrivacyRectangle(r:PrivacyRectangle,width:number,height:
     r.x+r.width>width||r.y+r.height>height)throw new Error("Область скрытия должна находиться внутри кадра.");
   return {x:r.x,y:r.y,width:r.width,height:r.height};
 }
-export function createPrivacyFrame(bytes:Uint8Array,frameId:string,modality:"CT"|"MR",redactions:PrivacyRectangle[]=[]):PrivacyFrame {
-  if(!/^frame-[1-4]$/.test(frameId)||!["CT","MR"].includes(modality)||!Array.isArray(redactions)||redactions.length>MAX_REDACTIONS)
+export function createPrivacyFrame(bytes:Uint8Array,frameId:string,modality:"CT"|"MR"|"CR"|"DX",redactions:PrivacyRectangle[]=[]):PrivacyFrame {
+  if(!/^frame-[1-4]$/.test(frameId)||!["CT","MR","CR","DX"].includes(modality)||!Array.isArray(redactions)||redactions.length>MAX_REDACTIONS)
     throw new Error("Неподдерживаемая копия кадра или лимит 32 областей скрытия.");
   const cleaned=stripPngMetadata(bytes);
   return {frameId,modality,width:cleaned.width,height:cleaned.height,pngBase64:toBase64(cleaned.bytes),sha256:digest(cleaned.bytes),

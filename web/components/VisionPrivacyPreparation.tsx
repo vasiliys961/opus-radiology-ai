@@ -13,6 +13,7 @@ import DeidentifiedOpenRouterPanel from "./DeidentifiedOpenRouterPanel";
 import type {LocalLungFacts} from "../lib/local-lung-review";
 import type {LocalSameSeriesLaa950} from "../lib/same-series-laa950-review";
 import type {SanitizedDetectorBundle} from "../lib/detector-consilium-evidence";
+import type {OriginalXrvCxrResult} from "../lib/xrv-original-cxr";
 import { buildPrivacyReadinessReport } from "../lib/privacy-readiness";
 
 const actionLabels:Record<PrivacyAction["kind"],string>={redacted:"Скрытие областей", "ocr-started":"OCR начат",
@@ -20,7 +21,7 @@ const actionLabels:Record<PrivacyAction["kind"],string>={redacted:"Скрыти�
   "text-retained":"Надписи оставлены по ручной отметке","review-set":"Ручная проверка","copy-restored":"Копия восстановлена · проверки сняты"};
 
 /** OCR reads same-origin fixed assets only. No image upload or recognized-text export. */
-export default function VisionPrivacyPreparation({previews,modality,originalLocalFileIds,onOpenOriginalSlice,specialistFacts,specialistLocalBinding,localLaa950,originalDetectorEvidence=null,autoStartAfterDetectors=false}:{
+export default function VisionPrivacyPreparation({previews,modality,originalLocalFileIds,onOpenOriginalSlice,specialistFacts,specialistLocalBinding,localLaa950,originalDetectorEvidence=null,originalCxrEvidence=null,autoStartAfterDetectors=false}:{
   previews:readonly (string|undefined)[];modality:string;
   originalLocalFileIds:readonly string[];
   onOpenOriginalSlice:(localFileId:string)=>void;
@@ -28,6 +29,7 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
   localLaa950?:LocalSameSeriesLaa950|null;
   specialistLocalBinding?:string;
   originalDetectorEvidence?:SanitizedDetectorBundle|null;
+  originalCxrEvidence?:OriginalXrvCxrResult|null;
   autoStartAfterDetectors?:boolean;
 }) {
   const [frames,setFrames]=useState<PrivacyFrame[]>([]),[selected,setSelected]=useState(0);
@@ -46,14 +48,14 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
   const autoAttempt=useRef(false);
   useEffect(()=>{
     if(!autoStartAfterDetectors||autoAttempt.current||!previews.length||previews.some(p=>!p?.startsWith("data:image/png;base64,")))return;
-    if(modality!=="CT"&&modality!=="MR")return;
+    if(!["CT","MR","CR","DX"].includes(modality))return;
     autoAttempt.current=true;
     const controller=new AbortController();
     const version=++generation.current;
     scan.current=controller;
     setBusy(true);setOcrBusy(true);setError("");
     setOcrNotice("Автоматически очищаем PNG и проверяем OCR всех выбранных кадров локально…");
-    void autoPrepareVisionPrivacy(previews,modality,controller.signal,notice=>{
+    void autoPrepareVisionPrivacy(previews,modality as "CT"|"MR"|"CR"|"DX",controller.signal,notice=>{
       if(version===generation.current&&!controller.signal.aborted)setOcrNotice(notice);
     }).then(result=>{
       if(version!==generation.current||controller.signal.aborted)return;
@@ -98,9 +100,9 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
     journalRef.current=next;setJournal(next);
   };
   const initialCopies=()=>{
-    if(!["CT","MR"].includes(modality)||!previews.length||previews.length>4||previews.some(p=>!p?.startsWith("data:image/png;base64,")))
+    if(!["CT","MR","CR","DX"].includes(modality)||!previews.length||previews.length>4||previews.some(p=>!p?.startsWith("data:image/png;base64,")))
       throw new Error("Сначала дождитесь локальных PNG-миниатюр всех выбранных срезов.");
-    return previews.map((url,i)=>createPrivacyFrame(pngFromBase64(url!.split(",")[1]),`frame-${i+1}`,modality as "CT"|"MR"));
+    return previews.map((url,i)=>createPrivacyFrame(pngFromBase64(url!.split(",")[1]),`frame-${i+1}`,modality as "CT"|"MR"|"CR"|"DX"));
   };
   const prepare=()=>{
     ++generation.current;setError("");setImportNotice("");
@@ -294,6 +296,7 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
       originalLocalFileIds={originalLocalFileIds}
       specialistFacts={specialistFacts}
       originalDetectorEvidence={originalDetectorEvidence}
+       originalCxrEvidence={originalCxrEvidence}
       localLaa950={localLaa950}
       specialistLocalBinding={specialistLocalBinding}
       onOpenOriginalSlice={onOpenOriginalSlice}

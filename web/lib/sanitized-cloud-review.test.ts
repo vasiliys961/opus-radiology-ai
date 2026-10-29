@@ -4,6 +4,7 @@ import {deflateSync} from "node:zlib";
 import {buildVisionPrivacyPacket,createPrivacyFrame,markPrivacyReview} from "./vision-privacy.ts";
 import {normalizeReviewedCloudPilot,reviewSanitizedSamples,PILOT_GEMINI,PILOT_OPUS} from "./sanitized-cloud-review.ts";
 import type {AiGatewayRequest} from "./ai-gateway.ts";
+import {toSafeXrvScores,type OriginalXrvCxrResult,SHA_XRV} from "./xrv-original-cxr.ts";
 
 const UUID="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 function chunk(type:string,payload:Buffer){
@@ -22,7 +23,7 @@ function testPng(){
   return Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),
     chunk("IHDR",header),chunk("IDAT",deflateSync(data)),chunk("IEND",Buffer.alloc(0))]);
 }
-function packet(modality:"CT"|"MR"="CT"){
+function packet(modality:"CT"|"MR"|"CR"|"DX"="CT"){
   const f=createPrivacyFrame(testPng(),"frame-1",modality);
   return buildVisionPrivacyPacket([
     markPrivacyReview(markPrivacyReview(f,"pixel",true),"visual",true),
@@ -187,4 +188,44 @@ test("Wrong modality or forged task statuses never reach either Vision model",as
   called++;return answer("should-not-call");
  },undefined,null,wrong));
  assert.equal(called,0);
+});
+
+
+test("Real XRV numeric score evidence is withheld from Gemini CXR Vision, then shown to Opus",async()=>{
+ const original={
+  schema:"opus-original-xrv-cxr-six-head/v1",
+  sourcePngSha256:"a".repeat(64),
+  model:"densenet121-res224-nih",
+  modelWeightSha256:SHA_XRV,
+  actualPretrainedModelForwardCompleted:true,
+  labels:{Pneumothorax:.172315,Cardiomegaly:.667162,
+   Effusion:.566473,Pneumonia:.501093,Edema:.501593,Mass:.532159},
+  spatialLocalizationSupported:false,
+  clinicalValidation:false,scoresAreCalibratedProbabilities:false,
+  negativeDiagnosisPermitted:false,patientMode:false,
+  limitations:["research only","no clinical accuracy","not an image-level diagnosis"],
+ } as OriginalXrvCxrResult;
+ const sanitized=toSafeXrvScores(original);
+ assert.equal(JSON.stringify(sanitized).includes(original.sourcePngSha256),false);
+ const calls:AiGatewayRequest[]=[];
+ const output=await reviewSanitizedSamples(packet("DX"),async req=>{
+  calls.push(req);
+  return answer(req.model===PILOT_GEMINI?"gemini-independent":"opus-after-comparison");
+ },undefined,null,null,sanitized);
+ assert.equal(calls.length,2);
+ assert.deepEqual(calls.map(x=>x.model),[PILOT_GEMINI,PILOT_OPUS]);
+ const first=JSON.stringify(calls[0].messages),second=JSON.stringify(calls[1].messages);
+ assert.doesNotMatch(first,/Cardiomegaly|0\.667162|TorchXRayVision|NIH-DenseNet121/);
+ assert.match(first,/AP\/PA/);
+ assert.match(second,/Cardiomegaly/);
+ assert.match(second,/0\.667162/);
+ assert.match(second,/gemini-independent/);
+ assert.equal(output.cxrModelEvidence?.labels.Cardiomegaly,.667162);
+ assert.equal(output.modality,"DX");
+ for(const msg of [first,second])assert.doesNotMatch(msg,/sourcePngSha256|originalTrainedCheckpointSHA256|patientName/);
+ let attempted=0;
+ await assert.rejects(reviewSanitizedSamples(packet("CT"),async()=>{
+  attempted++;return answer("should-not-call");
+ },undefined,null,null,sanitized),/CR\/DX/);
+ assert.equal(attempted,0);
 });
