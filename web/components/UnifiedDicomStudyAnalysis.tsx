@@ -4,6 +4,9 @@ import {useEffect,useMemo,useRef,useState} from "react";
 import type {DicomSeries} from "../lib/dicom-series";
 import {planNativeStudyAnalysis} from "../lib/unified-study-dispatch";
 import {prepareDicomMonaiFile} from "../lib/dicom-monai-direct";
+import {executeRealNodule} from "../lib/live-nodule-worker";
+import type {BoundNoduleReport} from "../lib/live-nodule-report";
+import {runOriginalEffusionTask315,type OriginalEffusionRun} from "../lib/real-effusion-worker";
 import {runPublicIchWorker} from "../lib/public-ich-worker";
 import {call,type WorkerSession} from "../lib/local-worker";
 import {bindWmhToSelectedDicom,type BoundWmh} from "../lib/wmh-source-review";
@@ -16,13 +19,19 @@ import {createNativePhysicianDraft,type NativeDicomDigest} from "../lib/native-p
  */
 export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onNavigate}:{
  series:DicomSeries;files:ReadonlyMap<string,File>;
- onMonaiReady:(source:File,session:WorkerSession)=>void;
+ onMonaiReady:(source:File,session:WorkerSession,completedReport?:BoundNoduleReport)=>void;
  onNavigate:(slice:number)=>void;
 }){
  const available=useMemo(()=>new Set(files.keys()),[files]);
  const plan=useMemo(()=>planNativeStudyAnalysis(series,available),[series,available]);
  const [endpoint,setEndpoint]=useState("");
  const [token,setToken]=useState("");
+ const [effusionEndpoint,setEffusionEndpoint]=useState("http://127.0.0.1:8774");
+ const [effusionToken,setEffusionToken]=useState("");
+ const [chestSource,setChestSource]=useState<File|null>(null);
+ const [chestNodules,setChestNodules]=useState<BoundNoduleReport|null>(null);
+ const [chestEffusion,setChestEffusion]=useState<OriginalEffusionRun|null>(null);
+ const [chestIssues,setChestIssues]=useState<string[]>([]);
  const [authorized,setAuthorized]=useState(false);
  const [flairConfirmed,setFlairConfirmed]=useState(false);
  const [sourceUrl,setSourceUrl]=useState("");
@@ -40,12 +49,17 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
    plan.route==="ianpan-ich"?"http://127.0.0.1:8766":"http://127.0.0.1:8772";
  useEffect(()=>{
    serial.current++;active.current?.abort();
-   setEndpoint(preset);setToken("");setAuthorized(false);setFlairConfirmed(false);
+   setEndpoint(preset);setToken("");setEffusionEndpoint("http://127.0.0.1:8774");setEffusionToken("");
+   setChestSource(null);setChestNodules(null);setChestEffusion(null);setChestIssues([]);
+   setAuthorized(false);setFlairConfirmed(false);
    setSourceUrl("");setSourceLicense("");setBusy(false);setError("");setStatus("");
    setIch(null);setWmh(null);setDecisions({});setDraftText("");setExporting(false);
    return ()=>{serial.current++;active.current?.abort();};
  },[series,files,preset]);
- const ready=!!plan.route&&authorized&&!!token&&!!endpoint.trim()&&!busy&&
+ const chestPlan=plan.route==="monai-nodules";
+ const ready=!!plan.route&&authorized&&!busy&&
+   (chestPlan?((!!token&&!!endpoint.trim())||(!!effusionToken&&!!effusionEndpoint.trim())):
+     (!!token&&!!endpoint.trim()))&&
    (!plan.needsExplicitFlair||(flairConfirmed&&sourceUrl.startsWith("https://")&&!!sourceLicense.trim()));
 
  async function launch(){
@@ -54,20 +68,53 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
    active.current?.abort();
    const controller=new AbortController();active.current=controller;
    setBusy(true);setStatus("Проверяем совместимость и доступность настоящей модели...");
-   setError("");setIch(null);setWmh(null);setDecisions({});setDraftText("");
+   setError("");setIch(null);setWmh(null);setChestSource(null);setChestNodules(null);
+   setChestEffusion(null);setChestIssues([]);setDecisions({});setDraftText("");
    const session:WorkerSession={endpoint,token};
    const progress=(message:string)=>{
      if(version===serial.current&&!controller.signal.aborted)setStatus(message);
    };
    try{
      if(plan.route==="monai-nodules"){
-       // Existing OPFS streaming conversion preserves native HU/geometry;
-       // the existing MONAI review component performs the actual worker run.
+       // One native HU conversion, TWO truly trained pathology tasks.
+       // Each worker runs sequentially: no heavy simultaneous RAM pressure.
        const original=series.members.map(m=>files.get(m.id));
        if(original.some(f=>!f))throw Error("Исходная DICOM-КТ больше недоступна.");
        const nifti=await prepareDicomMonaiFile(series,original as File[],controller.signal,progress);
        if(version!==serial.current||controller.signal.aborted)return;
-       onMonaiReady(nifti,session);
+       setChestSource(nifti);
+       const problems:string[]=[];
+       let completed=0;
+       if(token.trim()){
+         try{
+           const result=await executeRealNodule(session,nifti,controller.signal,progress);
+           if(version!==serial.current||controller.signal.aborted)return;
+           setChestNodules(result.report);completed++;
+         }catch(e){
+           if(controller.signal.aborted)return;
+           problems.push("MONAI узлы: "+(e instanceof Error?e.message:"исполнитель недоступен"));
+         }
+       }else problems.push("MONAI узлы: не указан токен исполнителя; не исследовано.");
+       if(effusionToken.trim()){
+         try{
+           const result=await runOriginalEffusionTask315(
+             {endpoint:effusionEndpoint,token:effusionToken},nifti,controller.signal,progress);
+           if(version!==serial.current||controller.signal.aborted)return;
+           setChestEffusion(result);completed++;
+         }catch(e){
+           if(controller.signal.aborted)return;
+           problems.push("TotalSegmentator выпоты: "+(e instanceof Error?e.message:"исполнитель недоступен"));
+         }
+       }else problems.push("Плевральный/перикардиальный выпот: нет токена task315; не исследовано.");
+       if(version!==serial.current||controller.signal.aborted)return;
+       setChestIssues(problems);
+       setDraftText("Исследовательская КТ грудной клетки. Выполнено настоящих патологических моделей: "+
+         completed+" из 2. Условия оценки ограничены выбранной серией. "+
+         "Результаты являются кандидатами, которые обязан проверить врач. "+
+         "Остальные заболевания грудной клетки не оценены.");
+       setStatus(completed?
+         "Завершено моделей: "+completed+" из 2. Недоступные анализы явно отмечены.":
+         "Ни одна патологическая модель не выполнена. Исследование не оценено.");
        return;
      }
      if(plan.route==="ianpan-ich"){
@@ -165,6 +212,12 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
     <summary>Настройки приватного исполнителя и разрешение</summary>
     <label>Адрес локального worker <input type="text" value={endpoint} disabled={busy} onChange={e=>setEndpoint(e.target.value)}/></label>
     <label>Токен worker <input type="password" autoComplete="off" value={token} disabled={busy} onChange={e=>setToken(e.target.value)}/></label>
+    {chestPlan&&<div className="cs-geometry">
+      <strong>Второй детектор той же КТ: плевральный и перикардиальный выпот</strong>
+      <label>Адрес TotalSegmentator task315 worker <input type="text" value={effusionEndpoint} disabled={busy} onChange={e=>setEffusionEndpoint(e.target.value)}/></label>
+      <label>Токен task315 <input type="password" autoComplete="off" value={effusionToken} disabled={busy} onChange={e=>setEffusionToken(e.target.value)}/></label>
+      <p>Оба настоящих детектора запускаются одной кнопкой последовательно на одной подготовленной HU-КТ. Если один worker недоступен, второй всё равно выполняется.</p>
+    </div>}
     {plan.needsExplicitFlair&&<>
      <label><input type="checkbox" checked={flairConfirmed} disabled={busy} onChange={e=>setFlairConfirmed(e.target.checked)}/>
       Врач подтвердил по протоколу, что выбранная исходная МР-серия действительно FLAIR.</label>
@@ -173,7 +226,7 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
     </>}
     <label><input type="checkbox" checked={authorized} disabled={busy} onChange={e=>setAuthorized(e.target.checked)}/>
      Подтверждаю разрешённый публичный обезличенный исследовательский источник и полномочия на локальный запуск. Пациентские снимки этим маршрутом не передавать.</label>
-    <p>MONAI и WMH используют разрешённые изображения в loopback worker; ianpan передаёт только SHA-256 и анализирует заранее установленную идентичную публичную КТ. Облачная передача не выполняется.</p>
+    <p>MONAI, task315 и WMH используют разрешённые изображения в loopback worker; ianpan передаёт только SHA-256 и анализирует заранее установленную идентичную публичную КТ. Облачная передача не выполняется.</p>
    </details>
    <button type="button" disabled={!ready} onClick={()=>void launch()}>
     {busy?"Выполняется реальный анализ...":"Анализировать исследование"}
@@ -183,6 +236,46 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
   </>}
   {status&&<p role="status">{status}</p>}
   {error&&<p role="alert">Не выполнено: {error}</p>}
+  {chestPlan&&chestIssues.length>0&&<div role="status" className="cs-geometry">
+    <strong>Непроверенные направления</strong>
+    {chestIssues.map((message,i)=><p key={i}>{message}</p>)}
+  </div>}
+  {chestNodules&&<div className="cs-geometry">
+    <h3>Узлы лёгких · оригинальная MONAI RetinaNet</h3>
+    <p>Настоящий pretrained inference завершён. Кандидатов: <strong>{chestNodules.candidates.length}</strong>.
+      Совпадение NIfTI и исходного DICOM по отдельным SOP ещё не доказано; отрицательного диагноза нет.</p>
+    {chestNodules.candidates.slice(0,30).map(c=><p key={c.index}>
+      Кандидат #{c.index+1}, score {c.score.toFixed(3)};
+      координата LPS {c.centerLpsMm.map(n=>n.toFixed(1)).join(" / ")} мм.
+    </p>)}
+    {chestNodules.candidates.length>30&&<p>Показаны первые 30 кандидатов.</p>}
+    {chestSource&&<button type="button" onClick={()=>onMonaiReady(chestSource,{endpoint,token},chestNodules)}>
+      Открыть подробный просмотр и врачебную оценку MONAI
+    </button>}
+  </div>}
+  {chestEffusion&&<div className="cs-geometry">
+    <h3>Плевральный и перикардиальный выпот · настоящий task315</h3>
+    <p>Исходная HU-КТ и модельный отчёт связаны по SHA-256. Класс 1 — анатомический, не жидкость.</p>
+    {chestEffusion.report.evidence.fluidCandidates.map(c=><div key={c.labelId}>
+      <p><strong>{c.labelId===2?"Плевральная жидкость":"Перикардиальная жидкость"}</strong>:
+        модельных вокселей {c.modelPositiveNativeVoxelCount};
+        объём кандидата {c.modelUnvalidatedFluidLabelVolumeMl.toFixed(2)} мл.</p>
+      {c.nativeSourceSliceIndicesK.length>0&&<button type="button" onClick={()=>{
+        const k=c.nativeSourceSliceIndicesK[Math.floor(c.nativeSourceSliceIndicesK.length/2)];
+        if(k>=0&&k<series.members.length)onNavigate(k);
+      }}>Показать предполагаемый соответствующий DICOM-срез (проверить геометрию)</button>}
+      {c.modelPositiveNativeVoxelCount===0&&<p>Кандидатов нет; отсутствие выпота не доказано.</p>}
+    </div>)}
+    <p>Модель не валидирована независимо. Врач проверяет соответствие изображения, объёма и протокола.</p>
+  </div>}
+  {chestPlan&&(chestNodules||chestEffusion)&&<div className="cs-geometry">
+    <h3>Предварительный черновик · проверяет врач</h3>
+    <label>Комментарий к результатам
+      <textarea rows={4} maxLength={12000} value={draftText} onChange={e=>setDraftText(e.target.value)}/>
+    </label>
+    <p>Сохранение общего source-bound отчёта для двух моделей ещё не подключено;
+      используйте детальную оценку MONAI и анализ выпотов на исходных кадрах.</p>
+  </div>}
   {ich&&<div>
    <p><strong>ianpan: {ich.findings.length} кандидатов.</strong> Отсутствие кандидатов не исключает кровоизлияние.</p>
    {ich.findings.map((f,i)=>{

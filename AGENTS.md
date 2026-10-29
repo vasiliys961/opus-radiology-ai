@@ -1,3 +1,28 @@
+## OWNER OVERRIDE — 2026-10-29: CONNECT VERIFIED DETECTORS, NO NEW CANDIDATES
+
+**Current single development task: sequentially integrate the ALREADY existing real
+pathology detector portfolio into the one-click DICOM automatic launch.** Do not
+search for or add new model candidates until this integration is completed.
+Complete each module before moving to the next; test, pass CI and squash-merge.
+
+**Strict deduplication:** one selected suitable authentic executor for each
+distinct clinical task. If existing MONAI handles pulmonary nodules, do NOT run
+a second pulmonary-nodule model just to raise a detector count. Task315's two
+true fluid labels (pleural and pericardial effusion) may be evaluated by ONE
+inference, not duplicated as two independent model launches. If a model fails,
+mark that task NOT ASSESSED rather than invoke a weaker duplicate automatically.
+
+**Priority:** connect real previously measured tasks region by region in the
+current original DICOM viewer (head, chest, abdomen, pelvis and spine). Preserve
+source identities and authorization, run original installed weights in bounded
+private workers, show actual findings and physician review. Clinical accuracy
+validation may follow after functional integration; it is NOT replaced by
+agreement between Gemini Vision and Claude Opus. Their role is independent
+authorized interpretive review, reconciliation and provisional report generation
+from actual source frames and detector evidence; they cannot produce proof of
+accuracy or turn an unavailable detector into a negative diagnosis.
+
+---
 ## OWNER'S NEW OVERRIDING STRATEGY — 2026-10-28: COMPLETE FUNCTIONAL V2 FIRST
 
 **LATEST OWNER DECISION, HIGHER PRIORITY THAN EARLIER "DETECTOR-BREADTH FIRST" ORDERING.**
