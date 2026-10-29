@@ -88,22 +88,41 @@ export function parseOriginalPeCtpReport(value:unknown,sourceSha:string,
    throw Error("Воксели кандидатов ТЭЛА превышают модельный источник.");
  return x as unknown as PeCtpSourceReport;
 }
+/** Fixed same-origin research bridge with server-held original PE worker credentials. */
+export async function automaticPeRequest(path:"/v1/pe/capabilities"|"/v1/pe/analyze",init:RequestInit={}):Promise<Response>{
+ const response=await fetch("/api/local-pe",{
+  ...init,method:path.endsWith("/capabilities")?"GET":"POST",
+  credentials:"same-origin",redirect:"error",cache:"no-store",
+ });
+ if(!response.ok)throw Error("Оригинальный PE worker недоступен (HTTP "+response.status+").");
+ return response;
+}
+export async function checkAutomaticPeReady(signal?:AbortSignal):Promise<boolean>{
+ try{
+  const response=await automaticPeRequest("/v1/pe/capabilities",{signal});
+  return readyOriginalPeCtpWorker(await response.json());
+ }catch{return false;}
+}
+
 export async function executeOriginalPeCtp(
- session:WorkerSession,source:File,confirmedCtpa:boolean,signal:AbortSignal,
+ session:WorkerSession|null,source:File,confirmedCtpa:boolean,signal:AbortSignal,
  progress:(text:string)=>void=()=>{},
 ):Promise<PeCtpSourceReport>{
  if(!confirmedCtpa)throw Error("Врач ещё не подтвердил, что открыта именно КТ-ангиография лёгочных артерий.");
+ const invoke=(path:"/v1/pe/capabilities"|"/v1/pe/analyze",init:RequestInit={})=>
+  session?call(session,path,init):automaticPeRequest(path,init);
  const native=await readNoduleNiftiHeader(source);
  progress("Проверяем установленные оригинальные веса и версию CTPA-модели...");
- const cap=await (await call(session,"/v1/pe/capabilities",{signal})).json() as unknown;
+ const cap=await (await invoke("/v1/pe/capabilities",{signal})).json() as unknown;
  if(!readyOriginalPeCtpWorker(cap))
    throw Error("Оригинальный PE nnU-Net worker недоступен или недостаточно RAM.");
  const originalSha=await originalNiftiSha256(source,signal);
  progress("Настоящий nnU-Net анализирует подтверждённую исходную CTPA на Linux CPU...");
- const response=await call(session,"/v1/pe/analyze",{method:"POST",signal,
+ const response=await invoke("/v1/pe/analyze",{method:"POST",signal,
   headers:{"Content-Type":"application/octet-stream",
    "X-Opus-Source-Sha256":originalSha,
-   "X-Opus-CTPA-Protocol-Confirmed":"yes"},body:source});
+   "X-Opus-CTPA-Protocol-Confirmed":"yes",
+   ...(session?{}:{"X-Opus-Public-Research-Authorization":"approved-nonpatient-source"})},body:source});
  const text=await response.text();
  if(text.length>512*1024)throw Error("Слишком большой отчёт nnU-Net ТЭЛА.");
  const result=parseOriginalPeCtpReport(JSON.parse(text),originalSha,
