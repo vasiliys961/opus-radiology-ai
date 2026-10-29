@@ -70,7 +70,7 @@ export function normalizeReviewedCloudPilot(value:unknown):NormalizedCloudPilot{
     imageId:f.frameId,reviewedPixelSha256:f.sha256,
   }))};
 }
-function reviewMessages(data:NormalizedCloudPilot,specialist:LocalLungFacts|null,detectors:SanitizedDetectorBundle|null):AiGatewayRequest["messages"] {
+function reviewMessages(data:NormalizedCloudPilot):AiGatewayRequest["messages"] {
   const frameIds=data.frames.map(f=>f.imageId);
   return [
     {role:"system",content:
@@ -132,7 +132,7 @@ export async function reviewSanitizedSamples(
     throw Error("XRV scores only valid for CR/DX radiography");
   if((checked.modality==="CR"||checked.modality==="DX")&&detectors)
     throw Error("CT/MR detector evidence must not be attached to CR/DX");
-  const messages=reviewMessages(checked,null,null);
+  const messages=reviewMessages(checked);
   // Sequential, not two independent simultaneous calls: Opus receives Gemini's
   // source-frame-validated observations and the same source-linked model facts.
   // Only two existing paid requests; no duplicate model inference.
