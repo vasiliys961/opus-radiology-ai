@@ -24,7 +24,7 @@ const mr=make("MR","HEAD",24);
 assert.equal(plan(mr).route,"wmh-flair");
 assert.equal(plan(mr).needsExplicitFlair,true);
 assert.equal(plan(make("MR","ABDOMEN",24)).route,null);
-assert.equal(plan(make("CT","ABDOMEN",24)).route,null);
+assert.equal(plan(make("CT","ABDOMEN",24)).route,"totalseg-abdomen");
 assert.equal(plan({...chest,volumeReady:false}).route,null);
 assert.equal(plan({...chest,spatiallySorted:false}).route,null);
 assert.equal(planNativeStudyAnalysis(chest,new Set(["file-0"])).route,null);
@@ -38,4 +38,4 @@ assert.equal(plan({...head,members:head.members.map((m,i)=>i===1?{
  ...m,metadata:{...m.metadata,sopInstanceUid:null}}:m)}).route,null);
 assert.equal(plan({...mr,members:mr.members.map((m,i)=>i===1?{
  ...m,metadata:{...m.metadata,numberOfFrames:12}}:m)}).route,null);
-console.log("PASS CT chest/CT head/MR head unified routing, FLAIR consent and source gates");
+console.log("PASS CT chest/CT abdomen/CT head/MR head unified routing, FLAIR consent and source gates");
