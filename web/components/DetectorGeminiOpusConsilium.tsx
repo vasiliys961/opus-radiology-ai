@@ -93,7 +93,7 @@ export default function DetectorGeminiOpusConsilium({snapshot}:{snapshot:Detecto
   <button type="button" disabled={!consent||!paid||working} onClick={()=>void analyze()}>
    {working?"Анализируем…":"Составить предварительный Gemini → Opus черновик"}
   </button>
-  {working&&<button type="button" onClick={()=>controller.current?.abort()}>Отменить</button>}
+  {working&&<button type="button" onClick={()=>{controller.current?.abort();setWorking(false);setError("Запрос отменён врачом.");}}>Отменить</button>}
   {error&&<p role="alert">{error}</p>}
   {review&&<div role="status">
    <h4>Gemini · задания для повторной оценки</h4>
