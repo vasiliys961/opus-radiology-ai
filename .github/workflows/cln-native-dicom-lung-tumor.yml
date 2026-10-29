@@ -1,0 +1,25 @@
+name: Original CLN native DICOM tumor bridge
+on:
+  pull_request:
+    paths:
+      - scripts/cln-native-dicom-lung-tumor.py
+      - scripts/test-cln-native-dicom-lung-tumor.py
+      - .github/workflows/cln-native-dicom-lung-tumor.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/cln-native-dicom-lung-tumor.py
+      - scripts/test-cln-native-dicom-lung-tumor.py
+permissions:
+  contents: read
+jobs:
+  dicom-original-model-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m unittest discover -s scripts -p 'test-cln-native-dicom-lung-tumor.py'
+      - run: python -m py_compile scripts/cln-native-dicom-lung-tumor.py
