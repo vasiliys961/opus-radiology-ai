@@ -4,7 +4,7 @@ import {useEffect,useMemo,useRef,useState} from "react";
 import type {DicomSeries} from "../lib/dicom-series";
 import {planNativeStudyAnalysis} from "../lib/unified-study-dispatch";
 import {prepareDicomMonaiFile,prepareDicomCtForPathology} from "../lib/dicom-monai-direct";
-import {runOriginalAbdominalModels,type AbdominalStudyResults} from "../lib/real-abdominal-worker";
+import {runOriginalAbdominalModels,checkAutomaticAbdomenReady,type AbdominalStudyResults} from "../lib/real-abdominal-worker";
 import {executeRealNodule} from "../lib/live-nodule-worker";
 import type {BoundNoduleReport} from "../lib/live-nodule-report";
 import {runOriginalEffusionTask315,type OriginalEffusionRun} from "../lib/real-effusion-worker";
@@ -53,6 +53,8 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  const [chestEffusion,setChestEffusion]=useState<OriginalEffusionRun|null>(null);
  const [chestIssues,setChestIssues]=useState<string[]>([]);
  const [abdomenResult,setAbdomenResult]=useState<AbdominalStudyResults|null>(null);
+ const [autoAbdomenReady,setAutoAbdomenReady]=useState(false);
+ const [autoAbdomenChecking,setAutoAbdomenChecking]=useState(false);
  const [xrvReport,setXrvReport]=useState<OriginalXrvCxrResult|null>(null);
  const [xrvStatus,setXrvStatus]=useState<"checking"|"ready"|"unavailable">("checking");
  const [xrvChestConfirmed,setXrvChestConfirmed]=useState(false);
@@ -108,6 +110,16 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  const chestPlan=plan.route==="monai-nodules";
  const xrvPlan=plan.route==="xrv-cxr";
  useEffect(()=>{
+  if(plan.route!=="totalseg-abdomen")return;
+  const controller=new AbortController();
+  setAutoAbdomenChecking(true);setAutoAbdomenReady(false);
+  void checkAutomaticAbdomenReady(controller.signal).then(ready=>{
+   if(!controller.signal.aborted)setAutoAbdomenReady(ready);
+  }).catch(()=>{if(!controller.signal.aborted)setAutoAbdomenReady(false);})
+    .finally(()=>{if(!controller.signal.aborted)setAutoAbdomenChecking(false);});
+  return()=>controller.abort();
+ },[plan.route,series.key]);
+ useEffect(()=>{
    if(!xrvPlan)return;
    const controller=new AbortController();
    setXrvStatus("checking");
@@ -117,7 +129,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
    return()=>controller.abort();
  },[xrvPlan,series.key]);
  const ready=!!plan.route&&authorized&&!busy&&
-   (xrvPlan?(xrvStatus==="ready"&&xrvChestConfirmed&&sourceUrl.startsWith("https://")):chestPlan?((!!token&&!!endpoint.trim())||(!!effusionToken&&!!effusionEndpoint.trim())||(ctpaConfirmed&&!!peToken&&!!peEndpoint.trim())||(enhancedChestConfirmed&&!!nodeToken&&!!nodeEndpoint.trim())):
+   (xrvPlan?(xrvStatus==="ready"&&xrvChestConfirmed&&sourceUrl.startsWith("https://")):plan.route==="totalseg-abdomen"?(autoAbdomenReady||(!!token&&!!endpoint.trim())):chestPlan?((!!token&&!!endpoint.trim())||(!!effusionToken&&!!effusionEndpoint.trim())||(ctpaConfirmed&&!!peToken&&!!peEndpoint.trim())||(enhancedChestConfirmed&&!!nodeToken&&!!nodeEndpoint.trim())):
      (!!token&&!!endpoint.trim()))&&
    (!plan.needsExplicitFlair||(
      brainTask==="wmh"?
@@ -233,7 +245,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
        const nifti=await prepareDicomCtForPathology(
          series,original as File[],controller.signal,"ABDOMEN",progress);
        if(version!==serial.current||controller.signal.aborted)return;
-       const result=await runOriginalAbdominalModels(session,nifti,controller.signal,progress);
+       const result=await runOriginalAbdominalModels(autoAbdomenReady?null:session,nifti,controller.signal,progress);
        if(version!==serial.current||controller.signal.aborted)return;
        setAbdomenResult(result);
        const done=Object.values(result.tasks).filter(x=>x.status==="completed").length;
@@ -379,9 +391,16 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
   {plan.route&&<>
    <details>
     <summary>Настройки приватного исполнителя и разрешение</summary>
-    {!xrvPlan&&<label>Адрес локального worker <input type="text" value={endpoint} disabled={busy} onChange={e=>setEndpoint(e.target.value)}/></label>}
-    {!xrvPlan&&<label>Токен worker <input type="password" autoComplete="off" value={token} disabled={busy} onChange={e=>setToken(e.target.value)}/></label>}
-    {xrvPlan&&<div className="cs-geometry">
+    {!xrvPlan&&!(plan.route==="totalseg-abdomen"&&autoAbdomenReady)&&<label>Адрес локального worker <input type="text" value={endpoint} disabled={busy} onChange={e=>setEndpoint(e.target.value)}/></label>}
+    {!xrvPlan&&!(plan.route==="totalseg-abdomen"&&autoAbdomenReady)&&<label>Токен worker <input type="password" autoComplete="off" value={token} disabled={busy} onChange={e=>setToken(e.target.value)}/></label>}
+    {plan.route==="totalseg-abdomen"&&<p role="status">
+       КТ живота · автоматическое подключение оригинальных моделей: {
+        autoAbdomenChecking?"проверяем…":autoAbdomenReady?
+        "готовы к запуску через приватный сервер; врачу не нужен токен":
+        "не настроено; доступен резервный ручной режим для исследователя"
+       }. Если часть моделей отсутствует, они будут отмечены неоценёнными.
+      </p>}
+     {xrvPlan&&<div className="cs-geometry">
       <strong>Одна оригинальная NIH DenseNet121 · шесть рентгенологических признаков</strong>
       <p role="status">Проверка весов и Linux worker: {xrvStatus==="checking"?
         "проверяем":xrvStatus==="ready"?"оригинальные веса проверены SHA-256 и worker доступен":
@@ -479,7 +498,9 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
     {busy?"Выполняется реальный анализ...":"Анализировать исследование"}
    </button>
    {busy&&<button type="button" onClick={cancel}>Отменить</button>}
-   {!ready&&!busy&&<p role="status">Для запуска откройте «Настройки» и укажите токен работающего worker и необходимые разрешения. Неподтверждённая модель не запускается.</p>}
+   {!ready&&!busy&&<p role="status">{plan.route==="totalseg-abdomen"?
+      "Серверные оригинальные веса КТ живота пока не готовы либо источник не подтверждён. Токены в автоматическом режиме врачу не нужны.":
+      "Для запуска требуется доступная оригинальная модель и разрешение на исследовательские данные."}</p>}
   </>}
   {status&&<p role="status">{status}</p>}
   {error&&<p role="alert">Не выполнено: {error}</p>}
