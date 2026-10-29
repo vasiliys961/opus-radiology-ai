@@ -178,6 +178,58 @@ def infer(args: argparse.Namespace) -> dict:
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     scores = mod.inspect_mask(ct, result, args.expert)
+    # Actual model positives become separate source-native 3-D tumor candidates.
+    # Keep the source affine; do not claim raw DICOM SOP registration.
+    from scipy.ndimage import label, find_objects, center_of_mass
+    pred_img = nib.load(str(result))
+    binary = np.asarray(pred_img.dataobj) == 1
+    labels, number = label(binary)
+    slices = find_objects(labels)
+    voxel_ml = abs(float(np.linalg.det(vol.affine[:3, :3]))) / 1000
+    candidates = []
+    expert_img = nib.load(str(args.expert)) if args.expert else None
+    truth = np.asarray(expert_img.dataobj) > 0 if expert_img else None
+    expert_components = None
+    if truth is not None:
+        expert_components, expert_count = label(truth)
+    else:
+        expert_count = 0
+    matched_experts = set()
+    for cid, bounds in enumerate(slices, 1):
+        if bounds is None:
+            continue
+        region = labels[bounds] == cid
+        count = int(region.sum())
+        local = center_of_mass(region)
+        ijk = [float(bounds[k].start + local[k]) for k in range(3)]
+        world = (vol.affine @ np.array([*ijk, 1.0]))[:3]
+        matched = (sorted(int(v) for v in np.unique(expert_components[bounds][region]) if v > 0)
+                   if expert_components is not None else [])
+        matched_experts.update(matched)
+        candidates.append({
+            "modelComponentId": cid, "candidateVoxels": count,
+            "candidateVolumeMl": round(count * voxel_ml, 6),
+            "sourceVoxelBoundsInclusive": [[int(v.start), int(v.stop - 1)] for v in bounds],
+            "sourceVoxelCentroidIJK": [round(v, 3) for v in ijk],
+            "sourceNiftiRasCentroidMm": [round(float(v), 3) for v in world],
+            "overlapsProvidedExpertTumorMask": bool(matched) if truth is not None else None,
+            "matchedExpertComponentIds": matched,
+            "clinicalDiagnosisConfirmed": False,
+        })
+    candidates.sort(key=lambda x: x["candidateVoxels"], reverse=True)
+    if sum(c["candidateVoxels"] for c in candidates) != scores["tumorVoxels"]:
+        raise ValueError("CLN_individual_candidates_do_not_cover_original_model_mask")
+    scores.update({
+        "modelTumorComponentCount": number,
+        "sourceNativeTumorCandidates": candidates[:250],
+        "modelComponentsTruncated": number > 250,
+        "expertTumorComponentCount": expert_count if truth is not None else None,
+        "expertTumorComponentsDetected": len(matched_experts) if truth is not None else None,
+        "expertTumorComponentsMissed": expert_count - len(matched_experts) if truth is not None else None,
+        "expertComponentRecallAnyVoxelOverlap": (round(len(matched_experts)/expert_count, 6)
+            if expert_count else None),
+        "independentLesionSensitivityValidated": False,
+    })
     return {"schema": "opus-cln-MSD-CT-real-CPU-research/v1", "model": REPO,
             "sourceSHA256": args.source_sha256.lower(),
             "checkpointSHA256": args.checkpoint_sha256.lower(),
