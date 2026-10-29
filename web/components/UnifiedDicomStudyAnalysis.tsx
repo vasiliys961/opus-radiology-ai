@@ -8,6 +8,7 @@ import {runOriginalAbdominalModels,type AbdominalStudyResults} from "../lib/real
 import {executeRealNodule} from "../lib/live-nodule-worker";
 import type {BoundNoduleReport} from "../lib/live-nodule-report";
 import {runOriginalEffusionTask315,type OriginalEffusionRun} from "../lib/real-effusion-worker";
+import {executeOriginalPeCtp,type PeCtpSourceReport} from "../lib/pe-ctpa-direct-worker";
 import {runPublicIchWorker} from "../lib/public-ich-worker";
 import {call,type WorkerSession} from "../lib/local-worker";
 import {bindWmhToSelectedDicom,type BoundWmh} from "../lib/wmh-source-review";
@@ -29,6 +30,10 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
  const [token,setToken]=useState("");
  const [effusionEndpoint,setEffusionEndpoint]=useState("http://127.0.0.1:8774");
  const [effusionToken,setEffusionToken]=useState("");
+ const [peEndpoint,setPeEndpoint]=useState("http://127.0.0.1:8776");
+ const [peToken,setPeToken]=useState("");
+ const [ctpaConfirmed,setCtpaConfirmed]=useState(false);
+ const [chestPe,setChestPe]=useState<PeCtpSourceReport|null>(null);
  const [chestSource,setChestSource]=useState<File|null>(null);
  const [chestNodules,setChestNodules]=useState<BoundNoduleReport|null>(null);
  const [chestEffusion,setChestEffusion]=useState<OriginalEffusionRun|null>(null);
@@ -53,7 +58,8 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
  useEffect(()=>{
    serial.current++;active.current?.abort();
    setEndpoint(preset);setToken("");setEffusionEndpoint("http://127.0.0.1:8774");setEffusionToken("");
-   setChestSource(null);setChestNodules(null);setChestEffusion(null);setChestIssues([]);setAbdomenResult(null);
+   setPeEndpoint("http://127.0.0.1:8776");setPeToken("");setCtpaConfirmed(false);setChestPe(null);
+   setChestSource(null);setChestNodules(null);setChestEffusion(null);setChestPe(null);setChestIssues([]);setAbdomenResult(null);
    setAuthorized(false);setFlairConfirmed(false);
    setSourceUrl("");setSourceLicense("");setBusy(false);setError("");setStatus("");
    setIch(null);setWmh(null);setDecisions({});setDraftText("");setExporting(false);
@@ -61,7 +67,7 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
  },[series,files,preset]);
  const chestPlan=plan.route==="monai-nodules";
  const ready=!!plan.route&&authorized&&!busy&&
-   (chestPlan?((!!token&&!!endpoint.trim())||(!!effusionToken&&!!effusionEndpoint.trim())):
+   (chestPlan?((!!token&&!!endpoint.trim())||(!!effusionToken&&!!effusionEndpoint.trim())||(ctpaConfirmed&&!!peToken&&!!peEndpoint.trim())):
      (!!token&&!!endpoint.trim()))&&
    (!plan.needsExplicitFlair||(flairConfirmed&&sourceUrl.startsWith("https://")&&!!sourceLicense.trim()));
 
@@ -72,7 +78,7 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
    const controller=new AbortController();active.current=controller;
    setBusy(true);setStatus("Проверяем совместимость и доступность настоящей модели...");
    setError("");setIch(null);setWmh(null);setChestSource(null);setChestNodules(null);
-   setChestEffusion(null);setChestIssues([]);setAbdomenResult(null);setDecisions({});setDraftText("");
+   setChestEffusion(null);setChestPe(null);setChestIssues([]);setAbdomenResult(null);setDecisions({});setDraftText("");
    const session:WorkerSession={endpoint,token};
    const progress=(message:string)=>{
      if(version===serial.current&&!controller.signal.aborted)setStatus(message);
@@ -109,14 +115,30 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
            problems.push("TotalSegmentator выпоты: "+(e instanceof Error?e.message:"исполнитель недоступен"));
          }
        }else problems.push("Плевральный/перикардиальный выпот: нет токена task315; не исследовано.");
+       if(ctpaConfirmed){
+         if(peToken.trim()){
+           try{
+             const result=await executeOriginalPeCtp(
+               {endpoint:peEndpoint,token:peToken},nifti,true,controller.signal,progress);
+             if(version!==serial.current||controller.signal.aborted)return;
+             setChestPe(result);completed++;
+           }catch(e){
+             if(controller.signal.aborted)return;
+             problems.push("ТЭЛА nnU-Net: "+(e instanceof Error?e.message:"исполнитель недоступен"));
+           }
+         }else problems.push("ТЭЛА nnU-Net: модель CTPA не запускалась, не задан токен.");
+       }else{
+         problems.push("ТЭЛА не исследована: тип серии CTPA не подтверждён врачом.");
+       }
        if(version!==serial.current||controller.signal.aborted)return;
        setChestIssues(problems);
+       const total=ctpaConfirmed?3:2;
        setDraftText("Исследовательская КТ грудной клетки. Выполнено настоящих патологических моделей: "+
-         completed+" из 2. Условия оценки ограничены выбранной серией. "+
+         completed+" из "+total+". Условия оценки ограничены выбранной серией. "+
          "Результаты являются кандидатами, которые обязан проверить врач. "+
          "Остальные заболевания грудной клетки не оценены.");
        setStatus(completed?
-         "Завершено моделей: "+completed+" из 2. Недоступные анализы явно отмечены.":
+         "Завершено моделей: "+completed+" из "+total+". Недоступные анализы явно отмечены.":
          "Ни одна патологическая модель не выполнена. Исследование не оценено.");
        return;
      }
@@ -239,7 +261,20 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
       <strong>Второй детектор той же КТ: плевральный и перикардиальный выпот</strong>
       <label>Адрес TotalSegmentator task315 worker <input type="text" value={effusionEndpoint} disabled={busy} onChange={e=>setEffusionEndpoint(e.target.value)}/></label>
       <label>Токен task315 <input type="password" autoComplete="off" value={effusionToken} disabled={busy} onChange={e=>setEffusionToken(e.target.value)}/></label>
-      <p>Оба настоящих детектора запускаются одной кнопкой последовательно на одной подготовленной HU-КТ. Если один worker недоступен, второй всё равно выполняется.</p>
+      <p>Плевральный и перикардиальный классы выполняет ОДНА оригинальная модель; другая модель на те же классы не запускается.</p>
+    </div>}
+    {chestPlan&&<div className="cs-geometry">
+      <strong>Третья отдельная задача: ТЭЛА · только подтверждённая CTPA</strong>
+      <label><input type="checkbox" checked={ctpaConfirmed} disabled={busy}
+        onChange={e=>setCtpaConfirmed(e.target.checked)}/>
+        Врач проверил протокол: эта выбранная серия является КТ-ангиографией лёгочных артерий с пригодной контрастной фазой.</label>
+      {ctpaConfirmed&&<>
+        <label>Адрес PE nnU-Net worker <input type="text" value={peEndpoint} disabled={busy}
+          onChange={e=>setPeEndpoint(e.target.value)}/></label>
+        <label>Токен PE worker <input type="password" autoComplete="off" value={peToken} disabled={busy}
+          onChange={e=>setPeToken(e.target.value)}/></label>
+      </>}
+      <p>Не применять на произвольной КТ грудной клетки. Исследовательская модель показала Dice 0,038 на одном FUMPE; решение требует ручной проверки, отрицательная ТЭЛА не исключается.</p>
     </div>}
     {plan.needsExplicitFlair&&<>
      <label><input type="checkbox" checked={flairConfirmed} disabled={busy} onChange={e=>setFlairConfirmed(e.target.checked)}/>
@@ -249,7 +284,7 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
     </>}
     <label><input type="checkbox" checked={authorized} disabled={busy} onChange={e=>setAuthorized(e.target.checked)}/>
      Подтверждаю разрешённый публичный обезличенный исследовательский источник и полномочия на локальный запуск. Пациентские снимки этим маршрутом не передавать.</label>
-    <p>MONAI, task315, TotalSegmentator живота и WMH используют разрешённые изображения в loopback worker; ianpan передаёт только SHA-256 и анализирует заранее установленную идентичную публичную КТ. Облачная передача не выполняется.</p>
+    <p>MONAI, task315, исследовательский PE, TotalSegmentator живота и WMH используют разрешённые изображения в loopback worker; ianpan передаёт только SHA-256 и анализирует заранее установленную идентичную публичную КТ. Облачная передача не выполняется.</p>
    </details>
    <button type="button" disabled={!ready} onClick={()=>void launch()}>
     {busy?"Выполняется реальный анализ...":"Анализировать исследование"}
@@ -319,6 +354,22 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
     {chestSource&&<button type="button" onClick={()=>onMonaiReady(chestSource,{endpoint,token},chestNodules)}>
       Открыть подробный просмотр и врачебную оценку MONAI
     </button>}
+  </div>}
+  {chestPe&&<div className="cs-geometry" aria-label="CTPA — оригинальная модель ТЭЛА">
+    <h3>ТЭЛА · настоящий Mazurowski nnU-Net</h3>
+    <p>Протокол CTPA подтверждён врачом. Исходная КТ и маска связаны по SHA-256.
+      Модель не валидирована и ранее на одном FUMPE показала Dice 0,038. Отсутствие
+      находок не исключает тромбоэмболию.</p>
+    <p>Положительных модельных вокселей: {chestPe.sourceNativeVoxelPositiveCount};
+      пространственных кандидатов: {chestPe.lesions.length}.</p>
+    {chestPe.lesions.slice(0,60).map((c,i)=><div key={i}>
+      <p>Кандидат {i+1}: {c.modelCandidateMl.toFixed(3)} мл, RAS {c.sourceRASmm.join(", ")} мм.</p>
+      <button type="button" onClick={()=>{
+        const k=Math.round(c.sourceCentroidIJK[2]);
+        if(k>=0&&k<series.members.length)onNavigate(k);
+      }}>Проверить предполагаемый исходный DICOM-срез</button>
+    </div>)}
+    {chestPe.lesions.length>60&&<p>Показаны первые 60 кандидатов.</p>}
   </div>}
   {chestEffusion&&<div className="cs-geometry">
     <h3>Плевральный и перикардиальный выпот · настоящий task315</h3>
