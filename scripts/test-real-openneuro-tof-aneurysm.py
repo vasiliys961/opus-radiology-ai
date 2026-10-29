@@ -23,6 +23,16 @@ class OriginalAneurysmDetector(unittest.TestCase):
             self.assertIn(token,src)
         self.assertNotIn("patientUseAllowed\":True",src)
 
+    def test_native_lesion_localization_and_reference_recall_contract(self):
+        src=PATH.read_text()
+        for name in ("nativeCentroidRASmm", "nativeVoxelBoundsInclusive",
+                     "modelCandidateVolumeMl", "manualReferenceComponentsMissed",
+                     "manualReferenceLesionRecallByAnyVoxelOverlap",
+                     "clinicalAneurysmDiagnosisConfirmed",
+                     "aneurysm_component_volumes_do_not_cover_model_mask"):
+            self.assertIn(name,src)
+        self.assertIn("from scipy.ndimage import label,find_objects,center_of_mass",src)
+
     def test_annex_checksum_check_fails_closed(self):
         with tempfile.TemporaryDirectory() as d:
             path=Path(d)/"public.nii.gz"

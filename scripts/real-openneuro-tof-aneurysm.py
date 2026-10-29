@@ -156,6 +156,42 @@ def evaluate(folder,model_mask,weights_manifest,out):
     tp=int(np.count_nonzero(predicted & manual))
     fp=int(np.count_nonzero(predicted & ~manual))
     fn=int(np.count_nonzero(~predicted & manual))
+    # Each connected model-positive region is a localized candidate, NOT an
+    # aneurysm diagnosis. Only intersections with the provided manual mask count
+    # as reference hits. Expose native source RAS geometry and lesion volumes.
+    from scipy.ndimage import label,find_objects,center_of_mass
+    component_map,component_count=label(predicted)
+    expert_component_map,expert_component_count=label(manual)
+    component_slices=find_objects(component_map)
+    voxel_ml=abs(float(np.linalg.det(image.affine[:3,:3])))/1000.0
+    candidates=[]
+    for component_id,region in enumerate(component_slices,1):
+        if region is None:continue
+        inside=component_map[region]==component_id
+        count=int(np.count_nonzero(inside))
+        if count<=0:continue
+        centroid_local=center_of_mass(inside)
+        centroid_voxel=[float(region[i].start+centroid_local[i]) for i in range(3)]
+        ras=(image.affine@np.array([*centroid_voxel,1.0]))[:3]
+        expert_labels=np.unique(expert_component_map[region][inside])
+        matched=[int(x) for x in expert_labels if x>0]
+        candidates.append({
+            "modelConnectedComponentId":component_id,
+            "nativeVoxelBoundsInclusive":[[int(sl.start),int(sl.stop-1)] for sl in region],
+            "nativeCentroidIJK":[round(x,3) for x in centroid_voxel],
+            "nativeCentroidRASmm":[round(float(x),3) for x in ras],
+            "modelPositiveVoxels":count,
+            "modelCandidateVolumeMl":round(count*voxel_ml,6),
+            "overlapsProvidedManualMask":bool(matched),
+            "matchedManualComponentIds":matched,
+            "clinicalAneurysmDiagnosisConfirmed":False,
+        })
+    candidates.sort(key=lambda item:item["modelPositiveVoxels"],reverse=True)
+    expert_labels_detected=set()
+    for item in candidates:
+        expert_labels_detected.update(item["matchedManualComponentIds"])
+    if sum(x["modelPositiveVoxels"] for x in candidates)!=int(np.count_nonzero(predicted)):
+        raise ValueError("aneurysm_component_volumes_do_not_cover_model_mask")
     dice=2*tp/(2*tp+fp+fn)
     report={
         "schema":SCHEMA,
@@ -183,6 +219,14 @@ def evaluate(folder,model_mask,weights_manifest,out):
         "falseNegativeVoxelsAgainstManual":fn,
         "voxelDiceAgainstProvidedManualMask":round(dice,6),
         "voxelRecallAgainstProvidedManualMask":round(tp/(tp+fn),6),
+        "nativeModelCandidateCount":component_count,
+        "nativeModelCandidates":candidates[:250],
+        "modelCandidatesTruncated":component_count>250,
+        "manualReferenceComponentCount":expert_component_count,
+        "manualReferenceComponentsDetectedByOverlap":len(expert_labels_detected),
+        "manualReferenceComponentsMissed":expert_component_count-len(expert_labels_detected),
+        "manualReferenceLesionRecallByAnyVoxelOverlap":round(len(expert_labels_detected)/expert_component_count,6) if expert_component_count else None,
+        "independentLesionSensitivityProven":False,
         "lesionLevelSensitivity":None,
         "independentTrainingHoldoutProven":False,
         "diagnosisPermitted":False,
