@@ -4,7 +4,7 @@
  */
 import type {DicomSeries} from "./dicom-series.ts";
 
-export type StudyRoute="monai-nodules"|"ianpan-ich"|"wmh-flair";
+export type StudyRoute="monai-nodules"|"ianpan-ich"|"wmh-flair"|"totalseg-abdomen";
 export type StudyAnalysisPlan={
   route:StudyRoute|null;
   title:string;
@@ -27,6 +27,10 @@ export function planNativeStudyAnalysis(series:DicomSeries, availableFiles:Reado
   const allRegion=(region:string)=>series.members.every(m=>m.metadata.bodyRegion===region);
   if(series.modality==="CT"&&allRegion("CHEST"))
     return {route:"monai-nodules",title:"Узлы лёгких · MONAI + плевральный/перикардиальный выпот · task315",reason:null,needsExplicitFlair:false};
+  if(series.modality==="CT"&&allRegion("ABDOMEN"))
+    return {route:"totalseg-abdomen",
+      title:"Кисты почек + очаги печени · 2 исходные TotalSegmentator задачи",
+      reason:null,needsExplicitFlair:false};
   if(series.modality==="CT"&&allRegion("HEAD")){
     if(series.members.length<8||series.members.length>64)
       return denied("ianpan поддерживает только 8–64 среза исходной КТ головы.");
