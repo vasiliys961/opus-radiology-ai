@@ -60,23 +60,43 @@ async function boundedReport(response:Response):Promise<string>{
  return new TextDecoder().decode(data);
 }
 
+/** Automatic server route: no browser-visible token or arbitrary URL. */
+export async function autoMonaiRequest(path:string,init:RequestInit={}):Promise<Response>{
+ if(!/^\/v1\/nodule\/(capabilities|upload|jobs\/[a-f0-9-]{36}(?:\/report)?)$/.test(path))
+  throw Error("Неверный путь MONAI.");
+ const res=await fetch("/api/local-nodule"+path,{
+  ...init,credentials:"same-origin",redirect:"error",cache:"no-store",
+ });
+ if(!res.ok)throw Error("Оригинальная MONAI недоступна (HTTP "+res.status+").");
+ return res;
+}
+export async function checkAutomaticMonaiReady(signal?:AbortSignal):Promise<boolean>{
+ try{
+  const cap=await smallJson(await autoMonaiRequest("/v1/nodule/capabilities",{signal}));
+  return readyOriginalNoduleWorker(cap)&&cap.imageUpload===true;
+ }catch{return false;}
+}
+
 export async function executeRealNodule(
- session:WorkerSession,source:File,signal:AbortSignal,
+ session:WorkerSession|null,source:File,signal:AbortSignal,
  onProgress?:(text:string)=>void,
 ):Promise<{source:NoduleNativeSource;report:BoundNoduleReport}> {
  if(signal.aborted)throw Error("Задание отменено.");
+ const invoke=(path:string,init:RequestInit={})=>session?call(session,path,init):autoMonaiRequest(path,init);
  const native=await readNoduleNiftiHeader(source);
  onProgress?.("Проверяем исходную КТ и подлинные MONAI-веса...");
- const cap=await smallJson(await call(session,"/v1/nodule/capabilities",{signal}));
+ const cap=await smallJson(await invoke("/v1/nodule/capabilities",{signal}));
  if(!readyOriginalNoduleWorker(cap))
    throw Error("MONAI RetinaNet ещё не установлен/не готов на выделенном Linux-worker.");
  const fileHash=await originalNiftiSha256(source,signal);
  const uploadEnabled=cap.imageUpload===true;
+ if(!session&&!uploadEnabled)throw Error("Для новой DICOM-КТ требуется оригинальный MONAI worker с загрузкой NIfTI.");
  let jobId:string|null=null;
  try{
-  const answer=await smallJson(await call(session,uploadEnabled?"/v1/nodule/upload":"/v1/nodule/jobs",{
+  const answer=await smallJson(await invoke(uploadEnabled?"/v1/nodule/upload":"/v1/nodule/jobs",{
    method:"POST",signal,headers:uploadEnabled?{
-    "Content-Type":"application/octet-stream","X-Opus-Source-Sha256":fileHash
+    "Content-Type":"application/octet-stream","X-Opus-Source-Sha256":fileHash,
+    ...(session?{}:{"X-Opus-Public-Research-Authorization":"approved-nonpatient-source"})
    }:{"Content-Type":"application/json"},
    body:uploadEnabled?source:JSON.stringify({schema:"opus-monai-nodule-request/v1",
     sourceSha256:fileHash,dataPolicy:"approved-public-reference-only"}),
@@ -87,7 +107,7 @@ export async function executeRealNodule(
   jobId=answer.jobId;
   for(;;){
    if(signal.aborted)throw Error("Анализ MONAI отменён.");
-   const state=await smallJson(await call(session,`/v1/nodule/jobs/${jobId}`,{signal}));
+   const state=await smallJson(await invoke(`/v1/nodule/jobs/${jobId}`,{signal}));
    if(state.schema!=="opus-monai-job/v1"||state.jobId!==jobId)
     throw Error("Несовместимый ответ MONAI-worker.");
    if(state.state==="failed")throw Error("MONAI не завершил настоящий инференс: "+String(state.reason??"ошибка"));
@@ -96,14 +116,14 @@ export async function executeRealNodule(
    onProgress?.("Настоящая MONAI RetinaNet обрабатывает исходную КТ на Linux CPU...");
    await pause(signal);
   }
-  const raw=await boundedReport(await call(session,`/v1/nodule/jobs/${jobId}/report`,{signal}));
+  const raw=await boundedReport(await invoke(`/v1/nodule/jobs/${jobId}/report`,{signal}));
   const verified=parseBoundNoduleReport(raw,native);
   if(verified.source.sha256!==fileHash)
     throw Error("MONAI-срезы не принадлежат открытому исходному исследованию.");
   onProgress?.("Настоящий инференс завершён; показываем кандидатов на исходной КТ.");
   return {source:native,report:verified};
  }finally{
-  if(jobId)await call(session,`/v1/nodule/jobs/${jobId}`,{
+  if(jobId)await invoke(`/v1/nodule/jobs/${jobId}`,{
    method:"DELETE",signal:AbortSignal.timeout(10000),
   }).catch(()=>{});
  }

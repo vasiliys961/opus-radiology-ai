@@ -5,7 +5,7 @@ import type {DicomSeries} from "../lib/dicom-series";
 import {planNativeStudyAnalysis} from "../lib/unified-study-dispatch";
 import {prepareDicomMonaiFile,prepareDicomCtForPathology} from "../lib/dicom-monai-direct";
 import {runOriginalAbdominalModels,checkAutomaticAbdomenReady,type AbdominalStudyResults} from "../lib/real-abdominal-worker";
-import {executeRealNodule} from "../lib/live-nodule-worker";
+import {executeRealNodule,checkAutomaticMonaiReady} from "../lib/live-nodule-worker";
 import type {BoundNoduleReport} from "../lib/live-nodule-report";
 import {runOriginalEffusionTask315,checkAutomaticEffusionReady,type OriginalEffusionRun} from "../lib/real-effusion-worker";
 import {executeOriginalPeCtp,type PeCtpSourceReport} from "../lib/pe-ctpa-direct-worker";
@@ -38,6 +38,8 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  const plan=useMemo(()=>planNativeStudyAnalysis(series,available),[series,available]);
  const [endpoint,setEndpoint]=useState("");
  const [token,setToken]=useState("");
+ const [autoMonaiReady,setAutoMonaiReady]=useState(false);
+ const [autoMonaiChecking,setAutoMonaiChecking]=useState(false);
  const [effusionEndpoint,setEffusionEndpoint]=useState("http://127.0.0.1:8774");
  const [effusionToken,setEffusionToken]=useState("");
  const [autoEffusionReady,setAutoEffusionReady]=useState(false);
@@ -113,6 +115,11 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  useEffect(()=>{
   if(!chestPlan)return;
   const controller=new AbortController();
+  setAutoMonaiChecking(true);setAutoMonaiReady(false);
+  void checkAutomaticMonaiReady(controller.signal).then(ok=>{
+   if(!controller.signal.aborted)setAutoMonaiReady(ok);
+  }).catch(()=>{if(!controller.signal.aborted)setAutoMonaiReady(false);})
+   .finally(()=>{if(!controller.signal.aborted)setAutoMonaiChecking(false);});
   setAutoEffusionChecking(true);setAutoEffusionReady(false);
   void checkAutomaticEffusionReady(controller.signal).then(ok=>{
    if(!controller.signal.aborted)setAutoEffusionReady(ok);
@@ -141,7 +148,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
    return()=>controller.abort();
  },[xrvPlan,series.key]);
  const ready=!!plan.route&&authorized&&!busy&&
-   (xrvPlan?(xrvStatus==="ready"&&xrvChestConfirmed&&sourceUrl.startsWith("https://")):plan.route==="totalseg-abdomen"?(autoAbdomenReady||(!!token&&!!endpoint.trim())):chestPlan?((!!token&&!!endpoint.trim())||(autoEffusionReady||(!!effusionToken&&!!effusionEndpoint.trim()))||(ctpaConfirmed&&!!peToken&&!!peEndpoint.trim())||(enhancedChestConfirmed&&!!nodeToken&&!!nodeEndpoint.trim())):
+   (xrvPlan?(xrvStatus==="ready"&&xrvChestConfirmed&&sourceUrl.startsWith("https://")):plan.route==="totalseg-abdomen"?(autoAbdomenReady||(!!token&&!!endpoint.trim())):chestPlan?((autoMonaiReady|| (!!token&&!!endpoint.trim()))||(autoEffusionReady||(!!effusionToken&&!!effusionEndpoint.trim()))||(ctpaConfirmed&&!!peToken&&!!peEndpoint.trim())||(enhancedChestConfirmed&&!!nodeToken&&!!nodeEndpoint.trim())):
      (!!token&&!!endpoint.trim()))&&
    (!plan.needsExplicitFlair||(
      brainTask==="wmh"?
@@ -196,7 +203,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
            if(controller.signal.aborted)return;
            problems.push("MONAI узлы: "+(e instanceof Error?e.message:"исполнитель недоступен"));
          }
-       }else problems.push("MONAI узлы: не указан токен исполнителя; не исследовано.");
+       }else problems.push("MONAI узлы: оригинальная модель не доступна на сервере и ручной worker не настроен; не исследовано.");
        if(autoEffusionReady||effusionToken.trim()){
          try{
            const result=await runOriginalEffusionTask315(
@@ -403,8 +410,8 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
   {plan.route&&<>
    <details>
     <summary>Настройки приватного исполнителя и разрешение</summary>
-    {!xrvPlan&&!(plan.route==="totalseg-abdomen"&&autoAbdomenReady)&&<label>Адрес локального worker <input type="text" value={endpoint} disabled={busy} onChange={e=>setEndpoint(e.target.value)}/></label>}
-    {!xrvPlan&&!(plan.route==="totalseg-abdomen"&&autoAbdomenReady)&&<label>Токен worker <input type="password" autoComplete="off" value={token} disabled={busy} onChange={e=>setToken(e.target.value)}/></label>}
+    {!xrvPlan&&!(plan.route==="totalseg-abdomen"&&autoAbdomenReady)&&!(chestPlan&&autoMonaiReady)&&<label>Адрес локального worker <input type="text" value={endpoint} disabled={busy} onChange={e=>setEndpoint(e.target.value)}/></label>}
+    {!xrvPlan&&!(plan.route==="totalseg-abdomen"&&autoAbdomenReady)&&!(chestPlan&&autoMonaiReady)&&<label>Токен worker <input type="password" autoComplete="off" value={token} disabled={busy} onChange={e=>setToken(e.target.value)}/></label>}
     {plan.route==="totalseg-abdomen"&&<p role="status">
        КТ живота · автоматическое подключение оригинальных моделей: {
         autoAbdomenChecking?"проверяем…":autoAbdomenReady?
@@ -596,7 +603,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
       координата LPS {c.centerLpsMm.map(n=>n.toFixed(1)).join(" / ")} мм.
     </p>)}
     {chestNodules.candidates.length>30&&<p>Показаны первые 30 кандидатов.</p>}
-    {chestSource&&<button type="button" onClick={()=>onMonaiReady(chestSource,{endpoint,token},chestNodules)}>
+    {chestSource&&<button type="button" onClick={()=>onMonaiReady(chestSource,autoMonaiReady?{endpoint:"http://127.0.0.1:8768",token:""}:{endpoint,token},chestNodules)}>
       Открыть подробный просмотр и врачебную оценку MONAI
     </button>}
   </div>}
