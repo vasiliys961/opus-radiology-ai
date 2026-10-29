@@ -1,11 +1,11 @@
 /** Pure original pathology worker readiness; never handles DICOM, pixels or patient data. */
-import {readyOriginalNoduleWorker} from "./live-nodule-worker";
-import {readyEffusionTask315} from "./real-effusion-worker";
-import {readyOriginalAbdominalWorker} from "./real-abdominal-worker";
-import {readyOriginalPeCtpWorker} from "./pe-ctpa-direct-worker";
-import {raidionicsOriginalReady} from "./mediastinal-raidionics-worker";
-import {readyOriginalBrainTask} from "./brain-multisequence-original-worker";
-import {validatedPublicIchCapabilities} from "./public-ich-worker";
+import {readyOriginalNoduleWorker} from "./live-nodule-worker.ts";
+import {readyEffusionTask315} from "./real-effusion-worker.ts";
+import {readyOriginalAbdominalWorker} from "./real-abdominal-worker.ts";
+import {readyOriginalPeCtpWorker} from "./pe-ctpa-direct-worker.ts";
+import {raidionicsOriginalReady} from "./mediastinal-raidionics-worker.ts";
+import {readyOriginalBrainTask} from "./brain-multisequence-original-worker.ts";
+import {validatedPublicIchCapabilities} from "./public-ich-worker.ts";
 
 
 type Status="ready"|"not_configured"|"unreachable"|"original_model_unverified";
