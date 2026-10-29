@@ -19,7 +19,7 @@ import {createNativePhysicianDraft,type NativeDicomDigest} from "../lib/native-p
  */
 export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onNavigate}:{
  series:DicomSeries;files:ReadonlyMap<string,File>;
- onMonaiReady:(source:File,session:WorkerSession)=>void;
+ onMonaiReady:(source:File,session:WorkerSession,completedReport?:BoundNoduleReport)=>void;
  onNavigate:(slice:number)=>void;
 }){
  const available=useMemo(()=>new Set(files.keys()),[files]);
@@ -249,7 +249,7 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
       координата LPS {c.centerLpsMm.map(n=>n.toFixed(1)).join(" / ")} мм.
     </p>)}
     {chestNodules.candidates.length>30&&<p>Показаны первые 30 кандидатов.</p>}
-    {chestSource&&<button type="button" onClick={()=>onMonaiReady(chestSource,{endpoint,token})}>
+    {chestSource&&<button type="button" onClick={()=>onMonaiReady(chestSource,{endpoint,token},chestNodules)}>
       Открыть подробный просмотр и врачебную оценку MONAI
     </button>}
   </div>}
@@ -263,7 +263,7 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
       {c.nativeSourceSliceIndicesK.length>0&&<button type="button" onClick={()=>{
         const k=c.nativeSourceSliceIndicesK[Math.floor(c.nativeSourceSliceIndicesK.length/2)];
         if(k>=0&&k<series.members.length)onNavigate(k);
-      }}>Открыть исходный DICOM-срез кандидата</button>}
+      }}>Показать предполагаемый соответствующий DICOM-срез (проверить геометрию)</button>}
       {c.modelPositiveNativeVoxelCount===0&&<p>Кандидатов нет; отсутствие выпота не доказано.</p>}
     </div>)}
     <p>Модель не валидирована независимо. Врач проверяет соответствие изображения, объёма и протокола.</p>
