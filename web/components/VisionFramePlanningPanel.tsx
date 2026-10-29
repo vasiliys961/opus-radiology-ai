@@ -393,7 +393,8 @@ export default function VisionFramePlanningPanel({
         Только локальный исследовательский контекст: эти цифры не отправляются в OpenRouter
         и не подтверждают диагноз эмфиземы.</p>}
       {laaWarning&&<p role="status">{laaWarning}</p>}
-      <VisionPrivacyPreparation originalDetectorEvidence={originalDetectorEvidence}
+      <VisionPrivacyPreparation autoStartAfterDetectors={fromPrimaryAnalysis}
+        originalDetectorEvidence={originalDetectorEvidence}
         key={JSON.stringify(report.frames.map(f=>f.fileId))+requested}
         previews={stablePrivacyPreviews}
         modality={series.find(s=>s.key===report.seriesKey)?.modality??""}
