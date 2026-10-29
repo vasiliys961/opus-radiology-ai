@@ -1,10 +1,13 @@
 "use client";
 import {useEffect,useMemo,useRef,useState} from "react";
-import {assembleSanitizedDetectorBundle,type DetectorRuntimeSnapshot} from "../lib/detector-consilium-evidence";
+import {assembleSanitizedDetectorBundle,type DetectorRuntimeSnapshot,type SanitizedDetectorBundle} from "../lib/detector-consilium-evidence";
 import type {NumericConsiliumResult} from "../lib/detector-gemini-opus-numeric";
 import type {AiProvider} from "../lib/ai-gateway";
 
-export default function DetectorGeminiOpusConsilium({snapshot}:{snapshot:DetectorRuntimeSnapshot}){
+export default function DetectorGeminiOpusConsilium({snapshot,onBundleReady}:{
+ snapshot:DetectorRuntimeSnapshot;
+ onBundleReady?:(bundle:SanitizedDetectorBundle)=>void;
+}){
  const [provider,setProvider]=useState<AiProvider>("openrouter");
  const [consent,setConsent]=useState(false),[paid,setPaid]=useState(false);
  const [working,setWorking]=useState(false),[error,setError]=useState("");
@@ -17,6 +20,9 @@ export default function DetectorGeminiOpusConsilium({snapshot}:{snapshot:Detecto
     snapshot.effusion,snapshot.pe,snapshot.nodes,snapshot.abdomen,
     snapshot.ich,snapshot.wmh,snapshot.brain]);
  const stamp=JSON.stringify(result.data);
+ useEffect(()=>{
+  if(result.data)onBundleReady?.(result.data);
+ },[stamp]);
  useEffect(()=>{
   controller.current?.abort();setWorking(false);setError("");setReview(null);setDraft("");
   setConsent(false);setPaid(false);
