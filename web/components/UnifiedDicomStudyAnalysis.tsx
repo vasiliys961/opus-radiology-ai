@@ -15,13 +15,15 @@ import {call,type WorkerSession} from "../lib/local-worker";
 import {bindWmhToSelectedDicom,type BoundWmh} from "../lib/wmh-source-review";
 import type {EvidenceJson} from "../lib/evidence-json";
 import {createNativePhysicianDraft,type NativeDicomDigest} from "../lib/native-physician-draft";
+import {prepareNativeBrainMr} from "../lib/brain-native-mr-dicom";
+import {executeOriginalBrain,BRAIN_ROLES,type BrainTask,type BrainModelReport} from "../lib/brain-multisequence-original-worker";
 
 /** A single primary action that reuses the real DICOM -> MONAI/ianpan/WMH paths.
  * Never advertises a checkpoint as installed until its private worker proves it.
  * No automatic cloud image transfer; Gemini/Opus require a separate privacy gate.
  */
-export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onNavigate}:{
- series:DicomSeries;files:ReadonlyMap<string,File>;
+export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMonaiReady,onNavigate}:{
+ series:DicomSeries;allSeries:ReadonlyArray<DicomSeries>;files:ReadonlyMap<string,File>;
  onMonaiReady:(source:File,session:WorkerSession,completedReport?:BoundNoduleReport)=>void;
  onNavigate:(slice:number)=>void;
 }){
@@ -53,13 +55,34 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
  const [error,setError]=useState("");
  const [ich,setIch]=useState<EvidenceJson|null>(null);
  const [wmh,setWmh]=useState<BoundWmh|null>(null);
+ const [brainTask,setBrainTask]=useState<"wmh"|BrainTask>("wmh");
+ const [brainSeriesByRole,setBrainSeriesByRole]=useState<Record<string,string>>({});
+ const [brainSequenceApproved,setBrainSequenceApproved]=useState(false);
+ const [brainResult,setBrainResult]=useState<BrainModelReport|null>(null);
  const [decisions,setDecisions]=useState<Record<string,"accepted"|"rejected">>({});
  const [draftText,setDraftText]=useState("");
  const [exporting,setExporting]=useState(false);
  const serial=useRef(0),active=useRef<AbortController|null>(null);
  const preset=plan.route==="monai-nodules"?"http://127.0.0.1:8768":
    plan.route==="ianpan-ich"?"http://127.0.0.1:8766":
-   plan.route==="totalseg-abdomen"?"http://127.0.0.1:8775":"http://127.0.0.1:8772";
+   plan.route==="totalseg-abdomen"?"http://127.0.0.1:8775":
+   plan.route==="wmh-flair"&&brainTask!=="wmh"?"http://127.0.0.1:8778":"http://127.0.0.1:8772";
+ const compatibleBrainSeries=useMemo(()=>{
+   if(plan.route!=="wmh-flair")return [];
+   const study=series.members[0]?.metadata.studyUid;
+   const frame=series.members[0]?.metadata.frameOfReferenceUid;
+   if(!study||!frame)return [];
+   return allSeries.filter(s=>s.modality==="MR"&&s.volumeReady&&s.spatiallySorted&&
+     s.members.length>=8&&s.members.length<=300&&
+     s.members.every(m=>m.metadata.bodyRegion==="HEAD"&&
+       m.metadata.studyUid===study&&m.metadata.frameOfReferenceUid===frame&&
+       m.metadata.imageRole!=="DERIVED"&&m.metadata.imageRole!=="LOCALIZER"&&files.has(m.id)));
+ },[allSeries,files,plan.route,series]);
+ const assignedBrainRoles=brainTask==="wmh"?[]:BRAIN_ROLES[brainTask];
+ const brainAssignedReady=brainTask!=="wmh"&&
+   assignedBrainRoles.every(role=>!!brainSeriesByRole[role]&&
+     compatibleBrainSeries.some(s=>s.key===brainSeriesByRole[role]))&&
+   new Set(assignedBrainRoles.map(role=>brainSeriesByRole[role])).size===assignedBrainRoles.length;
  useEffect(()=>{
    serial.current++;active.current?.abort();
    setEndpoint(preset);setToken("");setEffusionEndpoint("http://127.0.0.1:8774");setEffusionToken("");
@@ -68,14 +91,18 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
    setChestSource(null);setChestNodules(null);setChestEffusion(null);setChestPe(null);setChestNodes(null);setChestIssues([]);setAbdomenResult(null);
    setAuthorized(false);setFlairConfirmed(false);
    setSourceUrl("");setSourceLicense("");setBusy(false);setError("");setStatus("");
-   setIch(null);setWmh(null);setDecisions({});setDraftText("");setExporting(false);
+   setIch(null);setWmh(null);setBrainResult(null);setDecisions({});setDraftText("");setExporting(false);
    return ()=>{serial.current++;active.current?.abort();};
  },[series,files,preset]);
  const chestPlan=plan.route==="monai-nodules";
  const ready=!!plan.route&&authorized&&!busy&&
    (chestPlan?((!!token&&!!endpoint.trim())||(!!effusionToken&&!!effusionEndpoint.trim())||(ctpaConfirmed&&!!peToken&&!!peEndpoint.trim())||(enhancedChestConfirmed&&!!nodeToken&&!!nodeEndpoint.trim())):
      (!!token&&!!endpoint.trim()))&&
-   (!plan.needsExplicitFlair||(flairConfirmed&&sourceUrl.startsWith("https://")&&!!sourceLicense.trim()));
+   (!plan.needsExplicitFlair||(
+     brainTask==="wmh"?
+       (flairConfirmed&&sourceUrl.startsWith("https://")&&!!sourceLicense.trim()):
+       (brainSequenceApproved&&brainAssignedReady&&sourceUrl.startsWith("https://")&&!!sourceLicense.trim())
+   ));
 
  async function launch(){
    if(!ready||!plan.route)return;
@@ -83,7 +110,7 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
    active.current?.abort();
    const controller=new AbortController();active.current=controller;
    setBusy(true);setStatus("Проверяем совместимость и доступность настоящей модели...");
-   setError("");setIch(null);setWmh(null);setChestSource(null);setChestNodules(null);
+   setError("");setIch(null);setWmh(null);setBrainResult(null);setChestSource(null);setChestNodules(null);
    setChestEffusion(null);setChestPe(null);setChestNodes(null);setChestIssues([]);setAbdomenResult(null);setDecisions({});setDraftText("");
    const session:WorkerSession={endpoint,token};
    const progress=(message:string)=>{
@@ -196,6 +223,40 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
          evidence.findings.length+". Требуется сверка каждого очага с исходной КТ. "+
          "Отсутствие кандидатов не исключает кровоизлияние; анализ других патологий не проводился.");
        setStatus("Настоящий ianpan выполнен. Кандидаты требуют проверки врача.");
+       return;
+     }
+     if(plan.route==="wmh-flair"&&brainTask!=="wmh"){
+       if(!brainSequenceApproved||!brainAssignedReady)
+         throw Error("МР-последовательности не подтверждены врачом.");
+       const sourceFiles:Record<string,File>={};
+       const usedSeries=new Set<string>();
+       for(const role of assignedBrainRoles){
+         if(controller.signal.aborted)throw new DOMException("Оригинальная МРТ отменена.","AbortError");
+         const chosen=compatibleBrainSeries.find(x=>x.key===brainSeriesByRole[role]);
+         if(!chosen||usedSeries.has(chosen.key))
+           throw Error("Исходная МР-серия для "+role+" не установлена или повторяется.");
+         usedSeries.add(chosen.key);
+         const volume=chosen.members.map(m=>files.get(m.id));
+         if(volume.some(x=>!x))throw Error("Исходный DICOM "+role+" больше недоступен.");
+         progress("Подготавливаем исходную МР-последовательность "+role+"…");
+         sourceFiles[role]=await prepareNativeBrainMr(
+           chosen,volume as File[],role,controller.signal,progress);
+       }
+       if(controller.signal.aborted||version!==serial.current)return;
+       const result=await executeOriginalBrain(session,brainTask,sourceFiles,
+         brainSequenceApproved,controller.signal,progress);
+       if(controller.signal.aborted||version!==serial.current)return;
+       setBrainResult(result);
+       const count=Object.values(result.modelRegions).reduce(
+         (sum,region)=>sum+region.components.length,0);
+       setDraftText("Исследовательская МРТ головного мозга: модель "+
+         (brainTask==="stroke"?"ISLES22 DWI/ADC/FLAIR (ишемические очаги)":
+           "BraTS T1CE/T1/T2/FLAIR (опухолевые субрегионы)")+
+         " выполнена на подтверждённых исходных последовательностях. "+
+         "Модельных компонентов: "+count+". Окончательная диагностика требует "+
+         "проверки врача с сопоставлением всех оригинальных серий.");
+       setStatus("Настоящая "+(brainTask==="stroke"?"ISLES22":"BraTS")+
+         " завершена. Показаны исследовательские очаги на исходной физической сетке.");
        return;
      }
      // MR weighting cannot be inferred reliably from scanning sequence codes;
@@ -311,12 +372,48 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
       </>}
       <p>Не применять на произвольной КТ грудной клетки. Исследовательская модель показала Dice 0,038 на одном FUMPE; решение требует ручной проверки, отрицательная ТЭЛА не исключается.</p>
     </div>}
-    {plan.needsExplicitFlair&&<>
-     <label><input type="checkbox" checked={flairConfirmed} disabled={busy} onChange={e=>setFlairConfirmed(e.target.checked)}/>
-      Врач подтвердил по протоколу, что выбранная исходная МР-серия действительно FLAIR.</label>
-     <label>URL публичного источника <input type="url" value={sourceUrl} disabled={busy} onChange={e=>setSourceUrl(e.target.value)}/></label>
-     <label>Лицензия публичного исследования <input type="text" value={sourceLicense} disabled={busy} onChange={e=>setSourceLicense(e.target.value)}/></label>
-    </>}
+    {plan.needsExplicitFlair&&<div className="cs-geometry">
+      <label>Задача оригинальной модели МРТ головного мозга
+       <select value={brainTask} disabled={busy} onChange={e=>{
+         setBrainTask(e.target.value as "wmh"|BrainTask);
+         setBrainSequenceApproved(false);setBrainResult(null);setBrainSeriesByRole({});
+       }}>
+        <option value="wmh">FLAIR · гиперинтенсивности WMH (одна модель)</option>
+        <option value="stroke">DWI + ADC + FLAIR · ишемия ISLES22</option>
+        <option value="glioma">T1CE + T1 + T2 + FLAIR · глиома BraTS</option>
+       </select>
+      </label>
+      {brainTask==="wmh"?<>
+        <label><input type="checkbox" checked={flairConfirmed} disabled={busy} onChange={e=>setFlairConfirmed(e.target.checked)}/>
+         Врач подтвердил: выбранная исходная МР-серия действительно FLAIR.</label>
+      </>:<>
+        <p>Для модели {brainTask==="stroke"?"ISLES22":"BraTS"} выберите различные
+         исходные серии одного StudyUID и FrameOfReferenceUID. Названия последовательностей
+         не угадываются по DICOM: их подтверждает врач.</p>
+        {assignedBrainRoles.map(role=><label key={role}>Исходная серия для {role.toUpperCase()}
+         <select value={brainSeriesByRole[role]??""} disabled={busy}
+          onChange={e=>{
+            setBrainSeriesByRole(old=>({...old,[role]:e.target.value}));
+            setBrainSequenceApproved(false);setBrainResult(null);
+          }}>
+          <option value="">Выберите исходную МР-серию</option>
+          {compatibleBrainSeries.map(item=><option key={item.key} value={item.key}>
+             {item.label} · {item.members.length} срезов
+          </option>)}
+         </select>
+        </label>)}
+        <label><input type="checkbox" checked={brainSequenceApproved} disabled={busy||!brainAssignedReady}
+         onChange={e=>setBrainSequenceApproved(e.target.checked)}/>
+          Я проверил назначение всех последовательностей, их принадлежность одному исследованию,
+          корректную регистрацию и правомерность обработки.</label>
+        {brainTask==="glioma"&&<p>BraTS требует четыре уже зарегистрированные
+           МР-серии размером 240×240×155. Несовместимое исследование не запускается.</p>}
+      </>}
+      <label>URL разрешённого публичного исследования <input type="url" value={sourceUrl}
+        disabled={busy} onChange={e=>setSourceUrl(e.target.value)}/></label>
+      <label>Лицензия исходного исследования <input type="text" value={sourceLicense}
+        disabled={busy} onChange={e=>setSourceLicense(e.target.value)}/></label>
+    </div>}
     <label><input type="checkbox" checked={authorized} disabled={busy} onChange={e=>setAuthorized(e.target.checked)}/>
      Подтверждаю разрешённый публичный обезличенный исследовательский источник и полномочия на локальный запуск. Пациентские снимки этим маршрутом не передавать.</label>
     <p>MONAI, task315, оригинальный Raidionics, исследовательский PE, TotalSegmentator живота и WMH используют разрешённые изображения в loopback worker; ianpan передаёт только SHA-256 и анализирует заранее установленную идентичную публичную КТ. Облачная передача не выполняется.</p>
@@ -447,6 +544,31 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
     <p>Сохранение общего source-bound отчёта для двух моделей ещё не подключено;
       используйте детальную оценку MONAI и анализ выпотов на исходных кадрах.</p>
   </div>}
+  {brainResult&&<section className="cs-geometry" aria-label="Исходные МРТ — модельные кандидаты">
+    <h3>{brainResult.task==="stroke"?"Ишемические очаги · оригинальный ISLES22 nnU-Net":
+      "Глиома · оригинальный BraTS SegResNet"}</h3>
+    <p>Настоящая оригинальная модель выполнена. Результаты связаны по SHA-256 с
+      выбранными исходными МР-последовательностями. Каждая зона — только
+      неподтверждённый модельный кандидат.</p>
+    {Object.entries(brainResult.modelRegions).map(([kind,region])=><div key={kind}>
+      <h4>{kind} · {region.sourcePositiveVoxels} модельных вокселей</h4>
+      {region.components.slice(0,50).map((c,i)=><p key={i}>
+        Кандидат {i+1}: {c.candidateVolumeMl.toFixed(3)} мл;
+        исходная геометрия RAS {c.nativeCenterRASmm.join(", ")} мм;
+        индекс среза {Math.round(c.nativeCenterIJK[2])+1} референсной
+        {brainResult.sourceReferenceRole.toUpperCase()} серии.
+      </p>)}
+      {region.components.length===0&&<p>Кандидатов нет; патология не исключена.</p>}
+      {region.components.length>50&&<p>Показаны первые 50 компонентов.</p>}
+    </div>)}
+    <label>Предварительный текст, проверяет врач
+      <textarea rows={5} maxLength={12000} value={draftText}
+        onChange={e=>setDraftText(e.target.value)}/>
+    </label>
+    <p>Исходная физическая сетка подтверждена, но точная привязка к DICOM SOP ещё
+      не доказана. Исследовательская модель не определяет клинический диагноз.
+      Gemini/Opus могут отдельно анализировать разрешённые кадры, но не заменяют валидацию.</p>
+  </section>}
   {ich&&<div>
    <p><strong>ianpan: {ich.findings.length} кандидатов.</strong> Отсутствие кандидатов не исключает кровоизлияние.</p>
    {ich.findings.map((f,i)=>{

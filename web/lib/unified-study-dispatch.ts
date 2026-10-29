@@ -26,10 +26,10 @@ export function planNativeStudyAnalysis(series:DicomSeries, availableFiles:Reado
     return denied("Неполная, смешанная, производная или не подтверждённая по UID исходная серия.");
   const allRegion=(region:string)=>series.members.every(m=>m.metadata.bodyRegion===region);
   if(series.modality==="CT"&&allRegion("CHEST"))
-    return {route:"monai-nodules",title:"Узлы лёгких · MONAI + плевральный/перикардиальный выпот · task315",reason:null,needsExplicitFlair:false};
+    return {route:"monai-nodules",title:"Грудная клетка · MONAI узлы, task315 выпоты, PE на CTPA и Raidionics средостение",reason:null,needsExplicitFlair:false};
   if(series.modality==="CT"&&allRegion("ABDOMEN"))
     return {route:"totalseg-abdomen",
-      title:"Кисты почек + очаги печени · 2 исходные TotalSegmentator задачи",
+      title:"КТ живота · кисты почек, очаги печени, поджелудочная (3 разные модели)",
       reason:null,needsExplicitFlair:false};
   if(series.modality==="CT"&&allRegion("HEAD")){
     if(series.members.length<8||series.members.length>64)
@@ -37,7 +37,7 @@ export function planNativeStudyAnalysis(series:DicomSeries, availableFiles:Reado
     return {route:"ianpan-ich",title:"Кровоизлияния · ianpan",reason:null,needsExplicitFlair:false};
   }
   if(series.modality==="MR"&&allRegion("HEAD"))
-    return {route:"wmh-flair",title:"Гиперинтенсивности · оригинальный WMH fold 0",
+    return {route:"wmh-flair",title:"МРТ головы · WMH / ISLES22 / BraTS по подтверждённым последовательностям",
       reason:null,needsExplicitFlair:true};
   return denied("Для этой модальности и анатомии пока нет подключённого прямого исполнителя. Это не означает отсутствие патологии.");
 }
