@@ -20,7 +20,7 @@ const actionLabels:Record<PrivacyAction["kind"],string>={redacted:"Скрыти�
   "text-retained":"Надписи оставлены по ручной отметке","review-set":"Ручная проверка","copy-restored":"Копия восстановлена · проверки сняты"};
 
 /** OCR reads same-origin fixed assets only. No image upload or recognized-text export. */
-export default function VisionPrivacyPreparation({previews,modality,originalLocalFileIds,onOpenOriginalSlice,specialistFacts,specialistLocalBinding,localLaa950,originalDetectorEvidence=null}:{
+export default function VisionPrivacyPreparation({previews,modality,originalLocalFileIds,onOpenOriginalSlice,specialistFacts,specialistLocalBinding,localLaa950,originalDetectorEvidence=null,autoStartAfterDetectors=false}:{
   previews:readonly (string|undefined)[];modality:string;
   originalLocalFileIds:readonly string[];
   onOpenOriginalSlice:(localFileId:string)=>void;
@@ -28,6 +28,7 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
   localLaa950?:LocalSameSeriesLaa950|null;
   specialistLocalBinding?:string;
   originalDetectorEvidence?:SanitizedDetectorBundle|null;
+  autoStartAfterDetectors?:boolean;
 }) {
   const [frames,setFrames]=useState<PrivacyFrame[]>([]),[selected,setSelected]=useState(0);
   const [error,setError]=useState(""),[busy,setBusy]=useState(false);
@@ -44,7 +45,7 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
   // OCR + actual black-pixel masking + second OCR never grants clinical/cloud clearance.
   const autoAttempt=useRef(false);
   useEffect(()=>{
-    if(autoAttempt.current||!previews.length||previews.some(p=>!p?.startsWith("data:image/png;base64,")))return;
+    if(!autoStartAfterDetectors||autoAttempt.current||!previews.length||previews.some(p=>!p?.startsWith("data:image/png;base64,")))return;
     if(modality!=="CT"&&modality!=="MR")return;
     autoAttempt.current=true;
     const controller=new AbortController();
@@ -72,7 +73,7 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
       if(version===generation.current){scan.current=null;setBusy(false);setOcrBusy(false);}
     });
     return()=>controller.abort();
-  },[previews,modality]);
+  },[previews,modality,autoStartAfterDetectors]);
   const frame=frames[selected];
   const currentOcr=frame&&ocr[frame.frameId]?.sha256===frame.sha256?ocr[frame.frameId]:undefined;
   const unresolvedText=!!currentOcr?.regions.length&&keptText[frame.frameId]!==frame.sha256;
