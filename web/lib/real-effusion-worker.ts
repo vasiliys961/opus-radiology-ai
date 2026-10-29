@@ -54,6 +54,14 @@ export async function checkAutomaticEffusionReady(signal?:AbortSignal):Promise<b
   return readyEffusionTask315(await r.json());
  }catch{return false;}
 }
+/** Same source SHA in both modes; only server proxy consumes research approval header.
+ * Original direct task315 CORS permits exactly Authorization/Content-Type/SHA.
+ */
+export function effusionTransferHeaders(serverManaged:boolean,sha:string):Record<string,string>{
+ if(!/^[a-f0-9]{64}$/.test(sha))throw Error("Source SHA256 required.");
+ return {"Content-Type":"application/octet-stream","X-Opus-Source-Sha256":sha,
+  ...(serverManaged?{"X-Opus-Public-Research-Authorization":"approved-nonpatient-source"}:{})};
+}
 export async function runOriginalEffusionTask315(
  session:WorkerSession|null,source:File,signal:AbortSignal,
  progress:(message:string)=>void=()=>{},
@@ -69,8 +77,7 @@ export async function runOriginalEffusionTask315(
  progress("Task315: передаём именно исходную HU-КТ на приватный Linux-worker...");
  const response=await invoke("/v1/effusion/analyze",{
   method:"POST",signal,headers:{
-   "Content-Type":"application/octet-stream","X-Opus-Source-Sha256":sha,
-   ...(session===null?{"X-Opus-Public-Research-Authorization":"approved-nonpatient-source"}:{}),
+   ...effusionTransferHeaders(session===null,sha),
   },body:source,
  });
  const raw=await readBoundedReport(response);
