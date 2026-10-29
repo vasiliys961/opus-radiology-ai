@@ -68,6 +68,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  const [xrvChestConfirmed,setXrvChestConfirmed]=useState(false);
  const [authorized,setAuthorized]=useState(false);
  const [flairConfirmed,setFlairConfirmed]=useState(false);
+ const [autoWmhReady,setAutoWmhReady]=useState(false);
  const [sourceUrl,setSourceUrl]=useState("");
  const [sourceLicense,setSourceLicense]=useState("");
  const [busy,setBusy]=useState(false);
@@ -118,6 +119,15 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
    return ()=>{serial.current++;active.current?.abort();};
  },[series,files,preset]);
  const chestPlan=plan.route==="monai-nodules";
+ useEffect(()=>{
+  if(plan.route!=="wmh-flair")return;
+  const controller=new AbortController();setAutoWmhReady(false);
+  void fetch("/api/local-wmh",{signal:controller.signal,credentials:"same-origin",cache:"no-store"})
+   .then(r=>r.ok?r.json():null).then(c=>{
+    if(!controller.signal.aborted)setAutoWmhReady(!!c&&c.schema==="opus-direct-wmh-worker/v1"&&c.originalModelReady===true&&c.imageUpload===true&&c.patientMode===false&&c.dataPolicy==="approved-public-research-only"&&c.modelVersion==="1.6.0");
+   }).catch(()=>{if(!controller.signal.aborted)setAutoWmhReady(false);});
+  return()=>controller.abort();
+ },[plan.route,series.key]);
  useEffect(()=>{
   if(!chestPlan)return;
   const controller=new AbortController();
@@ -358,7 +368,12 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
      }
      // MR weighting cannot be inferred reliably from scanning sequence codes;
      // require a separate explicit FLAIR operator check and public-source rights.
-     const response=await call(session,"/v1/wmh/capabilities",{signal:controller.signal});
+     const wmhSession=autoWmhReady?null:session;
+     const invokeWmh=(path:"/v1/wmh/capabilities"|"/v1/wmh/analyze",init:RequestInit={})=>
+       wmhSession?call(wmhSession,path,init):fetch("/api/local-wmh",{
+        ...init,method:path.endsWith("/capabilities")?"GET":"POST",credentials:"same-origin",cache:"no-store",redirect:"error",
+       }).then(res=>{if(!res.ok)throw Error("WMH worker недоступен: HTTP "+res.status);return res;});
+     const response=await invokeWmh("/v1/wmh/capabilities",{signal:controller.signal});
      const cap=await response.json() as Record<string,unknown>;
      if(cap.schema!=="opus-direct-wmh-worker/v1"||cap.originalModelReady!==true||
         cap.patientMode!==false||cap.imageUpload!==true||
@@ -374,8 +389,9 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
        form.append("dicom",file,"slice.dcm");
      }
      progress("Загружаем разрешённые исходные FLAIR DICOM в приватный worker...");
-     const output=await call(session,"/v1/wmh/analyze",{
+     const output=await invokeWmh("/v1/wmh/analyze",{
        method:"POST",body:form,signal:controller.signal,
+       headers:wmhSession?{}:{"X-Opus-Public-Research-Authorization":"approved-nonpatient-source"},
      });
      const data:unknown=await output.json();
      const bound=await bindWmhToSelectedDicom(data,series,files);
@@ -436,8 +452,8 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
   {plan.route&&<>
    <details>
     <summary>Настройки приватного исполнителя и разрешение</summary>
-    {!xrvPlan&&!(plan.route==="totalseg-abdomen"&&autoAbdomenReady)&&!(chestPlan&&autoMonaiReady)&&<label>Адрес локального worker <input type="text" value={endpoint} disabled={busy} onChange={e=>setEndpoint(e.target.value)}/></label>}
-    {!xrvPlan&&!(plan.route==="totalseg-abdomen"&&autoAbdomenReady)&&!(chestPlan&&autoMonaiReady)&&<label>Токен worker <input type="password" autoComplete="off" value={token} disabled={busy} onChange={e=>setToken(e.target.value)}/></label>}
+    {!xrvPlan&&!(plan.route==="totalseg-abdomen"&&autoAbdomenReady)&&!(chestPlan&&autoMonaiReady)&&!(plan.route==="wmh-flair"&&brainTask==="wmh"&&autoWmhReady)&&<label>Адрес локального worker <input type="text" value={endpoint} disabled={busy} onChange={e=>setEndpoint(e.target.value)}/></label>}
+    {!xrvPlan&&!(plan.route==="totalseg-abdomen"&&autoAbdomenReady)&&!(chestPlan&&autoMonaiReady)&&!(plan.route==="wmh-flair"&&brainTask==="wmh"&&autoWmhReady)&&<label>Токен worker <input type="password" autoComplete="off" value={token} disabled={busy} onChange={e=>setToken(e.target.value)}/></label>}
     {plan.route==="totalseg-abdomen"&&<p role="status">
        КТ живота · автоматическое подключение оригинальных моделей: {
         autoAbdomenChecking?"проверяем…":autoAbdomenReady?
