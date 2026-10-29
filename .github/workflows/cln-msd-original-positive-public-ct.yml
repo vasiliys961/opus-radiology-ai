@@ -8,6 +8,7 @@ on:
   push:
     branches: [main]
     paths:
+      - scripts/cln-msd-original-ct-cpu.py
       - scripts/cln-msd-original-positive-public-ct.py
       - .github/workflows/cln-msd-original-positive-public-ct.yml
   workflow_dispatch:
