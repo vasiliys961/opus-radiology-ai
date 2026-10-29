@@ -25,6 +25,9 @@ from fastapi.responses import JSONResponse, Response
 
 from abdominal_ct_pathology_inference import TASKS, MIN_RAM, VERSION, AUTH, digest
 from totalsegmentator_input import inspect_input
+from pancreatic_tumor_original_inference import TASK as PANCREAS_TASK, MIN_RAM as PANCREAS_MIN_RAM, SCHEMA as PANCREAS_SCHEMA
+
+ALL_TASKS=(*TASKS,PANCREAS_TASK)
 
 MAX_BYTES=352+512*512*300*4
 MAX_REPORT=512*1024
@@ -32,10 +35,16 @@ MAX_REPORT=512*1024
 
 def installed(checkpoints):
     """Operator-supplied exact files; file SHA is NOT vendor loader proof."""
-    if platform.system()!="Linux" or importlib.metadata.version("TotalSegmentator")!=VERSION:
+    if platform.system()!="Linux":
         raise ValueError("isolated_pinned_original_model_runtime_required")
+    if any(task in checkpoints for task in TASKS):
+        if importlib.metadata.version("TotalSegmentator")!=VERSION:
+            raise ValueError("isolated_pinned_original_model_runtime_required")
+    if PANCREAS_TASK in checkpoints:
+        if importlib.metadata.version("monai") not in ("1.5.1","1.5.0"):
+            raise ValueError("original_monai_pancreatic_runtime_required")
     result={}
-    for task in TASKS:
+    for task in ALL_TASKS:
         pair=checkpoints.get(task)
         if pair is None:
             continue
@@ -44,8 +53,8 @@ def installed(checkpoints):
         path,sha=pair
         file=Path(path)
         if (file.is_symlink() or not file.is_file() or
-            not 1024<file.stat().st_size<1024**3 or
-            file.suffix not in (".pt",".pth") or
+            not (1024**2 if task==PANCREAS_TASK else 1024)<file.stat().st_size<1024**3 or
+            file.suffix not in ((".ts",) if task==PANCREAS_TASK else (".pt",".pth")) or
             not isinstance(sha,str) or len(sha)!=64 or
             any(x not in "0123456789abcdef" for x in sha) or
             digest(file)!=sha):
@@ -130,7 +139,7 @@ def create_app(*,token,origin,checkpoints,port=8775):
                 except ValueError:
                     raise HTTPException(422,"invalid_original_CT_geometry") from None
                 outputs={}
-                for task in TASKS:
+                for task in ALL_TASKS:
                     if task not in models:
                         outputs[task]={"status":"unavailable","reason":"checkpoint_not_installed"}
                         continue
@@ -138,7 +147,7 @@ def create_app(*,token,origin,checkpoints,port=8775):
                     if digest(model)!=observed:
                         outputs[task]={"status":"unavailable","reason":"checkpoint_modified"}
                         continue
-                    if psutil.virtual_memory().available<MIN_RAM:
+                    if psutil.virtual_memory().available<(PANCREAS_MIN_RAM if task==PANCREAS_TASK else MIN_RAM):
                         outputs[task]={"status":"unavailable","reason":"memory_preflight_failed"}
                         continue
                     admission=root/(task+"-admission.json")
@@ -152,11 +161,17 @@ def create_app(*,token,origin,checkpoints,port=8775):
                     }))
                     mask=root/(task+"-mask.nii.gz")
                     report=root/(task+"-report.json")
-                    cmd=[sys.executable,str(Path(__file__).with_name("abdominal_ct_pathology_inference.py")),
-                        "--task",task,"--source",str(src),
-                        "--output-mask",str(mask),"--output-json",str(report),
-                        "--checkpoint",str(model),"--checkpoint-sha256",observed,
-                        "--source-admission",str(admission),"--authorization",AUTH]
+                    if task==PANCREAS_TASK:
+                        cmd=[sys.executable,str(Path(__file__).with_name("pancreatic_tumor_original_inference.py")),
+                            "--source",str(src),"--output-json",str(report),
+                            "--checkpoint",str(model),"--checkpoint-sha256",observed,
+                            "--source-admission",str(admission),"--authorization",AUTH]
+                    else:
+                        cmd=[sys.executable,str(Path(__file__).with_name("abdominal_ct_pathology_inference.py")),
+                            "--task",task,"--source",str(src),
+                            "--output-mask",str(mask),"--output-json",str(report),
+                            "--checkpoint",str(model),"--checkpoint-sha256",observed,
+                            "--source-admission",str(admission),"--authorization",AUTH]
                     env={k:v for k,v in os.environ.items() if k in
                          ("PATH","HOME","TMPDIR","LANG","LC_ALL","LD_LIBRARY_PATH",
                           "TOTALSEG_HOME_DIR","OMP_NUM_THREADS","MKL_NUM_THREADS","OPENBLAS_NUM_THREADS")}
@@ -178,17 +193,27 @@ def create_app(*,token,origin,checkpoints,port=8775):
                             outputs[task]={"status":"failed","reason":"original_model_timeout"}
                             continue
                         if (process.returncode!=0 or not report.is_file()
-                            or report.stat().st_size>MAX_REPORT or not mask.is_file()):
+                            or report.stat().st_size>MAX_REPORT or
+                            (task!=PANCREAS_TASK and not mask.is_file())):
                             outputs[task]={"status":"failed","reason":"original_model_forward_failed"}
                             continue
                         data=json.loads(report.read_text(encoding="utf-8"))
-                        if (data.get("schema")!="opus-real-abdominal-ct-pathology-proposals/v1" or
-                            data.get("task")!=task or data.get("sourceNiftiSha256")!=sha or
-                            data.get("observedCheckpointFileSha256")!=observed or
-                            data.get("outputNativeMaskSha256")!=digest(mask) or
-                            data.get("execution",{}).get("actualPretrainedInferenceClaimed") is not True or
-                            data.get("execution",{}).get("mode")!="isolated-original-model" or
-                            data.get("negativeDiagnosisPermitted") is not False):
+                        if task==PANCREAS_TASK:
+                            verified=(data.get("schema")==PANCREAS_SCHEMA and
+                                data.get("task")==task and data.get("sourceNiftiSha256")==sha and
+                                data.get("modelCheckpointFileSha256")==observed and
+                                data.get("actualPretrainedModelForwardCompleted") is True and
+                                data.get("clinicalValidation") is False and
+                                data.get("negativeCancerDiagnosisPermitted") is False)
+                        else:
+                            verified=(data.get("schema")=="opus-real-abdominal-ct-pathology-proposals/v1" and
+                                data.get("task")==task and data.get("sourceNiftiSha256")==sha and
+                                data.get("observedCheckpointFileSha256")==observed and
+                                data.get("outputNativeMaskSha256")==digest(mask) and
+                                data.get("execution",{}).get("actualPretrainedInferenceClaimed") is True and
+                                data.get("execution",{}).get("mode")=="isolated-original-model" and
+                                data.get("negativeDiagnosisPermitted") is False)
+                        if not verified:
                             outputs[task]={"status":"failed","reason":"source_or_model_proof_mismatch"}
                             continue
                         outputs[task]={"status":"completed","report":data}
@@ -215,12 +240,16 @@ def main():
     p.add_argument("--kidney-sha")
     p.add_argument("--liver-checkpoint")
     p.add_argument("--liver-sha")
+    p.add_argument("--pancreas-checkpoint")
+    p.add_argument("--pancreas-sha")
     a=p.parse_args()
     specs={}
     if a.kidney_checkpoint and a.kidney_sha:
         specs["kidney_cysts"]=(a.kidney_checkpoint,a.kidney_sha)
     if a.liver_checkpoint and a.liver_sha:
         specs["liver_lesions"]=(a.liver_checkpoint,a.liver_sha)
+    if a.pancreas_checkpoint and a.pancreas_sha:
+        specs[PANCREAS_TASK]=(a.pancreas_checkpoint,a.pancreas_sha)
     token=secrets.token_urlsafe(36).replace("-","_")
     app=create_app(token=token,origin=a.origin,checkpoints=specs,port=a.port)
     print("Abdominal original research worker token: "+token,flush=True)
