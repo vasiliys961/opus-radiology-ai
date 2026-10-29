@@ -137,7 +137,7 @@ export default function ViewerPage() {
             <div className="cs-series-list">{series.map((s) => <button type="button" className={selected?.key === s.key ? "cs-series active" : "cs-series"} key={s.key} onClick={() => {setWmhSlice(undefined);setVisionOpen(false);setCurrentSeriesKey(s.key);}}>{s.label}</button>)}</div>
           </>}
           {selected && <div className="cs-geometry"><h3>Контроль геометрии</h3><p>{selected.spatiallySorted ? "✓ Пространственный порядок подтверждён" : "⚠ Порядок условный"}</p><p>{selected.volumeReady ? `✓ Предварительная геометрия для будущего 3D · ${selected.sliceSpacingMm?.toFixed(2)} мм` : "3D/MPR НЕ РАЗРЕШЕНЫ"}</p>{selected.warning && <p>{selected.warning}</p>}</div>}
-          {selected && <UnifiedDicomStudyAnalysis key={"unified-"+selected.key} series={selected} files={indexedById}
+          {selected && <UnifiedDicomStudyAnalysis key={"unified-"+selected.key} series={selected} allSeries={series} files={indexedById}
             onMonaiReady={(file,session,report)=>{setPreparedMonaiSource(file);setPreparedMonaiSession(session);setPreparedMonaiResult(report??null);setSourceMode("nodules");}}
             onNavigate={setWmhSlice}/>}
           <details className="cs-geometry"><summary>Дополнительно · ручные исследовательские инструменты</summary>
