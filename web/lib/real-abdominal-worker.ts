@@ -184,19 +184,40 @@ async function textBounded(response:Response):Promise<string>{
  for(const part of chunks){buffer.set(part,i);i+=part.length;}
  return new TextDecoder("utf-8",{fatal:true}).decode(buffer);
 }
+/** A null session uses the same-origin private server; clinician never sees token. */
+export async function originalAbdomenViaServer(
+ path:"/v1/abdomen/capabilities"|"/v1/abdomen/analyze",init:RequestInit={},
+):Promise<Response>{
+ const method=path.endsWith("/capabilities")?"GET":"POST";
+ if(method==="POST"&&new Headers(init.headers).get("X-Opus-Public-Research-Authorization")!=="approved-nonpatient-source")
+   throw Error("Public CT research authorization required.");
+ const response=await fetch("/api/local-abdomen",{
+  ...init,method,credentials:"same-origin",redirect:"error",cache:"no-store",
+ });
+ if(!response.ok)throw Error("Оригинальный CT abdomen worker не готов или отказал (HTTP "+response.status+").");
+ return response;
+}
+export async function checkAutomaticAbdomenReady(signal?:AbortSignal):Promise<boolean>{
+ try{
+  const r=await originalAbdomenViaServer("/v1/abdomen/capabilities",{signal});
+  return readyOriginalAbdominalWorker(await r.json());
+ }catch{return false;}
+}
 export async function runOriginalAbdominalModels(
- session:WorkerSession,source:File,signal:AbortSignal,
+ session:WorkerSession|null,source:File,signal:AbortSignal,
  progress:(message:string)=>void=()=>{},
 ):Promise<AbdominalStudyResults>{
+ const invoke=(path:"/v1/abdomen/capabilities"|"/v1/abdomen/analyze",init:RequestInit={})=>
+   session?call(session,path,init):originalAbdomenViaServer(path,init);
  const native=await readNoduleNiftiHeader(source);
  progress("Проверяем установленные модели почек, печени и поджелудочной железы...");
- const cap=await (await call(session,"/v1/abdomen/capabilities",{signal})).json() as unknown;
+ const cap=await (await invoke("/v1/abdomen/capabilities",{signal})).json() as unknown;
  if(!readyOriginalAbdominalWorker(cap))
   throw Error("Настоящие модели брюшной полости не установлены или недоступна RAM.");
  const known=record(record(cap).installedTasks);
  const sourceSha=await originalNiftiSha256(source,signal);
  progress("Запускаем три разные патологические модели последовательно на одной HU-КТ...");
- const raw=await textBounded(await call(session,"/v1/abdomen/analyze",{
+ const raw=await textBounded(await invoke("/v1/abdomen/analyze",{
    method:"POST",signal,headers:{"Content-Type":"application/octet-stream",
     "X-Opus-Source-Sha256":sourceSha,
     "X-Opus-Public-Research-Authorization":"approved-nonpatient-source"},body:source,
