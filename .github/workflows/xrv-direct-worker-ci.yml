@@ -6,6 +6,8 @@ on:
       - services/imaging-ai/test_cxr_xrv_direct_worker.py
       - scripts/provision_xrv_original_model.py
       - scripts/test_provision_xrv_original_model.py
+      - scripts/install_xrv_user_service.py
+      - scripts/test_install_xrv_user_service.py
       - web/lib/xrv-original-cxr.ts
       - web/lib/xrv-original-cxr.test.ts
       - web/lib/unified-study-dispatch.ts
@@ -29,13 +31,14 @@ jobs:
       - name: Compile original XRV worker and publisher/Yandex model cache
         run: |
           python -m py_compile services/imaging-ai/cxr_xrv_direct_worker.py scripts/provision_xrv_original_model.py
-          python -m py_compile services/imaging-ai/test_cxr_xrv_direct_worker.py scripts/test_provision_xrv_original_model.py
+          python -m py_compile services/imaging-ai/test_cxr_xrv_direct_worker.py scripts/test_provision_xrv_original_model.py scripts/install_xrv_user_service.py scripts/test_install_xrv_user_service.py
       - name: Exact-original SHA, rights, URL and worker authorization contracts
         env:
           PYTHONPATH: scripts:services/imaging-ai
         run: |
           python services/imaging-ai/test_cxr_xrv_direct_worker.py -v
           python scripts/test_provision_xrv_original_model.py -v
+          python scripts/test_install_xrv_user_service.py -v
       - name: State the validation boundary
         run: |
           echo "Technical tests only; no model inference or clinical sensitivity claim."
