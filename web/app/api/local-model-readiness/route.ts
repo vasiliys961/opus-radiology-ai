@@ -1,10 +1,10 @@
-/** Same-origin localhost ONLY: remote patient/workplace deployment requires auth. */
+/** Original research-model readiness; localhost-only, no patient data. */
 import {NextRequest,NextResponse} from "next/server";
 import {probeOriginalFleet,WORKERS} from "../../../lib/original-worker-fleet";
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
 const HEAD={"Cache-Control":"no-store","X-Content-Type-Options":"nosniff"};
-const HOST=/^(?:127\\.0\\.0\\.1|localhost):[0-9]{1,5}$/;
+const HOST=/^(?:127\.0\.0\.1|localhost):[0-9]{1,5}$/;
 function allowedHost(req:NextRequest){
  const host=req.headers.get("host")??"";
  const origin=req.headers.get("origin");
@@ -19,7 +19,7 @@ export async function GET(req:NextRequest){
    {status:404,headers:HEAD});
  const secrets=Object.fromEntries(WORKERS.map(w=>[w.env,process.env[w.env]]));
  const origin=process.env.OPUS_LOCAL_WORKER_ORIGIN??"http://127.0.0.1:3000";
- if(!/^http:\\/\\/(?:127\\.0\\.0\\.1|localhost):[0-9]{1,5}$/.test(origin))
+ if(!/^http:\/\/(?:127\.0\.0\.1|localhost):[0-9]{1,5}$/.test(origin))
    return NextResponse.json({error:"Invalid local origin"},
      {status:503,headers:HEAD});
  const entries=await probeOriginalFleet(secrets,origin);
