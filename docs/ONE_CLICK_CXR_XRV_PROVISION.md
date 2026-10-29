@@ -101,3 +101,47 @@ NIH scores to Gemini observations and prepare an unsigned physician draft.
 
 Any genuine deployment still needs an authorized real public CR/DX DICOM
 end-to-end trial and separate clinical validation before patient use.
+
+
+## Automatic persistent Linux startup: operator installs ONCE
+
+The real-trained-model HTTP smoke in
+\`.github/workflows/xrv-real-loopback-forward.yml\` verifies the original NIH
+checkpoint, true six-head forward via **authenticated localhost HTTP**, and
+rejections for wrong token, source SHA, origin and content type. It is **not**
+an independent original DICOM-to-PNG browser test.
+
+On a private isolated Linux CPU machine running Next and the original XRV
+worker under the **same Unix account**:
+
+\`\`\`bash
+# Install CPU dependencies as in the section above, then install service:
+python scripts/install_xrv_user_service.py --enable-now
+# View only non-PHI runtime status:
+systemctl --user status opus-xrv-research.service
+\`\`\`
+
+The service is unprivileged, runs only as the logged-in user, restarts on
+a crash (12-second backoff), writes no model files, API keys or patient
+images into the unit, and connects only to localhost. First startup
+calls the SHA-256-pinned official publisher installer; later starts use
+the verified weight cache. It writes its private shared secret to
+\`web/.env.local\` with 0600 permissions. Restart Next after first setup
+so its server runtime loads the secret. The clinician's viewer checks
+\`/api/local-xrv\` for true readiness without service commands, paths
+or technical tokens.
+
+For a headless boot without a logged-in Unix user, the host administrator
+may separately enable user lingering according to server policy; this
+installer never changes OS login policy, installs root services or
+modifies unrelated units. On macOS this install command is intentionally
+unavailable; Mac remains a DICOM browser/client.
+
+An existing user service is left untouched unless \`--replace\` is
+explicit. Without \`--enable-now\` the installer only writes a unit
+file and starts nothing. No production/patient mode is enabled here.
+
+GitHub Actions successfully running the model does **not** mean it is
+running on your own Linux server. Host readiness must be confirmed on
+the actual computer. The operator needs suitable RAM; Yandex Disk/OAuth
+is optional because the official publisher remains a direct source.
