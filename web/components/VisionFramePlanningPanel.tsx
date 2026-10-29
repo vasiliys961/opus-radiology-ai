@@ -21,7 +21,7 @@ import {sameSeriesR231Facts,type CapturedLocalSpecialist} from "../lib/same-seri
 import {sameSeriesLaa950ForReview,type CapturedLocalLaa950} from "../lib/same-series-laa950-review";
 
 export default function VisionFramePlanningPanel({
-  series, activeSeriesKey, fileById, onOpenSlice,capturedSpecialist,capturedLaa950,ichRuntime,publicResearchAuthorized=false,originalDetectorEvidence=null,
+  series, activeSeriesKey, fileById, onOpenSlice,capturedSpecialist,capturedLaa950,ichRuntime,publicResearchAuthorized=false,originalDetectorEvidence=null,fromPrimaryAnalysis=false,
 }: {
   series: readonly DicomSeries[];
   activeSeriesKey: string | null;
@@ -33,6 +33,7 @@ export default function VisionFramePlanningPanel({
   ichRuntime?:InstalledIchRuntime|null;
   publicResearchAuthorized?:boolean;
   originalDetectorEvidence?:SanitizedDetectorBundle|null;
+  fromPrimaryAnalysis?:boolean;
 }) {
   const [requested, setRequested] = useState(4);
   const autoPreparedSeriesKey = useRef<string | null>(null);
@@ -237,6 +238,7 @@ export default function VisionFramePlanningPanel({
     setNotice("Локальная подготовка завершена. Изображения НЕ анализировались AI и не отправлялись в облако.");
     void completionChime(); // sound only after successful preparation and explicit opt-in
   };
+  const stablePrivacyPreviews=useMemo(()=>report?.frames.map(f=>thumbnails[f.fileId]?.url)??[],[report,thumbnails]);
   return <section className="ora-vision-plan" aria-label="Локальная подготовка кадров для Gemini">
     <div className="ora-vision-plan-head">
       <div><h2>Gemini Orchestra · подготовка кадров</h2>
@@ -260,7 +262,7 @@ export default function VisionFramePlanningPanel({
         Сформировать план
       </button>
     </div>
-    <div className="ora-vision-budget-preview" aria-label="Единый запуск КТ МРТ">
+    {!fromPrimaryAnalysis&&<div className="ora-vision-budget-preview" aria-label="Единый запуск КТ МРТ">
       <strong>Единый анализ · детекторы + Gemini + Opus</strong>
       <p>Одна точка входа: запуск доступных локальных моделей, затем проверка копий и разрешённый вызов Gemini + Opus в этой же панели.</p>
       <button type="button" disabled={detectorBusy||universal.status!=="eligible_for_authorization"} onClick={startUnified}>
@@ -284,7 +286,8 @@ export default function VisionFramePlanningPanel({
         {ichWorkerNotice&&<p role="status">{ichWorkerNotice}</p>}
         <p>Запуск ICH не требует второй кнопки: после настройки он входит в «Запустить единый анализ КТ/МРТ» выше.</p>
       </details>
-    </div>
+    </div>}
+    {fromPrimaryAnalysis&&<p role="status">Первый шаг завершён: реальные патологические детекторы уже выполнены через главную кнопку DICOM. Кадры подготавливаются автоматически, повторно запускать модель не требуется. Далее — проверка обезличивания и одно разрешение облачной передачи.</p>}
     <div className="ora-vision-budget-preview" role="status" aria-label="Универсальный анализ КТ и МРТ">
       <strong>Gemini + Opus · универсальный анализ {universal.modality==="CT"?"КТ":universal.modality==="MR"?"МРТ":"DICOM"}</strong>
       <p>{universal.reason}</p>
@@ -390,9 +393,10 @@ export default function VisionFramePlanningPanel({
         Только локальный исследовательский контекст: эти цифры не отправляются в OpenRouter
         и не подтверждают диагноз эмфиземы.</p>}
       {laaWarning&&<p role="status">{laaWarning}</p>}
-      <VisionPrivacyPreparation originalDetectorEvidence={originalDetectorEvidence}
+      <VisionPrivacyPreparation autoStartAfterDetectors={fromPrimaryAnalysis}
+        originalDetectorEvidence={originalDetectorEvidence}
         key={JSON.stringify(report.frames.map(f=>f.fileId))+requested}
-        previews={report.frames.map(f=>thumbnails[f.fileId]?.url)}
+        previews={stablePrivacyPreviews}
         modality={series.find(s=>s.key===report.seriesKey)?.modality??""}
         specialistFacts={specialistFacts}
         localLaa950={localLaa950}

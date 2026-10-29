@@ -24,11 +24,12 @@ import type {SanitizedDetectorBundle} from "../lib/detector-consilium-evidence";
  * Never advertises a checkpoint as installed until its private worker proves it.
  * No automatic cloud image transfer; Gemini/Opus require a separate privacy gate.
  */
-export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMonaiReady,onNavigate,onDetectorEvidence}:{
+export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMonaiReady,onNavigate,onDetectorEvidence,onReadyForVision}:{
  series:DicomSeries;allSeries:ReadonlyArray<DicomSeries>;files:ReadonlyMap<string,File>;
  onMonaiReady:(source:File,session:WorkerSession,completedReport?:BoundNoduleReport)=>void;
  onNavigate:(slice:number)=>void;
  onDetectorEvidence?:(seriesKey:string,bundle:SanitizedDetectorBundle|null)=>void;
+ onReadyForVision?:(seriesKey:string)=>void;
 }){
  const available=useMemo(()=>new Set(files.keys()),[files]);
  const plan=useMemo(()=>planNativeStudyAnalysis(series,available),[series,available]);
@@ -192,6 +193,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
        setStatus(completed?
          "Завершено моделей: "+completed+" из "+total+". Недоступные анализы явно отмечены.":
          "Ни одна патологическая модель не выполнена. Исследование не оценено.");
+       if(completed>0)onReadyForVision?.(series.key);
        return;
      }
      if(plan.route==="totalseg-abdomen"){
@@ -212,6 +214,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
          "Оригинальные патологические модели завершены: "+done+" из 3. "+
          "Неоценённые задачи показаны отдельно.":
          "Модели патологии живота не смогли завершить инференс; отсутствие патологии не установлено.");
+       if(done>0)onReadyForVision?.(series.key);
        return;
      }
      if(plan.route==="ianpan-ich"){
@@ -227,6 +230,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
          evidence.findings.length+". Требуется сверка каждого очага с исходной КТ. "+
          "Отсутствие кандидатов не исключает кровоизлияние; анализ других патологий не проводился.");
        setStatus("Настоящий ianpan выполнен. Кандидаты требуют проверки врача.");
+       onReadyForVision?.(series.key);
        return;
      }
      if(plan.route==="wmh-flair"&&brainTask!=="wmh"){
@@ -261,6 +265,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
          "проверки врача с сопоставлением всех оригинальных серий.");
        setStatus("Настоящая "+(brainTask==="stroke"?"ISLES22":"BraTS")+
          " завершена. Показаны исследовательские очаги на исходной физической сетке.");
+       onReadyForVision?.(series.key);
        return;
      }
      // MR weighting cannot be inferred reliably from scanning sequence codes;
@@ -293,6 +298,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
        "; суммарный объём "+bound.totalMl.toFixed(2)+" мл. "+
        "Изменения неспецифичны; требуется врачебная оценка и дифференциальная интерпретация.");
      setStatus("Оригинальный WMH fold 0 выполнен. Сверены SHA-256 исходных DICOM.");
+     onReadyForVision?.(series.key);
    }catch(e){
      if(version===serial.current&&!controller.signal.aborted)
        setError(e instanceof Error?e.message:"Анализ не завершился. Результата нет.");

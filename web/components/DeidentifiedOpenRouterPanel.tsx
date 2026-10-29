@@ -26,12 +26,11 @@ export default function DeidentifiedOpenRouterPanel({
   originalLocalFileIds,onOpenOriginalSlice,specialistFacts,specialistLocalBinding,localLaa950,originalDetectorEvidence=null,
 }:Props){
   const [server,setServer]=useState<Ready|null>(null),[token,setToken]=useState("");
-  const [clinician,setClinician]=useState(false),[providerRights,setProviderRights]=useState(false);
-  const [pixelReview,setPixelReview]=useState(false),[paid,setPaid]=useState(false);
+  const [transferAuthorized,setTransferAuthorized]=useState(false);
   const [working,setWorking]=useState(false),[error,setError]=useState("");
   const [readinessNote,setReadinessNote]=useState("");
   const [includeSpecialist,setIncludeSpecialist]=useState(false);
-  const [includeDetectors,setIncludeDetectors]=useState(false);
+  const [includeDetectors,setIncludeDetectors]=useState(true);
   const [result,setResult]=useState<SanitizedModelReview|null>(null);
   const [decisions,setDecisions]=useState<Record<string,LocalObservationAssessment>>({});
   const [clinicalSynthesis,setClinicalSynthesis]=useState("");
@@ -41,7 +40,7 @@ export default function DeidentifiedOpenRouterPanel({
   // This is essential for offline DICOM review and fail-closed browser tests.
   useEffect(()=>()=>{ctl.current?.abort();},[]);
   useEffect(()=>{setResult(null);setIncludeSpecialist(false);setDecisions({});setClinicalSynthesis("");},[specialistLocalBinding]);
-  useEffect(()=>{setResult(null);setIncludeDetectors(false);setDecisions({});setClinicalSynthesis("");},[originalDetectorEvidence]);
+  useEffect(()=>{setResult(null);setIncludeDetectors(true);setTransferAuthorized(false);setDecisions({});setClinicalSynthesis("");},[originalDetectorEvidence]);
   async function checkReadiness(){
     if(working)return;
     setReadinessNote("");setError("");setServer(null);
@@ -56,11 +55,24 @@ export default function DeidentifiedOpenRouterPanel({
     }catch{setReadinessNote("Локальный облачный пилот недоступен.");}
   }
   async function send(){
-    if(working||!enabledByLocalChecks||!server?.enabled||token.length<24||
-       !clinician||!providerRights||!pixelReview||!paid)return;
+    if(working||!enabledByLocalChecks||token.length<24||!transferAuthorized)return;
     setError("");setResult(null);setDecisions({});setClinicalSynthesis("");setDraftError("");setWorking(true);
     const controller=new AbortController();ctl.current=controller;
     try{
+      // One approved physician action verifies server readiness and then
+      // performs the two paid calls; opening the study never sends images.
+      let ready=server;
+      if(!ready?.enabled){
+        const probe=await fetch("/api/ai/deidentified-openrouter-review",{
+          method:"GET",cache:"no-store",signal:controller.signal,credentials:"same-origin",
+        });
+        if(!probe.ok)throw Error("OpenRouter недоступен на локальном сервере.");
+        ready=await probe.json() as Ready;
+        if(ready.schema!=="opus-deidentified-openrouter-pilot-readiness/v1"||
+           ready.productionPatientCloudRelease!==false||ready.enabled!==true)
+          throw Error("OpenRouter не разрешён настройками локального исследовательского сервера.");
+        setServer(ready);
+      }
       const packet=prepareReviewedPacket(); // local exact copy + signed action journal check
       if(packet.frames.some((f,i)=>f.frameId!==exactReviewedHashes[i]?.imageId||
          f.sha256!==exactReviewedHashes[i]?.sha256))
@@ -73,7 +85,7 @@ export default function DeidentifiedOpenRouterPanel({
           sentDetectors.modality!==packet.frames[0]?.modality))
         throw Error("Пакет патологических детекторов не соответствует проверенным кадрам.");
       const response=await fetch("/api/ai/deidentified-openrouter-review",{
-        method:"POST",cache:"no-store",signal:controller.signal,
+        method:"POST",cache:"no-store",signal:controller.signal,credentials:"same-origin",
         headers:{"Content-Type":"application/json","X-Opus-Local-Operator-Token":token},
         body:JSON.stringify({packet,acknowledgeClinicianLawfulDisclosure:true,
           acknowledgeProviderHealthDataTerms:true,acknowledgePixelIdentityReviewed:true,
@@ -143,11 +155,11 @@ export default function DeidentifiedOpenRouterPanel({
     <p role="status"><strong>Режим исследования, не клиническая система.</strong> Даже
       обезличенные изображения остаются медицинскими данными; удаление метаданных
       и OCR не гарантируют анонимность. Ключ OpenRouter остаётся на сервере.</p>
-    <div className="ora-evidence-actions">
+    <details><summary>Дополнительно · проверить серверный доступ</summary>
       <button type="button" disabled={working} onClick={()=>void checkReadiness()}>
-        Проверить локальное разрешение OpenRouter
+        Проверить локальный OpenRouter
       </button>
-    </div>
+    </details>
     {!server?.enabled&&<p>Серверный доступ по умолчанию выключен. Нужны
       <code> RADIOLOGY_ENABLE_DEIDENTIFIED_OPENROUTER_PILOT=1</code>,
       <code> RADIOLOGY_OPENROUTER_HEALTH_DATA_APPROVED=1</code>,
@@ -160,18 +172,12 @@ export default function DeidentifiedOpenRouterPanel({
     <label>Локальный пароль оператора <input type="password" value={token}
       autoComplete="off" maxLength={512} disabled={working}
       onChange={e=>setToken(e.target.value)} placeholder="Только локальный сервер"/></label>
-    <label><input type="checkbox" disabled={working} checked={clinician}
-      onChange={e=>setClinician(e.target.checked)}/>
-      Я уполномочен работать с этим исследованием и подтверждаю законное
-      основание для передачи обезличенных медицинских изображений.</label>
-    <label><input type="checkbox" disabled={working} checked={providerRights}
-      onChange={e=>setProviderRights(e.target.checked)}/>
-      Подтверждаю, что условия OpenRouter и выбранных моделей разрешают эту
-      обработку медицинских изображений и необходимую передачу данных.</label>
-    <label><input type="checkbox" disabled={working} checked={pixelReview}
-      onChange={e=>setPixelReview(e.target.checked)}/>
-      Проверил все исходящие изображения: нет имён, дат рождения, ID,
-      надписей учреждения, лиц или других узнаваемых признаков.</label>
+    <label><input type="checkbox" disabled={working||!enabledByLocalChecks}
+      checked={transferAuthorized} onChange={e=>setTransferAuthorized(e.target.checked)}/>
+      Я проверил все исходящие PNG, имею законное право передать обезличенное
+      исследование OpenRouter и выбранным моделям, проверил условия обработки
+      медицинских данных и разрешаю ровно два платных запроса: Gemini Vision → Opus.
+    </label>
     {specialistFacts&&<label><input type="checkbox" disabled={working}
       checked={includeSpecialist} onChange={e=>{setIncludeSpecialist(e.target.checked);setResult(null);}}/>
       Дополнительно передать обеим LLM только измерения из локального R231
@@ -190,15 +196,11 @@ export default function DeidentifiedOpenRouterPanel({
         } из {originalDetectorEvidence.facts.length} задач.
         Исходные UID, SHA, координаты и сами маски не передаются.
       </label>}
-    <label><input type="checkbox" disabled={working} checked={paid}
-      onChange={e=>setPaid(e.target.checked)}/>
-      Разрешаю два платных вызова: Gemini 3.8 Flash и Claude Opus 5.5
-      через OpenRouter без автоматического повтора.</label>
     <div className="ora-evidence-actions">
       <button type="button" disabled={working||!enabledByLocalChecks||
-        !server?.enabled||token.length<24||!clinician||!providerRights||!pixelReview||!paid}
-        onClick={()=>void send()}>{working?"Два AI анализируют выборку…":
-        "Отправить проверенные кадры Gemini + Opus"}</button>
+        token.length<24||!transferAuthorized}
+        onClick={()=>void send()}>{working?"Gemini → Opus анализируют кадры…":
+        "Подтвердить передачу и создать предварительное заключение"}</button>
       {working&&<button type="button" onClick={()=>ctl.current?.abort()}>Отменить</button>}
     </div>
     {readinessNote&&<p role="status">{readinessNote}</p>}
