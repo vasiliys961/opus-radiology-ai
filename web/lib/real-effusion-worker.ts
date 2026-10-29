@@ -35,20 +35,42 @@ async function readBoundedReport(response:Response):Promise<string>{
  for(const x of chunks){all.set(x,offset);offset+=x.length;}
  return new TextDecoder("utf-8",{fatal:true}).decode(all);
 }
+/** Same-origin private server-managed task315 path, no clinician token. */
+export async function originalEffusionViaServer(
+ path:"/v1/effusion/capabilities"|"/v1/effusion/analyze",init:RequestInit={},
+):Promise<Response>{
+ const method=path.endsWith("/capabilities")?"GET":"POST";
+ if(method==="POST"&&new Headers(init.headers).get("X-Opus-Public-Research-Authorization")!=="approved-nonpatient-source")
+  throw Error("Public CT research authorization required.");
+ const r=await fetch("/api/local-effusion",{
+  ...init,method,credentials:"same-origin",redirect:"error",cache:"no-store",
+ });
+ if(!r.ok)throw Error("Оригинальная TotalSegmentator task315 не готова (HTTP "+r.status+").");
+ return r;
+}
+export async function checkAutomaticEffusionReady(signal?:AbortSignal):Promise<boolean>{
+ try{
+  const r=await originalEffusionViaServer("/v1/effusion/capabilities",{signal});
+  return readyEffusionTask315(await r.json());
+ }catch{return false;}
+}
 export async function runOriginalEffusionTask315(
- session:WorkerSession,source:File,signal:AbortSignal,
+ session:WorkerSession|null,source:File,signal:AbortSignal,
  progress:(message:string)=>void=()=>{},
 ):Promise<OriginalEffusionRun>{
+ const invoke=(path:"/v1/effusion/capabilities"|"/v1/effusion/analyze",init:RequestInit={})=>
+   session?call(session,path,init):originalEffusionViaServer(path,init);
  const native=await readNoduleNiftiHeader(source);
  progress("Проверяем наличие настоящей модели выпотов task315 на Linux...");
- const cap=await (await call(session,"/v1/effusion/capabilities",{signal})).json() as unknown;
+ const cap=await (await invoke("/v1/effusion/capabilities",{signal})).json() as unknown;
  if(!readyEffusionTask315(cap))
   throw Error("Настоящий TotalSegmentator task315 не установлен или worker не располагает достаточной RAM.");
  const sha=await originalNiftiSha256(source,signal);
  progress("Task315: передаём именно исходную HU-КТ на приватный Linux-worker...");
- const response=await call(session,"/v1/effusion/analyze",{
+ const response=await invoke("/v1/effusion/analyze",{
   method:"POST",signal,headers:{
    "Content-Type":"application/octet-stream","X-Opus-Source-Sha256":sha,
+   "X-Opus-Public-Research-Authorization":"approved-nonpatient-source",
   },body:source,
  });
  const raw=await readBoundedReport(response);
