@@ -11,6 +11,7 @@ import VisionPrivacyReadiness from "./VisionPrivacyReadiness";
 import DeidentifiedOpenRouterPanel from "./DeidentifiedOpenRouterPanel";
 import type {LocalLungFacts} from "../lib/local-lung-review";
 import type {LocalSameSeriesLaa950} from "../lib/same-series-laa950-review";
+import type {SanitizedDetectorBundle} from "../lib/detector-consilium-evidence";
 import { buildPrivacyReadinessReport } from "../lib/privacy-readiness";
 
 const actionLabels:Record<PrivacyAction["kind"],string>={redacted:"Скрытие областей", "ocr-started":"OCR начат",
@@ -18,13 +19,14 @@ const actionLabels:Record<PrivacyAction["kind"],string>={redacted:"Скрыти�
   "text-retained":"Надписи оставлены по ручной отметке","review-set":"Ручная проверка","copy-restored":"Копия восстановлена · проверки сняты"};
 
 /** OCR reads same-origin fixed assets only. No image upload or recognized-text export. */
-export default function VisionPrivacyPreparation({previews,modality,originalLocalFileIds,onOpenOriginalSlice,specialistFacts,specialistLocalBinding,localLaa950}:{
+export default function VisionPrivacyPreparation({previews,modality,originalLocalFileIds,onOpenOriginalSlice,specialistFacts,specialistLocalBinding,localLaa950,originalDetectorEvidence=null}:{
   previews:readonly (string|undefined)[];modality:string;
   originalLocalFileIds:readonly string[];
   onOpenOriginalSlice:(localFileId:string)=>void;
   specialistFacts?:LocalLungFacts|null;
   localLaa950?:LocalSameSeriesLaa950|null;
   specialistLocalBinding?:string;
+  originalDetectorEvidence?:SanitizedDetectorBundle|null;
 }) {
   const [frames,setFrames]=useState<PrivacyFrame[]>([]),[selected,setSelected]=useState(0);
   const [error,setError]=useState(""),[busy,setBusy]=useState(false);
@@ -217,6 +219,7 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
       prepareReviewedPacket={makePilotPacket}
       originalLocalFileIds={originalLocalFileIds}
       specialistFacts={specialistFacts}
+      originalDetectorEvidence={originalDetectorEvidence}
       localLaa950={localLaa950}
       specialistLocalBinding={specialistLocalBinding}
       onOpenOriginalSlice={onOpenOriginalSlice}
