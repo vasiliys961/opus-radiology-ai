@@ -10,7 +10,7 @@ import type {BoundNoduleReport} from "../lib/live-nodule-report";
 import {runOriginalEffusionTask315,checkAutomaticEffusionReady,type OriginalEffusionRun} from "../lib/real-effusion-worker";
 import {executeOriginalPeCtp,checkAutomaticPeReady,type PeCtpSourceReport} from "../lib/pe-ctpa-direct-worker";
 import {runOriginalRaidionicsNodes,checkAutomaticNodesReady,type MediastinalNodeReport} from "../lib/mediastinal-raidionics-worker";
-import {runPublicIchWorker} from "../lib/public-ich-worker";
+import {runPublicIchWorker,checkAutomaticIchReady} from "../lib/public-ich-worker";
 import {call,type WorkerSession} from "../lib/local-worker";
 import {bindWmhToSelectedDicom,type BoundWmh} from "../lib/wmh-source-review";
 import type {EvidenceJson} from "../lib/evidence-json";
@@ -74,6 +74,8 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  const [status,setStatus]=useState("");
  const [error,setError]=useState("");
  const [ich,setIch]=useState<EvidenceJson|null>(null);
+ const [autoIchReady,setAutoIchReady]=useState(false);
+ const [autoIchChecking,setAutoIchChecking]=useState(false);
  const [wmh,setWmh]=useState<BoundWmh|null>(null);
  const [brainTask,setBrainTask]=useState<"wmh"|BrainTask>("wmh");
  const [brainSeriesByRole,setBrainSeriesByRole]=useState<Record<string,string>>({});
@@ -141,6 +143,16 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
     .finally(()=>{if(!controller.signal.aborted)setAutoEffusionChecking(false);});
   return()=>controller.abort();
  },[chestPlan,series.key]);
+ useEffect(()=>{
+  if(plan.route!=="ianpan-ich")return;
+  const controller=new AbortController();
+  setAutoIchReady(false);setAutoIchChecking(true);
+  void checkAutomaticIchReady(controller.signal).then(ok=>{
+   if(!controller.signal.aborted)setAutoIchReady(ok);
+  }).catch(()=>{if(!controller.signal.aborted)setAutoIchReady(false);})
+   .finally(()=>{if(!controller.signal.aborted)setAutoIchChecking(false);});
+  return()=>controller.abort();
+ },[plan.route,series.key]);
  const xrvPlan=plan.route==="xrv-cxr";
  useEffect(()=>{
   if(plan.route!=="totalseg-abdomen")return;
@@ -294,7 +306,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
        return;
      }
      if(plan.route==="ianpan-ich"){
-       const evidence=await runPublicIchWorker(session,series,files,controller.signal,progress);
+       const evidence=await runPublicIchWorker(autoIchReady?null:session,series,files,controller.signal,progress);
        if(version!==serial.current||controller.signal.aborted)return;
        const sop=new Set(series.members.map(m=>m.metadata.sopInstanceUid));
        const uid=new Set(series.members.map(m=>m.metadata.seriesUid));

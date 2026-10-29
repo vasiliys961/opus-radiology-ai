@@ -37,8 +37,26 @@ export function validatedPublicIchCapabilities(value:unknown):boolean {
     keys.every(key=>obj[key]===ARTIFACTS[key]);
 }
 
-export async function checkPublicIchWorker(session:WorkerSession,signal?:AbortSignal):Promise<void>{
-  const cap=await smallJson(await call(session,"/v1/ich/capabilities",{signal}));
+/** Fixed same-origin original ICH bridge, no DICOM pixels or browser token. */
+export async function ichRequest(session:WorkerSession|null,path:string,init:RequestInit={}):Promise<Response>{
+ if(session)return call(session,path,init);
+ if(!/^\/v1\/ich\/(capabilities|jobs(?:\/[a-f0-9-]{36}(?:\/evidence)?)?)$/.test(path))
+  throw Error("Недопустимый путь оригинального ICH worker.");
+ const response=await fetch("/api/local-ich"+path,{
+  ...init,credentials:"same-origin",redirect:"error",cache:"no-store",
+ });
+ if(!response.ok)throw Error("Оригинальный ICH worker недоступен (HTTP "+response.status+").");
+ return response;
+}
+export async function checkAutomaticIchReady(signal?:AbortSignal):Promise<boolean>{
+ try{
+  const response=await ichRequest(null,"/v1/ich/capabilities",{signal});
+  return validatedPublicIchCapabilities(await smallJson(response));
+ }catch{return false;}
+}
+
+export async function checkPublicIchWorker(session:WorkerSession|null,signal?:AbortSignal):Promise<void>{
+  const cap=await smallJson(await ichRequest(session,"/v1/ich/capabilities",{signal}));
   if(!validatedPublicIchCapabilities(cap))
     throw Error("Отдельный Linux ICH-worker не готов: требуются оригинальные проверенные веса, 10 ГиБ RAM и разрешённая публичная КТ.");
 }
@@ -87,7 +105,7 @@ async function boundedEvidence(response:Response):Promise<unknown>{
 
 const ID=/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 export async function runPublicIchWorker(
-  session:WorkerSession,series:DicomSeries,files:ReadonlyMap<string,File|Blob>,
+  session:WorkerSession|null,series:DicomSeries,files:ReadonlyMap<string,File|Blob>,
   signal:AbortSignal,onStatus?:(value:string)=>void,
 ):Promise<EvidenceJson>{
   await checkPublicIchWorker(session,signal);
@@ -95,8 +113,9 @@ export async function runPublicIchWorker(
   const digests=await originalDicomDigests(series,files,signal);
   let jobId:string|null=null;
   try{
-    const start=await smallJson(await call(session,"/v1/ich/jobs",{
-      method:"POST",signal,headers:{"Content-Type":"application/json"},
+    const start=await smallJson(await ichRequest(session,"/v1/ich/jobs",{
+      method:"POST",signal,headers:{"Content-Type":"application/json",
+        ...(session?{}:{"X-Opus-Public-Research-Authorization":"approved-nonpatient-source"})},
       body:JSON.stringify({schema:"opus-public-ich-job/v1",dataPolicy:"public-reference-only",
         originalDicomSha256:digests}),
     }));
@@ -106,7 +125,7 @@ export async function runPublicIchWorker(
     jobId=start.jobId;
     for(;;){
       if(signal.aborted)throw Error("Задание ICH отменено.");
-      const progress=await smallJson(await call(session,`/v1/ich/jobs/${jobId}`,{signal}));
+      const progress=await smallJson(await ichRequest(session,`/v1/ich/jobs/${jobId}`,{signal}));
       if(progress.schema!=="opus-public-ich-job-status/v1"||progress.jobId!==jobId)
         throw Error("Неверный ответ ICH worker.");
       if(progress.state==="failed")throw Error("Настоящий ICH-инференс не выполнен: "+String(progress.reason??"worker_failed"));
@@ -115,7 +134,7 @@ export async function runPublicIchWorker(
       onStatus?.("Настоящий ICH-инференс выполняется на изолированном Linux worker...");
       await pause(signal);
     }
-    const evidence=await boundedEvidence(await call(session,`/v1/ich/jobs/${jobId}/evidence`,{signal}));
+    const evidence=await boundedEvidence(await ichRequest(session,`/v1/ich/jobs/${jobId}/evidence`,{signal}));
     if(!validateEvidenceJson(evidence)||evidence.modality!=="CT"||
        evidence.coverage==="assessed"||
        evidence.findings.some(f=>f.model.id!==IANPAN_MODEL_ID||
@@ -124,7 +143,7 @@ export async function runPublicIchWorker(
     onStatus?.("ICH завершён: исследовательские находки привязаны к исходным срезам.");
     return evidence;
   }finally{
-    if(jobId)await call(session,`/v1/ich/jobs/${jobId}`,{
+    if(jobId)await ichRequest(session,`/v1/ich/jobs/${jobId}`,{
       method:"DELETE",signal:AbortSignal.timeout(10000),
     }).catch(()=>{});
   }
