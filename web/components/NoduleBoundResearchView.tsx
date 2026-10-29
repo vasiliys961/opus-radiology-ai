@@ -9,7 +9,7 @@ import {readNoduleNiftiHeader,parseBoundNoduleReport,verifyNoduleSource,
 /** A real NIfTI CT + the EXACT same-source completed pretrained MONAI report.
  * All file reading, SHA, rendering and candidate selection stay browser-local.
  */
-export default function NoduleBoundResearchView({initialSource=null,initialAutoSession=null}:{initialSource?:File|null;initialAutoSession?:WorkerSession|null}){
+export default function NoduleBoundResearchView({initialSource=null,initialAutoSession=null,initialCompletedReport=null}:{initialSource?:File|null;initialAutoSession?:WorkerSession|null;initialCompletedReport?:BoundNoduleReport|null}){
  const [source,setSource]=useState<File|null>(null);
  const [reportFile,setReportFile]=useState<File|null>(null);
  const [ready,setReady]=useState<{source:NoduleNativeSource;report:BoundNoduleReport}|null>(null);
@@ -37,7 +37,7 @@ export default function NoduleBoundResearchView({initialSource=null,initialAutoS
  // Source and token are explicitly supplied by the physician from the DICOM action.
  // Do not persist the token or trigger inference for manually opened NIfTI.
  useEffect(()=>{
-   if(!initialSource||!initialAutoSession)return;
+   if(!initialSource||!initialAutoSession||initialCompletedReport)return;
    const version=++serial.current;
    controller.current?.abort();
    const ctrl=new AbortController();controller.current=ctrl;
@@ -57,7 +57,28 @@ export default function NoduleBoundResearchView({initialSource=null,initialAutoS
        setError(error instanceof Error?error.message:"Прямой инференс MONAI не завершён.");
    }).finally(()=>{if(version===serial.current)setBusy(false);});
    return ()=>{ctrl.abort();};
- },[initialSource,initialAutoSession]);
+ },[initialSource,initialAutoSession,initialCompletedReport]);
+ // Reuse one already completed inference: returning to detailed review MUST NOT
+ // rerun MONAI, trigger another worker upload, or change the source identity.
+ useEffect(()=>{
+   if(!initialSource||!initialCompletedReport)return;
+   const version=++serial.current;
+   controller.current?.abort();const ctrl=new AbortController();controller.current=ctrl;
+   setBusy(true);setReady(null);setReaderDecisions({});setError("");
+   setStatus("Проверяем исходный SHA-256 без повторного запуска модели...");
+   void (async()=>{
+     const src=await readNoduleNiftiHeader(initialSource);
+     const checked=parseBoundNoduleReport(JSON.stringify(initialCompletedReport),src);
+     await verifyNoduleSource(initialSource,checked.source.sha256,ctrl.signal);
+     if(version!==serial.current||ctrl.signal.aborted)return;
+     setReady({source:src,report:checked});setSlice(0);
+     setStatus("Тот же результат MONAI открыт без повторного инференса.");
+   })().catch(e=>{
+     if(version===serial.current&&!ctrl.signal.aborted)
+       setError(e instanceof Error?e.message:"Не удалось подтвердить исходную модель.");
+   }).finally(()=>{if(version===serial.current)setBusy(false);});
+   return()=>ctrl.abort();
+ },[initialSource,initialCompletedReport]);
  const candidates=useMemo(()=>ready?.report.candidates.filter(c=>c.score>=score&&c.nativeVoxelIndexHypothesis)
    .sort((a,b)=>b.score-a.score)??[],[ready,score]);
  async function open(){
