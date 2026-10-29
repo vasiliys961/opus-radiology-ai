@@ -52,7 +52,7 @@ async function provenCapabilities(token:string,origin:string,signal:AbortSignal)
  });
  if(!result.ok)throw Error("worker_not_ready");
  const cap=await boundedJson(result,16384);
- if(!readyOriginalPeCtpWorker(cap))throw Error("checkpoint_not_verified");
+ if(!readyOriginalBrainTask(cap,"stroke")&&!readyOriginalBrainTask(cap,"glioma"))throw Error("checkpoint_not_verified");
  return cap;
 }
 export async function GET(req:NextRequest){
