@@ -194,7 +194,9 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  },[xrvPlan,series.key]);
  const ready=!!plan.route&&authorized&&!busy&&
    (xrvPlan?(xrvStatus==="ready"&&xrvChestConfirmed&&sourceUrl.startsWith("https://")):plan.route==="totalseg-abdomen"?(autoAbdomenReady||(!!token&&!!endpoint.trim())):chestPlan?((autoMonaiReady|| (!!token&&!!endpoint.trim()))||(autoEffusionReady||(!!effusionToken&&!!effusionEndpoint.trim()))||(ctpaConfirmed&&(autoPeReady||(!!peToken&&!!peEndpoint.trim())))||(enhancedChestConfirmed&&(autoNodesReady||(!!nodeToken&&!!nodeEndpoint.trim())))):
-     (!!token&&!!endpoint.trim()))&&
+     (plan.route==="ianpan-ich"?(autoIchReady|| (!!token&&!!endpoint.trim())):
+      plan.route==="wmh-flair"?((brainTask==="wmh"?autoWmhReady:autoBrainReady)|| (!!token&&!!endpoint.trim())):
+      (!!token&&!!endpoint.trim())))&&
    (!plan.needsExplicitFlair||(
      brainTask==="wmh"?
        (flairConfirmed&&sourceUrl.startsWith("https://")&&!!sourceLicense.trim()):
@@ -461,8 +463,8 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
   {plan.route&&<>
    <details>
     <summary>Настройки приватного исполнителя и разрешение</summary>
-    {!xrvPlan&&!(plan.route==="totalseg-abdomen"&&autoAbdomenReady)&&!(chestPlan&&autoMonaiReady)&&!(plan.route==="wmh-flair"&&(brainTask==="wmh"?autoWmhReady:autoBrainReady))&&<label>Адрес локального worker <input type="text" value={endpoint} disabled={busy} onChange={e=>setEndpoint(e.target.value)}/></label>}
-    {!xrvPlan&&!(plan.route==="totalseg-abdomen"&&autoAbdomenReady)&&!(chestPlan&&autoMonaiReady)&&!(plan.route==="wmh-flair"&&brainTask==="wmh"&&autoWmhReady)&&<label>Токен worker <input type="password" autoComplete="off" value={token} disabled={busy} onChange={e=>setToken(e.target.value)}/></label>}
+    {!xrvPlan&&!(plan.route==="totalseg-abdomen"&&autoAbdomenReady)&&!(chestPlan&&autoMonaiReady)&&!(plan.route==="wmh-flair"&&(brainTask==="wmh"?autoWmhReady:autoBrainReady))&&!(plan.route==="ianpan-ich"&&autoIchReady)&&<label>Адрес локального worker <input type="text" value={endpoint} disabled={busy} onChange={e=>setEndpoint(e.target.value)}/></label>}
+    {!xrvPlan&&!(plan.route==="totalseg-abdomen"&&autoAbdomenReady)&&!(chestPlan&&autoMonaiReady)&&!(plan.route==="wmh-flair"&&(brainTask==="wmh"?autoWmhReady:autoBrainReady))&&!(plan.route==="ianpan-ich"&&autoIchReady)&&<label>Токен worker <input type="password" autoComplete="off" value={token} disabled={busy} onChange={e=>setToken(e.target.value)}/></label>}
     {plan.route==="totalseg-abdomen"&&<p role="status">
        КТ живота · автоматическое подключение оригинальных моделей: {
         autoAbdomenChecking?"проверяем…":autoAbdomenReady?
