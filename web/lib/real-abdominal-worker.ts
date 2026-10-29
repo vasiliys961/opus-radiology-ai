@@ -6,7 +6,8 @@ import {call,type WorkerSession} from "./local-worker.ts";
 import {originalNiftiSha256} from "./live-nodule-worker.ts";
 import {readNoduleNiftiHeader} from "./live-nodule-report.ts";
 
-export type AbdominalTask="kidney_cysts"|"liver_lesions";
+export type TotalSegAbdominalTask="kidney_cysts"|"liver_lesions";
+export type AbdominalTask=TotalSegAbdominalTask|"pancreatic_tumor";
 export type NativeAbdominalProposal={
  labelId:number;pathologyClass:string;modelCandidateVoxels:number;
  modelCandidateVolumeMl:number;nativeSliceIndicesK:number[];
@@ -17,7 +18,7 @@ export type NativeAbdominalProposal={
 };
 export type AbdominalBoundReport={
  schema:"opus-real-abdominal-ct-pathology-proposals/v1";
- task:AbdominalTask;model:"TotalSegmentator";version:"2.18.0";
+ task:TotalSegAbdominalTask;model:"TotalSegmentator";version:"2.18.0";
  sourceNiftiSha256:string;outputNativeMaskSha256:string;
  observedCheckpointFileSha256:string;
  checkpointActuallyUsedByVendorProven:false;
@@ -27,7 +28,26 @@ export type AbdominalBoundReport={
  execution:{actualPretrainedInferenceClaimed:true;mode:"isolated-original-model"};
  limitations:string[];
 };
-export type AbdominalTaskState={status:"completed";report:AbdominalBoundReport}|
+export type PancreaticTumorCandidate={
+ nativeSourceVoxelBoxIJK:[[number,number],[number,number],[number,number]];
+ nativeSourceCentroidIJK:[number,number,number];
+ worldRasCentroidMm:[number,number,number];
+ candidateVoxelCount:number;candidateVolumeMl:number;
+ clinicalPancreaticCancerConfirmed:false;
+};
+export type PancreaticTumorReport={
+ schema:"opus-real-monai-pancreatic-tumor-source-candidates/v1";
+ task:"pancreatic_tumor";sourceNiftiSha256:string;modelCheckpointFileSha256:string;
+ vendorInternalActiveWeightsProof:false;monaiVersion:string;
+ nativeSourceDimensionsXYZ:[number,number,number];
+ sourceNativeTumorVoxelCount:number;
+ tumorCandidateComponents:PancreaticTumorCandidate[];
+ actualPretrainedModelForwardCompleted:true;
+ originalDicomSopRegistrationVerified:false;
+ clinicalValidation:false;negativeCancerDiagnosisPermitted:false;
+ limitations:string[];
+};
+export type AbdominalTaskState={status:"completed";report:AbdominalBoundReport|PancreaticTumorReport}|
  {status:"unavailable"|"failed";reason:string};
 export type AbdominalStudyResults={
  sourceNiftiSha256:string;
@@ -37,7 +57,7 @@ const sha=(s:unknown):s is string=>typeof s==="string"&&/^[a-f0-9]{64}$/.test(s)
 const positiveInt=(s:unknown):s is number=>Number.isSafeInteger(s)&&Number(s)>=0;
 const triple=(x:unknown):x is number[]=>Array.isArray(x)&&x.length===3&&
  x.every(v=>typeof v==="number"&&Number.isFinite(v));
-const allowed:Record<AbdominalTask,Record<number,string>>={
+const allowed:Record<TotalSegAbdominalTask,Record<number,string>>={
  kidney_cysts:{1:"kidney_cyst_left",2:"kidney_cyst_right"},
  liver_lesions:{1:"liver_lesions"},
 };
@@ -57,11 +77,11 @@ export function readyOriginalAbdominalWorker(cap:unknown):boolean{
  try{
   const tasks=record(x.installedTasks);
   return (Object.keys(tasks).length>0&&Object.keys(tasks).every(k=>
-   (k==="kidney_cysts"||k==="liver_lesions")&&
+   (k==="kidney_cysts"||k==="liver_lesions"||k==="pancreatic_tumor")&&
    sha(record(tasks[k]).checkpointSha256)&&record(tasks[k]).observedFileVerified===true));
  }catch{return false;}
 }
-function validateReport(report:unknown,task:AbdominalTask,expectedSha:string,
+function validateReport(report:unknown,task:TotalSegAbdominalTask,expectedSha:string,
  expectedCheckpoint:string,dims:number[]):AbdominalBoundReport{
  const x=record(report),e=record(x.execution),p=x.proposals;
  if(x.schema!=="opus-real-abdominal-ct-pathology-proposals/v1"||
@@ -115,6 +135,44 @@ function validateReport(report:unknown,task:AbdominalTask,expectedSha:string,
    throw Error("Неполные классы оригинальной модели.");
  return x as unknown as AbdominalBoundReport;
 }
+/** Separate original DiNTS trained model: never confuse pancreas organ label 1 with tumor 2. */
+function validatePancreaticTumor(report:unknown,sourceSha:string,
+ checkpointSha:string,dims:number[]):PancreaticTumorReport{
+ const x=record(report);
+ if(x.schema!=="opus-real-monai-pancreatic-tumor-source-candidates/v1"||
+    x.task!=="pancreatic_tumor"||x.sourceNiftiSha256!==sourceSha||
+    x.modelCheckpointFileSha256!==checkpointSha||
+    x.vendorInternalActiveWeightsProof!==false||
+    x.actualPretrainedModelForwardCompleted!==true||
+    x.originalDicomSopRegistrationVerified!==false||
+    x.clinicalValidation!==false||x.negativeCancerDiagnosisPermitted!==false||
+    !triple(x.nativeSourceDimensionsXYZ)||
+    !x.nativeSourceDimensionsXYZ.every((v:number,i:number)=>v===dims[i])||
+    !positiveInt(x.sourceNativeTumorVoxelCount)||
+    !Array.isArray(x.tumorCandidateComponents)||
+    x.tumorCandidateComponents.length>128||
+    !Array.isArray(x.limitations)||x.limitations.length<3)
+  throw Error("Неверный настоящий инференс опухолей поджелудочной железы.");
+ let tally=0;
+ for(const raw of x.tumorCandidateComponents as unknown[]){
+  const c=record(raw),box=c.nativeSourceVoxelBoxIJK;
+  if(!Array.isArray(box)||box.length!==3||
+      !box.every((pair:unknown,i:number)=>Array.isArray(pair)&&pair.length===2&&
+        pair.every(positiveInt)&&pair[0]<=pair[1]&&pair[1]<dims[i])||
+      !triple(c.nativeSourceCentroidIJK)||
+      !c.nativeSourceCentroidIJK.every((v:number,i:number)=>v>=box[i][0]&&v<=box[i][1])||
+      !triple(c.worldRasCentroidMm)||
+      !positiveInt(c.candidateVoxelCount)||c.candidateVoxelCount<10||
+      typeof c.candidateVolumeMl!=="number"||!Number.isFinite(c.candidateVolumeMl)||
+      c.candidateVolumeMl<=0||
+      c.clinicalPancreaticCancerConfirmed!==false)
+   throw Error("Неверная локализация модельного кандидата поджелудочной железы.");
+  tally+=c.candidateVoxelCount as number;
+ }
+ if(tally>x.sourceNativeTumorVoxelCount)
+   throw Error("Неверная сумма вокселей кандидатов.");
+ return x as unknown as PancreaticTumorReport;
+}
 async function textBounded(response:Response):Promise<string>{
  const reader=response.body?.getReader();if(!reader)throw Error("Пустой ответ модели.");
  let size=0;const chunks:Uint8Array[]=[];
@@ -131,13 +189,13 @@ export async function runOriginalAbdominalModels(
  progress:(message:string)=>void=()=>{},
 ):Promise<AbdominalStudyResults>{
  const native=await readNoduleNiftiHeader(source);
- progress("Проверяем оригинальные модели для кист почек и очагов печени...");
+ progress("Проверяем установленные модели почек, печени и поджелудочной железы...");
  const cap=await (await call(session,"/v1/abdomen/capabilities",{signal})).json() as unknown;
  if(!readyOriginalAbdominalWorker(cap))
   throw Error("Настоящие модели брюшной полости не установлены или недоступна RAM.");
  const known=record(record(cap).installedTasks);
  const sourceSha=await originalNiftiSha256(source,signal);
- progress("Запускаем две разные патологические модели последовательно на одной HU-КТ...");
+ progress("Запускаем три разные патологические модели последовательно на одной HU-КТ...");
  const raw=await textBounded(await call(session,"/v1/abdomen/analyze",{
    method:"POST",signal,headers:{"Content-Type":"application/octet-stream",
     "X-Opus-Source-Sha256":sourceSha,
@@ -147,15 +205,18 @@ export async function runOriginalAbdominalModels(
  if(x.schema!=="opus-original-abdominal-ct-pathology-batch/v1"||
     x.sourceNiftiSha256!==sourceSha||x.clinicalValidation!==false||
     x.noNegativeDiagnosis!==true||
-    Object.keys(tasks).length!==2)
+    Object.keys(tasks).length!==3)
    throw Error("Исходная КТ и исполненные модели не подтверждены.");
  const done={} as Record<AbdominalTask,AbdominalTaskState>;
- for(const task of ["kidney_cysts","liver_lesions"] as const){
+ for(const task of ["kidney_cysts","liver_lesions","pancreatic_tumor"] as const){
   const state=record(tasks[task]),status=state.status;
   if(status==="completed"){
     if(!(task in known))throw Error("Исполнитель возвратил необъявленную модель.");
-    done[task]={status,report:validateReport(state.report,task,sourceSha,
-     String(record(known[task]).checkpointSha256),native.dimensions)};
+    done[task]={status,report:task==="pancreatic_tumor"?
+      validatePancreaticTumor(state.report,sourceSha,
+       String(record(known[task]).checkpointSha256),native.dimensions):
+      validateReport(state.report,task,sourceSha,
+       String(record(known[task]).checkpointSha256),native.dimensions)};
   }else if((status==="unavailable"||status==="failed")&&
            typeof state.reason==="string"&&state.reason.length<128){
     done[task]={status,reason:state.reason};

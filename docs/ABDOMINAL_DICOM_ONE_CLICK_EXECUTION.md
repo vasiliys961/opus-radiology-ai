@@ -26,10 +26,12 @@ python abdominal_ct_pathology_direct_worker.py \
   --kidney-sha <exact-64-lowercase-hex> \
   --liver-checkpoint /private/weights/liver/checkpoint_final.pth \
   --liver-sha <exact-64-lowercase-hex> \
+  --pancreas-checkpoint /private/weights/pancreas/original-model.ts \
+  --pancreas-sha <exact-64-lowercase-hex> \
   --origin http://127.0.0.1:3000
 \`\`\`
 
-One of the two task checkpoints may be omitted; missing task must show
+Any of the three task checkpoints may be omitted; missing task must show
 "not assessed", never a negative diagnosis. Copy the printed temporary
 session token into the application's **advanced worker settings**. The worker
 does not invent source DICOM identity; it verifies the NIfTI source SHA and

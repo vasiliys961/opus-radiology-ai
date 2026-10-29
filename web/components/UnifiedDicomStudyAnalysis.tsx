@@ -131,11 +131,11 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
        setAbdomenResult(result);
        const done=Object.values(result.tasks).filter(x=>x.status==="completed").length;
        setDraftText("Исследовательская КТ брюшной полости. Исполнены оригинальные "+
-         "патологические модели: "+done+" из 2 (кисты почек, очаги печени). "+
+         "патологические модели: "+done+" из 3 (кисты почек, очаги печени, опухолевые изменения поджелудочной). "+
          "Модельные кандидаты неспецифичны; врач проверяет находки на исходных срезах. "+
          "Невыполненная модель не означает отрицательный результат.");
        setStatus(done?
-         "Настоящие TotalSegmentator задачи завершены: "+done+" из 2. "+
+         "Оригинальные патологические модели завершены: "+done+" из 3. "+
          "Неоценённые задачи показаны отдельно.":
          "Модели патологии живота не смогли завершить инференс; отсутствие патологии не установлено.");
        return;
@@ -259,19 +259,33 @@ export default function UnifiedDicomStudyAnalysis({series,files,onMonaiReady,onN
   </>}
   {status&&<p role="status">{status}</p>}
   {error&&<p role="alert">Не выполнено: {error}</p>}
-  {abdomenResult&&<section className="cs-geometry" aria-label="Кисты почек и очаги печени · исходный DICOM">
-    <h3>КТ живота · две различные оригинальные модели</h3>
+  {abdomenResult&&<section className="cs-geometry" aria-label="Кисты почек, очаги печени и поджелудочная · исходный DICOM">
+    <h3>КТ живота · три различные оригинальные модели</h3>
     <p>Одна подготовленная HU-КТ, последовательное выполнение без повторных моделей
       одной патологии. Исходный объём и отчёты связаны по SHA-256.
       Координаты срезов — предположительное соответствие DICOM; врач проверяет физическую сетку.</p>
-    {(["kidney_cysts","liver_lesions"] as const).map(task=>{
+    {(["kidney_cysts","liver_lesions","pancreatic_tumor"] as const).map(task=>{
       const item=abdomenResult.tasks[task];
       return <div key={task}>
-        <h4>{task==="kidney_cysts"?"Кисты почек · TotalSegmentator":"Очаги печени · TotalSegmentator"}</h4>
+        <h4>{task==="kidney_cysts"?"Кисты почек · TotalSegmentator":task==="liver_lesions"?"Очаги печени · TotalSegmentator":"Опухолевые кандидаты поджелудочной · MONAI DiNTS"}</h4>
         {item.status!=="completed"?<p role="status">Не исследовано: {item.reason}. Это не отрицательная находка.</p>:
           <div>
             <p>Оригинальная модель выполнена. Кандидаты требуют врачебной оценки.</p>
-            {item.report.proposals.map(c=><div key={c.labelId}>
+            {item.report.schema==="opus-real-monai-pancreatic-tumor-source-candidates/v1"?
+              <div>
+                <p>Модельных вокселей класса 2: {item.report.sourceNativeTumorVoxelCount}.
+                  Органная метка поджелудочной (класс 1) НЕ считается опухолью.</p>
+                {item.report.tumorCandidateComponents.map((c,i)=><div key={i}>
+                  <p>Кандидат {i+1}: {c.candidateVoxelCount} вокселей, {c.candidateVolumeMl.toFixed(2)} мл.
+                    Источник RAS: {c.worldRasCentroidMm.join(", ")} мм.</p>
+                  <button type="button" onClick={()=>{
+                    const k=Math.round(c.nativeSourceCentroidIJK[2]);
+                    if(k>=0&&k<series.members.length)onNavigate(k);
+                  }}>Открыть предположительный DICOM-срез кандидата</button>
+                </div>)}
+                {item.report.tumorCandidateComponents.length===0&&<p>Положительных модельных кандидатов нет; опухоль не исключена.</p>}
+              </div>:
+              item.report.proposals.map(c=><div key={c.labelId}>
               <p><strong>{c.pathologyClass}</strong> · модельных вокселей {c.modelCandidateVoxels};
                 исследовательский объём {c.modelCandidateVolumeMl.toFixed(2)} мл.</p>
               {c.nativeSliceIndicesK.length>0&&<button type="button" onClick={()=>{
