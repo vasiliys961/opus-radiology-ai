@@ -142,6 +142,7 @@ export default function ViewerPage() {
           {selected && <UnifiedDicomStudyAnalysis key={"unified-"+selected.key} series={selected} allSeries={series} files={indexedById}
             onMonaiReady={(file,session,report)=>{setPreparedMonaiSource(file);setPreparedMonaiSession(session);setPreparedMonaiResult(report??null);setSourceMode("nodules");}}
             onNavigate={setWmhSlice}
+            onReadyForVision={key=>{if(selected?.key===key)setVisionOpen(true);}}
             onDetectorEvidence={(key,bundle)=>setVisionDetectorEvidence(previous=>{
               if(!bundle)return null;
               if(previous?.seriesKey===key&&JSON.stringify(previous.bundle)===JSON.stringify(bundle))
