@@ -83,3 +83,43 @@ export async function checkOriginalXrvReady(signal?:AbortSignal):Promise<boolean
  const value:unknown=await response.json();
  return Boolean(value&&typeof value==="object"&&(value as {ready?:boolean}).ready===true);
 }
+
+
+/** Strict cloud allowlist: six raw scores, NEVER source PNG SHA,
+ * original DICOM UID, model checkpoint identity or clinical diagnosis.
+ */
+export type SanitizedCxrScores={
+ schema:"opus-sanitized-xrv-six-head/v1";
+ labels:Record<XrvCxrLabel,number>;
+ scoreMeaning:"uncalibrated-image-level-model-output";
+ model:"NIH-DenseNet121";
+ sourceIdentifiersSent:false;
+ clinicalValidation:false;
+};
+export function safeXrvScores(value:unknown):SanitizedCxrScores{
+ if(!value||typeof value!=="object"||Array.isArray(value))
+  throw Error("XRV cloud evidence is not a schema object.");
+ const x=value as Record<string,unknown>;
+ if(x.schema!=="opus-sanitized-xrv-six-head/v1"||
+    Object.keys(x).sort().join(",")!==[
+     "schema","labels","scoreMeaning","model",
+     "sourceIdentifiersSent","clinicalValidation"].sort().join(",")||
+    x.model!=="NIH-DenseNet121"||
+    x.scoreMeaning!=="uncalibrated-image-level-model-output"||
+    x.sourceIdentifiersSent!==false||x.clinicalValidation!==false||
+    !x.labels||typeof x.labels!=="object"||Array.isArray(x.labels)||
+    Object.keys(x.labels).sort().join(",")!==[...XRV_CXR_LABELS].sort().join(",")||
+    !Object.values(x.labels).every(v=>typeof v==="number"&&Number.isFinite(v)&&v>=0&&v<=1))
+  throw Error("Unexpected or source-identifying radiograph evidence.");
+ return value as SanitizedCxrScores;
+}
+export function toSafeXrvScores(report:OriginalXrvCxrResult):SanitizedCxrScores{
+ const original=parseOriginalXrvReport(report);
+ return safeXrvScores({
+  schema:"opus-sanitized-xrv-six-head/v1",
+  labels:Object.fromEntries(XRV_CXR_LABELS.map(n=>[n,original.labels[n]])),
+  scoreMeaning:"uncalibrated-image-level-model-output",
+  model:"NIH-DenseNet121",
+  sourceIdentifiersSent:false,clinicalValidation:false,
+ });
+}
