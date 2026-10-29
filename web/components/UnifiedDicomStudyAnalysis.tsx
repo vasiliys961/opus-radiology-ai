@@ -19,6 +19,7 @@ import {prepareNativeBrainMr} from "../lib/brain-native-mr-dicom";
 import {executeOriginalBrain,BRAIN_ROLES,type BrainTask,type BrainModelReport} from "../lib/brain-multisequence-original-worker";
 import DetectorGeminiOpusConsilium from "./DetectorGeminiOpusConsilium";
 import type {SanitizedDetectorBundle} from "../lib/detector-consilium-evidence";
+import {checkOriginalXrvReady,runCxrXrvFromDicom,XRV_CXR_LABELS,type OriginalXrvCxrResult} from "../lib/xrv-original-cxr";
 
 /** A single primary action that reuses the real DICOM -> MONAI/ianpan/WMH paths.
  * Never advertises a checkpoint as installed until its private worker proves it.
@@ -50,6 +51,9 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  const [chestEffusion,setChestEffusion]=useState<OriginalEffusionRun|null>(null);
  const [chestIssues,setChestIssues]=useState<string[]>([]);
  const [abdomenResult,setAbdomenResult]=useState<AbdominalStudyResults|null>(null);
+ const [xrvReport,setXrvReport]=useState<OriginalXrvCxrResult|null>(null);
+ const [xrvStatus,setXrvStatus]=useState<"checking"|"ready"|"unavailable">("checking");
+ const [xrvChestConfirmed,setXrvChestConfirmed]=useState(false);
  const [authorized,setAuthorized]=useState(false);
  const [flairConfirmed,setFlairConfirmed]=useState(false);
  const [sourceUrl,setSourceUrl]=useState("");
@@ -93,14 +97,25 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
    setPeEndpoint("http://127.0.0.1:8776");setPeToken("");setCtpaConfirmed(false);setChestPe(null);
    setNodeEndpoint("http://127.0.0.1:8777");setNodeToken("");setEnhancedChestConfirmed(false);setChestNodes(null);
    setChestSource(null);setChestNodules(null);setChestEffusion(null);setChestPe(null);setChestNodes(null);setChestIssues([]);setAbdomenResult(null);
+   setXrvReport(null);setXrvChestConfirmed(false);
    setAuthorized(false);setFlairConfirmed(false);
    setSourceUrl("");setSourceLicense("");setBusy(false);setError("");setStatus("");
    setIch(null);setWmh(null);setBrainResult(null);setDecisions({});setDraftText("");setExporting(false);
    return ()=>{serial.current++;active.current?.abort();};
  },[series,files,preset]);
  const chestPlan=plan.route==="monai-nodules";
+ const xrvPlan=plan.route==="xrv-cxr";
+ useEffect(()=>{
+   if(!xrvPlan)return;
+   const controller=new AbortController();
+   setXrvStatus("checking");
+   void checkOriginalXrvReady(controller.signal).then(ok=>{
+     if(!controller.signal.aborted)setXrvStatus(ok?"ready":"unavailable");
+   }).catch(()=>{if(!controller.signal.aborted)setXrvStatus("unavailable");});
+   return()=>controller.abort();
+ },[xrvPlan,series.key]);
  const ready=!!plan.route&&authorized&&!busy&&
-   (chestPlan?((!!token&&!!endpoint.trim())||(!!effusionToken&&!!effusionEndpoint.trim())||(ctpaConfirmed&&!!peToken&&!!peEndpoint.trim())||(enhancedChestConfirmed&&!!nodeToken&&!!nodeEndpoint.trim())):
+   (xrvPlan?(xrvStatus==="ready"&&xrvChestConfirmed&&sourceUrl.startsWith("https://")):chestPlan?((!!token&&!!endpoint.trim())||(!!effusionToken&&!!effusionEndpoint.trim())||(ctpaConfirmed&&!!peToken&&!!peEndpoint.trim())||(enhancedChestConfirmed&&!!nodeToken&&!!nodeEndpoint.trim())):
      (!!token&&!!endpoint.trim()))&&
    (!plan.needsExplicitFlair||(
      brainTask==="wmh"?
@@ -116,12 +131,26 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
    setBusy(true);setStatus("Проверяем совместимость и доступность настоящей модели...");
    onDetectorEvidence?.(series.key,null);
    setError("");setIch(null);setWmh(null);setBrainResult(null);setChestSource(null);setChestNodules(null);
-   setChestEffusion(null);setChestPe(null);setChestNodes(null);setChestIssues([]);setAbdomenResult(null);setDecisions({});setDraftText("");
+   setChestEffusion(null);setChestPe(null);setChestNodes(null);setChestIssues([]);setAbdomenResult(null);setXrvReport(null);setDecisions({});setDraftText("");
    const session:WorkerSession={endpoint,token};
    const progress=(message:string)=>{
      if(version===serial.current&&!controller.signal.aborted)setStatus(message);
    };
    try{
+     if(plan.route==="xrv-cxr"){
+       const original=files.get(series.members[0].id);
+       if(!original)throw Error("Исходный рентгеновский DICOM отсутствует.");
+       const result=await runCxrXrvFromDicom(original,sourceUrl,
+         authorized&&xrvChestConfirmed,controller.signal,progress);
+       if(version!==serial.current||controller.signal.aborted)return;
+       setXrvReport(result);
+       setDraftText("Исследовательская рентгенография: оригинальная NIH DenseNet121 "+
+         "выдала шесть некалиброванных оценок. Требуется независимая "+
+         "оценка исходного изображения врачом, Gemini и Opus.");
+       setStatus("Настоящая TorchXRayVision завершена. Шесть модельных NIH-показателей "+
+         "привязаны к исходной рентгенограмме; клиническая точность не подтверждена.");
+       return;
+     }
      if(plan.route==="monai-nodules"){
        // One native HU conversion, TWO truly trained pathology tasks.
        // Each worker runs sequentially: no heavy simultaneous RAM pressure.
