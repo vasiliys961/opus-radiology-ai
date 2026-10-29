@@ -33,7 +33,7 @@ test("One actual detector -> one fixed numeric task; unavailable are never norma
 test("Never mix findings of separate original CT volumes",()=>{
  const other={sourceNiftiSHA256:"b".repeat(64),candidates:[]} as MediastinalNodeReport;
  assert.throws(()=>assembleSanitizedDetectorBundle({region:"chest",modality:"CT",
-   nativeSourceSha256:source,nodules,nodes:other}),/разных исходных/);
+   nativeSourceSha256:source,nodules,nodes:other}),/разным исходным/);
  assert.throws(()=>assembleSanitizedDetectorBundle({region:"abdomen",modality:"CT"}),
    /Ни одна модель/);
 });
