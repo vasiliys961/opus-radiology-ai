@@ -8,7 +8,7 @@ import {runOriginalAbdominalModels,checkAutomaticAbdomenReady,type AbdominalStud
 import {executeRealNodule,checkAutomaticMonaiReady} from "../lib/live-nodule-worker";
 import type {BoundNoduleReport} from "../lib/live-nodule-report";
 import {runOriginalEffusionTask315,checkAutomaticEffusionReady,type OriginalEffusionRun} from "../lib/real-effusion-worker";
-import {executeOriginalPeCtp,type PeCtpSourceReport} from "../lib/pe-ctpa-direct-worker";
+import {executeOriginalPeCtp,checkAutomaticPeReady,type PeCtpSourceReport} from "../lib/pe-ctpa-direct-worker";
 import {runOriginalRaidionicsNodes,type MediastinalNodeReport} from "../lib/mediastinal-raidionics-worker";
 import {runPublicIchWorker} from "../lib/public-ich-worker";
 import {call,type WorkerSession} from "../lib/local-worker";
@@ -46,6 +46,8 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  const [autoEffusionChecking,setAutoEffusionChecking]=useState(false);
  const [peEndpoint,setPeEndpoint]=useState("http://127.0.0.1:8776");
  const [peToken,setPeToken]=useState("");
+ const [autoPeReady,setAutoPeReady]=useState(false);
+ const [autoPeChecking,setAutoPeChecking]=useState(false);
  const [ctpaConfirmed,setCtpaConfirmed]=useState(false);
  const [chestPe,setChestPe]=useState<PeCtpSourceReport|null>(null);
  const [nodeEndpoint,setNodeEndpoint]=useState("http://127.0.0.1:8777");
@@ -120,6 +122,11 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
    if(!controller.signal.aborted)setAutoMonaiReady(ok);
   }).catch(()=>{if(!controller.signal.aborted)setAutoMonaiReady(false);})
    .finally(()=>{if(!controller.signal.aborted)setAutoMonaiChecking(false);});
+  setAutoPeChecking(true);setAutoPeReady(false);
+  void checkAutomaticPeReady(controller.signal).then(ok=>{
+   if(!controller.signal.aborted)setAutoPeReady(ok);
+  }).catch(()=>{if(!controller.signal.aborted)setAutoPeReady(false);})
+   .finally(()=>{if(!controller.signal.aborted)setAutoPeChecking(false);});
   setAutoEffusionChecking(true);setAutoEffusionReady(false);
   void checkAutomaticEffusionReady(controller.signal).then(ok=>{
    if(!controller.signal.aborted)setAutoEffusionReady(ok);
@@ -148,7 +155,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
    return()=>controller.abort();
  },[xrvPlan,series.key]);
  const ready=!!plan.route&&authorized&&!busy&&
-   (xrvPlan?(xrvStatus==="ready"&&xrvChestConfirmed&&sourceUrl.startsWith("https://")):plan.route==="totalseg-abdomen"?(autoAbdomenReady||(!!token&&!!endpoint.trim())):chestPlan?((autoMonaiReady|| (!!token&&!!endpoint.trim()))||(autoEffusionReady||(!!effusionToken&&!!effusionEndpoint.trim()))||(ctpaConfirmed&&!!peToken&&!!peEndpoint.trim())||(enhancedChestConfirmed&&!!nodeToken&&!!nodeEndpoint.trim())):
+   (xrvPlan?(xrvStatus==="ready"&&xrvChestConfirmed&&sourceUrl.startsWith("https://")):plan.route==="totalseg-abdomen"?(autoAbdomenReady||(!!token&&!!endpoint.trim())):chestPlan?((autoMonaiReady|| (!!token&&!!endpoint.trim()))||(autoEffusionReady||(!!effusionToken&&!!effusionEndpoint.trim()))||(ctpaConfirmed&&(autoPeReady||(!!peToken&&!!peEndpoint.trim())))||(enhancedChestConfirmed&&!!nodeToken&&!!nodeEndpoint.trim())):
      (!!token&&!!endpoint.trim()))&&
    (!plan.needsExplicitFlair||(
      brainTask==="wmh"?
@@ -226,7 +233,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
              if(controller.signal.aborted)return;
              problems.push("ТЭЛА nnU-Net: "+(e instanceof Error?e.message:"исполнитель недоступен"));
            }
-         }else problems.push("ТЭЛА nnU-Net: модель CTPA не запускалась, не задан токен.");
+         }else problems.push("ТЭЛА nnU-Net: оригинальная модель недоступна автоматически, ручной worker не настроен.");
        }else{
          problems.push("ТЭЛА не исследована: тип серии CTPA не подтверждён врачом.");
        }
@@ -464,7 +471,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
       <label><input type="checkbox" checked={ctpaConfirmed} disabled={busy}
         onChange={e=>setCtpaConfirmed(e.target.checked)}/>
         Врач проверил протокол: эта выбранная серия является КТ-ангиографией лёгочных артерий с пригодной контрастной фазой.</label>
-      {ctpaConfirmed&&<>
+      {ctpaConfirmed&&<><p role="status">{autoPeChecking?"Проверяем оригинальный PE worker…":autoPeReady?"PE nnU-Net готов к автоматическому запуску через приватный сервер; токен врачу не нужен.":"PE worker не готов автоматически; доступен ручной исследовательский запуск."}</p>
         <label>Адрес PE nnU-Net worker <input type="text" value={peEndpoint} disabled={busy}
           onChange={e=>setPeEndpoint(e.target.value)}/></label>
         <label>Токен PE worker <input type="password" autoComplete="off" value={peToken} disabled={busy}
