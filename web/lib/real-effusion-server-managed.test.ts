@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {checkAutomaticEffusionReady,originalEffusionViaServer} from "./real-effusion-worker.ts";
+import {checkAutomaticEffusionReady,originalEffusionViaServer,effusionTransferHeaders} from "./real-effusion-worker.ts";
 
 const oldFetch=globalThis.fetch;
 test("No installed original task315 -> no falsely advertised automatic readiness",async()=>{
@@ -36,4 +36,17 @@ test("Actual auto-original pleural/pericardial worker is same-origin only withou
   assert.equal(requests[1].init.method,"POST");
   assert.equal(requests[1].url,"/api/local-effusion");
  }finally{globalThis.fetch=oldFetch;}
+});
+
+
+test("Manual direct TotalSegmentator worker still receives only original CORS-allowed headers",()=>{
+ const sha="d".repeat(64);
+ const direct=effusionTransferHeaders(false,sha);
+ assert.deepEqual(Object.keys(direct).sort(),["Content-Type","X-Opus-Source-Sha256"].sort());
+ assert.equal(direct["X-Opus-Source-Sha256"],sha);
+ assert.ok(!("X-Opus-Public-Research-Authorization" in direct));
+ const automated=effusionTransferHeaders(true,sha);
+ assert.equal(automated["X-Opus-Public-Research-Authorization"],
+   "approved-nonpatient-source");
+ assert.throws(()=>effusionTransferHeaders(true,"not-a-hash"),/SHA256/);
 });
