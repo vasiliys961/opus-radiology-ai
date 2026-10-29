@@ -1,0 +1,44 @@
+name: Real XRV original trained loopback HTTP forward
+on:
+  pull_request:
+    paths:
+      - services/imaging-ai/cxr_xrv_direct_worker.py
+      - scripts/smoke-real-xrv-loopback.py
+      - scripts/provision_xrv_original_model.py
+      - .github/workflows/xrv-real-loopback-forward.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-publisher-model-localhost:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: CPU-only genuine upstream NIH DenseNet121 and loopback worker packages
+        run: |
+          python -m pip install torch==2.6.0 torchvision==0.21.0 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install torchxrayvision==1.5.7 scikit-image 'fastapi>=0.115,<1' 'uvicorn>=0.30,<1'
+      - name: Download exact publisher CXR sample and original pretrained checkpoint (never patient data)
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p /tmp/opus-original-cxr-e2e
+          curl -fLsS --retry 2 --max-time 120 'https://raw.githubusercontent.com/mlmed/torchxrayvision/main/tests/00000001_000.png' -o /tmp/opus-original-cxr-e2e/sample.png
+          curl -fLsS --retry 2 --max-time 210 'https://github.com/mlmed/torchxrayvision/releases/download/v1/nih-densenet121-d121-tw-lr001-rot45-tr15-sc15-seed0-best.pt' -o /tmp/opus-original-cxr-e2e/nih-densenet121-d121-tw-lr001-rot45-tr15-sc15-seed0-best.pt
+          echo 'c8cbe59e6b9b186060dc68e63965658fa6b5b3ada6648d25c189b8b69b43cd4c  /tmp/opus-original-cxr-e2e/sample.png' | sha256sum -c -
+          echo '31a5475c6b1383a7edbfcaf96af9ce302eb9969cfe28b6b8b5859afc6f274fdf  /tmp/opus-original-cxr-e2e/nih-densenet121-d121-tw-lr001-rot45-tr15-sc15-seed0-best.pt' | sha256sum -c -
+      - name: REAL original pretrained NIH model over private authenticated localhost HTTP
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/smoke-real-xrv-loopback.py \
+            --image /tmp/opus-original-cxr-e2e/sample.png \
+            --weights /tmp/opus-original-cxr-e2e/nih-densenet121-d121-tw-lr001-rot45-tr15-sc15-seed0-best.pt
+      - name: Remove nonpatient model and sample inputs, upload NO image artifacts
+        if: always()
+        run: rm -rf /tmp/opus-original-cxr-e2e
