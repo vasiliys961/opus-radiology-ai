@@ -12,9 +12,10 @@ const base={
  dataPolicy:"public-nonpatient-research-only",
  vendorCheckpointUseCryptographicallyProven:false,
  installedTasks:{kidney_cysts:{checkpointSha256:sha,observedFileVerified:true},
-   liver_lesions:{checkpointSha256:sha,observedFileVerified:true}},
+   liver_lesions:{checkpointSha256:sha,observedFileVerified:true},
+   pancreatic_tumor:{checkpointSha256:sha,observedFileVerified:true}},
 };
-test("Two unique existing abdominal pathology tasks are ready only with real local checkpoints",()=>{
+test("Three unique existing abdominal pathology tasks are ready only with real local checkpoints",()=>{
  assert.equal(readyOriginalAbdominalWorker(base),true);
  assert.equal(readyOriginalAbdominalWorker({...base,installedTasks:{
   kidney_cysts:{checkpointSha256:sha,observedFileVerified:true}}}),true);
