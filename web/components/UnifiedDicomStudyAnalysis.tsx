@@ -3,7 +3,7 @@
 import {useEffect,useMemo,useRef,useState} from "react";
 import type {DicomSeries} from "../lib/dicom-series";
 import {planNativeStudyAnalysis} from "../lib/unified-study-dispatch";
-import {verifyRenalThreePhaseStudy} from "../lib/renal-three-phase-gate";
+import {verifyRenalThreePhaseStudy,type RenalPhaseRole} from "../lib/renal-three-phase-gate";
 import {prepareDicomMonaiFile,prepareDicomCtForPathology} from "../lib/dicom-monai-direct";
 import {runOriginalAbdominalModels,checkAutomaticAbdomenReady,type AbdominalStudyResults} from "../lib/real-abdominal-worker";
 import {executeRealNodule,checkAutomaticMonaiReady} from "../lib/live-nodule-worker";
@@ -39,7 +39,8 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
 }){
  const available=useMemo(()=>new Set(files.keys()),[files]);
  const plan=useMemo(()=>planNativeStudyAnalysis(series,available),[series,available]);
- const renalPhaseGate=useMemo(()=>verifyRenalThreePhaseStudy(allSeries,available),[allSeries,available]);
+ const [renalPhaseRoles,setRenalPhaseRoles]=useState<Partial<Record<RenalPhaseRole,string>>>({});
+ const renalPhaseGate=useMemo(()=>verifyRenalThreePhaseStudy(allSeries,available,renalPhaseRoles),[allSeries,available,renalPhaseRoles]);
  const [endpoint,setEndpoint]=useState("");
  const [token,setToken]=useState("");
  const [autoMonaiReady,setAutoMonaiReady]=useState(false);
@@ -633,7 +634,13 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
     report={xrvReport} onNavigate={onNavigate}/>}
   {plan.route==="totalseg-abdomen"&&<div className="cs-geometry" role="status">
    <strong>Опухоли почек · MONAI 3-фазная КТ</strong>
-   <p>Не исследовано: {renalPhaseGate.reason}</p>
+   <p>Сопоставление фаз (только при подтверждённом протоколе):</p>
+   {(["artery","vein","excret"] as const).map(role=><label key={role}>{role==="artery"?"Артериальная":role==="vein"?"Венозная":"Экскреторная"} фаза
+    <select disabled={busy} value={renalPhaseRoles[role]??""} onChange={e=>setRenalPhaseRoles(previous=>({...previous,[role]:e.target.value||undefined}))}>
+     <option value="">Не назначена</option>
+     {allSeries.filter(candidate=>candidate.modality==="CT"&&candidate.members.every(member=>member.metadata.bodyRegion==="ABDOMEN")).map(candidate=><option value={candidate.key} key={candidate.key}>{candidate.label}</option>)}
+    </select></label>)}
+   <p>{renalPhaseGate.status==="not_assessed"?"Не исследовано: ":"Готово только к проверке совмещения: "}{renalPhaseGate.reason}</p>
    <p>Это не отрицательный результат. Однофазную КТ и случайные серии нельзя передавать трёхфазной модели.</p>
   </div>}
   {abdomenResult&&<section className="cs-geometry" aria-label="Кисты почек, очаги печени и поджелудочная · исходный DICOM">
