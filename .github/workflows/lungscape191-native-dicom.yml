@@ -1,0 +1,19 @@
+name: LungSCAPE191 native DICOM original inference bridge
+on:
+  pull_request:
+    paths:
+      - scripts/lungscape191-native-dicom.py
+      - scripts/test-lungscape191-native-dicom.py
+      - .github/workflows/lungscape191-native-dicom.yml
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m unittest discover -s scripts -p 'test-lungscape191-native-dicom.py'
+      - run: python -m py_compile scripts/lungscape191-native-dicom.py
