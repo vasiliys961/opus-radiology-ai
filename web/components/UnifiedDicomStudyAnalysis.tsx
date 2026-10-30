@@ -4,6 +4,7 @@ import {useEffect,useMemo,useRef,useState} from "react";
 import type {DicomSeries} from "../lib/dicom-series";
 import {planNativeStudyAnalysis} from "../lib/unified-study-dispatch";
 import {verifyRenalThreePhaseStudy,type RenalPhaseRole} from "../lib/renal-three-phase-gate";
+import {runRenalMonaiThreePhase,type RenalMonaiResult} from "../lib/renal-monai-direct";
 import {prepareDicomMonaiFile,prepareDicomCtForPathology} from "../lib/dicom-monai-direct";
 import {runOriginalAbdominalModels,checkAutomaticAbdomenReady,type AbdominalStudyResults} from "../lib/real-abdominal-worker";
 import {executeRealNodule,checkAutomaticMonaiReady} from "../lib/live-nodule-worker";
@@ -40,6 +41,8 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  const available=useMemo(()=>new Set(files.keys()),[files]);
  const plan=useMemo(()=>planNativeStudyAnalysis(series,available),[series,available]);
  const [renalPhaseRoles,setRenalPhaseRoles]=useState<Partial<Record<RenalPhaseRole,string>>>({});
+ const [renalMonaiResult,setRenalMonaiResult]=useState<RenalMonaiResult|null>(null);
+ const [renalMonaiIssue,setRenalMonaiIssue]=useState("");
  const renalPhaseGate=useMemo(()=>verifyRenalThreePhaseStudy(allSeries,available,renalPhaseRoles),[allSeries,available,renalPhaseRoles]);
  const [endpoint,setEndpoint]=useState("");
  const [token,setToken]=useState("");
@@ -225,7 +228,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
    setBusy(true);setStatus("Проверяем совместимость и доступность настоящей модели...");
    onDetectorEvidence?.(series.key,null);
    setError("");setIch(null);setWmh(null);setBrainResult(null);setChestSource(null);setChestNodules(null);
-   setChestEffusion(null);setChestPe(null);setChestNodes(null);setChestIssues([]);setAbdomenResult(null);setXrvReport(null);setDecisions({});setDraftText("");
+   setChestEffusion(null);setChestPe(null);setChestNodes(null);setChestIssues([]);setAbdomenResult(null);setRenalMonaiResult(null);setRenalMonaiIssue("");setXrvReport(null);setDecisions({});setDraftText("");
    const session:WorkerSession={endpoint,token};
    const progress=(message:string)=>{
      if(version===serial.current&&!controller.signal.aborted)setStatus(message);
@@ -338,6 +341,17 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
        return;
      }
      if(plan.route==="totalseg-abdomen"){
+       if(renalPhaseGate.status==="ready_for_registration"){
+        try{
+         progress("Проверяем оригинальный MONAI для трёхфазной КТ почек…");
+         const renal=await runRenalMonaiThreePhase(allSeries,files,renalPhaseRoles,controller.signal,progress);
+         if(version!==serial.current||controller.signal.aborted)return;
+         setRenalMonaiResult(renal);
+        }catch(cause){
+         if(controller.signal.aborted)return;
+         setRenalMonaiIssue(cause instanceof Error?cause.message:"MONAI не выполнил анализ трёх фаз");
+        }
+       }
        const original=series.members.map(m=>files.get(m.id));
        if(original.some(f=>!f))throw Error("Исходная DICOM-КТ брюшной полости больше недоступна.");
        const nifti=await prepareDicomCtForPathology(
@@ -642,6 +656,10 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
     </select></label>)}
    <p>{renalPhaseGate.status==="not_assessed"?"Не исследовано: ":"Готово только к проверке совмещения: "}{renalPhaseGate.reason}</p>
    <p>Это не отрицательный результат. Однофазную КТ и случайные серии нельзя передавать трёхфазной модели.</p>
+   {renalMonaiIssue&&<p role="status">MONAI не выполнен: {renalMonaiIssue}</p>}
+   {renalMonaiResult&&<div><strong>Оригинальный MONAI SegResNet выполнен · опухолевых кандидатов: {renalMonaiResult.report.componentCandidates.length}</strong>
+    {renalMonaiResult.report.componentCandidates.map((candidate,i)=><p key={i}>Кандидат {i+1}: {candidate.candidateVolumeMl.toFixed(3)} мл, {candidate.candidateVoxels} вокселей; координаты RAS {candidate.niftiWorldCentroidMm.join(", ")} мм</p>)}
+   </div>}
   </div>}
   {abdomenResult&&<section className="cs-geometry" aria-label="Кисты почек, очаги печени и поджелудочная · исходный DICOM">
     <h3>КТ живота · оригинальные модели и HU-поиск почечных конкрементов</h3>
