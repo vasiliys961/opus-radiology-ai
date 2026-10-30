@@ -34,7 +34,7 @@ MAX_BYTES=352+512*512*300*4
 MAX_REPORT=512*1024
 
 
-def installed(checkpoints):
+def installed(checkpoints, *, allow_calculus_only=False):
     """Operator-supplied exact files; file SHA is NOT vendor loader proof."""
     if platform.system()!="Linux":
         raise ValueError("isolated_pinned_original_model_runtime_required")
@@ -61,7 +61,7 @@ def installed(checkpoints):
             digest(file)!=sha):
             raise ValueError("original_"+task+"_checkpoint_mismatch")
         result[task]=(file,sha)
-    if not result:
+    if not result and not allow_calculus_only:
         raise ValueError("no_original_pretrained_pathology_model_installed")
     return result
 
@@ -73,7 +73,9 @@ def create_app(*,token,origin,checkpoints,port=8775,calculus_source=None):
         origin.startswith("http://127.0.0.1:") or origin.startswith("http://localhost:")):
         raise ValueError("local_origin_required")
     if not 1024<=port<=65535:raise ValueError("loopback_port_required")
-    models=installed(checkpoints)
+    models=installed(checkpoints,allow_calculus_only=calculus_source is not None)
+    if calculus_source is not None and importlib.metadata.version('TotalSegmentator')!=VERSION:
+        raise ValueError('original_anatomy_runtime_version_required')
     if calculus_source is not None and (not isinstance(calculus_source,tuple) or len(calculus_source)!=2 or
         calculus_source[0] not in ("CC0","CC BY 3.0","CC BY 4.0") or
         not isinstance(calculus_source[1],str) or not calculus_source[1].startswith("https://")):
