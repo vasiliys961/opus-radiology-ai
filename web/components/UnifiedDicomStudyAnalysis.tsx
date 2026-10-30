@@ -659,7 +659,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
                 </div>)}
                 {item.report.tumorCandidateComponents.length===0&&<p>Положительных модельных кандидатов нет; опухоль не исключена.</p>}
               </div>:
-              item.report.proposals.map(c=><div key={c.labelId}>
+              item.report.schema==="opus-real-abdominal-ct-pathology-proposals/v1"&&item.report.proposals.map(c=><div key={c.labelId}>
               <p><strong>{c.pathologyClass}</strong> · модельных вокселей {c.modelCandidateVoxels};
                 исследовательский объём {c.modelCandidateVolumeMl.toFixed(2)} мл.</p>
               {c.nativeSliceIndicesK.length>0&&<button type="button" onClick={()=>{
