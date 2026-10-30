@@ -8,6 +8,8 @@ from __future__ import annotations
 import argparse
 import asyncio
 import hashlib
+import gzip
+import shutil
 import importlib.util
 import json
 import os
@@ -22,7 +24,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 MODEL_SCRIPT=Path(__file__).resolve().parents[2]/"scripts"/"real-monai-renal-neoplasm-3phase.py"
-NAMES=("artery.nii.gz","vein.nii.gz","excret.nii.gz")
+NAMES=("artery.nii","vein.nii","excret.nii")
 LIMIT=400*1024*1024
 PACKAGE_LIMIT=3*LIMIT+1024*1024
 
@@ -44,7 +46,15 @@ def validate_archive(archive:Path,folder:Path):
                     total+=len(block)
                     if total>LIMIT:raise ValueError("unbounded_phase")
                     dst.write(block)
-    return {name:folder/name for name in NAMES}
+    result={}
+    for name in NAMES:
+        source=folder/name
+        output=folder/(name+".gz")
+        with source.open("rb") as inp,gzip.open(output,"wb",compresslevel=1) as out:
+            shutil.copyfileobj(inp,out,length=1024*1024)
+        source.unlink()
+        result[name]=output
+    return result
 
 def verify_model(checkpoint:Path):
     if checkpoint.is_symlink() or not checkpoint.is_file():
