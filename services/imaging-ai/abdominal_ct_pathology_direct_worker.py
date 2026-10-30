@@ -163,7 +163,16 @@ def create_app(*,token,origin,checkpoints,port=8775,calculus_source=None):
                         env={k:v for k,v in os.environ.items() if k in
                              ("PATH","HOME","TMPDIR","LANG","LC_ALL","LD_LIBRARY_PATH","TOTALSEG_HOME_DIR",
                               "XDG_CACHE_HOME","MPLCONFIGDIR","TORCH_HOME","OMP_NUM_THREADS","MKL_NUM_THREADS")}
-                        env.update({"HF_HUB_OFFLINE":"1","TRANSFORMERS_OFFLINE":"1"})
+                        env.update({"HF_HUB_OFFLINE":"1","TRANSFORMERS_OFFLINE":"1",
+                            "HF_HUB_DISABLE_TELEMETRY":"1"})
+                        # The existing isolated TotalSegmentator executor requires writable
+                        # Linux /tmp cache locations; never use the operator HOME.
+                        cache=root/"calculus-cache"
+                        cache.mkdir(mode=0o700)
+                        for key in ("HOME","XDG_CACHE_HOME","MPLCONFIGDIR","TORCH_HOME","TOTALSEG_HOME_DIR"):
+                            path=cache/key.lower()
+                            path.mkdir(mode=0o700)
+                            env[key]=str(path)
                         process=await asyncio.create_subprocess_exec(*cmd,
                             stdout=asyncio.subprocess.DEVNULL,stderr=asyncio.subprocess.DEVNULL,
                             start_new_session=True,env=env)
