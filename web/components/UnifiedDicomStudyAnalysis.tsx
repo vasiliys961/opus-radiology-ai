@@ -5,7 +5,6 @@ import type {DicomSeries} from "../lib/dicom-series";
 import {planNativeStudyAnalysis} from "../lib/unified-study-dispatch";
 import {verifyRenalThreePhaseStudy,type RenalPhaseRole} from "../lib/renal-three-phase-gate";
 import {runRenalMonaiThreePhase,type RenalMonaiResult} from "../lib/renal-monai-direct";
-import {runKs987NativeKidney,type Ks987NativeReport} from "../lib/ks987-native-kidney";
 import {prepareDicomMonaiFile,prepareDicomCtForPathology} from "../lib/dicom-monai-direct";
 import {runOriginalAbdominalModels,checkAutomaticAbdomenReady,type AbdominalStudyResults} from "../lib/real-abdominal-worker";
 import {executeRealNodule,checkAutomaticMonaiReady} from "../lib/live-nodule-worker";
@@ -43,8 +42,6 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  const plan=useMemo(()=>planNativeStudyAnalysis(series,available),[series,available]);
  const [renalPhaseRoles,setRenalPhaseRoles]=useState<Partial<Record<RenalPhaseRole,string>>>({});
  const [renalMonaiResult,setRenalMonaiResult]=useState<RenalMonaiResult|null>(null);
- const [ks987Result,setKs987Result]=useState<Ks987NativeReport|null>(null);
- const [ks987Issue,setKs987Issue]=useState("");
  const [renalMonaiIssue,setRenalMonaiIssue]=useState("");
  const renalPhaseGate=useMemo(()=>verifyRenalThreePhaseStudy(allSeries,available,renalPhaseRoles),[allSeries,available,renalPhaseRoles]);
  const [endpoint,setEndpoint]=useState("");
@@ -231,7 +228,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
    setBusy(true);setStatus("Проверяем совместимость и доступность настоящей модели...");
    onDetectorEvidence?.(series.key,null);
    setError("");setIch(null);setWmh(null);setBrainResult(null);setChestSource(null);setChestNodules(null);
-   setChestEffusion(null);setChestPe(null);setChestNodes(null);setChestIssues([]);setAbdomenResult(null);setRenalMonaiResult(null);setRenalMonaiIssue("");setKs987Result(null);setKs987Issue("");setXrvReport(null);setDecisions({});setDraftText("");
+   setChestEffusion(null);setChestPe(null);setChestNodes(null);setChestIssues([]);setAbdomenResult(null);setRenalMonaiResult(null);setRenalMonaiIssue("");setXrvReport(null);setDecisions({});setDraftText("");
    const session:WorkerSession={endpoint,token};
    const progress=(message:string)=>{
      if(version===serial.current&&!controller.signal.aborted)setStatus(message);
@@ -363,12 +360,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
        const result=await runOriginalAbdominalModels(autoAbdomenReady?null:session,nifti,controller.signal,progress,ncctVerified);
        if(version!==serial.current||controller.signal.aborted)return;
        setAbdomenResult(result);
-       try{
-        progress("KS987: запускаем оригинальную модель опухолей почек на нативной КТ…");
-        const ks=await runKs987NativeKidney(nifti,controller.signal);
-        if(version!==serial.current||controller.signal.aborted)return;
-        setKs987Result(ks);
-       }catch(cause){if(!controller.signal.aborted)setKs987Issue(cause instanceof Error?cause.message:"KS987 недоступен");}
+
        const done=Object.values(result.tasks).filter(x=>x.status==="completed").length;
        setDraftText("Исследовательская КТ брюшной полости. Исполнены оригинальные "+
          "патологические модели: "+done+" из 4 (кисты почек, очаги печени, опухолевые изменения поджелудочной, почечные HU-кандидаты). "+
@@ -670,12 +662,6 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
     {renalMonaiResult.report.componentCandidates.map((candidate,i)=><p key={i}>Кандидат {i+1}: {candidate.candidateVolumeMl.toFixed(3)} мл, {candidate.candidateVoxels} вокселей; координаты RAS {candidate.niftiWorldCentroidMm.join(", ")} мм</p>)}
    </div>}
   </div>}
-  {plan.route==="totalseg-abdomen"&&<section className="cs-geometry" aria-label="KS987 опухоли почек"><h3>Опухоли почек · KS987, однофазная КТ</h3>
-   {ks987Issue&&<p role="status">Не выполнено: {ks987Issue}</p>}
-   {ks987Result&&<div><p>Оригинальный nnU-Net выполнен. Кандидатов: {ks987Result.candidateComponentCount}.</p>
-    {ks987Result.candidateRegions.map((c,i)=><p key={i}>Кандидат {i+1}, {c.sourceVolumeMl.toFixed(3)} мл; RAS {c.rasMmCentroid.join(", ")} мм.
-     <button type="button" onClick={()=>{const z=Math.round(c.nativeCentroidVoxel[2]);if(z>=0&&z<series.members.length)onNavigate(z);}}>Открыть предполагаемый срез</button></p>)}</div>}
-  </section>}
   {abdomenResult&&<section className="cs-geometry" aria-label="Кисты почек, очаги печени и поджелудочная · исходный DICOM">
     <h3>КТ живота · оригинальные модели и HU-поиск почечных конкрементов</h3>
     <p>Одна подготовленная HU-КТ, последовательное выполнение без повторных моделей
