@@ -147,8 +147,8 @@ def create_app(*,token,origin,checkpoints,port=8775,calculus_source=None):
                 outputs={}
                 for task in (*ALL_TASKS,CALCULUS_TASK):
                     if task==CALCULUS_TASK:
-                        if calculus_source is None:
-                            outputs[task]={"status":"unavailable","reason":"original_anatomy_not_configured"}
+                        if calculus_source is None or request.headers.get("x-opus-ncct-verified")!="native-noncontrast-verified":
+                            outputs[task]={"status":"unavailable","reason":"original_anatomy_or_noncontrast_unverified"}
                             continue
                         if psutil.virtual_memory().available<MIN_RAM:
                             outputs[task]={"status":"unavailable","reason":"memory_preflight_failed"}
