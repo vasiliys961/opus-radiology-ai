@@ -25,8 +25,8 @@ jobs:
           import json,os,platform
           lines=open("/proc/meminfo").read().splitlines()
           mem={k:int(v.split()[0])*1024 for k,v in (line.split(":",1) for line in lines if ":" in line)}
-          free=mem["MemAvailable:"]/(1024**3)
-          total=mem["MemTotal:"]/(1024**3)
+          free=mem["MemAvailable"]/(1024**3)
+          total=mem["MemTotal"]/(1024**3)
           result={"schema":"opus-ks987-free-runner-feasibility/v1",
              "host":platform.platform(),"memoryTotalGiB":round(total,2),
              "memoryAvailableGiB":round(free,2),"originalForwardMinimumFreeGiB":64,
