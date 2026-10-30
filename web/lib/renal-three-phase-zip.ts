@@ -41,5 +41,5 @@ export async function zipRenalNativePhases(files:Record<(typeof ROLES)[number],F
  const central=dirs.reduce((a,x)=>a+x.length,0),end=new Uint8Array(22),v=new DataView(end.buffer);
  write32(v,0,0x06054b50);write16(v,8,3);write16(v,10,3);
  write32(v,12,central);write32(v,16,offset);
- return new Blob([...parts,...dirs,end],{type:"application/zip"});
+ return new Blob([...parts,...dirs.map(d=>new Uint8Array(d)),new Uint8Array(end)],{type:"application/zip"});
 }
