@@ -20,7 +20,7 @@ test("ZIP32 contains the exact native phase names and source bytes",async()=>{
  const end=bytes.length-22;
  assert.equal(view.getUint32(end,true),0x06054b50);
  assert.equal(view.getUint16(end+10,true),3);
- assert.equal(view.getUint32(end+16,true),bytes.length-22-3*(46+("artery.nii").length)+2);
+ assert.equal(view.getUint32(end+16,true),3*30+("artery.nii".length+"vein.nii".length+"excret.nii".length)+3*1024);
 });
 test("ZIP submission cannot omit a phase or exceed per-phase byte limits",async()=>{
  const sample=new File([new Uint8Array(1024)],"valid.nii");
