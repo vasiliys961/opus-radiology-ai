@@ -1,0 +1,32 @@
+name: VLM blind ten-case experiment preflight
+on:
+  push:
+    branches: [experiment/blind-vlm-judge-20261030]
+    paths:
+      - '.github/workflows/vlm-blind-ten-preflight.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    env:
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check syntax, secret presence and private dataset readiness
+        shell: bash
+        run: |
+          python3 -m py_compile experiments/vlm_blind_10.py
+          if [ -n "$OPENROUTER_API_KEY" ]; then
+            echo 'OPENROUTER_API_KEY: configured'
+          else
+            echo 'OPENROUTER_API_KEY: missing'
+          fi
+          if [ ! -f experiments/private/manifest.json ]; then
+            echo 'BLOCKED: 10 approved, deidentified radiographs and manifest are not provided.'
+            echo 'No medical images transmitted. No billable API requests made.'
+            exit 0
+          fi
+          echo 'Manifest present; dataset license and authorization must be reviewed before any API call.'
+          echo 'This workflow is PREFLIGHT ONLY. It does not upload images or call OpenRouter.'
