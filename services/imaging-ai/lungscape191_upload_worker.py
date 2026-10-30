@@ -54,13 +54,13 @@ def create_app():
                                            device="cpu",execute=True,fold=os.environ.get("OPUS_LUNGSCAPE_FOLD","all"))
             if result.get("trueOriginalTrainedModelForwardCompleted") is not True or result.get("status")!="research_mask_generated":
                 raise ValueError("original_inference_not_completed")
-            if result.get("originalMaskComponentAnalysisCompleted") is not True:
+            if result.get("componentAnalysisCompleted") is not True:
                 raise ValueError("native_component_analysis_not_completed")
-            components=result.get("originalMaskConnectedComponentsResearchOnly")
+            components=result.get("candidateComponents")
             if not isinstance(components,list) or len(components)>400:raise ValueError("unbounded_components")
             job["report"]={"schema":"opus-lungscape-original-CT-result/v1","sourceNiftiSha256":job["hash"],
                 "realOriginalModelForwardCompleted":True,"model":"LungSCAPE Dataset191",
-                "modelLabelMap":result.get("originalModelLabelMap"),
+                "modelLabelMap":result.get("labelMapFromInstalledModel"),
                 "nativeComponents":components,"componentCount":len(components),
                 "researchOnly":True,"clinicalValidation":False,"negativeDiagnosisPermitted":False}
             job["state"]="succeeded"
