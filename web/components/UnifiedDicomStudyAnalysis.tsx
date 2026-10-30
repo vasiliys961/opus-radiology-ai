@@ -798,7 +798,8 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
       координаты кандидатов и решения врача. Не загружайте такой файл в публичный GitHub или облачный LLM.
       Это не подписанное клиническое заключение.</p>
   </div>}
-  {(chestNodules||chestCln||chestEffusion||chestPe||chestNodes||abdomenResult||ich||wmh||brainResult)&&
+  {chestCln&&<p role="status">CLN: {chestCln.candidateCount} опухолевых кандидатов (не диагноз).</p>}
+   {(chestNodules||chestCln||chestEffusion||chestPe||chestNodes||abdomenResult||ich||wmh||brainResult)&&
     <DetectorGeminiOpusConsilium onBundleReady={bundle=>onDetectorEvidence?.(series.key,bundle)} snapshot={{
       modality:series.modality as "CT"|"MR",
       region:plan.route==="monai-nodules"?"chest":
