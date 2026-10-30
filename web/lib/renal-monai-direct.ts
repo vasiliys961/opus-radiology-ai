@@ -1,7 +1,7 @@
 import type {DicomSeries} from "./dicom-series.ts";
 import {prepareDicomCtForPathology} from "./dicom-monai-direct.ts";
 import {zipRenalNativePhases} from "./renal-three-phase-zip.ts";
-import {originalNiftiSha256} from "./live-nodule-worker.ts";
+import {sha256} from "@noble/hashes/sha2.js";
 import {verifyRenalThreePhaseStudy,type RenalPhaseRole} from "./renal-three-phase-gate.ts";
 
 export type RenalMonaiResult={
@@ -34,7 +34,12 @@ export async function runRenalMonaiThreePhase(
    message=>progress(role+": "+message));
  }
  const archive=await zipRenalNativePhases(output,signal,progress);
- const sha=await originalNiftiSha256(archive,signal);
+ const hash=sha256.create();
+ for(let pos=0;pos<archive.size;pos+=1024*1024){
+  if(signal.aborted)throw Error("Анализ отменён.");
+  hash.update(new Uint8Array(await archive.slice(pos,Math.min(pos+1024*1024,archive.size)).arrayBuffer()));
+ }
+ const sha=Array.from(hash.digest(),b=>b.toString(16).padStart(2,"0")).join("");
  const result=await fetch("/api/local-renal",{method:"POST",body:archive,signal,
   headers:{"Content-Type":"application/zip","X-Opus-Source-Sha256":sha,
    "X-Opus-Three-Phase-Research":"authorized-registered-kidney-roi"},cache:"no-store"});
