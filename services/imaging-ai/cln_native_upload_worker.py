@@ -96,7 +96,7 @@ def create_app():
             # An actual 3D source NIfTI must contain the native NIfTI-1 signature.
             with nii.open("rb") as inp:
                 header=inp.read(352)
-            if int.from_bytes(header[:4],"little")!=348 or header[344:348]!=b"n+1\\x00":
+            if int.from_bytes(header[:4],"little")!=348 or header[344:348]!=bytes([110,43,49,0]):
                 raise HTTPException(422,"invalid_native_nifti")
             jobId=str(uuid.uuid4());job={"state":"running","sourceHash":sha,"dir":folder}
             store[jobId]=job
