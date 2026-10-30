@@ -4,6 +4,7 @@
  * It is not Gemini VISION; visual frame review remains separately authorized.
  */
 import type {BoundNoduleReport} from "./live-nodule-report.ts";
+import type {ClnReport} from "./cln-native-worker.ts";
 import type {OriginalEffusionRun} from "./real-effusion-worker.ts";
 import type {PeCtpSourceReport} from "./pe-ctpa-direct-worker.ts";
 import type {MediastinalNodeReport} from "./mediastinal-raidionics-worker.ts";
@@ -13,7 +14,7 @@ import type {BoundWmh} from "./wmh-source-review.ts";
 import type {BrainModelReport} from "./brain-multisequence-original-worker.ts";
 
 export type ConsiliumTask=
-  "lung_nodules"|"pleural_effusion"|"pericardial_effusion"|
+  "lung_nodules"|"lung_tumor"|"pleural_effusion"|"pericardial_effusion"|
   "pulmonary_embolism"|"mediastinal_nodes"|
   "renal_cysts"|"hepatic_lesions"|"pancreatic_tumor"|
   "brain_hemorrhage"|"white_matter_hyperintensities"|
@@ -36,7 +37,7 @@ export type SanitizedDetectorBundle={
  negativeDiagnosisPermitted:false;
 };
 export const TASKS_BY_REGION:Record<ConsiliumRegion,readonly ConsiliumTask[]>={
- chest:["lung_nodules","pleural_effusion","pericardial_effusion",
+ chest:["lung_nodules","lung_tumor","pleural_effusion","pericardial_effusion",
         "pulmonary_embolism","mediastinal_nodes"],
  abdomen:["renal_cysts","hepatic_lesions","pancreatic_tumor"],
  brain:["brain_hemorrhage","white_matter_hyperintensities","ischemic_stroke","glioma"],
@@ -86,6 +87,7 @@ export type DetectorRuntimeSnapshot={
  region:ConsiliumRegion;
  nativeSourceSha256?:string|null;
  nodules?:BoundNoduleReport|null;
+ cln?:ClnReport|null;
  effusion?:OriginalEffusionRun|null;
  pe?:PeCtpSourceReport|null;
  nodes?:MediastinalNodeReport|null;
@@ -113,6 +115,17 @@ export function assembleSanitizedDetectorBundle(snapshot:DetectorRuntimeSnapshot
   if(snapshot.nodules){
    same(snapshot.nodules.source.sha256);
    complete("lung_nodules",snapshot.nodules.candidates.length,null);
+  }
+  if(snapshot.cln){
+   same(snapshot.cln.sourceNiftiSha256);
+   if(snapshot.cln.realOriginalModelForwardCompleted!==true||
+      snapshot.cln.schema!=="opus-original-cln-upload-result/v1"||
+      snapshot.cln.researchOnly!==true||snapshot.cln.clinicalValidation!==false||
+      snapshot.cln.negativeDiagnosisPermitted!==false||
+      snapshot.cln.candidateCount!==snapshot.cln.nativeCandidates.length)
+     throw Error("CLN original forward is not verified");
+   complete("lung_tumor",snapshot.cln.candidateCount,
+     snapshot.cln.nativeCandidates.reduce((a,x)=>a+x.candidateVolumeMl,0));
   }
   if(snapshot.effusion){
    same(snapshot.effusion.report.evidence.originalChestCtSha256);
