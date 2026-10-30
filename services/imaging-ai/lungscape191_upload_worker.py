@@ -51,7 +51,7 @@ def create_app():
                 with gzip.GzipFile(fileobj=f,mode="wb",filename="",mtime=0) as target:
                     while chunk:=inp.read(1024*1024):target.write(chunk)
             result=await asyncio.to_thread(model().run,gz,MODELS,job["dir"]/"output",
-                                           device="cpu",execute=True,fold="all")
+                                           device="cpu",execute=True,fold=os.environ.get("OPUS_LUNGSCAPE_FOLD","all"))
             if result.get("trueOriginalTrainedModelForwardCompleted") is not True or result.get("status")!="research_mask_generated":
                 raise ValueError("original_inference_not_completed")
             if result.get("originalMaskComponentAnalysisCompleted") is not True:
