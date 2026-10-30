@@ -17,7 +17,7 @@ import type {BrainModelReport} from "./brain-multisequence-original-worker.ts";
 export type ConsiliumTask=
   "lung_nodules"|"lung_tumor"|"lungscape_model_regions"|"pleural_effusion"|"pericardial_effusion"|
   "pulmonary_embolism"|"mediastinal_nodes"|
-  "renal_cysts"|"hepatic_lesions"|"pancreatic_tumor"|
+  "renal_cysts"|"hepatic_lesions"|"pancreatic_tumor"|"renal_calculus_candidates"|
   "brain_hemorrhage"|"white_matter_hyperintensities"|
   "ischemic_stroke"|"glioma";
 export type ConsiliumRegion="chest"|"abdomen"|"brain";
@@ -40,7 +40,7 @@ export type SanitizedDetectorBundle={
 export const TASKS_BY_REGION:Record<ConsiliumRegion,readonly ConsiliumTask[]>={
  chest:["lung_nodules","lung_tumor","lungscape_model_regions","pleural_effusion","pericardial_effusion",
         "pulmonary_embolism","mediastinal_nodes"],
- abdomen:["renal_cysts","hepatic_lesions","pancreatic_tumor"],
+ abdomen:["renal_cysts","hepatic_lesions","pancreatic_tumor","renal_calculus_candidates"],
  brain:["brain_hemorrhage","white_matter_hyperintensities","ischemic_stroke","glioma"],
 };
 const finiteCount=(n:number):number=>{
