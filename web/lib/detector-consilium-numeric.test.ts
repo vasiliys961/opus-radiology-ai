@@ -11,7 +11,7 @@ const base=assembleSanitizedDetectorBundle({region:"chest",modality:"CT",
  nativeSourceSha256:source,nodules});
 test("One actual detector -> one fixed numeric task; unavailable are never normal findings",()=>{
  assert.equal(validateSanitizedDetectorBundle(base),true);
- assert.equal(base.facts.length,5);
+ assert.equal(base.facts.length,6);
  assert.deepEqual(base.facts[0],{task:"lung_nodules",status:"completed",
    candidateCount:2,candidateVolumeMl:null});
  for(const notDone of base.facts.slice(1)){
