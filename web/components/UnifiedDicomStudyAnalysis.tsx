@@ -23,6 +23,7 @@ import {checkOriginalXrvReady,runCxrXrvFromDicom,XRV_CXR_LABELS,type OriginalXrv
 import CxrIndependentVisionReview from "./CxrIndependentVisionReview";
 import OriginalWorkerFleetReadiness from "./OriginalWorkerFleetReadiness";
 import {checkAutomaticClnReady,executeOriginalCln,type ClnReport} from "../lib/cln-native-worker";
+import {checkAutomaticLungscapeReady,executeOriginalLungscape,type LungscapeReport} from "../lib/lungscape-native-worker";
 
 /** A single primary action that reuses the real DICOM -> MONAI/ianpan/WMH paths.
  * Never advertises a checkpoint as installed until its private worker proves it.
@@ -61,6 +62,8 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  const [chestNodules,setChestNodules]=useState<BoundNoduleReport|null>(null);
  const [clnReady,setClnReady]=useState(false);
  const [chestCln,setChestCln]=useState<ClnReport|null>(null);
+ const [lungscapeReady,setLungscapeReady]=useState(false);
+ const [lungscapeResult,setLungscapeResult]=useState<LungscapeReport|null>(null);
  const [chestEffusion,setChestEffusion]=useState<OriginalEffusionRun|null>(null);
  const [chestIssues,setChestIssues]=useState<string[]>([]);
  const [abdomenResult,setAbdomenResult]=useState<AbdominalStudyResults|null>(null);
@@ -115,7 +118,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
    setEndpoint(preset);setToken("");setEffusionEndpoint("http://127.0.0.1:8774");setEffusionToken("");
    setPeEndpoint("http://127.0.0.1:8776");setPeToken("");setCtpaConfirmed(false);setChestPe(null);
    setNodeEndpoint("http://127.0.0.1:8777");setNodeToken("");setEnhancedChestConfirmed(false);setChestNodes(null);
-   setChestSource(null);setChestNodules(null);setChestCln(null);setChestEffusion(null);setChestPe(null);setChestNodes(null);setChestIssues([]);setAbdomenResult(null);
+   setChestSource(null);setChestNodules(null);setChestCln(null);setLungscapeResult(null);setChestEffusion(null);setChestPe(null);setChestNodes(null);setChestIssues([]);setAbdomenResult(null);
    setXrvReport(null);setXrvChestConfirmed(false);
    setAuthorized(false);setFlairConfirmed(false);
    setSourceUrl("");setSourceLicense("");setBusy(false);setError("");setStatus("");
@@ -143,6 +146,8 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  useEffect(()=>{
   if(!chestPlan)return;
   const controller=new AbortController();
+  setLungscapeReady(false);
+  void checkAutomaticLungscapeReady(controller.signal).then(ok=>{if(!controller.signal.aborted)setLungscapeReady(ok);}).catch(()=>{});
   setClnReady(false);
   void checkAutomaticClnReady(controller.signal).then(ok=>{if(!controller.signal.aborted)setClnReady(ok);}).catch(()=>{});
   setAutoMonaiChecking(true);setAutoMonaiReady(false);
@@ -265,6 +270,15 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
             problems.push("CLN опухоль лёгкого: "+(e instanceof Error?e.message:"недоступен"));
           }
         }else problems.push("CLN опухоли лёгких: оригинальный worker не установлен; не исследовано.");
+        if(lungscapeReady){
+          try{
+            const ild=await executeOriginalLungscape(nifti,controller.signal,progress);
+            if(version!==serial.current||controller.signal.aborted)return;
+            setLungscapeResult(ild);completed++;
+          }catch(e){if(controller.signal.aborted)return;
+            problems.push("LungSCAPE191 модельные классы: "+(e instanceof Error?e.message:"недоступен"));
+          }
+        }else problems.push("LungSCAPE191: оригинальная модель не установлена; ILD не исследовано.");
         if(autoEffusionReady||effusionToken.trim()){
          try{
            const result=await runOriginalEffusionTask315(
@@ -308,7 +322,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
        }else problems.push("Лимфоузлы средостения: контрастная КТ не подтверждена; не исследовано.");
        if(version!==serial.current||controller.signal.aborted)return;
        setChestIssues(problems);
-       const total=3+Number(ctpaConfirmed)+Number(enhancedChestConfirmed);
+       const total=4+Number(ctpaConfirmed)+Number(enhancedChestConfirmed);
        setDraftText("Исследовательская КТ грудной клетки. Выполнено настоящих патологических моделей: "+
          completed+" из "+total+". Условия оценки ограничены выбранной серией. "+
          "Результаты являются кандидатами, которые обязан проверить врач. "+
@@ -799,7 +813,8 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
       Это не подписанное клиническое заключение.</p>
   </div>}
   {chestCln&&<p role="status">CLN: {chestCln.candidateCount} опухолевых кандидатов (не диагноз).</p>}
-   {(chestNodules||chestCln||chestEffusion||chestPe||chestNodes||abdomenResult||ich||wmh||brainResult)&&
+   {lungscapeResult&&<p role="status">LungSCAPE191: настоящий инференс завершён, компонентов {lungscapeResult.componentCount}. Классы модели не являются диагнозом ILD/UIP/IPF.</p>}
+  {(chestNodules||chestCln||lungscapeResult||chestEffusion||chestPe||chestNodes||abdomenResult||ich||wmh||brainResult)&&
     <DetectorGeminiOpusConsilium onBundleReady={bundle=>onDetectorEvidence?.(series.key,bundle)} snapshot={{
       modality:series.modality as "CT"|"MR",
       region:plan.route==="monai-nodules"?"chest":
