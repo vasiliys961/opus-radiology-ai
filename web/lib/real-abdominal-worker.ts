@@ -77,7 +77,7 @@ export function readyOriginalAbdominalWorker(cap:unknown):boolean{
    x.vendorCheckpointUseCryptographicallyProven!==false)return false;
  try{
   const tasks=record(x.installedTasks);
-  return (Object.keys(tasks).length>0&&Object.keys(tasks).every(k=>
+  return ((Object.keys(tasks).length>0||x.renalCalculusConfigured===true)&&Object.keys(tasks).every(k=>
    (k==="kidney_cysts"||k==="liver_lesions"||k==="pancreatic_tumor")&&
    sha(record(tasks[k]).checkpointSha256)&&record(tasks[k]).observedFileVerified===true));
  }catch{return false;}
