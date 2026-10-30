@@ -8,7 +8,7 @@ import {readNoduleNiftiHeader} from "./live-nodule-report.ts";
 
 export type TotalSegAbdominalTask="kidney_cysts"|"liver_lesions";
 export type AbdominalTask=TotalSegAbdominalTask|"pancreatic_tumor"|"renal_calculus_candidates";
-export type RenalCalculusReport={schema:"opus-kidney-calculus-ncct-candidates/v1";sourceCTSHA256:string;trainedAnatomyModelExecutedByThisAdapter:true;absenceOfStonesEstablished:false;ureterEvaluated:false;numberOfCandidateComponents:number;candidateComponents:Array<{anatomyMaskSide:string;sourceCentroidIJK:number[];centroidWorldRASmm:number[];candidateVolumeMm3:number;equivalentSphereDiameterMm:number;maxCandidateHU:number;meanCandidateHU:number}>};
+export type RenalCalculusReport={schema:"opus-kidney-calculus-ncct-candidates/v1";task:"intrarenal_high_attenuation_renal_stone_candidates_not_diagnoses";sourceCTSHA256:string;trainedAnatomyModelExecutedByThisAdapter:true;absenceOfStonesEstablished:false;ureterEvaluated:false;numberOfCandidateComponents:number;candidateComponents:Array<{anatomyMaskSide:string;sourceCentroidIJK:number[];centroidWorldRASmm:number[];candidateVolumeMm3:number;equivalentSphereDiameterMm:number;maxCandidateHU:number;meanCandidateHU:number}>};
 export type NativeAbdominalProposal={
  labelId:number;pathologyClass:string;modelCandidateVoxels:number;
  modelCandidateVolumeMl:number;nativeSliceIndicesK:number[];
