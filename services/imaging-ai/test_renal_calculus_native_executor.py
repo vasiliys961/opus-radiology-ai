@@ -19,7 +19,7 @@ class KidneyAnatomyTests(unittest.TestCase):
         source = types.SimpleNamespace(ndim=3,shape=(16,16,16),affine=affine)
         cyst = types.SimpleNamespace(ndim=3,shape=(16,16,16),affine=affine,
                                      dataobj=np.full((16,16,16), 7, dtype=np.uint8))
-        fake = types.SimpleNamespace(load=lambda path: cyst if "combined" in path else source)
+        fake = types.SimpleNamespace(load=lambda path, **kwargs: cyst if "combined" in path else source)
         with patch.dict(sys.modules, {"nibabel":fake}):
             with self.assertRaisesRegex(ValueError,"not_total_abdomen_anatomy_labels"):
                 module.separate_kidneys(Path("source.nii"),Path("combined.nii"),
@@ -31,7 +31,7 @@ class KidneyAnatomyTests(unittest.TestCase):
         translated=np.eye(4);translated[0,3]=10
         anatomy = types.SimpleNamespace(ndim=3,shape=(16,16,16),affine=translated,
                                         dataobj=np.zeros((16,16,16),dtype=np.uint8))
-        fake=types.SimpleNamespace(load=lambda path: anatomy if "combined" in path else source)
+        fake=types.SimpleNamespace(load=lambda path, **kwargs: anatomy if "combined" in path else source)
         with patch.dict(sys.modules, {"nibabel":fake}):
             with self.assertRaisesRegex(ValueError,"anatomy_and_source_affine_mismatch"):
                 module.separate_kidneys(Path("source.nii"),Path("combined.nii"),
