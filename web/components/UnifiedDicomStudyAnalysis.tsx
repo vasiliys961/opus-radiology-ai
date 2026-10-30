@@ -3,6 +3,7 @@
 import {useEffect,useMemo,useRef,useState} from "react";
 import type {DicomSeries} from "../lib/dicom-series";
 import {planNativeStudyAnalysis} from "../lib/unified-study-dispatch";
+import {verifyRenalThreePhaseStudy} from "../lib/renal-three-phase-gate";
 import {prepareDicomMonaiFile,prepareDicomCtForPathology} from "../lib/dicom-monai-direct";
 import {runOriginalAbdominalModels,checkAutomaticAbdomenReady,type AbdominalStudyResults} from "../lib/real-abdominal-worker";
 import {executeRealNodule,checkAutomaticMonaiReady} from "../lib/live-nodule-worker";
@@ -38,6 +39,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
 }){
  const available=useMemo(()=>new Set(files.keys()),[files]);
  const plan=useMemo(()=>planNativeStudyAnalysis(series,available),[series,available]);
+ const renalPhaseGate=useMemo(()=>verifyRenalThreePhaseStudy(allSeries,available),[allSeries,available]);
  const [endpoint,setEndpoint]=useState("");
  const [token,setToken]=useState("");
  const [autoMonaiReady,setAutoMonaiReady]=useState(false);
@@ -629,6 +631,11 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
   </section>}
   {xrvReport&&<CxrIndependentVisionReview series={series} files={files}
     report={xrvReport} onNavigate={onNavigate}/>}
+  {plan.route==="totalseg-abdomen"&&<div className="cs-geometry" role="status">
+   <strong>Опухоли почек · MONAI 3-фазная КТ</strong>
+   <p>Не исследовано: {renalPhaseGate.reason}</p>
+   <p>Это не отрицательный результат. Однофазную КТ и случайные серии нельзя передавать трёхфазной модели.</p>
+  </div>}
   {abdomenResult&&<section className="cs-geometry" aria-label="Кисты почек, очаги печени и поджелудочная · исходный DICOM">
     <h3>КТ живота · оригинальные модели и HU-поиск почечных конкрементов</h3>
     <p>Одна подготовленная HU-КТ, последовательное выполнение без повторных моделей
