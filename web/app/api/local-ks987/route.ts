@@ -8,6 +8,22 @@ function gate(req:NextRequest){
  return process.env.NODE_ENV==="development"&&/^(localhost|127\.0\.0\.1):\d{1,5}$/.test(host)&&["localhost","127.0.0.1"].includes(req.nextUrl.hostname)&&req.headers.get("origin")==="http://"+host;
 }
 function secret(){const t=process.env.OPUS_KS987_WORKER_TOKEN??"";return /^[A-Za-z0-9_-]{32,128}$/.test(t)?t:null;}
+export async function GET(req:NextRequest){
+ const host=req.headers.get("host")??"";
+ const t=secret();
+ if(!t||process.env.NODE_ENV!=="development"||!["localhost","127.0.0.1"].includes(req.nextUrl.hostname)||
+   !/^(localhost|127\\.0\\.0\\.1):\\d{1,5}$/.test(host))return fail(404,"private_research_only");
+ try{
+  const r=await fetch("http://127.0.0.1:8783/v1/ks987/capabilities",{
+   cache:"no-store",redirect:"error",signal:AbortSignal.any([req.signal,AbortSignal.timeout(3500)]),
+   headers:{Authorization:"Bearer "+t}});
+  if(!r.ok)return fail(503,"model_unavailable");
+  const x=await r.json();
+  if(x.schema!=="opus-original-ks987-kidney-worker/v1"||x.originalWeightsVerified!==true||
+    !/^[a-f0-9]{64}$/.test(x.checkpointSHA256))return fail(503,"model_unverified");
+  return NextResponse.json(x,{headers:{"Cache-Control":"no-store"}});
+ }catch{return fail(503,"worker_offline");}
+}
 export async function POST(req:NextRequest){
  const token=secret();
  if(!gate(req)||!token)return fail(403,"private_research_only");
