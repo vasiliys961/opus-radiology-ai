@@ -167,9 +167,14 @@ export function assembleSanitizedDetectorBundle(snapshot:DetectorRuntimeSnapshot
    throw Error("Подмена исходной КТ брюшной полости.");
   for(const [task,code] of [
     ["kidney_cysts","renal_cysts"],["liver_lesions","hepatic_lesions"],
-    ["pancreatic_tumor","pancreatic_tumor"]] as const){
+    ["pancreatic_tumor","pancreatic_tumor"],["renal_calculus_candidates","renal_calculus_candidates"]] as const){
    const item=snapshot.abdomen.tasks[task];
    if(item?.status!=="completed")continue;
+   if(item.report.schema==="opus-kidney-calculus-ncct-candidates/v1"){
+    if(task!=="renal_calculus_candidates"||item.report.sourceCTSHA256!==source)throw Error("Подмена почечных HU-кандидатов.");
+    complete(code,item.report.numberOfCandidateComponents,item.report.candidateComponents.reduce((sum,c)=>sum+c.candidateVolumeMm3/1000,0));
+    continue;
+   }
    if(item.report.task!==task)throw Error("Подмена модели патологической задачи.");
    if(item.report.schema==="opus-real-monai-pancreatic-tumor-source-candidates/v1"){
     complete(code,item.report.tumorCandidateComponents.length,
