@@ -15,6 +15,7 @@ export async function prepareDicomCtForPathology(
  series:DicomSeries,files:File[],signal:AbortSignal,region:"CHEST"|"ABDOMEN",
  progress:(message:string)=>void=()=>{},
  storage?:OpfsRoot,
+ internalName?:string,
 ):Promise<File>{
  if(series.modality!=="CT"||series.members.length!==files.length||
     !series.members.every(m=>m.metadata.bodyRegion===region))
@@ -31,7 +32,9 @@ export async function prepareDicomCtForPathology(
  if(signal.aborted)throw new DOMException("Анализ отменён.","AbortError");
  // This fixed internal filename is never a user path or a DICOM identifier.
  // The prior study is replaced, rather than silently reused.
- const name=NAMES[region];
+ const name=internalName??NAMES[region];
+ if(!/^opus-(?:active-abdomen-ct|active-monai-chest-ct|renal-(?:artery|vein|excret))-ct?\.nii$/.test(name)&&
+    name!==NAMES[region])throw Error("Недопустимое внутреннее имя временной КТ.");
  const handle=await root.getFileHandle(name,{create:true});
  const writer=await handle.createWritable();
  try{
