@@ -28,6 +28,7 @@ from totalsegmentator_input import inspect_input
 from pancreatic_tumor_original_inference import TASK as PANCREAS_TASK, MIN_RAM as PANCREAS_MIN_RAM, SCHEMA as PANCREAS_SCHEMA
 
 ALL_TASKS=(*TASKS,PANCREAS_TASK)
+CALCULUS_TASK='renal_calculus_candidates'
 
 MAX_BYTES=352+512*512*300*4
 MAX_REPORT=512*1024
@@ -65,7 +66,7 @@ def installed(checkpoints):
     return result
 
 
-def create_app(*,token,origin,checkpoints,port=8775):
+def create_app(*,token,origin,checkpoints,port=8775,calculus_source=None):
     if not isinstance(token,str) or not 32<=len(token)<=128:
         raise ValueError("worker_session_token_required")
     if not isinstance(origin,str) or not (
@@ -73,6 +74,10 @@ def create_app(*,token,origin,checkpoints,port=8775):
         raise ValueError("local_origin_required")
     if not 1024<=port<=65535:raise ValueError("loopback_port_required")
     models=installed(checkpoints)
+    if calculus_source is not None and (not isinstance(calculus_source,tuple) or len(calculus_source)!=2 or
+        calculus_source[0] not in ("CC0","CC BY 3.0","CC BY 4.0") or
+        not isinstance(calculus_source[1],str) or not calculus_source[1].startswith("https://")):
+        raise ValueError("renal_calculus_public_source_provenance_required")
     lock=asyncio.Lock()
     app=FastAPI(docs_url=None,redoc_url=None,openapi_url=None)
 
@@ -105,6 +110,7 @@ def create_app(*,token,origin,checkpoints,port=8775):
             "ready":psutil.virtual_memory().available>=MIN_RAM,
             "installedTasks":{t:{"checkpointSha256":sha,"observedFileVerified":digest(path)==sha}
                               for t,(path,sha) in models.items()},
+            "renalCalculusConfigured":calculus_source is not None,
             "mode":"local-linux-cpu-research","sourceFormat":"original-HU-NIfTI",
             "patientMode":False,"dataPolicy":"public-nonpatient-research-only",
             "vendorCheckpointUseCryptographicallyProven":False}
@@ -139,7 +145,47 @@ def create_app(*,token,origin,checkpoints,port=8775):
                 except ValueError:
                     raise HTTPException(422,"invalid_original_CT_geometry") from None
                 outputs={}
-                for task in ALL_TASKS:
+                for task in (*ALL_TASKS,CALCULUS_TASK):
+                    if task==CALCULUS_TASK:
+                        if calculus_source is None:
+                            outputs[task]={"status":"unavailable","reason":"original_anatomy_not_configured"}
+                            continue
+                        if psutil.virtual_memory().available<MIN_RAM:
+                            outputs[task]={"status":"unavailable","reason":"memory_preflight_failed"}
+                            continue
+                        report=root/"renal-calculus-report.json"
+                        cmd=[sys.executable,str(Path(__file__).with_name("renal_calculus_native_executor.py")),
+                            "--ct",str(src),"--output",str(report),
+                            "--source-license",calculus_source[0],"--source-url",calculus_source[1],
+                            "--licensed-deidentified-public-NCCT-confirmed"]
+                        env={k:v for k,v in os.environ.items() if k in
+                             ("PATH","HOME","TMPDIR","LANG","LC_ALL","LD_LIBRARY_PATH","TOTALSEG_HOME_DIR",
+                              "XDG_CACHE_HOME","MPLCONFIGDIR","TORCH_HOME","OMP_NUM_THREADS","MKL_NUM_THREADS")}
+                        env.update({"HF_HUB_OFFLINE":"1","TRANSFORMERS_OFFLINE":"1"})
+                        process=await asyncio.create_subprocess_exec(*cmd,
+                            stdout=asyncio.subprocess.DEVNULL,stderr=asyncio.subprocess.DEVNULL,
+                            start_new_session=True,env=env)
+                        try:
+                            await asyncio.wait_for(process.wait(),timeout=2400)
+                            if process.returncode or not report.is_file() or report.stat().st_size>MAX_REPORT:
+                                outputs[task]={"status":"failed","reason":"original_anatomy_or_HU_forward_failed"}
+                            else:
+                                data=json.loads(report.read_text())
+                                if (data.get("schema")!="opus-kidney-calculus-ncct-candidates/v1" or
+                                    data.get("sourceCTSHA256")!=sha or
+                                    data.get("trainedAnatomyModelExecutedByThisAdapter") is not True or
+                                    data.get("absenceOfStonesEstablished") is not False or
+                                    data.get("ureterEvaluated") is not False):
+                                    outputs[task]={"status":"failed","reason":"renal_evidence_source_mismatch"}
+                                else:outputs[task]={"status":"completed","report":data}
+                        except Exception:
+                            outputs[task]={"status":"failed","reason":"renal_calculus_not_assessed"}
+                        finally:
+                            if process.returncode is None:
+                                try:os.killpg(process.pid,signal.SIGKILL)
+                                except ProcessLookupError:pass
+                                await process.wait()
+                        continue
                     if task not in models:
                         outputs[task]={"status":"unavailable","reason":"checkpoint_not_installed"}
                         continue
@@ -242,6 +288,8 @@ def main():
     p.add_argument("--liver-sha")
     p.add_argument("--pancreas-checkpoint")
     p.add_argument("--pancreas-sha")
+    p.add_argument("--renal-calculus-public-license")
+    p.add_argument("--renal-calculus-public-url")
     a=p.parse_args()
     specs={}
     if a.kidney_checkpoint and a.kidney_sha:
@@ -251,7 +299,8 @@ def main():
     if a.pancreas_checkpoint and a.pancreas_sha:
         specs[PANCREAS_TASK]=(a.pancreas_checkpoint,a.pancreas_sha)
     token=secrets.token_urlsafe(36).replace("-","_")
-    app=create_app(token=token,origin=a.origin,checkpoints=specs,port=a.port)
+    calculus=(a.renal_calculus_public_license,a.renal_calculus_public_url) if (a.renal_calculus_public_license and a.renal_calculus_public_url) else None
+    app=create_app(token=token,origin=a.origin,checkpoints=specs,port=a.port,calculus_source=calculus)
     print("Abdominal original research worker token: "+token,flush=True)
     import uvicorn
     uvicorn.run(app,host="127.0.0.1",port=a.port,access_log=False)
