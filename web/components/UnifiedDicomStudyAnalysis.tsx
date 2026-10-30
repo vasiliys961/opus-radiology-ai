@@ -804,12 +804,12 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
       modality:series.modality as "CT"|"MR",
       region:plan.route==="monai-nodules"?"chest":
         plan.route==="totalseg-abdomen"?"abdomen":"brain",
-      nativeSourceSha256:chestNodules?.source.sha256??
+      nativeSourceSha256:chestCln?.sourceNiftiSha256??chestNodules?.source.sha256??
         chestEffusion?.sourceSha256??
         chestPe?.sourceNiftiSHA256??
         chestNodes?.sourceNiftiSHA256??
         abdomenResult?.sourceNiftiSha256??null,
-      nodules:chestNodules,effusion:chestEffusion,pe:chestPe,nodes:chestNodes,
+      nodules:chestNodules,cln:chestCln,effusion:chestEffusion,pe:chestPe,nodes:chestNodes,
       abdomen:abdomenResult,ich,wmh,brain:brainResult,
     }}/>}
   <p>Gemini Vision по исходным кадрам выполняется отдельно после обезличивания.
