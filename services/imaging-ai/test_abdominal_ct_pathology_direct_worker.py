@@ -31,6 +31,21 @@ class RealAbdominalBridgeContracts(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError,"runtime_required"):
                     installed(pair)
 
+    def test_calculus_only_worker_and_reject_unverified_runtime(self):
+        with patch("abdominal_ct_pathology_direct_worker.platform.system",return_value="Linux"),patch(
+            "abdominal_ct_pathology_direct_worker.importlib.metadata.version",return_value="2.18.0"):
+            self.assertEqual(installed({},allow_calculus_only=True),{})
+            with self.assertRaisesRegex(ValueError,"no_original_pretrained_pathology_model_installed"):
+                installed({})
+            app=create_app(token="x"*42,origin="http://127.0.0.1:3000",
+                checkpoints={},calculus_source=("CC BY 4.0","https://example.org/source"))
+            self.assertIsNotNone(app)
+        with patch("abdominal_ct_pathology_direct_worker.platform.system",return_value="Linux"),patch(
+            "abdominal_ct_pathology_direct_worker.importlib.metadata.version",return_value="0.0.0"):
+            with self.assertRaisesRegex(ValueError,"original_anatomy_runtime_version_required"):
+                create_app(token="x"*42,origin="http://127.0.0.1:3000",
+                    checkpoints={},calculus_source=("CC BY 4.0","https://example.org/source"))
+
     def test_no_repeat_task_and_no_untrusted_browser_origin(self):
         with tempfile.TemporaryDirectory() as d:
             model=Path(d)/"model.pth"
