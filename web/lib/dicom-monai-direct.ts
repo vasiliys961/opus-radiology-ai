@@ -33,7 +33,7 @@ export async function prepareDicomCtForPathology(
  // This fixed internal filename is never a user path or a DICOM identifier.
  // The prior study is replaced, rather than silently reused.
  const name=internalName??NAMES[region];
- if(!/^opus-(?:active-abdomen-ct|active-monai-chest-ct|renal-(?:artery|vein|excret))-ct?\.nii$/.test(name)&&
+ if(!/^opus-renal-(?:artery|vein|excret)\.nii$/.test(name)&&
     name!==NAMES[region])throw Error("Недопустимое внутреннее имя временной КТ.");
  const handle=await root.getFileHandle(name,{create:true});
  const writer=await handle.createWritable();
