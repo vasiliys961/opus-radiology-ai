@@ -12,6 +12,7 @@ import type {AiGatewayRequest} from "./ai-gateway.ts";
 import {parseLocalLungFacts,type LocalLungFacts} from "./local-lung-review.ts";
 import {validateSanitizedDetectorBundle,type SanitizedDetectorBundle} from "./detector-consilium-evidence.ts";
 import {safeXrvScores,type SanitizedCxrScores} from "./xrv-original-cxr.ts";
+import {validateSanitizedClnEvidence,type SanitizedClnTumorEvidence} from "./cln-tumor-consilium.ts";
 
 export const CLOUD_PILOT_MAX_IMAGE_BASE64=2_000_000;
 export const CLOUD_PILOT_MAX_FRAMES=4;
@@ -37,6 +38,7 @@ export type SanitizedModelReview={
   researchOnly:true;
   diagnosticAccuracyValidated:false;
   detectorEvidence?:SanitizedDetectorBundle;
+  clnTumorEvidence?:SanitizedClnTumorEvidence;
   cxrModelEvidence?:SanitizedCxrScores;
   specialistEvidence?:{
     model:"lungmask-R231";frameCount:number;
@@ -105,6 +107,7 @@ export async function reviewSanitizedSamples(
   localSpecialist:unknown=null,
   numericDetectors:unknown=null,
   originalCxrScores:unknown=null,
+  clnTumorEvidence:unknown=null,
 ):Promise<SanitizedModelReview>{
   const checked=normalizeReviewedCloudPilot(packet);
   const ids=checked.frames.map(f=>f.imageId);
@@ -119,6 +122,10 @@ export async function reviewSanitizedSamples(
     throw Error("current_source_MR_CT_mismatch");
   if(detectors&&!detectors.facts.some(f=>f.status==="completed"))
     throw Error("model_evidence_without_actual_completed_task");
+  const cln=clnTumorEvidence===null?null:
+    validateSanitizedClnEvidence(clnTumorEvidence)?clnTumorEvidence:null;
+  if(clnTumorEvidence!==null&&cln===null)throw Error("untrusted_CLN_tumor_evidence");
+  if(cln&&checked.modality!=="CT")throw Error("CLN_CT_only");
   const cxr=originalCxrScores===null?null:safeXrvScores(originalCxrScores);
   if(cxr&&checked.modality!=="CR"&&checked.modality!=="DX")
     throw Error("XRV scores only valid for CR/DX radiography");
@@ -151,6 +158,9 @@ export async function reviewSanitizedSamples(
         "Now compare these independent visual observations against the same-study completed and not-assessed "+
         "numeric model tasks. Completed is not diagnosis, not-assessed is never normal, and zero candidates "+
         "does not exclude disease: "+JSON.stringify(detectors.facts)}]:[]),
+      ...(cln?[{type:"text",text:"Independent CLN original-model research result, withheld from Gemini: "+
+        JSON.stringify(cln)+". Lung tumor candidates are NOT lung nodule findings, not a diagnosis, "+
+        "and zero candidates never excludes malignancy."}]:[]),
       ...(specialist?[{type:"text",text:"LOCAL lung anatomy segmentation (not a pathology diagnosis): "+
         JSON.stringify({rightMl:specialist.rightLungMaskMl,leftMl:specialist.leftLungMaskMl,
           frameCount:specialist.frameCount})}]:[]),
@@ -171,6 +181,7 @@ export async function reviewSanitizedSamples(
     clinicalReviewRequired:true,deidentificationIndependentlyCertified:false,
     patientDataCanStillBeSensitive:true,researchOnly:true,diagnosticAccuracyValidated:false,
     ...(detectors?{detectorEvidence:detectors}:{}),
+    ...(cln?{clnTumorEvidence:cln}:{}),
     ...(cxr?{cxrModelEvidence:cxr}:{}),
     ...(specialist?{specialistEvidence:{
       model:"lungmask-R231" as const,frameCount:specialist.frameCount,
