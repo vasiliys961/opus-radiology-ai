@@ -155,6 +155,7 @@ test("Genuine selected-study model counts join Gemini Vision -> Opus without DIC
   facts:[
    {task:"lung_nodules" as const,status:"completed" as const,candidateCount:2,candidateVolumeMl:null},
    {task:"lung_tumor" as const,status:"not_assessed" as const,candidateCount:null,candidateVolumeMl:null},
+   {task:"lungscape_model_regions" as const,status:"not_assessed" as const,candidateCount:null,candidateVolumeMl:null},
    {task:"pleural_effusion" as const,status:"not_assessed" as const,candidateCount:null,candidateVolumeMl:null},
    {task:"pericardial_effusion" as const,status:"not_assessed" as const,candidateCount:null,candidateVolumeMl:null},
    {task:"pulmonary_embolism" as const,status:"not_assessed" as const,candidateCount:null,candidateVolumeMl:null},
