@@ -19,7 +19,7 @@ jobs:
       nnUNet_n_proc_DA: "1"
       OPUS_LUNGSCAPE_FOLD: "0"
       OPUS_LUNGSCAPE_WORKER_ORIGIN: "http://127.0.0.1:3000"
-      OPUS_LUNGSCAPE_MODEL_ROOT: ${{ runner.temp }}/nnunet-results
+      OPUS_LUNGSCAPE_MODEL_ROOT: /tmp/nnunet-results
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
