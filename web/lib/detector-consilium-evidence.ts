@@ -5,6 +5,7 @@
  */
 import type {BoundNoduleReport} from "./live-nodule-report.ts";
 import type {ClnReport} from "./cln-native-worker.ts";
+import type {LungscapeReport} from "./lungscape-native-worker.ts";
 import type {OriginalEffusionRun} from "./real-effusion-worker.ts";
 import type {PeCtpSourceReport} from "./pe-ctpa-direct-worker.ts";
 import type {MediastinalNodeReport} from "./mediastinal-raidionics-worker.ts";
@@ -14,7 +15,7 @@ import type {BoundWmh} from "./wmh-source-review.ts";
 import type {BrainModelReport} from "./brain-multisequence-original-worker.ts";
 
 export type ConsiliumTask=
-  "lung_nodules"|"lung_tumor"|"pleural_effusion"|"pericardial_effusion"|
+  "lung_nodules"|"lung_tumor"|"lungscape_model_regions"|"pleural_effusion"|"pericardial_effusion"|
   "pulmonary_embolism"|"mediastinal_nodes"|
   "renal_cysts"|"hepatic_lesions"|"pancreatic_tumor"|
   "brain_hemorrhage"|"white_matter_hyperintensities"|
@@ -37,7 +38,7 @@ export type SanitizedDetectorBundle={
  negativeDiagnosisPermitted:false;
 };
 export const TASKS_BY_REGION:Record<ConsiliumRegion,readonly ConsiliumTask[]>={
- chest:["lung_nodules","lung_tumor","pleural_effusion","pericardial_effusion",
+ chest:["lung_nodules","lung_tumor","lungscape_model_regions","pleural_effusion","pericardial_effusion",
         "pulmonary_embolism","mediastinal_nodes"],
  abdomen:["renal_cysts","hepatic_lesions","pancreatic_tumor"],
  brain:["brain_hemorrhage","white_matter_hyperintensities","ischemic_stroke","glioma"],
@@ -88,6 +89,7 @@ export type DetectorRuntimeSnapshot={
  nativeSourceSha256?:string|null;
  nodules?:BoundNoduleReport|null;
  cln?:ClnReport|null;
+ lungscape?:LungscapeReport|null;
  effusion?:OriginalEffusionRun|null;
  pe?:PeCtpSourceReport|null;
  nodes?:MediastinalNodeReport|null;
@@ -126,6 +128,17 @@ export function assembleSanitizedDetectorBundle(snapshot:DetectorRuntimeSnapshot
      throw Error("CLN original forward is not verified");
    complete("lung_tumor",snapshot.cln.candidateCount,
      snapshot.cln.nativeCandidates.reduce((a,x)=>a+x.candidateVolumeMl,0));
+  }
+  if(snapshot.lungscape){
+   same(snapshot.lungscape.sourceNiftiSha256);
+   if(snapshot.lungscape.schema!=="opus-lungscape-original-CT-result/v1"||
+      snapshot.lungscape.realOriginalModelForwardCompleted!==true||
+      snapshot.lungscape.clinicalValidation!==false||
+      snapshot.lungscape.researchOnly!==true||
+      snapshot.lungscape.negativeDiagnosisPermitted!==false||
+      snapshot.lungscape.componentCount!==snapshot.lungscape.nativeComponents.length)
+    throw Error("LungSCAPE original forward is not verified");
+   complete("lungscape_model_regions",snapshot.lungscape.componentCount,null);
   }
   if(snapshot.effusion){
    same(snapshot.effusion.report.evidence.originalChestCtSha256);
