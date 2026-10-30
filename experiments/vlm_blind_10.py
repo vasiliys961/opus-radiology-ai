@@ -6,10 +6,51 @@ No images, descriptions or patient data are committed to GitHub.
 import argparse, base64, hashlib, json, os, pathlib, random, urllib.request, urllib.error, time
 
 URL="https://openrouter.ai/api/v1/chat/completions"
-VISION="""Describe this chest radiograph IN RUSSIAN from visible evidence only.
-Return JSON with keys: projection, technical_quality, findings (array of {anatomy,
-observation,laterality,certainty}), impression (array), uncertainties (array),
-limitations (array). Do not invent clinical history or pathology. Be concise."""
+VISION="""Ты врач-рентгенолог, выполняющий исследовательское описание ОДНОЙ обзорной рентгенограммы органов грудной клетки.
+Работай независимо, не получая подсказок об эталонном диагнозе. Отвечай на русском, ТОЛЬКО валидным JSON без markdown.
+
+Последовательность просмотра:
+1. Проверь вид/проекцию (PA/AP/боковая/неопределено), положение/ротацию, вдох, экспозицию,
+   охват анатомии, артефакты и ограничения; не угадывай проекцию.
+2. Систематически оцени лёгочные поля (правое/левое, верхние/средние/нижние зоны):
+   очаги, уплотнения/консолидации, интерстициальные изменения, ателектазы,
+   признаки гиперинфляции, подозрительные узлы/образования.
+3. Оцени плевру и синусы: выпот, пневмоторакс, утолщения.
+4. Оцени сердечную тень, средостение, корни лёгких и видимые крупные сосуды;
+   размер сердца интерпретируй с учётом AP/PA проекции, не измеряй CTR без масштаба.
+5. Оцени диафрагму, видимые кости и мягкие ткани, медицинские устройства/катетеры.
+6. Дай заключение по визуальным находкам и важным ограничениям.
+
+Правила: описывай ТОЛЬКО то, что видно на предоставленном изображении; отсутствие видимых
+изменений не доказывает исключения заболевания. Не выдумывай историю болезни, симптомы,
+размеры в мм без калибровки, уверенную сторону/проекцию при неопределённости или этиологию.
+Для каждого раздела используй status: "abnormal"|"no_visible_abnormality"|"uncertain"|"not_assessable".
+Называй конкретные подозрительные находки и их локализацию, но явно фиксируй неопределённость.
+Не подменяй реальную находку общими нормальными шаблонами. Не назначай лечение.
+
+Обязательная структура JSON:
+{
+ "projection":"PA|AP|lateral|unknown",
+ "image_quality":{"rotation":"...", "inspiration":"...", "penetration":"...",
+                  "coverage":"...", "limitations":["..."]},
+ "regions":{
+   "right_lung":{"status":"...", "observations":["..."]},
+   "left_lung":{"status":"...", "observations":["..."]},
+   "pleura":{"status":"...", "observations":["..."]},
+   "cardiomediastinum":{"status":"...", "observations":["..."]},
+   "hila":{"status":"...", "observations":["..."]},
+   "diaphragm":{"status":"...", "observations":["..."]},
+   "bones_soft_tissues":{"status":"...", "observations":["..."]},
+   "devices":{"status":"...", "observations":["..."]}
+ },
+ "findings":[{"finding":"...", "location":"...", "laterality":"right|left|bilateral|midline|unknown",
+              "certainty":"high|moderate|low"}],
+ "impression":["..."],
+ "uncertainties":["..."],
+ "not_assessed":["..."]
+}
+Для пустых списков используй []; не добавляй ключи вне этой структуры.
+"""
 JUDGE="""You are a blinded medical-report QUALITY reviewer. Compare PACKAGE A and
 PACKAGE B: ten paired JSON radiograph descriptions with matching case IDs.
 No original images are provided. Therefore you CANNOT verify diagnostic truth,
@@ -72,7 +113,7 @@ def main():
             image="data:"+mime+";base64,"+base64.b64encode(data).decode()
             msg=[{"role":"user","content":[{"type":"text","text":VISION},
                 {"type":"image_url","image_url":{"url":image}}]}]
-            raw,usage=request(key,model,msg,1500)
+            raw,usage=request(key,model,msg,2800)
             rows.append({"model_tag":model_tag,"model":model,"id":e["id"],
                          "image_sha256":hashlib.sha256(data).hexdigest(),
                          "description":as_json(raw),"usage":usage})
