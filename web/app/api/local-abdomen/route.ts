@@ -93,6 +93,7 @@ export async function POST(req:NextRequest){
     headers:{"Content-Type":"application/octet-stream",
       "X-Opus-Source-Sha256":claimed,
       "X-Opus-Public-Research-Authorization":"approved-nonpatient-source",
+      ...(req.headers.get("x-opus-ncct-verified")==="native-noncontrast-verified"?{"X-Opus-NCCT-Verified":"native-noncontrast-verified"}:{}),
       Origin:origin,Authorization:"Bearer "+token},
     signal:AbortSignal.any([req.signal,AbortSignal.timeout(750000)]),
   };
