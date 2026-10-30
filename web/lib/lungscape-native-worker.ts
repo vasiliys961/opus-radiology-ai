@@ -1,4 +1,4 @@
-/** Real original LungSCAPE lung-tumor inference on the same converted HU NIfTI as MONAI.
+/** Real original LungSCAPE Dataset191 trained pattern segmentation on the same converted HU NIfTI as MONAI.
  * Only auto-ready original checkpoints; no mock results.
  */
 import {originalNiftiSha256} from "./live-nodule-worker.ts";
@@ -6,8 +6,9 @@ import {pause} from "./local-worker.ts";
 export type LungscapeReport={
  schema:"opus-lungscape-original-CT-result/v1";
  sourceNiftiSha256:string;realOriginalModelForwardCompleted:true;
- checkpointSha256:string;candidateCount:number;
- nativeCandidates:Array<{candidateVolumeMl:number}>;
+ componentCount:number;
+ nativeComponents:Array<{originalModelLabelId:number;voxels:number}>;
+ modelLabelMap:Record<string,string>;
  researchOnly:true;clinicalValidation:false;negativeDiagnosisPermitted:false;
 };
 const JOB=/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
@@ -23,7 +24,7 @@ export async function checkAutomaticLungscapeReady(signal?:AbortSignal){
     c.modelId==="LungSCAPE Dataset191"&&
     c.originalWeightsVerified===true&&c.imageUpload===true&&
     c.researchOnly===true&&c.patientMode===false&&
-    typeof c.checkpointSha256==="string"&&/^[a-f0-9]{64}$/.test(c.checkpointSha256);
+    c.modelId==="LungSCAPE Dataset191";
  }catch{return false;}
 }
 export async function executeOriginalLungscape(source:File,signal:AbortSignal,onProgress:(message:string)=>void):Promise<LungscapeReport>{
@@ -52,11 +53,11 @@ export async function executeOriginalLungscape(source:File,signal:AbortSignal,on
   if(raw.schema!=="opus-lungscape-original-CT-result/v1"||
     raw.sourceNiftiSha256!==sha||raw.realOriginalModelForwardCompleted!==true||
     raw.researchOnly!==true||raw.clinicalValidation!==false||
-    raw.negativeDiagnosisPermitted!==false||!Array.isArray(raw.nativeCandidates)||
-    !Number.isSafeInteger(raw.candidateCount)||Number(raw.candidateCount)!==raw.nativeCandidates.length||
-    !/^[a-f0-9]{64}$/.test(String(raw.checkpointSha256))||
-    raw.nativeCandidates.some((x:unknown)=>!x||typeof x!=="object"||
-      !Number.isFinite((x as {candidateVolumeMl?:number}).candidateVolumeMl)))
+    raw.negativeDiagnosisPermitted!==false||!Array.isArray(raw.nativeComponents)||
+    !Number.isSafeInteger(raw.componentCount)||Number(raw.componentCount)!==raw.nativeComponents.length||
+    !raw.modelLabelMap||typeof raw.modelLabelMap!=="object"||
+    raw.nativeComponents.some((x:unknown)=>!x||typeof x!=="object"||
+      !Number.isSafeInteger((x as {voxels:number}).voxels)))
     throw Error("LungSCAPE не вернул подтверждённую модельную маску");
   return raw as LungscapeReport;
  }finally{
