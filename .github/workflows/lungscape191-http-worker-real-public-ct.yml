@@ -1,0 +1,108 @@
+name: LungSCAPE191 real HTTP worker public CT end-to-end
+on:
+  pull_request:
+    paths:
+      - .github/workflows/lungscape191-http-worker-real-public-ct.yml
+      - services/imaging-ai/lungscape191_upload_worker.py
+permissions:
+  contents: read
+jobs:
+  http-original-forward:
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    env:
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      HF_HUB_DISABLE_XET: "1"
+      HF_HUB_DISABLE_PROGRESS_BARS: "1"
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+      nnUNet_n_proc_DA: "1"
+      OPUS_LUNGSCAPE_FOLD: "0"
+      OPUS_LUNGSCAPE_WORKER_ORIGIN: "http://127.0.0.1:3000"
+      OPUS_LUNGSCAPE_MODEL_ROOT: /tmp/nnunet-results
+      nnUNet_results: /tmp/nnunet-results
+      nnUNet_raw: /tmp/nnunet-raw
+      nnUNet_preprocessed: /tmp/nnunet-preprocessed
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install original CPU nnU-Net and local HTTP worker
+        run: |
+          python -m pip install nnunetv2 nibabel==5.3.2 huggingface_hub==0.35.3 fastapi uvicorn requests
+          python -m pip install --force-reinstall --no-deps --index-url https://download.pytorch.org/whl/cpu torch==2.6.0
+          python -c "import torch,nnunetv2,fastapi; assert torch.version.cuda is None"
+      - name: Download public CoronaCases CT and original publisher five-fold weights
+        run: |
+          python scripts/prepare-lungscape191-public-coronacases.py --case coronacases_003 --output-private "$RUNNER_TEMP/public" --execute-download
+          python scripts/prepare-lungscape191-original-weights.py --output-private "$RUNNER_TEMP/weights" --execute-download
+          mkdir -p "$OPUS_LUNGSCAPE_MODEL_ROOT"
+          nnUNetv2_install_pretrained_model_from_zip "$RUNNER_TEMP/weights/Dataset191_HighAttenuation.zip"
+      - name: Start real local HTTP worker and send genuine original CT through upload/job/report
+        run: |
+          export OPUS_LUNGSCAPE_WORKER_TOKEN="$(python -c 'import secrets;print(secrets.token_urlsafe(40))')"
+          echo "::add-mask::$OPUS_LUNGSCAPE_WORKER_TOKEN"
+          python services/imaging-ai/lungscape191_upload_worker.py >"$RUNNER_TEMP/worker.log" 2>&1 &
+          python - <<'PY'
+          import gzip, hashlib, json, os, pathlib, requests, time
+          root=pathlib.Path(os.environ["RUNNER_TEMP"])
+          source=root/"public/in/lungcase001_0000.nii.gz"
+          raw=root/"source.nii"
+          with gzip.open(source,"rb") as i, raw.open("xb") as o:
+              for chunk in iter(lambda:i.read(1048576),b""):o.write(chunk)
+          sha=hashlib.file_digest(raw.open("rb"),"sha256").hexdigest()
+          u="http://127.0.0.1:8784/v1/lungscape"
+          h={"Authorization":"Bearer "+os.environ["OPUS_LUNGSCAPE_WORKER_TOKEN"],
+             "Origin":"http://127.0.0.1:3000"}
+          for n in range(90):
+              try:
+                  res=requests.get(u+"/capabilities",headers=h,timeout=4)
+                  if res.ok: break
+              except requests.RequestException:pass
+              time.sleep(2)
+          else:raise RuntimeError("HTTP worker did not become available")
+          cap=res.json()
+          assert cap["originalWeightsVerified"] is True,cap
+          h.update({"Content-Type":"application/octet-stream",
+                    "X-Opus-Source-Sha256":sha,
+                    "X-Opus-Public-Research-Authorization":"approved-nonpatient-source"})
+          with raw.open("rb") as f:
+              posted=requests.post(u+"/upload",headers=h,data=f,timeout=180)
+          posted.raise_for_status()
+          job=posted.json();assert job["state"]=="running",job
+          deadline=time.monotonic()+5700
+          while time.monotonic()<deadline:
+              v=requests.get(u+"/jobs/"+job["jobId"],headers=h,timeout=20)
+              v.raise_for_status();st=v.json()["state"]
+              if st=="succeeded":break
+              if st=="failed":raise RuntimeError("original HTTP forward failed: "+str(v.json().get("reason")))
+              time.sleep(10)
+          else:raise TimeoutError("real original HTTP forward timed out")
+          report=requests.get(u+"/jobs/"+job["jobId"]+"/report",headers=h,timeout=20)
+          report.raise_for_status();data=report.json()
+          assert data["schema"]=="opus-lungscape-original-CT-result/v1"
+          assert data["realOriginalModelForwardCompleted"] is True
+          assert data["sourceNiftiSha256"]==sha
+          assert data["componentCount"]==len(data["nativeComponents"])
+          assert data["clinicalValidation"] is False
+          assert data["negativeDiagnosisPermitted"] is False
+          public={"schema":"opus-lungscape-original-http-worker-public-test/v1",
+                  "realOriginalModelForwardCompleted":True,
+                  "nativeSourceSHA256":sha,
+                  "sourceMatched":True,
+                  "modelLabelMap":data["modelLabelMap"],
+                  "componentCount":data["componentCount"],
+                  "researchOnly":True,"expertOntologyMatches":False,
+                  "clinicalValidation":False,"wholeAppBrowserRun":False}
+          (root/"lungscape-http-evidence.json").write_text(json.dumps(public,indent=2)+"\n")
+          print("REAL LUNGSCAPE HTTP WORKER SUCCESS",json.dumps(public))
+          requests.delete(u+"/jobs/"+job["jobId"],headers=h,timeout=15).raise_for_status()
+          PY
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: lungscape191-original-http-public-evidence
+          path: ${{ runner.temp }}/lungscape-http-evidence.json
+          retention-days: 7
+          if-no-files-found: error
