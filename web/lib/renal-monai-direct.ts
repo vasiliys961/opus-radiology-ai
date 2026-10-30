@@ -31,7 +31,7 @@ export async function runRenalMonaiThreePhase(
   const nativeFiles=vol.members.map(m=>files.get(m.id));
   if(nativeFiles.some(f=>!f))throw Error("Отсутствует часть DICOM-срезов.");
   output[role]=await prepareDicomCtForPathology(vol,nativeFiles as File[],signal,"ABDOMEN",
-   message=>progress(role+": "+message));
+   message=>progress(role+": "+message),undefined,"opus-renal-"+role+".nii");
  }
  const archive=await zipRenalNativePhases(output,signal,progress);
  const hash=sha256.create();
