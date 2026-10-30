@@ -7,7 +7,8 @@ import {originalNiftiSha256} from "./live-nodule-worker.ts";
 import {readNoduleNiftiHeader} from "./live-nodule-report.ts";
 
 export type TotalSegAbdominalTask="kidney_cysts"|"liver_lesions";
-export type AbdominalTask=TotalSegAbdominalTask|"pancreatic_tumor";
+export type AbdominalTask=TotalSegAbdominalTask|"pancreatic_tumor"|"renal_calculus_candidates";
+export type RenalCalculusReport={schema:"opus-kidney-calculus-ncct-candidates/v1";sourceCTSHA256:string;trainedAnatomyModelExecutedByThisAdapter:true;absenceOfStonesEstablished:false;ureterEvaluated:false;numberOfCandidateComponents:number;candidateComponents:Array<{anatomyMaskSide:string;sourceCentroidIJK:number[];centroidWorldRASmm:number[];candidateVolumeMm3:number;equivalentSphereDiameterMm:number;maxCandidateHU:number;meanCandidateHU:number}>};
 export type NativeAbdominalProposal={
  labelId:number;pathologyClass:string;modelCandidateVoxels:number;
  modelCandidateVolumeMl:number;nativeSliceIndicesK:number[];
@@ -47,7 +48,7 @@ export type PancreaticTumorReport={
  clinicalValidation:false;negativeCancerDiagnosisPermitted:false;
  limitations:string[];
 };
-export type AbdominalTaskState={status:"completed";report:AbdominalBoundReport|PancreaticTumorReport}|
+export type AbdominalTaskState={status:"completed";report:AbdominalBoundReport|PancreaticTumorReport|RenalCalculusReport}|
  {status:"unavailable"|"failed";reason:string};
 export type AbdominalStudyResults={
  sourceNiftiSha256:string;
@@ -205,7 +206,7 @@ export async function checkAutomaticAbdomenReady(signal?:AbortSignal):Promise<bo
 }
 export async function runOriginalAbdominalModels(
  session:WorkerSession|null,source:File,signal:AbortSignal,
- progress:(message:string)=>void=()=>{},
+ progress:(message:string)=>void=()=>{},ncctVerified=false,
 ):Promise<AbdominalStudyResults>{
  const invoke=(path:"/v1/abdomen/capabilities"|"/v1/abdomen/analyze",init:RequestInit={})=>
    session?call(session,path,init):originalAbdomenViaServer(path,init);
@@ -220,19 +221,36 @@ export async function runOriginalAbdominalModels(
  const raw=await textBounded(await invoke("/v1/abdomen/analyze",{
    method:"POST",signal,headers:{"Content-Type":"application/octet-stream",
     "X-Opus-Source-Sha256":sourceSha,
-    "X-Opus-Public-Research-Authorization":"approved-nonpatient-source"},body:source,
+    "X-Opus-Public-Research-Authorization":"approved-nonpatient-source",
+    ...(ncctVerified?{"X-Opus-NCCT-Verified":"native-noncontrast-verified"}:{})},body:source,
  }));
  const x=record(JSON.parse(raw)),tasks=record(x.tasks);
  if(x.schema!=="opus-original-abdominal-ct-pathology-batch/v1"||
     x.sourceNiftiSha256!==sourceSha||x.clinicalValidation!==false||
     x.noNegativeDiagnosis!==true||
-    Object.keys(tasks).length!==3)
+    Object.keys(tasks).length!==4)
    throw Error("Исходная КТ и исполненные модели не подтверждены.");
  const done={} as Record<AbdominalTask,AbdominalTaskState>;
- for(const task of ["kidney_cysts","liver_lesions","pancreatic_tumor"] as const){
+ for(const task of ["kidney_cysts","liver_lesions","pancreatic_tumor","renal_calculus_candidates"] as const){
   const state=record(tasks[task]),status=state.status;
   if(status==="completed"){
-    if(!(task in known))throw Error("Исполнитель возвратил необъявленную модель.");
+    if(task!=="renal_calculus_candidates"&&!(task in known))throw Error("Исполнитель возвратил необъявленную модель.");
+    if(task==="renal_calculus_candidates"){
+      const r=record(state.report);
+      if(!ncctVerified||record(cap).renalCalculusConfigured!==true||
+        r.schema!=="opus-kidney-calculus-ncct-candidates/v1"||r.sourceCTSHA256!==sourceSha||
+        r.trainedAnatomyModelExecutedByThisAdapter!==true||
+        r.absenceOfStonesEstablished!==false||r.ureterEvaluated!==false||
+        !positiveInt(r.numberOfCandidateComponents)||!Array.isArray(r.candidateComponents)||
+        r.candidateComponents.length!==r.numberOfCandidateComponents||r.candidateComponents.length>256)
+        throw Error("Не подтверждён подлинный HU-анализ почечных конкрементов.");
+      for(const raw of r.candidateComponents){const c=record(raw);
+        if(!["left","right"].includes(String(c.anatomyMaskSide))||
+          !triple(c.sourceCentroidIJK)||!triple(c.centroidWorldRASmm)||
+          ![c.candidateVolumeMm3,c.equivalentSphereDiameterMm,c.maxCandidateHU,c.meanCandidateHU].every(v=>typeof v==="number"&&Number.isFinite(v)&&v>=0))
+          throw Error("Некорректный почечный HU-кандидат.");}
+      done[task]={status,report:r as RenalCalculusReport};continue;
+    }
     done[task]={status,report:task==="pancreatic_tumor"?
       validatePancreaticTumor(state.report,sourceSha,
        String(record(known[task]).checkpointSha256),native.dimensions):
