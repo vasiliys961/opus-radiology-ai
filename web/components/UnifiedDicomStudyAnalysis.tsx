@@ -67,6 +67,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  const [chestEffusion,setChestEffusion]=useState<OriginalEffusionRun|null>(null);
  const [chestIssues,setChestIssues]=useState<string[]>([]);
  const [abdomenResult,setAbdomenResult]=useState<AbdominalStudyResults|null>(null);
+ const [ncctVerified,setNcctVerified]=useState(false);
  const [autoAbdomenReady,setAutoAbdomenReady]=useState(false);
  const [autoAbdomenChecking,setAutoAbdomenChecking]=useState(false);
  const [xrvReport,setXrvReport]=useState<OriginalXrvCxrResult|null>(null);
@@ -118,7 +119,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
    setEndpoint(preset);setToken("");setEffusionEndpoint("http://127.0.0.1:8774");setEffusionToken("");
    setPeEndpoint("http://127.0.0.1:8776");setPeToken("");setCtpaConfirmed(false);setChestPe(null);
    setNodeEndpoint("http://127.0.0.1:8777");setNodeToken("");setEnhancedChestConfirmed(false);setChestNodes(null);
-   setChestSource(null);setChestNodules(null);setChestCln(null);setLungscapeResult(null);setChestEffusion(null);setChestPe(null);setChestNodes(null);setChestIssues([]);setAbdomenResult(null);
+   setChestSource(null);setChestNodules(null);setChestCln(null);setLungscapeResult(null);setChestEffusion(null);setChestPe(null);setChestNodes(null);setChestIssues([]);setAbdomenResult(null);setNcctVerified(false);
    setXrvReport(null);setXrvChestConfirmed(false);
    setAuthorized(false);setFlairConfirmed(false);
    setSourceUrl("");setSourceLicense("");setBusy(false);setError("");setStatus("");
@@ -339,16 +340,16 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
        const nifti=await prepareDicomCtForPathology(
          series,original as File[],controller.signal,"ABDOMEN",progress);
        if(version!==serial.current||controller.signal.aborted)return;
-       const result=await runOriginalAbdominalModels(autoAbdomenReady?null:session,nifti,controller.signal,progress);
+       const result=await runOriginalAbdominalModels(autoAbdomenReady?null:session,nifti,controller.signal,progress,ncctVerified);
        if(version!==serial.current||controller.signal.aborted)return;
        setAbdomenResult(result);
        const done=Object.values(result.tasks).filter(x=>x.status==="completed").length;
        setDraftText("Исследовательская КТ брюшной полости. Исполнены оригинальные "+
-         "патологические модели: "+done+" из 3 (кисты почек, очаги печени, опухолевые изменения поджелудочной). "+
+         "патологические модели: "+done+" из 4 (кисты почек, очаги печени, опухолевые изменения поджелудочной, почечные HU-кандидаты). "+
          "Модельные кандидаты неспецифичны; врач проверяет находки на исходных срезах. "+
          "Невыполненная модель не означает отрицательный результат.");
        setStatus(done?
-         "Оригинальные патологические модели завершены: "+done+" из 3. "+
+         "Оригинальные патологические модели завершены: "+done+" из 4. "+
          "Неоценённые задачи показаны отдельно.":
          "Модели патологии живота не смогли завершить инференс; отсутствие патологии не установлено.");
        if(done>0)onReadyForVision?.(series.key);
@@ -493,6 +494,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
     <summary>Настройки приватного исполнителя и разрешение</summary>
     {!xrvPlan&&!(plan.route==="totalseg-abdomen"&&autoAbdomenReady)&&!(chestPlan&&autoMonaiReady)&&!(plan.route==="wmh-flair"&&(brainTask==="wmh"?autoWmhReady:autoBrainReady))&&!(plan.route==="ianpan-ich"&&autoIchReady)&&<label>Адрес локального worker <input type="text" value={endpoint} disabled={busy} onChange={e=>setEndpoint(e.target.value)}/></label>}
     {!xrvPlan&&!(plan.route==="totalseg-abdomen"&&autoAbdomenReady)&&!(chestPlan&&autoMonaiReady)&&!(plan.route==="wmh-flair"&&(brainTask==="wmh"?autoWmhReady:autoBrainReady))&&!(plan.route==="ianpan-ich"&&autoIchReady)&&<label>Токен worker <input type="password" autoComplete="off" value={token} disabled={busy} onChange={e=>setToken(e.target.value)}/></label>}
+    {plan.route==="totalseg-abdomen"&&<label><input type="checkbox" checked={ncctVerified} disabled={busy} onChange={e=>setNcctVerified(e.target.checked)}/> По исходному протоколу подтверждаю нативную КТ без контрастирования (иначе HU-поиск камней не выполняется)</label>}
     {plan.route==="totalseg-abdomen"&&<p role="status">
        КТ живота · автоматическое подключение оригинальных моделей: {
         autoAbdomenChecking?"проверяем…":autoAbdomenReady?
@@ -628,18 +630,22 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
   {xrvReport&&<CxrIndependentVisionReview series={series} files={files}
     report={xrvReport} onNavigate={onNavigate}/>}
   {abdomenResult&&<section className="cs-geometry" aria-label="Кисты почек, очаги печени и поджелудочная · исходный DICOM">
-    <h3>КТ живота · три различные оригинальные модели</h3>
+    <h3>КТ живота · оригинальные модели и HU-поиск почечных конкрементов</h3>
     <p>Одна подготовленная HU-КТ, последовательное выполнение без повторных моделей
       одной патологии. Исходный объём и отчёты связаны по SHA-256.
       Координаты срезов — предположительное соответствие DICOM; врач проверяет физическую сетку.</p>
-    {(["kidney_cysts","liver_lesions","pancreatic_tumor"] as const).map(task=>{
+    {(["kidney_cysts","liver_lesions","pancreatic_tumor","renal_calculus_candidates"] as const).map(task=>{
       const item=abdomenResult.tasks[task];
       return <div key={task}>
-        <h4>{task==="kidney_cysts"?"Кисты почек · TotalSegmentator":task==="liver_lesions"?"Очаги печени · TotalSegmentator":"Опухолевые кандидаты поджелудочной · MONAI DiNTS"}</h4>
+        <h4>{task==="kidney_cysts"?"Кисты почек · TotalSegmentator":task==="liver_lesions"?"Очаги печени · TotalSegmentator":task==="renal_calculus_candidates"?"Почечные плотные компоненты · TotalSegmentator + HU":"Опухолевые кандидаты поджелудочной · MONAI DiNTS"}</h4>
         {item.status!=="completed"?<p role="status">Не исследовано: {item.reason}. Это не отрицательная находка.</p>:
           <div>
             <p>Оригинальная модель выполнена. Кандидаты требуют врачебной оценки.</p>
-            {item.report.schema==="opus-real-monai-pancreatic-tumor-source-candidates/v1"?
+            {item.report.schema==="opus-kidney-calculus-ncct-candidates/v1"?<div>
+                <p>Кандидатов: {item.report.numberOfCandidateComponents}. Это не диагноз мочекаменной болезни. Мочеточники не оценивались.</p>
+                {item.report.candidateComponents.map((c,i)=><p key={i}>Кандидат {i+1}: {c.anatomyMaskSide==="left"?"левая":"правая"} почка; {c.equivalentSphereDiameterMm.toFixed(2)} мм (эквивалентный диаметр), объём {c.candidateVolumeMm3.toFixed(2)} мм³, максимум {c.maxCandidateHU.toFixed(0)} HU, средняя {c.meanCandidateHU.toFixed(0)} HU, RAS {c.centroidWorldRASmm.join(", ")} мм. <button type="button" onClick={()=>{const k=Math.round(c.sourceCentroidIJK[2]);if(k>=0&&k<series.members.length)onNavigate(k);}}>Открыть предполагаемый срез</button></p>)}
+                {item.report.numberOfCandidateComponents===0&&<p>Кандидаты не выделены; отсутствие камней не установлено.</p>}
+              </div>:item.report.schema==="opus-real-monai-pancreatic-tumor-source-candidates/v1"?
               <div>
                 <p>Модельных вокселей класса 2: {item.report.sourceNativeTumorVoxelCount}.
                   Органная метка поджелудочной (класс 1) НЕ считается опухолью.</p>
