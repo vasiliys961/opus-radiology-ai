@@ -89,8 +89,7 @@ jobs:
             scripts/check-real-public-cln-gemini-opus.mjs \
             "$RUNNER_TEMP/verified-cln-numeric.json" \
             "$RUNNER_TEMP/public-ct-png" \
-            "$RUNNER_TEMP/real-public-ct-gemini-opus-report.json" \
-            "$RUNNER_TEMP/real-public-ct-gemini-opus-report-radiologist-report.txt"
+            "$RUNNER_TEMP/real-public-ct-gemini-opus-report.json"
       - name: Upload public case model observations only; never original image pixels
         if: steps.access.outputs.ready == 'true' && success()
         uses: actions/upload-artifact@v4
@@ -108,4 +107,5 @@ jobs:
           rm -rf "$RUNNER_TEMP/public-ct-png" "/tmp/opus-public-hf-cache" \
             "$RUNNER_TEMP/verified-cln-numeric.json" \
             "$RUNNER_TEMP/verified-cln-numeric.zip" \
-            "$RUNNER_TEMP/real-public-ct-gemini-opus-report.json"
+            "$RUNNER_TEMP/real-public-ct-gemini-opus-report.json" \
+            "$RUNNER_TEMP/real-public-ct-gemini-opus-report-radiologist-report.txt"
