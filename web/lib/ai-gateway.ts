@@ -39,7 +39,12 @@ export async function callAiGateway(request: AiGatewayRequest, signal?: AbortSig
   const config = PROVIDERS[request.provider];
   const apiKey = process.env[config.env];
   if (!apiKey) throw new Error(`Provider ${request.provider} is not configured`);
-  const tokenCeiling=request.responseFormat?2000:1500;
+  // A structured specialist report is longer than a per-frame JSON observation.
+  // Allow up to 3500 output tokens ONLY for the known Opus model with strict
+  // provider-enforced JSON; all other requests retain their previous ceilings.
+  const tokenCeiling=request.responseFormat&&
+    request.provider==="openrouter"&&request.model==="anthropic/claude-opus-5.5"
+    ?3500:request.responseFormat?2000:1500;
   const response = await fetch(config.url, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
