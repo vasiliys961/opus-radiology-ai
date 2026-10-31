@@ -11,6 +11,39 @@ export type RadiologistProtocol={
  assessmentScope:"sampled_frames_only";
  physicianReviewRequired:true;
 };
+/** Standard report structure depends on the ACTUAL study region, not an LLM guess. */
+export type RadiologyStudyRegion="chest"|"abdomen"|"brain"|null;
+export function standardRadiologistSections(
+ modality:"CT"|"MR"|"CR"|"DX",region:RadiologyStudyRegion,
+):readonly string[]{
+ if(modality==="CR"||modality==="DX")return [
+  "Легочные поля","Плевральные полости","Сердечно-сосудистая тень","Костные структуры",
+ ];
+ if(region==="chest")return [
+  "Легкие и бронхи","Плевра","Средостение и лимфатические узлы",
+  "Сердце и сосуды","Костные структуры и мягкие ткани",
+ ];
+ if(region==="abdomen")return [
+  "Печень и желчные пути","Поджелудочная железа и селезенка",
+  "Почки и надпочечники","Кишечник и брюшина",
+  "Сосуды и лимфатические узлы","Костные структуры",
+ ];
+ if(region==="brain")return [
+  "Вещество головного мозга","Желудочковая система и ликворные пространства",
+  "Срединные структуры","Сосудистые структуры","Околоносовые пазухи и кости черепа",
+ ];
+ return [];
+}
+export function validateStandardAnatomicalDescription(
+ protocol:RadiologistProtocol,modality:"CT"|"MR"|"CR"|"DX",
+ region:RadiologyStudyRegion,
+):boolean{
+ if(!validateRadiologistProtocol(protocol))return false;
+ const sections=standardRadiologistSections(modality,region);
+ // Exact headings anchor an ordinary Russian radiology report and make absent
+ // structures visibly unassessed instead of silently omitted.
+ return sections.every(heading=>protocol.description.includes(heading+":"));
+}
 const readable=(v:unknown,max:number):v is string=>
  typeof v==="string"&&v.trim().length>=12&&v.length<=max;
 export function validateRadiologistProtocol(v:unknown):v is RadiologistProtocol{
