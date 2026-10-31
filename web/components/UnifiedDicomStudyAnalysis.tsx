@@ -337,7 +337,8 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
        setStatus(completed?
          "Завершено моделей: "+completed+" из "+total+". Недоступные анализы явно отмечены.":
          "Ни одна патологическая модель не выполнена. Исследование не оценено.");
-       if(completed>0)onReadyForVision?.(series.key);
+       // Vision is independent of specialty-model availability; privacy/budget gates remain upstream.
+       onReadyForVision?.(series.key);
        return;
      }
      if(plan.route==="totalseg-abdomen"){
@@ -370,7 +371,8 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
          "Оригинальные патологические модели завершены: "+done+" из 4. "+
          "Неоценённые задачи показаны отдельно.":
          "Модели патологии живота не смогли завершить инференс; отсутствие патологии не установлено.");
-       if(done>0)onReadyForVision?.(series.key);
+       // A missing abdominal worker must not suppress an otherwise authorized Vision review.
+        onReadyForVision?.(series.key);
        return;
      }
      if(plan.route==="ianpan-ich"){
