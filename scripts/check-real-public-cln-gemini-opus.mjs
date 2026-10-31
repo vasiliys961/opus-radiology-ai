@@ -14,7 +14,7 @@ import {TASKS_BY_REGION,validateSanitizedDetectorBundle}
 import {reviewSanitizedSamples,PILOT_GEMINI,PILOT_OPUS}
  from "../web/lib/sanitized-cloud-review.ts";
 import {callAiGateway} from "../web/lib/ai-gateway.ts";
-import {formatRadiologistProtocol} from "../web/lib/radiologist-protocol.ts";
+import {formatRadiologistProtocol,validateStandardAnatomicalDescription} from "../web/lib/radiologist-protocol.ts";
 import {createClnFrameRelativeEvidence} from "../web/lib/cln-frame-relative-evidence.ts";
 
 if(process.env.RADIOLOGY_PUBLIC_MSD_CLOUD_TRANSFER_APPROVED!=="1"||
@@ -104,6 +104,7 @@ assert.equal(clinical.physicianReviewRequired,true);
 assert.ok(clinical.technique.length>12&&clinical.description.length>30);
 assert.ok(clinical.conclusion.length>12);
 assert.ok(clinical.recommendations.length>12);
+assert.ok(validateStandardAnatomicalDescription(clinical,"CT","chest"),"Standard chest radiology protocol must describe lungs, pleura, mediastinum, heart and bones by anatomical sections");
 assert.deepEqual(doc.frameRelativeClnEvidence,spatial);
 assert.equal(doc.frameRelativeClnEvidence?.originalDicomSopRegistrationVerified,false);
 const publicReport={
