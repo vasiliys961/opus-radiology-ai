@@ -110,7 +110,14 @@ try{
    sourceFrames:frames,callsAttempted:2,originalDicomSent:false,
    sourceDicomIdentifiersSent:false,clinicalReviewRequired:true,
    deidentificationIndependentlyCertified:false,patientDataCanStillBeSensitive:true,
-   researchOnly:true,diagnosticAccuracyValidated:false};
+   researchOnly:true,diagnosticAccuracyValidated:false,
+   opusSynthesis:{
+    schema:"opus-integrated-gemini-detector-synthesis/v1",
+    summary:"Синтетическая учебная КТ. Получены наблюдения Gemini и Opus. Клиническая интерпретация не выполнялась.",
+    comparisons:[],conflicts:[],
+    limitations:["Синтетический фантом; не отражает реальных пациентов."],
+    sourceCoverage:"sampled_frames_only",clinicallyValidated:false,
+   }};
   await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify(response)});
  });
  await cloud.getByRole("textbox",{name:"Локальный пароль оператора"}).fill("test-operator-token-0123456789");
@@ -121,6 +128,11 @@ try{
  assert.equal(postCount,1,"Exactly one consent-gated two-model server request");
  const responses=await cloud.innerText();
  assert.match(responses,/Gemini Vision/);assert.match(responses,/Opus Vision/);
+ const integrated=cloud.locator('section[aria-label="Объединённое заключение Opus по Gemini JSON и детекторам"]');
+ await integrated.waitFor();
+ await integrated.getByRole("textbox",{name:"Редактируемое заключение врача"})
+   .fill("SYNTHETIC OPUS INTEGRATED REPORT after Gemini JSON.");
+
  await cloud.getByRole("button",{name:"Показать исходный срез"}).first().click();
  await cloud.getByRole("button",{name:"На перепроверку"}).first().click();
  await cloud.getByRole("textbox",{name:/Рабочий синтез врача/}).fill("SYNTHETIC physician review — no diagnosis.");
@@ -133,6 +145,9 @@ try{
  const exported=JSON.parse(await readFile(dest,"utf8"));
  const sanitized=JSON.stringify(exported);
  assert.match(sanitized,/SYNTHETIC physician review/);
+ assert.match(sanitized,/SYNTHETIC OPUS INTEGRATED REPORT/);
+ assert.deepEqual(exported.integratedOpusReport.comparisons,[]);
+ assert.equal(exported.integratedOpusReport.clinicallyValidated,false);
  assert.doesNotMatch(sanitized,/2\.25\.1043521000002|SOPInstanceUID|StudyInstanceUID/);
  assert.equal(errors.length,0,"Browser console errors: "+errors.join(" / "));
  console.log("PASS UI: local OCR -> physician review -> authorized mock Gemini/Opus -> source slice -> physician JSON");
