@@ -6,7 +6,9 @@ test("unified Analyze button admits verified automatic original brain workers wi
  assert.match(source,/plan\.route==="ianpan-ich"\?true/);
  assert.match(source,/if\(!autoIchReady&&!token\.trim\(\)\)/);
  assert.match(source,/onReadyForVision\?\.\(series\.key\)/);
- assert.match(source,/plan\.route==="wmh-flair"\?\(\(brainTask==="wmh"\?autoWmhReady:autoBrainReady\)\|\|\s*\(!!token&&!!endpoint\.trim\(\)\)\)/);
+ assert.match(source,/plan\.route==="wmh-flair"\?true/);
+ assert.match(source,/if\(!autoBrainReady&&!token\.trim\(\)\)/);
+ assert.match(source,/if\(!autoWmhReady&&!token\.trim\(\)\)/);
  assert.match(source,/runPublicIchWorker\(autoIchReady\?null:session/);
  assert.match(source,/executeOriginalBrain\(autoBrainReady\?null:session/);
  assert.match(source,/const wmhSession=autoWmhReady\?null:session/);
