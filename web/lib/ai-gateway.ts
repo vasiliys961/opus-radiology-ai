@@ -39,7 +39,16 @@ export async function callAiGateway(request: AiGatewayRequest, signal?: AbortSig
   const config = PROVIDERS[request.provider];
   const apiKey = process.env[config.env];
   if (!apiKey) throw new Error(`Provider ${request.provider} is not configured`);
-  const tokenCeiling=request.responseFormat?2000:1500;
+  // A source-checked Opus report needs room for standard CT/MRI organ sections,
+  // structured comparisons and limitations. Grant the higher budget ONLY to
+  // this fixed, server-constructed Opus schema with strict provider enforcement.
+  // All other structured research models remain capped at 2000 tokens.
+  const professionalRadiologyReport=request.provider==="openrouter"&&
+    request.model==="anthropic/claude-opus-5.5"&&
+    request.requireParameters===true&&
+    request.responseFormat?.json_schema.name==="opus_gemini_detector_report";
+  const tokenCeiling=professionalRadiologyReport?4500:
+    request.responseFormat?2000:1500;
   const response = await fetch(config.url, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
