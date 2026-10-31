@@ -10,7 +10,7 @@ import {parseRoleResponse,parseStrictObject,readCompletionText,
   type RoleResponse} from "./vision-orchestra.ts";
 import type {AiGatewayRequest,AiJsonSchemaFormat} from "./ai-gateway.ts";
 import {parseLocalLungFacts,type LocalLungFacts} from "./local-lung-review.ts";
-import {validateSanitizedDetectorBundle,type SanitizedDetectorBundle} from "./detector-consilium-evidence.ts";
+import {validateSanitizedDetectorBundle,type SanitizedDetectorBundle,type ConsiliumTask} from "./detector-consilium-evidence.ts";
 import {safeXrvScores,type SanitizedCxrScores} from "./xrv-original-cxr.ts";
 import {validateSanitizedClnEvidence,type SanitizedClnTumorEvidence} from "./cln-tumor-consilium.ts";
 
@@ -23,6 +23,42 @@ export type NormalizedCloudPilot={
   frames:Array<{imageId:string;base64:string}>;
   localFrameHashes:Array<{imageId:string;reviewedPixelSha256:string}>;
 };
+export type OpusIntegratedSynthesis={
+ schema:"opus-integrated-gemini-detector-synthesis/v1";
+ summary:string;
+ comparisons:Array<{task:ConsiliumTask;assessment:"compatible"|"discordant"|"not_comparable";reason:string}>;
+ conflicts:string[];
+ limitations:string[];
+ sourceCoverage:"sampled_frames_only";
+ clinicallyValidated:false;
+};
+const short=(v:unknown,limit:number):v is string=>
+ typeof v==="string"&&v.trim().length>0&&v.length<=limit;
+export function validateOpusIntegratedSynthesis(
+ value:unknown,completedTasks:readonly ConsiliumTask[],
+):value is OpusIntegratedSynthesis{
+ if(!value||typeof value!=="object"||Array.isArray(value))return false;
+ const v=value as Partial<OpusIntegratedSynthesis>;
+ if(Object.keys(v).sort().join(",")!==
+   ["schema","summary","comparisons","conflicts","limitations","sourceCoverage","clinicallyValidated"].sort().join(",")||
+   v.schema!=="opus-integrated-gemini-detector-synthesis/v1"||
+   v.sourceCoverage!=="sampled_frames_only"||v.clinicallyValidated!==false||
+   !short(v.summary,4000)||!Array.isArray(v.comparisons)||
+   v.comparisons.length!==completedTasks.length||
+   !Array.isArray(v.conflicts)||v.conflicts.length>8||
+   !v.conflicts.every(x=>short(x,400))||
+   !Array.isArray(v.limitations)||v.limitations.length>8||
+   !v.limitations.every(x=>short(x,400)))return false;
+ const seen=new Set<string>();
+ return v.comparisons.every(x=>{
+   if(!x||typeof x!=="object"||Array.isArray(x)||
+      Object.keys(x).sort().join(",")!==["task","assessment","reason"].sort().join(",")||
+      !completedTasks.includes(x.task)||seen.has(x.task)||
+      !["compatible","discordant","not_comparable"].includes(x.assessment)||
+      !short(x.reason,350))return false;
+   seen.add(x.task);return true;
+ });
+}
 export type SanitizedModelReview={
   schema:"opus-sanitized-cloud-pilot/v1";
   modality:"CT"|"MR"|"CR"|"DX";
@@ -38,6 +74,7 @@ export type SanitizedModelReview={
   researchOnly:true;
   diagnosticAccuracyValidated:false;
   detectorEvidence?:SanitizedDetectorBundle;
+  opusSynthesis?:OpusIntegratedSynthesis;
   clnTumorEvidence?:SanitizedClnTumorEvidence;
   cxrModelEvidence?:SanitizedCxrScores;
   specialistEvidence?:{
@@ -76,7 +113,7 @@ export function normalizeReviewedCloudPilot(value:unknown):NormalizedCloudPilot{
  * The trusted frame-ID enum prevents a provider from inventing other studies.
  * Local parseRoleResponse remains the authority for every value and source ID.
  */
-export function sourceFrameReviewFormat(frameIds:readonly string[]):AiJsonSchemaFormat {
+export function sourceFrameReviewFormat(frameIds:readonly string[],opusTasks?:readonly ConsiliumTask[]):AiJsonSchemaFormat {
   if(frameIds.length<1||frameIds.length>CLOUD_PILOT_MAX_FRAMES||
      new Set(frameIds).size!==frameIds.length||
      frameIds.some(id=>!/^frame-[1-4]$/.test(id)))
@@ -84,7 +121,7 @@ export function sourceFrameReviewFormat(frameIds:readonly string[]):AiJsonSchema
   return {
     type:"json_schema",
     json_schema:{
-      name:"source_anchored_observations",
+      name:opusTasks===undefined?"source_anchored_observations":"opus_gemini_detector_report",
       strict:true,
       schema:{
         type:"object",
@@ -104,8 +141,29 @@ export function sourceFrameReviewFormat(frameIds:readonly string[]):AiJsonSchema
           }},
           limitations:{type:"array",maxItems:8,items:{type:"string"},
             description:"Concise sampling, quality and image-privacy limitations"},
+          ...(opusTasks===undefined?{}:{opusSynthesis:{
+            type:"object",additionalProperties:false,
+            properties:{
+              schema:{type:"string",enum:["opus-integrated-gemini-detector-synthesis/v1"]},
+              summary:{type:"string",description:"Editable provisional radiology report in Russian. Compare independent Gemini JSON and actual detector findings; partial image coverage only."},
+              comparisons:{type:"array",minItems:opusTasks.length,maxItems:opusTasks.length,
+                description:"Exactly one entry for EACH actually completed detector task. Do NOT include unavailable or unperformed tasks.",
+                items:{type:"object",additionalProperties:false,properties:{
+                  task:{type:"string",enum:opusTasks.length?[...opusTasks]:["none"]},
+                  assessment:{type:"string",enum:["compatible","discordant","not_comparable"],
+                    description:"Agreement on sampled source frames is NOT clinical validation; use not_comparable if location/coverage cannot be independently checked"},
+                  reason:{type:"string",description:"Explain comparison and uncertainty without inventing diagnosis"},
+                },required:["task","assessment","reason"]}},
+              conflicts:{type:"array",maxItems:8,items:{type:"string"}},
+              limitations:{type:"array",maxItems:8,items:{type:"string"}},
+              sourceCoverage:{type:"string",enum:["sampled_frames_only"]},
+              clinicallyValidated:{type:"boolean",enum:[false]},
+            },
+            required:["schema","summary","comparisons","conflicts","limitations","sourceCoverage","clinicallyValidated"],
+          }}),
         },
-        required:["role","reviewedImageIds","observations","limitations"],
+        required:opusTasks===undefined?["role","reviewedImageIds","observations","limitations"]:
+          ["role","reviewedImageIds","observations","limitations","opusSynthesis"],
         additionalProperties:false,
       },
     },
@@ -180,6 +238,9 @@ export async function reviewSanitizedSamples(
     throw Error("CT/MR detector evidence must not be attached to CR/DX");
   const messages=reviewMessages(checked);
   const responseFormat=sourceFrameReviewFormat(ids);
+  const completedTasks:ConsiliumTask[]=detectors?.facts.filter(x=>x.status==="completed").map(x=>x.task)??[];
+  if(cln&&!completedTasks.includes("lung_tumor"))completedTasks.push("lung_tumor");
+  const opusFormat=sourceFrameReviewFormat(ids,completedTasks);
   // Sequential, not two independent simultaneous calls: Opus receives Gemini's
   // source-frame-validated observations and the same source-linked model facts.
   // Only two existing paid requests; no duplicate model inference.
@@ -199,7 +260,15 @@ export async function reviewSanitizedSamples(
        "and disagreements, look for false positives, take AP/PA magnification into "+
        "account if independently supported, but do not mistake scores for probabilities "+
        "or assert cardiomegaly, edema, infiltrate, mass or pneumothorax as clinical diagnoses. ":"")+
-      "Use the SAME strict JSON role observations schema."},
+      "Return the same source-anchored image observations PLUS mandatory opusSynthesis. "+
+      "Write a Russian-language provisional draft summarizing actual model outputs and "+
+      "Gemini's INDEPENDENT source-frame JSON. For each actually completed pathology "+
+      "task return exactly one structured comparison with the task ID. If the limited "+
+      "frames do not include the candidate's anatomical location, select "+
+      "not_comparable, not agreement or contradiction. Disagreements and uncertainties "+
+      "must be explicit. Unperformed tasks must remain NOT ASSESSED. "+
+      "Your summary is not a confirmed diagnosis, whole-series review or validated AI accuracy. "+
+      "No invented anatomy, lesion side, staging, measurements or history."},
     {role:"user",content:[...(messages[1].content as Array<Record<string,unknown>>),
       {type:"text",text:"Prior source-checked Gemini observations, NOT "+
         "independent clinical validation: "+JSON.stringify(a)},
@@ -219,8 +288,12 @@ export async function reviewSanitizedSamples(
   ];
   const opus=await call({provider:"openrouter",role:"vision",
     model:PILOT_OPUS,maxTokens:1800,messages:opusMessages,
-    responseFormat,requireParameters:true},signal);
-  const b=parseRoleResponse(parseStrictObject(readCompletionText(opus)),"observations",ids);
+    responseFormat:opusFormat,requireParameters:true},signal);
+  const opusRaw=parseStrictObject(readCompletionText(opus));
+  const b=parseRoleResponse(opusRaw,"observations",ids);
+  const synthesis=(opusRaw as Record<string,unknown>).opusSynthesis;
+  if(!validateOpusIntegratedSynthesis(synthesis,completedTasks))
+   throw Error("opus_synthesis_missing_or_unbound_to_executed_detector_tasks");
   requireCompleteFrameCoverage(b,ids);
   return {
     schema:"opus-sanitized-cloud-pilot/v1",modality:checked.modality,
@@ -228,6 +301,7 @@ export async function reviewSanitizedSamples(
     results:[{reviewer:"gemini",model:PILOT_GEMINI,review:a},
       {reviewer:"opus",model:PILOT_OPUS,review:b}],
     sourceFrames:checked.localFrameHashes,
+    opusSynthesis:synthesis,
     callsAttempted:2,originalDicomSent:false,sourceDicomIdentifiersSent:false,
     clinicalReviewRequired:true,deidentificationIndependentlyCertified:false,
     patientDataCanStillBeSensitive:true,researchOnly:true,diagnosticAccuracyValidated:false,
