@@ -9,6 +9,7 @@ import type {LocalSameSeriesLaa950} from "../lib/same-series-laa950-review";
 import {validateSanitizedDetectorBundle,type SanitizedDetectorBundle} from "../lib/detector-consilium-evidence";
 import {bindLocalSanitizedReview,sourceFileForObservation,perFrameModelCoverage} from "../lib/local-cloud-source-navigation";
 import {toSafeXrvScores,type OriginalXrvCxrResult} from "../lib/xrv-original-cxr";
+import {validateLateDetectorReconciliation,type LateDetectorReconciliation} from "../lib/late-detector-opus-reconcile";
 
 type Props={
   enabledByLocalChecks:boolean;
@@ -38,12 +39,21 @@ export default function DeidentifiedOpenRouterPanel({
   const [decisions,setDecisions]=useState<Record<string,LocalObservationAssessment>>({});
   const [clinicalSynthesis,setClinicalSynthesis]=useState("");
   const [draftError,setDraftError]=useState("");
+  const [lateReview,setLateReview]=useState<LateDetectorReconciliation|null>(null);
+  const [lateDraft,setLateDraft]=useState("");
+  const [lateWorking,setLateWorking]=useState(false),[lateConsent,setLateConsent]=useState(false);
   const ctl=useRef<AbortController|null>(null);
   // Never probe even localhost without a clinician/operator click.
   // This is essential for offline DICOM review and fail-closed browser tests.
   useEffect(()=>()=>{ctl.current?.abort();},[]);
   useEffect(()=>{setResult(null);setIncludeSpecialist(false);setDecisions({});setClinicalSynthesis("");},[specialistLocalBinding]);
-  useEffect(()=>{setResult(null);setIncludeDetectors(true);setTransferAuthorized(false);setDecisions({});setClinicalSynthesis("");},[originalDetectorEvidence]);
+  // A real CLN/nnU-Net may finish AFTER an already paid Vision review.
+  // Preserve Gemini/Opus observations and physician decisions; revoke permission
+  // before any new external call, and invalidate only prior late reconciliation.
+  useEffect(()=>{
+    setIncludeDetectors(true);setTransferAuthorized(false);
+    setLateReview(null);setLateDraft("");setLateConsent(false);
+  },[originalDetectorEvidence]);
   useEffect(()=>{setResult(null);setIncludeCxr(true);setTransferAuthorized(false);setDecisions({});setClinicalSynthesis("");},[originalCxrEvidence]);
   async function checkReadiness(){
     if(working)return;
@@ -59,7 +69,7 @@ export default function DeidentifiedOpenRouterPanel({
     }catch{setReadinessNote("Локальный облачный пилот недоступен.");}
   }
   async function send(){
-    if(working||!enabledByLocalChecks||token.length<24||!transferAuthorized)return;
+    if(working||lateWorking||!enabledByLocalChecks||token.length<24||!transferAuthorized)return;
     setError("");setResult(null);setDecisions({});setClinicalSynthesis("");setDraftError("");setWorking(true);
     const controller=new AbortController();ctl.current=controller;
     try{
@@ -144,16 +154,66 @@ export default function DeidentifiedOpenRouterPanel({
         e instanceof Error?e.message:"Ошибка анализа проверенных срезов");
     }finally{setWorking(false);ctl.current=null;}
   }
+  const lateEvidenceReady=!!result&&!!originalDetectorEvidence&&
+    validateSanitizedDetectorBundle(originalDetectorEvidence)&&
+    originalDetectorEvidence.modality===result.modality&&
+    originalDetectorEvidence.facts.some(f=>f.status==="completed")&&
+    JSON.stringify(originalDetectorEvidence)!==JSON.stringify(result.detectorEvidence);
+  const validLateReview=lateReview&&originalDetectorEvidence&&result&&
+    validateLateDetectorReconciliation(lateReview,originalDetectorEvidence,
+      result.sourceFrames.map(f=>f.imageId))?lateReview:null;
+  async function reconcileLate(){
+    if(!lateEvidenceReady||!lateConsent||working||lateWorking||
+       token.length<24||!result||!originalDetectorEvidence||!enabledByLocalChecks)return;
+    setLateWorking(true);setError("");setDraftError("");
+    const ctrl=new AbortController();ctl.current=ctrl;
+    try{
+      // Check original private DICOM ↔ reviewed exact PNG before the new request.
+      // The server passes only text and bounded numeric facts to ONE Opus call.
+      bindLocalSanitizedReview(result,
+        exactReviewedHashes.map(f=>({imageId:f.imageId,reviewedPixelSha256:f.sha256})),
+        originalLocalFileIds);
+      const res=await fetch("/api/ai/vision-detector-reconcile",{
+        method:"POST",cache:"no-store",credentials:"same-origin",signal:ctrl.signal,
+        headers:{"Content-Type":"application/json","X-Opus-Local-Operator-Token":token},
+        body:JSON.stringify({
+          schema:"opus-authorized-late-detector-reconciliation-request/v1",
+          priorReview:result,detectorEvidence:originalDetectorEvidence,
+          acknowledgeSinglePaidOpusCall:true,acknowledgeLawfulNumericDisclosure:true,
+        }),
+      });
+      const output:unknown=await res.json();
+      if(!res.ok)throw Error("Согласование Opus не выполнено (HTTP "+res.status+")");
+      if(!validateLateDetectorReconciliation(output,originalDetectorEvidence,
+         result.sourceFrames.map(f=>f.imageId)))
+        throw Error("Opus returned an unbound detector report");
+      if(ctrl.signal.aborted)return;
+      setLateReview(output);setLateDraft(output.draft.summary);
+      setLateConsent(false);setToken("");
+    }catch(e){if(!ctrl.signal.aborted)setError(e instanceof Error?e.message:"Ошибка позднего согласования Opus");}
+    finally{if(!ctrl.signal.aborted){setLateWorking(false);ctl.current=null;}}
+  }
   const downloadLocalReview=()=>{
     if(!result)return;
     try{
       const doc=buildLocalDualReviewDraft(result,
         exactReviewedHashes.map(f=>({imageId:f.imageId,reviewedPixelSha256:f.sha256})),
         originalLocalFileIds,decisions,clinicalSynthesis);
-      const blob=new Blob([JSON.stringify(doc,null,2)],{type:"application/json"});
+      const payload=validLateReview?{
+        ...doc,schema:"opus-local-dual-vision-detector-physician-draft/v1",
+        lateDetectorReconciliation:{
+          provider:"openrouter",opusModel:validLateReview.opusModel,
+          numericFacts:validLateReview.detectorEvidence.facts,
+          editableUnsignedDraft:lateDraft,
+          limitations:validLateReview.draft.limitations,
+          imagePixelsResent:false,originalDicomSent:false,
+          clinicianSigned:false,clinicalValidation:false,
+        },
+      }:doc;
+      const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});
       const url=URL.createObjectURL(blob);
       const a=document.createElement("a");a.href=url;
-      a.download="opus-local-gemini-opus-physician-review.json";
+      a.download=validLateReview?"opus-local-gemini-opus-detector-review.json":"opus-local-gemini-opus-physician-review.json";
       document.body.appendChild(a);a.click();a.remove();
       setTimeout(()=>URL.revokeObjectURL(url),1000);
       setDraftError("");
@@ -216,7 +276,7 @@ export default function DeidentifiedOpenRouterPanel({
         Исходные UID, SHA, координаты и сами маски не передаются.
       </label>}
     <div className="ora-evidence-actions">
-      <button type="button" disabled={working||!enabledByLocalChecks||
+      <button type="button" disabled={working||lateWorking||!enabledByLocalChecks||
         token.length<24||!transferAuthorized}
         onClick={()=>void send()}>{working?"Gemini → Opus анализируют кадры…":
         "Подтвердить передачу и создать предварительное заключение"}</button>
@@ -228,6 +288,32 @@ export default function DeidentifiedOpenRouterPanel({
       <p><strong>Ответ моделей получен.</strong> Это черновые визуальные
         наблюдения по отдельным срезам, не полноценный анализ исследования
         и не диагноз. Врач сверяет их с исходным DICOM локально.</p>
+      {lateEvidenceReady&&<section aria-label="Позднее согласование детекторов с Opus" className="ora-reviewer-note">
+        <h4>Детектор завершился после Vision · согласовать с Claude Opus</h4>
+        <p>Новые оригинальные числовые находки по текущей серии:
+          завершено {originalDetectorEvidence!.facts.filter(f=>f.status==="completed").length}
+          из {originalDetectorEvidence!.facts.length} задач.
+          Ранее оплаченные результаты Gemini и Opus и решения врача сохранены.
+          Дополнительный вызов не повторяет Gemini и не отправляет изображения.</p>
+        <label><input type="checkbox" checked={lateConsent} disabled={lateWorking||working}
+          onChange={e=>setLateConsent(e.target.checked)}/>
+          Разрешаю передать проверенные обезличенные текстовые наблюдения и новые
+          числовые факты одному вызову Claude Opus. Подтверждаю право передачи
+          и оплату одного дополнительного запроса.</label>
+        <button type="button" disabled={!lateConsent||lateWorking||working||
+          !enabledByLocalChecks||token.length<24} onClick={()=>void reconcileLate()}>
+          {lateWorking?"Opus сопоставляет находки…":"Согласовать новые находки в Opus (1 вызов, без PNG)"}
+        </button>
+        {lateWorking&&<button type="button" onClick={()=>ctl.current?.abort()}>Отменить Opus</button>}
+        {validLateReview&&<div role="status">
+          <h4>Opus · общий предварительный отчёт для врача</h4>
+          <textarea rows={7} maxLength={6000} value={lateDraft}
+            onChange={e=>setLateDraft(e.target.value)}/>
+          {validLateReview.draft.limitations.map((t,i)=><p key={i}>{t}</p>)}
+          <p>Отчёт сохраняется с первоначальными наблюдениями и решениями врача
+            через кнопку локального экспорта ниже.</p>
+        </div>}
+      </section>}
       <h4>Покадровое сопоставление · без голосования моделей</h4>
       <p>Числа ниже — количество текстовых наблюдений, не вероятность заболевания
         и не доказательство согласия Gemini и Opus.</p>
