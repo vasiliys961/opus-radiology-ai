@@ -64,11 +64,20 @@ try{
       paidResult={status:response.status(),body:await response.json().catch(()=>null)};
    }
  });
- await page.goto(baseUrl+"/viewer",{waitUntil:"domcontentloaded",timeout:90000});
+ await page.goto(baseUrl+"/viewer",{waitUntil:"networkidle",timeout:90000});
  const files=(await readdir(join(fixture,"dicom"))).sort().map(name=>join(fixture,"dicom",name));
  assert.equal(files.length,32);
- await page.locator('input[accept*=".dcm"]').setInputFiles(files);
- await page.getByText(/Проиндексировано 32 DICOM/).waitFor({timeout:45000});
+ const chooser=page.locator('input[accept*=".dcm"]');
+ await chooser.setInputFiles(files);
+ try{
+  await page.getByText(/Проиндексировано 32 DICOM/).waitFor({timeout:15000});
+ }catch{
+  // Next development hydration can complete after the SSR file input is visible.
+  // The first unhydrated onchange event is not delivered to React.
+  await chooser.setInputFiles([]);
+  await chooser.setInputFiles(files);
+  await page.getByText(/Проиндексировано 32 DICOM/).waitFor({timeout:45000});
+ }
  await page.locator(".cs-series-list button").first().click();
  const analysis=page.locator('section[aria-label="Единый анализ DICOM"]');
  await analysis.waitFor();
