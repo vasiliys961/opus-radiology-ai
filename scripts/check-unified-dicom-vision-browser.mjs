@@ -114,6 +114,14 @@ try{
    opusSynthesis:{
     schema:"opus-integrated-gemini-detector-synthesis/v1",
     summary:"Синтетическая учебная КТ. Получены наблюдения Gemini и Opus. Клиническая интерпретация не выполнялась.",
+    radiologistProtocol:{
+     schema:"opus-radiologist-protocol/v1",
+     technique:"Четыре отдельных среза синтетического изображения CT, без полного объёма.",
+     description:"На предоставленных срезах обнаружены только элементы цифрового фантома.",
+     conclusion:"Цифровой фантом, клиническое заключение не формируется.",
+     recommendations:"Для клинической оценки требуется полное исследование пациента.",
+     assessmentScope:"sampled_frames_only",physicianReviewRequired:true,
+    },
     comparisons:[],conflicts:[],
     limitations:["Синтетический фантом; не отражает реальных пациентов."],
     sourceCoverage:"sampled_frames_only",clinicallyValidated:false,
@@ -130,8 +138,18 @@ try{
  assert.match(responses,/Gemini Vision/);assert.match(responses,/Opus Vision/);
  const integrated=cloud.locator('section[aria-label="Объединённое заключение Opus по Gemini JSON и детекторам"]');
  await integrated.waitFor();
- await integrated.getByRole("textbox",{name:"Редактируемое заключение врача"})
-   .fill("SYNTHETIC OPUS INTEGRATED REPORT after Gemini JSON.");
+ const reportBox=integrated.getByRole("textbox",{name:/Редактируемый протокол/});
+ assert.match(await reportBox.inputValue(),/МЕТОДИКА[\s\S]*ОПИСАНИЕ[\s\S]*ЗАКЛЮЧЕНИЕ[\s\S]*РЕКОМЕНДАЦИИ/);
+ const textDownloadPromise=page.waitForEvent("download");
+ await integrated.getByRole("button",{name:/Скачать заключение рентгенолога/}).click();
+ const textDownload=await textDownloadPromise;
+ assert.match(textDownload.suggestedFilename(),/zaklyuchenie-rentgenologa\.txt$/);
+ const reportDest=join(fixture,"radiologist-report.txt");
+ await textDownload.saveAs(reportDest);
+ const physicianReport=await readFile(reportDest,"utf8");
+ assert.match(physicianReport,/Цифровой фантом/);
+ assert.doesNotMatch(physicianReport,/PatientName|SOPInstanceUID|StudyInstanceUID/);
+ await reportBox.fill("SYNTHETIC OPUS INTEGRATED REPORT after Gemini JSON.");
 
  await cloud.getByRole("button",{name:"Показать исходный срез"}).first().click();
  await cloud.getByRole("button",{name:"На перепроверку"}).first().click();
