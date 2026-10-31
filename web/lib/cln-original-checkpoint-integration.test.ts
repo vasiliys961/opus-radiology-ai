@@ -44,7 +44,7 @@ test("CLN true-positive numeric output enters same-study consilium as lung tumor
  });
  const tumor=bundle.facts.find(f=>f.task==="lung_tumor");
  assert.deepEqual(tumor,{task:"lung_tumor",status:"completed",
-  candidateCount:1,candidateVolumeMl:2.303572});
+  candidateCount:1,candidateVolumeMl:2.304});
  assert.equal(bundle.facts.find(f=>f.task==="lung_nodules")?.status,"not_assessed");
  assert.equal(bundle.sourceIdentifiersSent,false);
  assert.equal(bundle.sourcePixelsSent,false);
