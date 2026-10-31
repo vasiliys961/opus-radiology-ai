@@ -4,7 +4,7 @@
  * It is not Gemini VISION; visual frame review remains separately authorized.
  */
 import type {BoundNoduleReport} from "./live-nodule-report.ts";
-import type {ClnReport} from "./cln-native-worker.ts";
+import {CLN_ORIGINAL_CHECKPOINT_SHA256,type ClnReport} from "./cln-native-worker.ts";
 import type {LungscapeReport} from "./lungscape-native-worker.ts";
 import type {OriginalEffusionRun} from "./real-effusion-worker.ts";
 import type {PeCtpSourceReport} from "./pe-ctpa-direct-worker.ts";
@@ -122,9 +122,15 @@ export function assembleSanitizedDetectorBundle(snapshot:DetectorRuntimeSnapshot
    same(snapshot.cln.sourceNiftiSha256);
    if(snapshot.cln.realOriginalModelForwardCompleted!==true||
       snapshot.cln.schema!=="opus-original-cln-upload-result/v1"||
+      snapshot.cln.checkpointSha256!==CLN_ORIGINAL_CHECKPOINT_SHA256||
       snapshot.cln.researchOnly!==true||snapshot.cln.clinicalValidation!==false||
       snapshot.cln.negativeDiagnosisPermitted!==false||
-      snapshot.cln.candidateCount!==snapshot.cln.nativeCandidates.length)
+      !Number.isSafeInteger(snapshot.cln.candidateCount)||
+      snapshot.cln.candidateCount<0||snapshot.cln.candidateCount>100000||
+      !Array.isArray(snapshot.cln.nativeCandidates)||
+      snapshot.cln.candidateCount!==snapshot.cln.nativeCandidates.length||
+      snapshot.cln.nativeCandidates.some(c=>!Number.isFinite(c.candidateVolumeMl)||
+         c.candidateVolumeMl<0||c.candidateVolumeMl>100000))
      throw Error("CLN original forward is not verified");
    complete("lung_tumor",snapshot.cln.candidateCount,
      snapshot.cln.nativeCandidates.reduce((a,x)=>a+x.candidateVolumeMl,0));
