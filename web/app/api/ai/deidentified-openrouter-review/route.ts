@@ -105,15 +105,33 @@ export async function POST(req:NextRequest){
   // deidentification certificate or legal authority; clinical production is off.
   const release=limiter.acquire();
   if(!release)return reply(429,"One active request; maximum two starts in twenty minutes");
+  let attempted=0,completed=0;
   try{
+    const trackedCall:typeof callAiGateway=async(request,signal)=>{
+      attempted++;
+      const output=await callAiGateway(request,signal);
+      completed++;
+      return output;
+    };
     const result=await reviewSanitizedSamples(
-      v.packet,callAiGateway,AbortSignal.any([req.signal,AbortSignal.timeout(75_000)]),
+      v.packet,trackedCall,AbortSignal.any([req.signal,AbortSignal.timeout(75_000)]),
       specialistProvided?v.specialistFacts:null,
       detectorProvided?v.detectorEvidence:null,
       cxrProvided?v.cxrModelEvidence:null);
     return NextResponse.json(result,{headers:HEADERS});
-  }catch{
-    // Never expose model replies, base64 images, user headers, tokens or PHI.
+  }catch(error){
+    // This diagnostic is scoped to ONE unmerged synthetic-only workflow branch.
+    // Never log model output, pixels, prompt, headers, health data or credentials.
+    if(process.env.NODE_ENV==="development"&&process.env.OPUS_SYNTHETIC_LIVE_TEST_APPROVED==="true"){
+      const name=error instanceof Error?error.name:"unknown";
+      const message=error instanceof Error?error.message:"unknown";
+      const knownCodes=["Vision result contract mismatch","Expected JSON text",
+        "Model JSON exceeds limit","Invalid vision JSON","Unexpected JSON envelope"];
+      const category=/^AI provider returned HTTP [0-9]{3}$/.test(message)?message:
+        knownCodes.includes(message)?message:error instanceof SyntaxError?"Model JSON syntax":
+        message==="physician_cancelled_before_opus"?"Cancelled before Opus":"Other contract error";
+      console.error("SYNTHETIC_PILOT_DIAGNOSTIC",JSON.stringify({attempted,completed,name,category}));
+    }
     return reply(502,"Image privacy contract, source review or remote model result failed");
   }finally{release();}
 }
