@@ -32,6 +32,14 @@ function packet(modality:"CT"|"MR"|"CR"|"DX"="CT"){
 const integrated=(tasks:readonly string[]=[])=>({
  schema:"opus-integrated-gemini-detector-synthesis/v1",
  summary:"Исследовательский черновик: наблюдения Gemini и модельные кандидаты требуют врачебной проверки.",
+ radiologistProtocol:{
+  schema:"opus-radiologist-protocol/v1",
+  technique:"Оценены только выбранные аксиальные кадры синтетического изображения.",
+  description:"На выбранных кадрах модельного фантома присутствует искусственная структура.",
+  conclusion:"Искусственный фантом, клинический диагноз не устанавливается.",
+  recommendations:"Представить полное исследование для полноценного описания врачом.",
+  assessmentScope:"sampled_frames_only",physicianReviewRequired:true,
+ },
  comparisons:tasks.map(task=>({task,assessment:"not_comparable" as const,
    reason:"Выбранные кадры не подтверждают положение модельного кандидата."})),
  conflicts:["Выборка изображений не охватывает полный объём."],
@@ -334,6 +342,7 @@ test("Opus's 2nd paid call must receive Gemini source-frame JSON AND real CLN ta
  },undefined,null,bound);
  assert.equal(seen.length,2,"Only Gemini Vision and combined Opus calls");
  assert.equal(result.opusSynthesis?.comparisons[0].task,"lung_tumor");
+ assert.match(result.opusSynthesis!.radiologistProtocol.description,/искусственная структура/);
  assert.equal(result.opusSynthesis?.comparisons[0].assessment,"not_comparable");
  assert.match(result.opusSynthesis!.summary,/черновик/);
  assert.equal(result.detectorEvidence?.facts[1].candidateVolumeMl,2.303572);
