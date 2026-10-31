@@ -53,7 +53,7 @@ def main():
  if len(scan.shape)!=3 or not all(20<n<1000 for n in scan.shape):
   raise SystemExit("unexpected_public_CT_geometry")
  z=int(round(center[2]))
- indices=[min(max(z+delta,0),scan.shape[2]-1) for delta in (-6,-2,2,6)]
+ indices=[min(max(z+delta,0),scan.shape[2]-1) for delta in (-6,-2,0,4)]
  if len(set(indices))!=4: raise SystemExit("insufficient_distinct_public_CT_slices")
  a.dest.mkdir(parents=True,exist_ok=False)
  for i,k in enumerate(indices,1):
@@ -63,6 +63,13 @@ def main():
   pixels=np.uint8(np.round(window))
   # Public pixel-only PNG with no annotations, NIfTI headers, names or UID.
   Image.fromarray(np.flipud(pixels.T)).convert("RGB").save(a.dest/f"frame-{i}.png",optimize=True)
+ (a.dest/"frame-relative-map.json").write_text(json.dumps({
+  "sourceImageSha256": SHA_NATIVE,
+  "detectorSourceImageSha256": SHA_NATIVE,
+  "imageDimensions":list(scan.shape),
+  "reviewedFrames":[{"frameId":f"frame-{i}","sourceAxialIndex":int(k)}
+                    for i,k in enumerate(indices,1)],
+ },separators=(",",":"))+"\\n")
  print("PINNED MSD SOURCE FRAMES VERIFIED",json.dumps({
   "case":"public-MSD-Lung-043","sourceSHA256":SHA_CT,
   "checkpointSHA256":SHA_MODEL,"sliceCount":4,
