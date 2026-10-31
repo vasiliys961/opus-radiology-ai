@@ -13,6 +13,7 @@ import {parseLocalLungFacts,type LocalLungFacts} from "./local-lung-review.ts";
 import {validateSanitizedDetectorBundle,type SanitizedDetectorBundle,type ConsiliumTask} from "./detector-consilium-evidence.ts";
 import {safeXrvScores,type SanitizedCxrScores} from "./xrv-original-cxr.ts";
 import {validateSanitizedClnEvidence,type SanitizedClnTumorEvidence} from "./cln-tumor-consilium.ts";
+import {validateClnFrameRelativeEvidence,type ClnFrameRelativeEvidence} from "./cln-frame-relative-evidence.ts";
 
 export const CLOUD_PILOT_MAX_IMAGE_BASE64=2_000_000;
 export const CLOUD_PILOT_MAX_FRAMES=4;
@@ -76,6 +77,7 @@ export type SanitizedModelReview={
   detectorEvidence?:SanitizedDetectorBundle;
   opusSynthesis?:OpusIntegratedSynthesis;
   clnTumorEvidence?:SanitizedClnTumorEvidence;
+  frameRelativeClnEvidence?:ClnFrameRelativeEvidence;
   cxrModelEvidence?:SanitizedCxrScores;
   specialistEvidence?:{
     model:"lungmask-R231";frameCount:number;
@@ -213,6 +215,7 @@ export async function reviewSanitizedSamples(
   numericDetectors:unknown=null,
   originalCxrScores:unknown=null,
   clnTumorEvidence:unknown=null,
+  frameRelativeClnEvidence:unknown=null,
 ):Promise<SanitizedModelReview>{
   const checked=normalizeReviewedCloudPilot(packet);
   const ids=checked.frames.map(f=>f.imageId);
@@ -231,6 +234,21 @@ export async function reviewSanitizedSamples(
     validateSanitizedClnEvidence(clnTumorEvidence)?clnTumorEvidence:null;
   if(clnTumorEvidence!==null&&cln===null)throw Error("untrusted_CLN_tumor_evidence");
   if(cln&&checked.modality!=="CT")throw Error("CLN_CT_only");
+  const spatial=frameRelativeClnEvidence===null?null:
+   validateClnFrameRelativeEvidence(frameRelativeClnEvidence,ids)?frameRelativeClnEvidence:null;
+  if(frameRelativeClnEvidence!==null&&spatial===null)
+    throw Error("untrusted_CLN_frame_projection");
+  if(spatial){
+    if(checked.modality!=="CT"||!detectors)
+      throw Error("frame_projection_requires_completed_CLN_model_for_same_CT");
+    const clnFact=detectors.facts.find(x=>x.task==="lung_tumor");
+    if(clnFact?.status!=="completed"||
+       clnFact.candidateCount!==spatial.candidateAnchors.length||
+       clnFact.candidateVolumeMl===null||
+       Math.abs(clnFact.candidateVolumeMl-
+        spatial.candidateAnchors.reduce((sum,c)=>sum+c.candidateVolumeMl,0))>.005)
+      throw Error("frame_projection_disagrees_with_CLN_counts_or_volumes");
+  }
   const cxr=originalCxrScores===null?null:safeXrvScores(originalCxrScores);
   if(cxr&&checked.modality!=="CR"&&checked.modality!=="DX")
     throw Error("XRV scores only valid for CR/DX radiography");
@@ -267,6 +285,7 @@ export async function reviewSanitizedSamples(
       "frames do not include the candidate's anatomical location, select "+
       "not_comparable, not agreement or contradiction. Disagreements and uncertainties "+
       "must be explicit. Unperformed tasks must remain NOT ASSESSED. "+
+      "If source-bound frame-relative CLN candidate anchors are supplied, compare their position to Gemini and your own image observation for the referenced frame, explicitly explain spatial concordance or discordance instead of merely saying location unavailable. An anchor is not a lesion contour or ground truth. "+
       "Your summary is not a confirmed diagnosis, whole-series review or validated AI accuracy. "+
       "No invented anatomy, lesion side, staging, measurements or history."},
     {role:"user",content:[...(messages[1].content as Array<Record<string,unknown>>),
@@ -276,6 +295,17 @@ export async function reviewSanitizedSamples(
         "Now compare these independent visual observations against the same-study completed and not-assessed "+
         "numeric model tasks. Completed is not diagnosis, not-assessed is never normal, and zero candidates "+
         "does not exclude disease: "+JSON.stringify(detectors.facts)}]:[]),
+      ...(spatial?[{type:"text",text:"VERIFIED same-public-NIfTI frame-relative CLN centroid PROJECTIONS (withheld from Gemini). "+
+        "Candidate location is a pointer, not an outline or true visual validation. "+
+        "xFraction and yFraction refer to the displayed PNG: origin TOP LEFT, "+
+        "x rightward, y downward, both 0..1. axialSliceOffset is native slice-index "+
+        "difference of centroid minus nearest shown frame (0 means centroid lies "+
+        "approximately in that frame). Candidate may be off-plane; do not assert "+
+        "visibility if not demonstrated. No original voxel indices, DICOM UID or "+
+        "scanner/world coordinates are provided. Compare specifically the candidate "+
+        "anchor to visual findings on the referenced frame, note conflicting "+
+        "locations and how incomplete sample frames restrict conclusions: "+
+        JSON.stringify(spatial.candidateAnchors)}]:[]),
       ...(cln?[{type:"text",text:"Independent CLN original-model research result, withheld from Gemini: "+
         JSON.stringify(cln)+". Lung tumor candidates are NOT lung nodule findings, not a diagnosis, "+
         "and zero candidates never excludes malignancy."}]:[]),
@@ -307,6 +337,7 @@ export async function reviewSanitizedSamples(
     patientDataCanStillBeSensitive:true,researchOnly:true,diagnosticAccuracyValidated:false,
     ...(detectors?{detectorEvidence:detectors}:{}),
     ...(cln?{clnTumorEvidence:cln}:{}),
+    ...(spatial?{frameRelativeClnEvidence:spatial}:{}),
     ...(cxr?{cxrModelEvidence:cxr}:{}),
     ...(specialist?{specialistEvidence:{
       model:"lungmask-R231" as const,frameCount:specialist.frameCount,
