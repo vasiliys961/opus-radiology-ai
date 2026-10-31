@@ -16,3 +16,8 @@ test("one-click analysis waits for model discovery before fallback",()=>{
     assert.match(source,new RegExp(name+"\\(false\\)"),name+" completion missing");
   }
 });
+
+test("probe waits end after bounded timeout even if an endpoint hangs",()=>{
+  const signals=source.match(/AbortSignal\.any\(\[controller\.signal,AbortSignal\.timeout\(12_000\)\]\)/g)??[];
+  assert.equal(signals.length,6,"all route probe groups must have a bounded deadline");
+});
