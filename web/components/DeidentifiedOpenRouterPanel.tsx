@@ -191,7 +191,7 @@ export default function DeidentifiedOpenRouterPanel({
       setLateReview(output);setLateDraft(output.draft.summary);
       setLateConsent(false);setToken("");
     }catch(e){if(!ctrl.signal.aborted)setError(e instanceof Error?e.message:"Ошибка позднего согласования Opus");}
-    finally{if(!ctrl.signal.aborted){setLateWorking(false);ctl.current=null;}}
+    finally{setLateWorking(false);if(ctl.current===ctrl)ctl.current=null;}
   }
   const downloadLocalReview=()=>{
     if(!result)return;
