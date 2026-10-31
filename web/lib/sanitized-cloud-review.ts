@@ -46,20 +46,20 @@ export function validateOpusIntegratedSynthesis(
    ["schema","summary","radiologistProtocol","comparisons","conflicts","limitations","sourceCoverage","clinicallyValidated"].sort().join(",")||
    v.schema!=="opus-integrated-gemini-detector-synthesis/v1"||
    v.sourceCoverage!=="sampled_frames_only"||v.clinicallyValidated!==false||
-   !short(v.summary,4000)||!validateRadiologistProtocol(v.radiologistProtocol)||
+   !short(v.summary,5500)||!validateRadiologistProtocol(v.radiologistProtocol)||
    !Array.isArray(v.comparisons)||
    v.comparisons.length!==completedTasks.length||
    !Array.isArray(v.conflicts)||v.conflicts.length>8||
-   !v.conflicts.every(x=>short(x,400))||
+   !v.conflicts.every(x=>short(x,900))||
    !Array.isArray(v.limitations)||v.limitations.length>8||
-   !v.limitations.every(x=>short(x,400)))return false;
+   !v.limitations.every(x=>short(x,900)))return false;
  const seen=new Set<string>();
  return v.comparisons.every(x=>{
    if(!x||typeof x!=="object"||Array.isArray(x)||
       Object.keys(x).sort().join(",")!==["task","assessment","reason"].sort().join(",")||
       !completedTasks.includes(x.task)||seen.has(x.task)||
       !["compatible","discordant","not_comparable"].includes(x.assessment)||
-      !short(x.reason,350))return false;
+      !short(x.reason,900))return false;
    seen.add(x.task);return true;
  });
 }
@@ -370,7 +370,10 @@ export async function reviewSanitizedSamples(
   const b=parseRoleResponse(opusRaw,"observations",ids);
   const synthesis=(opusRaw as Record<string,unknown>).opusSynthesis;
   if(!validateOpusIntegratedSynthesis(synthesis,completedTasks))
-   throw Error("opus_synthesis_missing_or_unbound_to_executed_detector_tasks");
+   throw Error("opus_synthesis_missing_or_unbound_to_executed_detector_tasks: "+
+     (!synthesis||typeof synthesis!=="object"?"no_object":
+      !validateRadiologistProtocol((synthesis as {radiologistProtocol?:unknown}).radiologistProtocol)?"invalid_radiology_protocol":
+      "invalid_comparison_or_summary"));
   if(!validateStandardAnatomicalDescription(synthesis.radiologistProtocol,
       checked.modality,detectors?.region??null))
    throw Error("opus_radiologist_protocol_missing_standard_anatomical_sections");
