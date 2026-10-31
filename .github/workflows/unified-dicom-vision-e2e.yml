@@ -1,0 +1,47 @@
+name: Unified DICOM to Vision browser end-to-end
+
+on:
+  pull_request:
+    paths:
+      - "web/**"
+      - "scripts/check-unified-dicom-vision-browser.mjs"
+      - "scripts/generate-segmentation-phantom.mjs"
+      - ".github/workflows/unified-dicom-vision-e2e.yml"
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+      - "scripts/check-unified-dicom-vision-browser.mjs"
+      - "scripts/generate-segmentation-phantom.mjs"
+      - ".github/workflows/unified-dicom-vision-e2e.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-end-to-end:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Build actual DICOM viewer
+        run: npm run build
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run browser synthetic CT to Vision to physician review
+        run: node ../scripts/check-unified-dicom-vision-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: unified-dicom-vision-e2e-failure
+          path: web/browser-results/unified-dicom-vision-e2e-failure.png
+          if-no-files-found: ignore
+          retention-days: 7
