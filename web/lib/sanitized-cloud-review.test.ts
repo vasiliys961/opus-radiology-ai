@@ -31,7 +31,7 @@ function packet(modality:"CT"|"MR"|"CR"|"DX"="CT"){
 }
 const integrated=(tasks:readonly string[]=[])=>({
  schema:"opus-integrated-gemini-detector-synthesis/v1",
- summary:"Исследовательский черновик: наблюдения Gemini и модельные кандидаты требуют врачебной проверки.",
+ summary:"ИССЛЕДОВАНИЕ:\\nКТ грудной клетки, выборочные кадры.\\nОПИСАНИЕ:\\nИмеются данные о модельном кандидате; доступность полной серии не подтверждена.\\nЗАКЛЮЧЕНИЕ:\\nПредварительный черновик для врачебной проверки.\\nРЕКОМЕНДАЦИИ:\\nНеобходим просмотр полного DICOM-исследования и уточнение размеров.",
  comparisons:tasks.map(task=>({task,assessment:"not_comparable" as const,
    reason:"Выбранные кадры не подтверждают положение модельного кандидата."})),
  conflicts:["Выборка изображений не охватывает полный объём."],
@@ -262,7 +262,7 @@ test("Four-frame pilot requests provider-enforced JSON with every source ID and 
  assert.equal(seen.length,2);
  assert.deepEqual(seen.map(x=>x.model),[PILOT_GEMINI,PILOT_OPUS]);
  for(const request of seen){
-  assert.equal(request.maxTokens,1800);
+  assert.equal(request.maxTokens,request.model===PILOT_OPUS?2400:1800);
   assert.equal(request.requireParameters,true);
   const format=request.responseFormat;
   assert.equal(format?.type,"json_schema");
