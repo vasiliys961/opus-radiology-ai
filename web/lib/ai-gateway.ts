@@ -34,11 +34,11 @@ export function validateAiGatewayRequest(value: unknown): value is AiGatewayRequ
       (typeof (m as {content?: unknown}).content === "string" || Array.isArray((m as {content?: unknown}).content)));
 }
 export async function callAiGateway(request: AiGatewayRequest, signal?: AbortSignal) {
+  if(request.responseFormat&&(request.provider!=="openrouter"||request.requireParameters!==true))
+    throw Error("Structured output requires a compatible OpenRouter endpoint");
   const config = PROVIDERS[request.provider];
   const apiKey = process.env[config.env];
   if (!apiKey) throw new Error(`Provider ${request.provider} is not configured`);
-  if(request.responseFormat&&(request.provider!=="openrouter"||request.requireParameters!==true))
-    throw Error("Structured output requires a compatible OpenRouter endpoint");
   const tokenCeiling=request.responseFormat?2000:1500;
   const response = await fetch(config.url, {
     method: "POST",
