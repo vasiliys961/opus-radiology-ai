@@ -69,7 +69,7 @@ def main():
   "imageDimensions":list(scan.shape),
   "reviewedFrames":[{"frameId":f"frame-{i}","sourceAxialIndex":int(k)}
                     for i,k in enumerate(indices,1)],
- },separators=(",",":"))+"\\n")
+ },separators=(",",":"))+"\n")
  print("PINNED MSD SOURCE FRAMES VERIFIED",json.dumps({
   "case":"public-MSD-Lung-043","sourceSHA256":SHA_CT,
   "checkpointSHA256":SHA_MODEL,"sliceCount":4,
