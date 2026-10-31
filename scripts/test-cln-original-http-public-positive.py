@@ -60,7 +60,7 @@ def unzip_public_nii(source: Path, target: Path):
             h.update(part)
     with target.open("rb") as f:
         header = f.read(352)
-    if len(header) != 352 or int.from_bytes(header[:4], "little") != 348 or header[344:348] != b"n+1\\0":
+    if len(header) != 352 or int.from_bytes(header[:4], "little") != 348 or header[344:348] != bytes([110,43,49,0]):
         raise ValueError("original_NIfTI_header_invalid")
     return h.hexdigest(), n
 
