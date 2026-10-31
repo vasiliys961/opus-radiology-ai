@@ -4,9 +4,12 @@ on:
   push:
     branches:
       - test/real-public-cln-gemini-opus-20261031
+      - feat/frame-relative-cln-opus-20261031
     paths:
       - "scripts/check-real-public-cln-gemini-opus.mjs"
       - "scripts/prepare-public-cln-gemini-opus-frames.py"
+      - "web/lib/cln-frame-relative-evidence.ts"
+      - "web/lib/sanitized-cloud-review.ts"
       - ".github/workflows/real-public-cln-gemini-opus.yml"
   workflow_dispatch:
 
