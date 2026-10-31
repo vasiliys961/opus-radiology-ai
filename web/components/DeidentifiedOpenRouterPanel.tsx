@@ -71,6 +71,7 @@ export default function DeidentifiedOpenRouterPanel({
   async function send(){
     if(working||lateWorking||!enabledByLocalChecks||token.length<24||!transferAuthorized)return;
     setError("");setResult(null);setDecisions({});setClinicalSynthesis("");setDraftError("");setWorking(true);
+    setLateReview(null);setLateDraft("");setLateConsent(false);
     const controller=new AbortController();ctl.current=controller;
     try{
       // One approved physician action verifies server readiness and then
