@@ -67,8 +67,10 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  const [chestSource,setChestSource]=useState<File|null>(null);
  const [chestNodules,setChestNodules]=useState<BoundNoduleReport|null>(null);
  const [clnReady,setClnReady]=useState(false);
+ const [clnChecking,setClnChecking]=useState(false);
  const [chestCln,setChestCln]=useState<ClnReport|null>(null);
  const [lungscapeReady,setLungscapeReady]=useState(false);
+ const [lungscapeChecking,setLungscapeChecking]=useState(false);
  const [lungscapeResult,setLungscapeResult]=useState<LungscapeReport|null>(null);
  const [chestEffusion,setChestEffusion]=useState<OriginalEffusionRun|null>(null);
  const [chestIssues,setChestIssues]=useState<string[]>([]);
@@ -82,6 +84,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  const [authorized,setAuthorized]=useState(false);
  const [flairConfirmed,setFlairConfirmed]=useState(false);
  const [autoWmhReady,setAutoWmhReady]=useState(false);
+ const [autoWmhChecking,setAutoWmhChecking]=useState(false);
  const [sourceUrl,setSourceUrl]=useState("");
  const [sourceLicense,setSourceLicense]=useState("");
  const [busy,setBusy]=useState(false);
@@ -93,6 +96,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  const [wmh,setWmh]=useState<BoundWmh|null>(null);
  const [brainTask,setBrainTask]=useState<"wmh"|BrainTask>("wmh");
  const [autoBrainReady,setAutoBrainReady]=useState(false);
+ const [autoBrainChecking,setAutoBrainChecking]=useState(false);
  const [brainSeriesByRole,setBrainSeriesByRole]=useState<Record<string,string>>({});
  const [brainSequenceApproved,setBrainSequenceApproved]=useState(false);
  const [brainResult,setBrainResult]=useState<BrainModelReport|null>(null);
@@ -135,28 +139,34 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  const chestPlan=plan.route==="monai-nodules";
  useEffect(()=>{
   if(plan.route!=="wmh-flair"||brainTask==="wmh")return;
-  const controller=new AbortController();setAutoBrainReady(false);
+  const controller=new AbortController();setAutoBrainReady(false);setAutoBrainChecking(true);
   void checkAutomaticBrainReady(brainTask,controller.signal).then(v=>{
    if(!controller.signal.aborted)setAutoBrainReady(v);
-  }).catch(()=>{if(!controller.signal.aborted)setAutoBrainReady(false);});
+  }).catch(()=>{if(!controller.signal.aborted)setAutoBrainReady(false);})
+   .finally(()=>{if(!controller.signal.aborted)setAutoBrainChecking(false);});
   return()=>controller.abort();
  },[plan.route,brainTask,series.key]);
  useEffect(()=>{
   if(plan.route!=="wmh-flair")return;
-  const controller=new AbortController();setAutoWmhReady(false);
+  const controller=new AbortController();setAutoWmhReady(false);setAutoWmhChecking(true);
   void fetch("/api/local-wmh",{signal:controller.signal,credentials:"same-origin",cache:"no-store"})
    .then(r=>r.ok?r.json():null).then(c=>{
     if(!controller.signal.aborted)setAutoWmhReady(!!c&&c.schema==="opus-direct-wmh-worker/v1"&&c.originalModelReady===true&&c.imageUpload===true&&c.patientMode===false&&c.dataPolicy==="approved-public-research-only"&&c.modelVersion==="1.6.0");
-   }).catch(()=>{if(!controller.signal.aborted)setAutoWmhReady(false);});
+   }).catch(()=>{if(!controller.signal.aborted)setAutoWmhReady(false);})
+    .finally(()=>{if(!controller.signal.aborted)setAutoWmhChecking(false);});
   return()=>controller.abort();
  },[plan.route,series.key]);
  useEffect(()=>{
   if(!chestPlan)return;
   const controller=new AbortController();
-  setLungscapeReady(false);
-  void checkAutomaticLungscapeReady(controller.signal).then(ok=>{if(!controller.signal.aborted)setLungscapeReady(ok);}).catch(()=>{});
-  setClnReady(false);
-  void checkAutomaticClnReady(controller.signal).then(ok=>{if(!controller.signal.aborted)setClnReady(ok);}).catch(()=>{});
+  setLungscapeReady(false);setLungscapeChecking(true);
+  void checkAutomaticLungscapeReady(controller.signal).then(ok=>{if(!controller.signal.aborted)setLungscapeReady(ok);})
+   .catch(()=>{if(!controller.signal.aborted)setLungscapeReady(false);})
+   .finally(()=>{if(!controller.signal.aborted)setLungscapeChecking(false);});
+  setClnReady(false);setClnChecking(true);
+  void checkAutomaticClnReady(controller.signal).then(ok=>{if(!controller.signal.aborted)setClnReady(ok);})
+   .catch(()=>{if(!controller.signal.aborted)setClnReady(false);})
+   .finally(()=>{if(!controller.signal.aborted)setClnChecking(false);});
   setAutoMonaiChecking(true);setAutoMonaiReady(false);
   void checkAutomaticMonaiReady(controller.signal).then(ok=>{
    if(!controller.signal.aborted)setAutoMonaiReady(ok);
@@ -209,7 +219,12 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
    }).catch(()=>{if(!controller.signal.aborted)setXrvStatus("unavailable");});
    return()=>controller.abort();
  },[xrvPlan,series.key]);
- const ready=!!plan.route&&authorized&&!busy&&
+ const readinessChecksPending=chestPlan?
+   (clnChecking||lungscapeChecking||autoMonaiChecking||autoEffusionChecking||autoPeChecking||autoNodesChecking):
+   plan.route==="totalseg-abdomen"?autoAbdomenChecking:
+   plan.route==="ianpan-ich"?autoIchChecking:
+   plan.route==="wmh-flair"?(brainTask==="wmh"?autoWmhChecking:autoBrainChecking):false;
+ const ready=!!plan.route&&authorized&&!busy&&!readinessChecksPending&&
    (xrvPlan?(xrvStatus==="ready"&&xrvChestConfirmed&&sourceUrl.startsWith("https://")):plan.route==="totalseg-abdomen"?true:chestPlan?true:
      (plan.route==="ianpan-ich"?true:
       plan.route==="wmh-flair"?true:
@@ -717,7 +732,8 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
     {busy?"Выполняется реальный анализ...":"Анализировать исследование"}
    </button>
    {busy&&<button type="button" onClick={cancel}>Отменить</button>}
-   {!ready&&!busy&&<p role="status">{plan.route==="totalseg-abdomen"?
+   {!ready&&!busy&&<p role="status">{readinessChecksPending?
+      "Проверяем доступность оригинальных патологических моделей перед запуском.":plan.route==="totalseg-abdomen"?
       "Серверные оригинальные веса КТ живота пока не готовы либо источник не подтверждён. Токены в автоматическом режиме врачу не нужны.":
       "Для запуска требуется доступная оригинальная модель и разрешение на исследовательские данные."}</p>}
   </>}
