@@ -35,7 +35,7 @@ const integrated=(tasks:readonly string[]=[])=>({
  radiologistProtocol:{
   schema:"opus-radiologist-protocol/v1",
   technique:"Оценены только выбранные аксиальные кадры синтетического изображения.",
-  description:"Легкие и бронхи: На выбранном изображении видна искусственная структура.\nПлевра: По представленным кадрам достоверно не оценивается.\nСредостение и лимфатические узлы: По представленным кадрам достоверно не оцениваются.\nСердце и сосуды: По представленным кадрам достоверно не оцениваются.\nКостные структуры и мягкие ткани: По представленным кадрам достоверно не оцениваются.",
+  description:"Легкие и бронхи: На выбранном изображении видна искусственная структура.\nПлевра: По представленным кадрам достоверно не оценивается.\nСредостение и лимфатические узлы: По представленным кадрам достоверно не оцениваются.\nСердце и сосуды: По представленным кадрам достоверно не оцениваются.\nКостные структуры и мягкие ткани: По представленным кадрам достоверно не оцениваются.\nЛегочные поля: По представленным кадрам достоверно не оцениваются.\nПлевральные полости: По представленным кадрам достоверно не оцениваются.\nСердечно-сосудистая тень: По представленным кадрам достоверно не оценивается.\nКостные структуры: По представленным кадрам достоверно не оцениваются.",
   conclusion:"Искусственный фантом, клинический диагноз не устанавливается.",
   recommendations:"Представить полное исследование для полноценного описания врачом.",
   assessmentScope:"sampled_frames_only",physicianReviewRequired:true,
@@ -270,7 +270,7 @@ test("Four-frame pilot requests provider-enforced JSON with every source ID and 
  assert.equal(seen.length,2);
  assert.deepEqual(seen.map(x=>x.model),[PILOT_GEMINI,PILOT_OPUS]);
  for(const request of seen){
-  assert.equal(request.maxTokens,request.model===PILOT_GEMINI?1800:6000);
+  assert.equal(request.maxTokens,request.model===PILOT_GEMINI?1800:4500);
   assert.equal(request.requireParameters,true);
   const format=request.responseFormat;
   assert.equal(format?.type,"json_schema");
