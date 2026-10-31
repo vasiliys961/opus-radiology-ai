@@ -2,7 +2,7 @@
 
 import {useEffect,useRef,useState} from "react";
 import type {VisionPrivacyPacket} from "../lib/vision-privacy";
-import type {SanitizedModelReview} from "../lib/sanitized-cloud-review";
+import {validateOpusIntegratedSynthesis,type SanitizedModelReview} from "../lib/sanitized-cloud-review";
 import {buildLocalDualReviewDraft,findingReviewKey,type LocalObservationAssessment} from "../lib/local-dual-vision-physician-draft";
 import type {LocalLungFacts} from "../lib/local-lung-review";
 import type {LocalSameSeriesLaa950} from "../lib/same-series-laa950-review";
@@ -38,6 +38,7 @@ export default function DeidentifiedOpenRouterPanel({
   const [result,setResult]=useState<SanitizedModelReview|null>(null);
   const [decisions,setDecisions]=useState<Record<string,LocalObservationAssessment>>({});
   const [clinicalSynthesis,setClinicalSynthesis]=useState("");
+  const [integratedDraft,setIntegratedDraft]=useState("");
   const [draftError,setDraftError]=useState("");
   const [lateReview,setLateReview]=useState<LateDetectorReconciliation|null>(null);
   const [lateDraft,setLateDraft]=useState("");
@@ -46,7 +47,7 @@ export default function DeidentifiedOpenRouterPanel({
   // Never probe even localhost without a clinician/operator click.
   // This is essential for offline DICOM review and fail-closed browser tests.
   useEffect(()=>()=>{ctl.current?.abort();},[]);
-  useEffect(()=>{setResult(null);setIncludeSpecialist(false);setDecisions({});setClinicalSynthesis("");},[specialistLocalBinding]);
+  useEffect(()=>{setResult(null);setIncludeSpecialist(false);setDecisions({});setClinicalSynthesis("");setIntegratedDraft("");},[specialistLocalBinding]);
   // A real CLN/nnU-Net may finish AFTER an already paid Vision review.
   // Preserve Gemini/Opus observations and physician decisions; revoke permission
   // before any new external call, and invalidate only prior late reconciliation.
@@ -54,7 +55,7 @@ export default function DeidentifiedOpenRouterPanel({
     setIncludeDetectors(true);setTransferAuthorized(false);
     setLateReview(null);setLateDraft("");setLateConsent(false);
   },[originalDetectorEvidence]);
-  useEffect(()=>{setResult(null);setIncludeCxr(true);setTransferAuthorized(false);setDecisions({});setClinicalSynthesis("");},[originalCxrEvidence]);
+  useEffect(()=>{setResult(null);setIncludeCxr(true);setTransferAuthorized(false);setDecisions({});setClinicalSynthesis("");setIntegratedDraft("");},[originalCxrEvidence]);
   async function checkReadiness(){
     if(working)return;
     setReadinessNote("");setError("");setServer(null);
@@ -70,7 +71,7 @@ export default function DeidentifiedOpenRouterPanel({
   }
   async function send(){
     if(working||lateWorking||!enabledByLocalChecks||token.length<24||!transferAuthorized)return;
-    setError("");setResult(null);setDecisions({});setClinicalSynthesis("");setDraftError("");setWorking(true);
+    setError("");setResult(null);setDecisions({});setClinicalSynthesis("");setIntegratedDraft("");setDraftError("");setWorking(true);
     setLateReview(null);setLateDraft("");setLateConsent(false);
     const controller=new AbortController();ctl.current=controller;
     try{
@@ -145,9 +146,15 @@ export default function DeidentifiedOpenRouterPanel({
           throw Error("Оценки TorchXRayVision не совпадают с разрешённым набором.");
       }else if(doc.cxrModelEvidence)
         throw Error("Незапрошенные оценки TorchXRayVision.");
+      const comparedTasks=doc.detectorEvidence?.facts.filter(f=>f.status==="completed")
+        .map(f=>f.task)??[];
+      if(doc.clnTumorEvidence&&!comparedTasks.includes("lung_tumor"))
+        comparedTasks.push("lung_tumor");
+      if(!validateOpusIntegratedSynthesis(doc.opusSynthesis,comparedTasks))
+        throw Error("Opus не предоставил проверяемый объединённый JSON Gemini и детекторов.");
       // An unbound or changed source makes ALL clinical navigation unavailable.
       bindLocalSanitizedReview(doc,exactReviewedHashes.map(f=>({imageId:f.imageId,reviewedPixelSha256:f.sha256})),originalLocalFileIds);
-      setResult(doc);
+      setResult(doc);setIntegratedDraft(doc.opusSynthesis!.summary);
       setToken("");
     }catch(e){
       setError(controller.signal.aborted?
@@ -211,7 +218,15 @@ export default function DeidentifiedOpenRouterPanel({
           clinicianSigned:false,clinicalValidation:false,
         },
       }:doc;
-      const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});
+      const finalPayload=result.opusSynthesis?{
+        ...payload,
+        integratedOpusReport:{
+          ...result.opusSynthesis,editableUnsignedDraft:integratedDraft,
+          sourcePixelSHA256:doc.provenance.sourceImagePixelSHA256,
+          physicianSigned:false,
+        },
+      }:payload;
+      const blob=new Blob([JSON.stringify(finalPayload,null,2)],{type:"application/json"});
       const url=URL.createObjectURL(blob);
       const a=document.createElement("a");a.href=url;
       a.download=validLateReview?"opus-local-gemini-opus-detector-review.json":"opus-local-gemini-opus-physician-review.json";
@@ -289,6 +304,23 @@ export default function DeidentifiedOpenRouterPanel({
       <p><strong>Ответ моделей получен.</strong> Это черновые визуальные
         наблюдения по отдельным срезам, не полноценный анализ исследования
         и не диагноз. Врач сверяет их с исходным DICOM локально.</p>
+      {result.opusSynthesis&&<section aria-label="Объединённое заключение Opus по Gemini JSON и детекторам" className="ora-reviewer-note">
+        <h4>Claude Opus · предварительное объединённое заключение</h4>
+        <p>Opus сопоставил независимый JSON Gemini, собственный просмотр выбранных кадров
+          и выполненные детекторы. Охват ограничен выборкой, а не всей КТ/МРТ.
+          Повторный вызов Gemini не нужен.</p>
+        <label>Редактируемое заключение врача
+          <textarea rows={8} maxLength={4000} value={integratedDraft}
+            onChange={e=>setIntegratedDraft(e.target.value)}/>
+        </label>
+        {result.opusSynthesis.comparisons.map(entry=><p key={entry.task}>
+          <strong>{entry.task}</strong>: {entry.assessment==="compatible"?"согласуется в доступных кадрах":
+            entry.assessment==="discordant"?"расхождение":"недостаточно данных для сопоставления"}.
+          {" "}{entry.reason}
+        </p>)}
+        {result.opusSynthesis.conflicts.map((x,i)=><p key={i}>Расхождение: {x}</p>)}
+        {result.opusSynthesis.limitations.map((x,i)=><p key={i}>Ограничение: {x}</p>)}
+      </section>}
       {lateEvidenceReady&&<section aria-label="Позднее согласование детекторов с Opus" className="ora-reviewer-note">
         <h4>Детектор завершился после Vision · согласовать с Claude Opus</h4>
         <p>Новые оригинальные числовые находки по текущей серии:
