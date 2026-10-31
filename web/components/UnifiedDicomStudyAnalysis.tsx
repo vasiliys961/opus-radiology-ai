@@ -212,7 +212,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  const ready=!!plan.route&&authorized&&!busy&&
    (xrvPlan?(xrvStatus==="ready"&&xrvChestConfirmed&&sourceUrl.startsWith("https://")):plan.route==="totalseg-abdomen"?true:chestPlan?true:
      (plan.route==="ianpan-ich"?true:
-      plan.route==="wmh-flair"?((brainTask==="wmh"?autoWmhReady:autoBrainReady)|| (!!token&&!!endpoint.trim())):
+      plan.route==="wmh-flair"?true:
       (!!token&&!!endpoint.trim())))&&
    (!plan.needsExplicitFlair||(
      brainTask==="wmh"?
@@ -441,8 +441,24 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
            chosen,volume as File[],role,controller.signal,progress);
        }
        if(controller.signal.aborted||version!==serial.current)return;
-       const result=await executeOriginalBrain(autoBrainReady?null:session,brainTask,sourceFiles,
+       if(!autoBrainReady&&!token.trim()){
+        setStatus("Оригинальная МР-модель не установлена; детектор не выполнил анализ.");
+        setDraftText("Исследовательская МРТ головного мозга. Патологический детектор не выполнен; отсутствие патологии не установлено.");
+        onReadyForVision?.(series.key);
+        return;
+       }
+       let result;
+       try{
+        result=await executeOriginalBrain(autoBrainReady?null:session,brainTask,sourceFiles,
          brainSequenceApproved,controller.signal,progress);
+       }catch(cause){
+        if(controller.signal.aborted||version!==serial.current)return;
+        setStatus("Оригинальная МР-модель не выполнила анализ.");
+        setError(cause instanceof Error?cause.message:"Ошибка МР worker");
+        setDraftText("Исследовательская МРТ головного мозга. Патологический детектор не выполнен; отсутствие патологии не установлено.");
+        onReadyForVision?.(series.key);
+        return;
+       }
        if(controller.signal.aborted||version!==serial.current)return;
        setBrainResult(result);
        const count=Object.values(result.modelRegions).reduce(
@@ -460,6 +476,12 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
      }
      // MR weighting cannot be inferred reliably from scanning sequence codes;
      // require a separate explicit FLAIR operator check and public-source rights.
+     if(!autoWmhReady&&!token.trim()){
+       setStatus("Оригинальная WMH-модель не установлена; FLAIR не оценена детектором.");
+       setDraftText("Исследовательская FLAIR-МРТ. WMH-детектор не выполнен; отсутствие очагов не установлено.");
+       onReadyForVision?.(series.key);
+       return;
+     }
      const wmhSession=autoWmhReady?null:session;
      const invokeWmh=(path:"/v1/wmh/capabilities"|"/v1/wmh/analyze",init:RequestInit={})=>
        wmhSession?call(wmhSession,path,init):fetch("/api/local-wmh",{
