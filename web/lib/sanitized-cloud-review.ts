@@ -148,7 +148,7 @@ export function sourceFrameReviewFormat(frameIds:readonly string[],opusTasks?:re
             type:"object",additionalProperties:false,
             properties:{
               schema:{type:"string",enum:["opus-integrated-gemini-detector-synthesis/v1"]},
-              summary:{type:"string",description:"Professional Russian-language radiologist CT/MR report in four sections ИССЛЕДОВАНИЕ, ОПИСАНИЕ, ЗАКЛЮЧЕНИЕ, РЕКОМЕНДАЦИИ, with concise findings, differential diagnosis, appropriate next steps, explicit limited sampled-frame coverage; no AI or JSON jargon."},
+              summary:{type:"string",description:"Standard Russian radiology protocol in five sections ИССЛЕДОВАНИЕ, МЕТОДИКА, ОПИСАНИЕ (organ-by-organ), ЗАКЛЮЧЕНИЕ, РЕКОМЕНДАЦИИ, based on actual sampled image coverage, with no invented normal structures, no AI jargon."},
               comparisons:{type:"array",minItems:opusTasks.length,maxItems:opusTasks.length,
                 description:"Exactly one entry for EACH actually completed detector task. Do NOT include unavailable or unperformed tasks.",
                 items:{type:"object",additionalProperties:false,properties:{
@@ -319,7 +319,7 @@ export async function reviewSanitizedSamples(
         JSON.stringify(cxr)+". Absence of elevated scores does not exclude pathology."}]:[])]},
   ];
   const opus=await call({provider:"openrouter",role:"vision",
-    model:PILOT_OPUS,maxTokens:2400,messages:opusMessages,
+    model:PILOT_OPUS,maxTokens:3500,messages:opusMessages,
     responseFormat:opusFormat,requireParameters:true},signal);
   const opusRaw=parseStrictObject(readCompletionText(opus));
   const b=parseRoleResponse(opusRaw,"observations",ids);
