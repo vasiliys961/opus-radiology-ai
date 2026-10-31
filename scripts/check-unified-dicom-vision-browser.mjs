@@ -48,7 +48,7 @@ try{
  await analysis.waitFor();
  assert.match(await analysis.innerText(),/Грудная клетка/);
  assert.doesNotMatch(await analysis.innerText(),/Нет совместимого исполнительного пути/);
- await analysis.locator("summary").first().click();
+ await analysis.getByText("Настройки приватного исполнителя и разрешение",{exact:true}).click();
  await analysis.getByRole("checkbox",{name:/Подтверждаю разрешённый публичный/}).check();
  const launch=analysis.getByRole("button",{name:"Анализировать исследование"});
  await page.waitForFunction(()=>{const section=document.querySelector('section[aria-label="Единый анализ DICOM"]');
