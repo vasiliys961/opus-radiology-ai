@@ -116,7 +116,12 @@ try{
  await cloud.getByRole("checkbox",{name:/Я проверил все исходящие PNG/}).check();
  assert.equal(await send.isDisabled(),false);
  await send.click();
- await cloud.getByText(/Ответ моделей получен/).waitFor({timeout:180000});
+ const outcome=await Promise.race([
+  cloud.getByText(/Ответ моделей получен/).waitFor({timeout:120000}).then(()=>"success"),
+  cloud.getByRole("alert").waitFor({timeout:120000}).then(()=>"server-error"),
+ ]);
+ if(outcome!=="success")throw Error("Server did not deliver validated real Gemini/Opus response; HTTP "+(paidResult?.status??"unknown"));
+
  assert.ok(paidResult,"Real cloud POST response missing");
  assert.equal(paidResult.status,200,"Server returned error instead of live model results");
  assert.equal(paidResult.body?.schema,"opus-sanitized-cloud-pilot/v1");
