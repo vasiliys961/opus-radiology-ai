@@ -210,7 +210,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
    return()=>controller.abort();
  },[xrvPlan,series.key]);
  const ready=!!plan.route&&authorized&&!busy&&
-   (xrvPlan?(xrvStatus==="ready"&&xrvChestConfirmed&&sourceUrl.startsWith("https://")):plan.route==="totalseg-abdomen"?(autoAbdomenReady||(!!token&&!!endpoint.trim())):chestPlan?true:
+   (xrvPlan?(xrvStatus==="ready"&&xrvChestConfirmed&&sourceUrl.startsWith("https://")):plan.route==="totalseg-abdomen"?true:chestPlan?true:
      (plan.route==="ianpan-ich"?(autoIchReady|| (!!token&&!!endpoint.trim())):
       plan.route==="wmh-flair"?((brainTask==="wmh"?autoWmhReady:autoBrainReady)|| (!!token&&!!endpoint.trim())):
       (!!token&&!!endpoint.trim())))&&
@@ -358,7 +358,23 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
        const nifti=await prepareDicomCtForPathology(
          series,original as File[],controller.signal,"ABDOMEN",progress);
        if(version!==serial.current||controller.signal.aborted)return;
-       const result=await runOriginalAbdominalModels(autoAbdomenReady?null:session,nifti,controller.signal,progress,ncctVerified);
+       if(!autoAbdomenReady&&!token.trim()){
+        setStatus("Модели патологии живота недоступны; исследование не оценено детекторами.");
+        setDraftText("Исследовательская КТ брюшной полости. Патологические модели не выполнены: worker не настроен. Отсутствие патологии не установлено.");
+        onReadyForVision?.(series.key);
+        return;
+       }
+       let result;
+       try{
+        result=await runOriginalAbdominalModels(autoAbdomenReady?null:session,nifti,controller.signal,progress,ncctVerified);
+       }catch(cause){
+        if(version!==serial.current||controller.signal.aborted)return;
+        setStatus("Модели патологии живота не выполнились; исследование не оценено детекторами.");
+        setDraftText("Исследовательская КТ брюшной полости. Патологические модели не выполнены. Отсутствие патологии не установлено.");
+        setError(cause instanceof Error?cause.message:"Ошибка патологического worker");
+        onReadyForVision?.(series.key);
+        return;
+       }
        if(version!==serial.current||controller.signal.aborted)return;
        setAbdomenResult(result);
 
