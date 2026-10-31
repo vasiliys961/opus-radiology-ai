@@ -364,7 +364,7 @@ export async function reviewSanitizedSamples(
         JSON.stringify(cxr)+". Absence of elevated scores does not exclude pathology."}]:[])]},
   ];
   const opus=await call({provider:"openrouter",role:"vision",
-    model:PILOT_OPUS,maxTokens:6000,messages:opusMessages,
+    model:PILOT_OPUS,maxTokens:4500,messages:opusMessages,
     responseFormat:opusFormat,requireParameters:true},signal);
   const opusRaw=parseStrictObject(readCompletionText(opus));
   const b=parseRoleResponse(opusRaw,"observations",ids);
