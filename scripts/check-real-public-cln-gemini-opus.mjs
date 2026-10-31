@@ -14,6 +14,7 @@ import {TASKS_BY_REGION,validateSanitizedDetectorBundle}
 import {reviewSanitizedSamples,PILOT_GEMINI,PILOT_OPUS}
  from "../web/lib/sanitized-cloud-review.ts";
 import {callAiGateway} from "../web/lib/ai-gateway.ts";
+import {hasRadiologistReportSections} from "../web/lib/senior-radiologist-report.ts";
 import {createClnFrameRelativeEvidence} from "../web/lib/cln-frame-relative-evidence.ts";
 
 if(process.env.RADIOLOGY_PUBLIC_MSD_CLOUD_TRANSFER_APPROVED!=="1"||
@@ -96,6 +97,8 @@ assert.equal(doc.opusSynthesis?.comparisons[0].task,"lung_tumor");
 assert.equal(doc.opusSynthesis?.clinicallyValidated,false);
 assert.equal(doc.detectorEvidence?.facts.find(f=>f.task==="lung_tumor")?.candidateCount,1);
 assert.ok(doc.opusSynthesis?.summary);
+assert.ok(hasRadiologistReportSections(doc.opusSynthesis.summary),
+ "Actual Claude Opus must return a clinician-readable Russian radiology report, not a JSON recap");
 assert.deepEqual(doc.frameRelativeClnEvidence,spatial);
 assert.equal(doc.frameRelativeClnEvidence?.originalDicomSopRegistrationVerified,false);
 const publicReport={
@@ -118,6 +121,9 @@ const publicReport={
  independentClinicalValidation:false,
 };
 writeFileSync(output,JSON.stringify(publicReport,null,2)+"\n",{flag:"wx",mode:0o600});
+const reportPath=output.replace(/\\.json$/,".txt");
+assert.notEqual(reportPath,output,"report output must have .json suffix");
+writeFileSync(reportPath,doc.opusSynthesis.summary.trim()+"\n",{flag:"wx",mode:0o600});
 console.log("REAL PUBLIC MSD CLN + Gemini JSON + Opus structured synthesis SUCCESS",
  JSON.stringify({actualOpenRouterCalls:calls,
  models:receipts.map(r=>r.model),sampledCTFrames:frames.length,
