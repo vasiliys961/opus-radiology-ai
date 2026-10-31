@@ -375,15 +375,25 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
        }
        const original=series.members.map(m=>files.get(m.id));
        if(original.some(f=>!f))throw Error("Исходная DICOM-КТ брюшной полости больше недоступна.");
-       const nifti=await prepareDicomCtForPathology(
-         series,original as File[],controller.signal,"ABDOMEN",progress);
-       if(version!==serial.current||controller.signal.aborted)return;
        if(!autoAbdomenReady&&!token.trim()){
         setStatus("Модели патологии живота недоступны; исследование не оценено детекторами.");
         setDraftText("Исследовательская КТ брюшной полости. Патологические модели не выполнены: worker не настроен. Отсутствие патологии не установлено.");
         onReadyForVision?.(series.key);
         return;
        }
+       let nifti:File;
+       try{
+        nifti=await prepareDicomCtForPathology(
+          series,original as File[],controller.signal,"ABDOMEN",progress);
+       }catch(cause){
+        if(version!==serial.current||controller.signal.aborted)return;
+        setStatus("Конвертация КТ живота для патологических моделей не выполнена; детекторы не запускались.");
+        setError(cause instanceof Error?cause.message:"Ошибка DICOM→NIfTI");
+        setDraftText("Исследовательская КТ брюшной полости. Детекторы не выполнены; отсутствие патологии не установлено.");
+        onReadyForVision?.(series.key);
+        return;
+       }
+       if(version!==serial.current||controller.signal.aborted)return;
        let result;
        try{
         result=await runOriginalAbdominalModels(autoAbdomenReady?null:session,nifti,controller.signal,progress,ncctVerified);
