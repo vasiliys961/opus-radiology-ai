@@ -25,6 +25,7 @@ import {checkOriginalXrvReady,runCxrXrvFromDicom,XRV_CXR_LABELS,type OriginalXrv
 import CxrIndependentVisionReview from "./CxrIndependentVisionReview";
 import OriginalWorkerFleetReadiness from "./OriginalWorkerFleetReadiness";
 import {checkAutomaticClnReady,executeOriginalCln,type ClnReport} from "../lib/cln-native-worker";
+import ClnOriginalPhysicianReview from "./ClnOriginalPhysicianReview";
 import {checkAutomaticLungscapeReady,executeOriginalLungscape,type LungscapeReport} from "../lib/lungscape-native-worker";
 
 /** A single primary action that reuses the real DICOM -> MONAI/ianpan/WMH paths.
@@ -961,7 +962,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
       координаты кандидатов и решения врача. Не загружайте такой файл в публичный GitHub или облачный LLM.
       Это не подписанное клиническое заключение.</p>
   </div>}
-  {chestCln&&<p role="status">CLN: {chestCln.candidateCount} опухолевых кандидатов (не диагноз).</p>}
+  {chestCln&&chestSource&&<ClnOriginalPhysicianReview report={chestCln} series={series} source={chestSource} onNavigate={onNavigate}/>}
    {lungscapeResult&&<p role="status">LungSCAPE191: настоящий инференс завершён, компонентов {lungscapeResult.componentCount}. Классы модели не являются диагнозом ILD/UIP/IPF.</p>}
   {(chestNodules||chestCln||lungscapeResult||chestEffusion||chestPe||chestNodes||abdomenResult||ich||wmh||brainResult)&&
     <DetectorGeminiOpusConsilium onBundleReady={bundle=>onDetectorEvidence?.(series.key,bundle)} snapshot={{
