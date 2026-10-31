@@ -1,5 +1,10 @@
 export type AiProvider = "openrouter" | "polza";
 export type AiRole = "vision" | "reasoning";
+/** Internal-only OpenRouter structured output; never constructed from browser input. */
+export type AiJsonSchemaFormat={
+  type:"json_schema";
+  json_schema:{name:string;strict:true;schema:Record<string,unknown>};
+};
 export interface AiGatewayRequest {
   provider: AiProvider;
   role: AiRole;
@@ -7,6 +12,9 @@ export interface AiGatewayRequest {
   messages: Array<{ role: "system" | "user" | "assistant"; content: string | Array<Record<string, unknown>> }>;
   temperature?: number;
   maxTokens?: number;
+  responseFormat?:AiJsonSchemaFormat;
+  /** Refuse OpenRouter endpoints that silently ignore the JSON schema. */
+  requireParameters?:true;
 }
 const PROVIDERS: Record<AiProvider, { url: string; env: string }> = {
   openrouter: { url: "https://openrouter.ai/api/v1/chat/completions", env: "OPENROUTER_API_KEY" },
@@ -29,6 +37,9 @@ export async function callAiGateway(request: AiGatewayRequest, signal?: AbortSig
   const config = PROVIDERS[request.provider];
   const apiKey = process.env[config.env];
   if (!apiKey) throw new Error(`Provider ${request.provider} is not configured`);
+  if(request.responseFormat&&(request.provider!=="openrouter"||request.requireParameters!==true))
+    throw Error("Structured output requires a compatible OpenRouter endpoint");
+  const tokenCeiling=request.responseFormat?2000:1500;
   const response = await fetch(config.url, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -38,8 +49,10 @@ export async function callAiGateway(request: AiGatewayRequest, signal?: AbortSig
       // These evaluator versions do not advertise temperature in either catalogue.
       ...(["openai/gpt-6.1-sol","anthropic/claude-sonnet-5.5","anthropic/claude-opus-5.5"].includes(request.model)?{}:
         {temperature:request.temperature??0.1}),
+      ...(request.responseFormat?{response_format:request.responseFormat}:{}),
+      ...(request.requireParameters?{provider:{require_parameters:true}}:{}),
       max_tokens: Number.isInteger(request.maxTokens) &&
-        request.maxTokens! >= 1 && request.maxTokens! <= 1500 ? request.maxTokens : 1200 }),
+        request.maxTokens! >= 1 && request.maxTokens! <= tokenCeiling ? request.maxTokens : 1200 }),
     signal,
     cache: "no-store",
   });
