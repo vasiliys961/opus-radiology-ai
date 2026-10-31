@@ -1,0 +1,44 @@
+name: One-time LIVE OpenRouter DICOM viewer synthetic E2E
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "scripts/check-live-openrouter-dicom-e2e.mjs"
+      - ".github/workflows/live-openrouter-dicom-e2e.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  live-synthetic-vision:
+    if: ${{ github.head_ref == 'test/live-openrouter-dicom-viewer-e2e-20261031' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    defaults:
+      run:
+        working-directory: web
+    env:
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      OPUS_SYNTHETIC_LIVE_TEST_APPROVED: "true"
+      RADIOLOGY_ENABLE_DEIDENTIFIED_OPENROUTER_PILOT: "1"
+      RADIOLOGY_OPENROUTER_HEALTH_DATA_APPROVED: "1"
+      RADIOLOGY_LOCAL_RESEARCH_OPERATOR_TOKEN: "synthetic-only-ci-token-20261031-no-patient"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Install pinned dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Install Chromium for full browser E2E
+        run: npx playwright install --with-deps chromium
+      - name: Run real Gemini and Opus through local-only API from synthetic DICOM UI
+        run: node ../scripts/check-live-openrouter-dicom-e2e.mjs
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: live-openrouter-dicom-e2e-failure
+          path: web/browser-results/live-openrouter-dicom-e2e-failure.png
+          if-no-files-found: ignore
+          retention-days: 3
