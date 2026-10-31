@@ -53,8 +53,8 @@ export function validateRadiologistProtocol(v:unknown):v is RadiologistProtocol{
   ["schema","technique","description","conclusion","recommendations",
    "assessmentScope","physicianReviewRequired"].sort().join(",")&&
   x.schema==="opus-radiologist-protocol/v1"&&
-  readable(x.technique,1000)&&readable(x.description,3500)&&
-  readable(x.conclusion,1700)&&readable(x.recommendations,1400)&&
+  readable(x.technique,1300)&&readable(x.description,5500)&&
+  readable(x.conclusion,2500)&&readable(x.recommendations,2000)&&
   x.assessmentScope==="sampled_frames_only"&&x.physicianReviewRequired===true;
 }
 export function formatRadiologistProtocol(
