@@ -14,6 +14,7 @@ import {validateSanitizedDetectorBundle,type SanitizedDetectorBundle,type Consil
 import {safeXrvScores,type SanitizedCxrScores} from "./xrv-original-cxr.ts";
 import {validateSanitizedClnEvidence,type SanitizedClnTumorEvidence} from "./cln-tumor-consilium.ts";
 import {validateClnFrameRelativeEvidence,type ClnFrameRelativeEvidence} from "./cln-frame-relative-evidence.ts";
+import {validateRadiologistProtocol,type RadiologistProtocol} from "./radiologist-protocol.ts";
 
 export const CLOUD_PILOT_MAX_IMAGE_BASE64=2_000_000;
 export const CLOUD_PILOT_MAX_FRAMES=4;
@@ -27,6 +28,7 @@ export type NormalizedCloudPilot={
 export type OpusIntegratedSynthesis={
  schema:"opus-integrated-gemini-detector-synthesis/v1";
  summary:string;
+ radiologistProtocol:RadiologistProtocol;
  comparisons:Array<{task:ConsiliumTask;assessment:"compatible"|"discordant"|"not_comparable";reason:string}>;
  conflicts:string[];
  limitations:string[];
@@ -41,10 +43,11 @@ export function validateOpusIntegratedSynthesis(
  if(!value||typeof value!=="object"||Array.isArray(value))return false;
  const v=value as Partial<OpusIntegratedSynthesis>;
  if(Object.keys(v).sort().join(",")!==
-   ["schema","summary","comparisons","conflicts","limitations","sourceCoverage","clinicallyValidated"].sort().join(",")||
+   ["schema","summary","radiologistProtocol","comparisons","conflicts","limitations","sourceCoverage","clinicallyValidated"].sort().join(",")||
    v.schema!=="opus-integrated-gemini-detector-synthesis/v1"||
    v.sourceCoverage!=="sampled_frames_only"||v.clinicallyValidated!==false||
-   !short(v.summary,4000)||!Array.isArray(v.comparisons)||
+   !short(v.summary,4000)||!validateRadiologistProtocol(v.radiologistProtocol)||
+   !Array.isArray(v.comparisons)||
    v.comparisons.length!==completedTasks.length||
    !Array.isArray(v.conflicts)||v.conflicts.length>8||
    !v.conflicts.every(x=>short(x,400))||
@@ -147,7 +150,21 @@ export function sourceFrameReviewFormat(frameIds:readonly string[],opusTasks?:re
             type:"object",additionalProperties:false,
             properties:{
               schema:{type:"string",enum:["opus-integrated-gemini-detector-synthesis/v1"]},
-              summary:{type:"string",description:"Editable provisional radiology report in Russian. Compare independent Gemini JSON and actual detector findings; partial image coverage only."},
+              summary:{type:"string",description:"Brief technical internal summary of cross-model evidence. The physician-facing output is radiologistProtocol."},
+              radiologistProtocol:{
+                type:"object",additionalProperties:false,
+                properties:{
+                  schema:{type:"string",enum:["opus-radiologist-protocol/v1"]},
+                  technique:{type:"string",description:"Russian Методика: modality, exactly four or fewer reviewed sample images, not full scan; contrast, HU, geometry or orientation if unknown explicitly unknown."},
+                  description:{type:"string",description:"Russian Описание in experienced radiologist style, coherent prose grounded only in visible findings. Location uncertain if DICOM orientation unknown, morphology supported by actual images, never invent measurements, contrast phase, lymph node findings or absence of lesions in unsampled areas. Detector candidate volume is model result, not a radiologist measured lesion size."},
+                  conclusion:{type:"string",description:"Russian Заключение, concise diagnostic imaging interpretation / reasonable differential based on morphology. For suspicious spiculated pulmonary nodule say suspicious for neoplastic process as imaging sign, not verified cancer. No unsupported categorical diagnosis."},
+                  recommendations:{type:"string",description:"Russian Рекомендации: review whole original study, 3D measurement/mediastinum, compare prior studies, consider clinical pathway as warranted. No invented follow-up interval."},
+                  assessmentScope:{type:"string",enum:["sampled_frames_only"]},
+                  physicianReviewRequired:{type:"boolean",enum:[true]},
+                },
+                required:["schema","technique","description","conclusion","recommendations",
+                  "assessmentScope","physicianReviewRequired"],
+              },
               comparisons:{type:"array",minItems:opusTasks.length,maxItems:opusTasks.length,
                 description:"Exactly one entry for EACH actually completed detector task. Do NOT include unavailable or unperformed tasks.",
                 items:{type:"object",additionalProperties:false,properties:{
@@ -161,7 +178,7 @@ export function sourceFrameReviewFormat(frameIds:readonly string[],opusTasks?:re
               sourceCoverage:{type:"string",enum:["sampled_frames_only"]},
               clinicallyValidated:{type:"boolean",enum:[false]},
             },
-            required:["schema","summary","comparisons","conflicts","limitations","sourceCoverage","clinicallyValidated"],
+            required:["schema","summary","radiologistProtocol","comparisons","conflicts","limitations","sourceCoverage","clinicallyValidated"],
           }}),
         },
         required:opusTasks===undefined?["role","reviewedImageIds","observations","limitations"]:
@@ -286,6 +303,22 @@ export async function reviewSanitizedSamples(
       "not_comparable, not agreement or contradiction. Disagreements and uncertainties "+
       "must be explicit. Unperformed tasks must remain NOT ASSESSED. "+
       "If source-bound frame-relative CLN candidate anchors are supplied, compare their position to Gemini and your own image observation for the referenced frame, explicitly explain spatial concordance or discordance instead of merely saying location unavailable. An anchor is not a lesion contour or ground truth. "+
+      "Take the role of an EXPERIENCED BOARD-CERTIFIED RADIOLOGIST preparing "+
+      "a professional Russian radiology protocol for the treating physician, not "+
+      "a software debugging log. The PRIMARY deliverable MUST be "+
+      "opusSynthesis.radiologistProtocol with coherent four fields: "+
+      "technique (Методика), description (Описание), conclusion (Заключение), "+
+      "recommendations (Рекомендации). Write natural professional Russian "+
+      "with correct radiological terminology, prioritize morphology and localization, "+
+      "describe actual observed abnormalities, report suspicious imaging features "+
+      "and differential when warranted, and distinguish image findings from model "+
+      "candidate estimates. DO NOT put frame IDs, model IDs, SHA, JSON field names, "+
+      "status labels, detector inventory or coordinates in the clinical conclusion; "+
+      "keep technical provenance in comparison fields. State the limited sample "+
+      "in technique, and if laterality is only presumed, say so. Do not assert normal "+
+      "mediastinum, pleura, other organs or no metastases without adequate source coverage. "+
+      "Never invent linear dimensions from detector volume, absence of contrast, "+
+      "density HU, stage, subtype or certainty of malignancy. "+
       "Your summary is not a confirmed diagnosis, whole-series review or validated AI accuracy. "+
       "No invented anatomy, lesion side, staging, measurements or history."},
     {role:"user",content:[...(messages[1].content as Array<Record<string,unknown>>),
@@ -317,7 +350,7 @@ export async function reviewSanitizedSamples(
         JSON.stringify(cxr)+". Absence of elevated scores does not exclude pathology."}]:[])]},
   ];
   const opus=await call({provider:"openrouter",role:"vision",
-    model:PILOT_OPUS,maxTokens:1800,messages:opusMessages,
+    model:PILOT_OPUS,maxTokens:3000,messages:opusMessages,
     responseFormat:opusFormat,requireParameters:true},signal);
   const opusRaw=parseStrictObject(readCompletionText(opus));
   const b=parseRoleResponse(opusRaw,"observations",ids);
