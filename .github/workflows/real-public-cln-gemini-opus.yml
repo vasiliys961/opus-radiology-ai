@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
-      HF_HOME: ${{ runner.temp }}/opus-public-hf-cache
+      HF_HOME: /tmp/opus-public-hf-cache
       HF_HUB_DISABLE_TELEMETRY: "1"
       HF_HUB_DISABLE_PROGRESS_BARS: "1"
     steps:
@@ -97,7 +97,7 @@ jobs:
         if: always()
         shell: bash
         run: |
-          rm -rf "$RUNNER_TEMP/public-ct-png" "$RUNNER_TEMP/opus-public-hf-cache" \
+          rm -rf "$RUNNER_TEMP/public-ct-png" "/tmp/opus-public-hf-cache" \
             "$RUNNER_TEMP/verified-cln-numeric.json" \
             "$RUNNER_TEMP/verified-cln-numeric.zip" \
             "$RUNNER_TEMP/real-public-ct-gemini-opus-report.json"
