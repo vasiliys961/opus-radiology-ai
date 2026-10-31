@@ -14,6 +14,7 @@ import {TASKS_BY_REGION,validateSanitizedDetectorBundle}
 import {reviewSanitizedSamples,PILOT_GEMINI,PILOT_OPUS}
  from "../web/lib/sanitized-cloud-review.ts";
 import {callAiGateway} from "../web/lib/ai-gateway.ts";
+import {formatRadiologistProtocol} from "../web/lib/radiologist-protocol.ts";
 import {createClnFrameRelativeEvidence} from "../web/lib/cln-frame-relative-evidence.ts";
 
 if(process.env.RADIOLOGY_PUBLIC_MSD_CLOUD_TRANSFER_APPROVED!=="1"||
@@ -96,6 +97,13 @@ assert.equal(doc.opusSynthesis?.comparisons[0].task,"lung_tumor");
 assert.equal(doc.opusSynthesis?.clinicallyValidated,false);
 assert.equal(doc.detectorEvidence?.facts.find(f=>f.task==="lung_tumor")?.candidateCount,1);
 assert.ok(doc.opusSynthesis?.summary);
+assert.ok(doc.opusSynthesis?.radiologistProtocol);
+const clinical=doc.opusSynthesis.radiologistProtocol;
+assert.equal(clinical.assessmentScope,"sampled_frames_only");
+assert.equal(clinical.physicianReviewRequired,true);
+assert.ok(clinical.technique.length>12&&clinical.description.length>30);
+assert.ok(clinical.conclusion.length>12);
+assert.ok(clinical.recommendations.length>12);
 assert.deepEqual(doc.frameRelativeClnEvidence,spatial);
 assert.equal(doc.frameRelativeClnEvidence?.originalDicomSopRegistrationVerified,false);
 const publicReport={
@@ -118,6 +126,13 @@ const publicReport={
  independentClinicalValidation:false,
 };
 writeFileSync(output,JSON.stringify(publicReport,null,2)+"\n",{flag:"wx",mode:0o600});
+const narrativePath=output.replace(/\.json$/,"-radiologist-report.txt");
+assert.notEqual(narrativePath,output);
+const readableReport=formatRadiologistProtocol(clinical,"CT");
+writeFileSync(narrativePath,readableReport+"\n",{flag:"wx",mode:0o600});
+console.log("REAL RADIOLOGIST REPORT generated with sections",
+ JSON.stringify({reportSections:["МЕТОДИКА","ОПИСАНИЕ","ЗАКЛЮЧЕНИЕ","РЕКОМЕНДАЦИИ"],
+  chars:readableReport.length}));
 console.log("REAL PUBLIC MSD CLN + Gemini JSON + Opus structured synthesis SUCCESS",
  JSON.stringify({actualOpenRouterCalls:calls,
  models:receipts.map(r=>r.model),sampledCTFrames:frames.length,
