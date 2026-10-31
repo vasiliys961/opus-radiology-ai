@@ -1,0 +1,73 @@
+name: REAL CLN original tumor-positive CT through authenticated HTTP worker
+
+on:
+  pull_request:
+    paths:
+      - "scripts/test-cln-original-http-public-positive.py"
+      - "services/imaging-ai/cln_native_upload_worker.py"
+      - ".github/workflows/cln-original-http-public-positive.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  original-cln-pinned-public-ct-http:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    env:
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      HF_HUB_DISABLE_PROGRESS_BARS: "1"
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "1"
+      CUDA_VISIBLE_DEVICES: "-1"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Check original model/source code and ephemeral CPU host before download
+        run: |
+          python -m py_compile scripts/test-cln-original-http-public-positive.py services/imaging-ai/cln_native_upload_worker.py
+          python - <<'PY'
+          from pathlib import Path
+          import shutil
+          v=Path("/proc/meminfo").read_text().splitlines()
+          available=int(next(x.split()[1] for x in v if x.startswith("MemAvailable:")))*1024
+          disk=shutil.disk_usage("/tmp").free
+          print("Actual free GiB RAM:",round(available/2**30,2),"disk:",round(disk/2**30,2))
+          assert available>=12*2**30 and disk>=6*2**30
+          PY
+      - name: Install original nnU-Net CPU runtime plus local private HTTP dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --no-cache-dir "torch==2.5.1+cpu" --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --no-cache-dir "nnunetv2==2.7.0" "huggingface_hub==0.35.3" \
+            "nibabel==5.3.2" "psutil==7.0.0" "fastapi==0.115.12" \
+            "uvicorn==0.34.2" "requests==2.32.3"
+          python -m pip check
+          python - <<'PY'
+          import torch,shutil
+          assert torch.version.cuda is None
+          assert shutil.which("nnUNetv2_predict") is not None
+          PY
+      - name: GENUINE published CLN checkpoint and native positive CT → worker upload, 3D CPU inference, source-bound report
+        run: |
+          set -euo pipefail
+          python scripts/test-cln-original-http-public-positive.py \
+            --workdir "$RUNNER_TEMP/cln-pinned-original-worker" \
+            --report "$RUNNER_TEMP/cln-real-http-positive-numeric.json"
+      - name: Upload only bounded nonpatient numeric source/model/candidate evidence
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cln-original-worker-public-positive-numeric
+          path: ${{ runner.temp }}/cln-real-http-positive-numeric.json
+          retention-days: 7
+          if-no-files-found: error
+      - name: Delete all public CT pixels, expert labels, model weights and private tokens
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/cln-pinned-original-worker" \
+            "$RUNNER_TEMP/cln-real-http-positive-numeric.json"
