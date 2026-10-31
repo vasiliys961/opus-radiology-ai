@@ -482,6 +482,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
        onReadyForVision?.(series.key);
        return;
      }
+     try{
      const wmhSession=autoWmhReady?null:session;
      const invokeWmh=(path:"/v1/wmh/capabilities"|"/v1/wmh/analyze",init:RequestInit={})=>
        wmhSession?call(wmhSession,path,init):fetch("/api/local-wmh",{
@@ -517,6 +518,13 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
        "Изменения неспецифичны; требуется врачебная оценка и дифференциальная интерпретация.");
      setStatus("Оригинальный WMH fold 0 выполнен. Сверены SHA-256 исходных DICOM.");
      onReadyForVision?.(series.key);
+     }catch(cause){
+       if(controller.signal.aborted||version!==serial.current)return;
+       setStatus("WMH worker не завершил анализ; FLAIR не оценена детектором.");
+       setError(cause instanceof Error?cause.message:"Ошибка WMH worker");
+       setDraftText("Исследовательская FLAIR-МРТ. WMH-детектор не выполнен; отсутствие очагов не установлено.");
+       onReadyForVision?.(series.key);
+     }
    }catch(e){
      if(version===serial.current&&!controller.signal.aborted)
        setError(e instanceof Error?e.message:"Анализ не завершился. Результата нет.");
