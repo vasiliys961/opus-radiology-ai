@@ -36,6 +36,9 @@ export default function VisionFramePlanningPanel({
   fromPrimaryAnalysis?:boolean;
 }) {
   const [requested, setRequested] = useState(4);
+  // Editing the sampled frame count must invalidate privacy approval until the
+  // physician explicitly generates the new source-bound plan.
+  const previousRequested=useRef(requested);
   const [targetFrame, setTargetFrame] = useState("");
   const [report, setReport] = useState<VisionFramePlan | null>(null);
   const [notice, setNotice] = useState("");
@@ -106,7 +109,11 @@ export default function VisionFramePlanningPanel({
     // new eligible preview in the SAME reset effect. A one-shot ref was unsafe
     // under React Strict Mode: the second effect replay cleared the preview,
     // but its ref then blocked the second automatic preparation.
-    setReport(activeSeriesKey&&universal.status==="eligible_for_authorization"&&
+    // A requested frame-count change, unlike a Strict Mode effect replay,
+    // must discard the old privacy review until the new plan is confirmed.
+    const frameCountChanged=previousRequested.current!==requested;
+    previousRequested.current=requested;
+    setReport(!frameCountChanged&&activeSeriesKey&&universal.status==="eligible_for_authorization"&&
       choice.status==="ready-for-local-preview"?choice:null);
     setDetectorResult(null);
     setUnifiedStarted(false);
