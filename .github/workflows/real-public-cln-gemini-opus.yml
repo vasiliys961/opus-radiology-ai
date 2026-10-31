@@ -1,0 +1,103 @@
+name: Real licensed MSD CT CLN evidence to paid Gemini JSON and Opus
+
+on:
+  push:
+    branches:
+      - test/real-public-cln-gemini-opus-20261031
+    paths:
+      - "scripts/check-real-public-cln-gemini-opus.mjs"
+      - "scripts/prepare-public-cln-gemini-opus-frames.py"
+      - ".github/workflows/real-public-cln-gemini-opus.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  authentic-cln-gemini-opus:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      HF_HOME: ${{ runner.temp }}/opus-public-hf-cache
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      HF_HUB_DISABLE_PROGRESS_BARS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check whether user-provided OpenRouter secret is configured
+        id: access
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        shell: bash
+        run: |
+          if [ -n "$OPENROUTER_API_KEY" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            echo "Configured OpenRouter secret detected; use only pinned public licensed MSD source."
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "NOT RUN: OPENROUTER_API_KEY GitHub Actions secret is unavailable; no paid calls or source transfers."
+          fi
+      - name: Set up public case and prior authentic worker artifact
+        if: steps.access.outputs.ready == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          curl --fail --location --silent --show-error \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/vasiliys961/opus-radiology-ai/actions/artifacts/13054442427/zip" \
+            -o "$RUNNER_TEMP/verified-cln-numeric.zip"
+          unzip -p "$RUNNER_TEMP/verified-cln-numeric.zip" \
+            cln-real-http-positive-numeric.json > "$RUNNER_TEMP/verified-cln-numeric.json"
+          python -m json.tool "$RUNNER_TEMP/verified-cln-numeric.json" >/dev/null
+      - uses: actions/setup-python@v5
+        if: steps.access.outputs.ready == 'true'
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        if: steps.access.outputs.ready == 'true'
+        with:
+          node-version: '24'
+      - name: Install public NIfTI raster and application testing dependencies
+        if: steps.access.outputs.ready == 'true'
+        run: |
+          python -m pip install --no-cache-dir \
+            "numpy==1.26.4" "nibabel==5.3.2" "pillow==11.3.0" "huggingface_hub==0.35.3"
+          cd web && npm ci --no-audit --no-fund
+      - name: Verify original public MSD CT checksum and prepare four real pixel-only frames
+        if: steps.access.outputs.ready == 'true'
+        run: |
+          python scripts/prepare-public-cln-gemini-opus-frames.py \
+            --numeric "$RUNNER_TEMP/verified-cln-numeric.json" \
+            --dest "$RUNNER_TEMP/public-ct-png"
+      - name: Real Gemini 3.8 Flash JSON then Claude Opus 5.5 integrated detector review
+        if: steps.access.outputs.ready == 'true'
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          RADIOLOGY_PUBLIC_MSD_CLOUD_TRANSFER_APPROVED: "1"
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --disable-warning=ExperimentalWarning --experimental-strip-types \
+            scripts/check-real-public-cln-gemini-opus.mjs \
+            "$RUNNER_TEMP/verified-cln-numeric.json" \
+            "$RUNNER_TEMP/public-ct-png" \
+            "$RUNNER_TEMP/real-public-ct-gemini-opus-report.json"
+      - name: Upload public case model observations only; never original image pixels
+        if: steps.access.outputs.ready == 'true' && success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-public-cln-gemini-opus-numeric-and-text
+          path: ${{ runner.temp }}/real-public-ct-gemini-opus-report.json
+          retention-days: 7
+          if-no-files-found: error
+      - name: Delete source images, raster copies, artifact and local caches
+        if: always()
+        shell: bash
+        run: |
+          rm -rf "$RUNNER_TEMP/public-ct-png" "$RUNNER_TEMP/opus-public-hf-cache" \
+            "$RUNNER_TEMP/verified-cln-numeric.json" \
+            "$RUNNER_TEMP/verified-cln-numeric.zip" \
+            "$RUNNER_TEMP/real-public-ct-gemini-opus-report.json"
