@@ -253,7 +253,27 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
        // Each worker runs sequentially: no heavy simultaneous RAM pressure.
        const original=series.members.map(m=>files.get(m.id));
        if(original.some(f=>!f))throw Error("Исходная DICOM-КТ больше недоступна.");
-       const nifti=await prepareDicomMonaiFile(series,original as File[],controller.signal,progress);
+       const chestWorkerAvailable=autoMonaiReady||!!token.trim()||clnReady||lungscapeReady||
+         autoEffusionReady||!!effusionToken.trim()||
+         (ctpaConfirmed&&(autoPeReady||!!peToken.trim()))||
+         (enhancedChestConfirmed&&(autoNodesReady||!!nodeToken.trim()));
+       if(!chestWorkerAvailable){
+         setStatus("Патологические модели грудной клетки недоступны; детекторы не выполнялись.");
+         setDraftText("Исследовательская КТ грудной клетки. Детекторы не выполнены; отсутствие патологии не установлено.");
+         onReadyForVision?.(series.key);
+         return;
+       }
+       let nifti:File;
+       try{
+         nifti=await prepareDicomMonaiFile(series,original as File[],controller.signal,progress);
+       }catch(cause){
+         if(controller.signal.aborted||version!==serial.current)return;
+         setStatus("Подготовка КТ для патологических моделей не выполнена; детекторы не запускались.");
+         setError(cause instanceof Error?cause.message:"Ошибка DICOM→NIfTI");
+         setDraftText("Исследовательская КТ грудной клетки. Детекторы не выполнены; отсутствие патологии не установлено.");
+         onReadyForVision?.(series.key);
+         return;
+       }
        if(version!==serial.current||controller.signal.aborted)return;
        setChestSource(nifti);
        const problems:string[]=[];
