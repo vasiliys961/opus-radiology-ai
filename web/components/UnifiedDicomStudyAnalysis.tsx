@@ -245,6 +245,10 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
    onDetectorEvidence?.(series.key,null);
    setError("");setIch(null);setWmh(null);setBrainResult(null);setChestSource(null);setChestNodules(null);setChestCln(null);setLungscapeResult(null);
    setChestEffusion(null);setChestPe(null);setChestNodes(null);setChestIssues([]);setAbdomenResult(null);setRenalMonaiResult(null);setRenalMonaiIssue("");setXrvReport(null);setDecisions({});setDraftText("");
+   // Start local source-bound Vision frame planning immediately, in parallel with
+   // authenticated original detector inference. This does not authorize external
+   // image transfer: pixel/metadata review and paid-provider approval remain separate.
+   if(series.modality==="CT"||series.modality==="MR")onReadyForVision?.(series.key);
    const session:WorkerSession={endpoint,token};
    const progress=(message:string)=>{
      if(version===serial.current&&!controller.signal.aborted)setStatus(message);

@@ -56,9 +56,11 @@ try{
   return !!button&&!button.disabled;},null,{timeout:60000});
  assert.equal(aiRequests.length,0,"No cloud request from indexing, worker probing, or authorization");
  await launch.click();
- await analysis.getByText(/Патологические модели грудной клетки недоступны/).waitFor({timeout:30000});
+ // The SAME primary action must open offline Vision planning immediately.
+ // The heavy original worker path is independent and may still be running.
  await page.getByRole("heading",{name:/Gemini Orchestra · подготовка кадров/}).waitFor({timeout:30000});
- await page.getByText(/Первый шаг главного маршрута DICOM завершён/).waitFor();
+ await page.getByText(/Основной анализ DICOM запущен/).waitFor({timeout:30000});
+ await analysis.getByText(/Патологические модели грудной клетки недоступны/).waitFor({timeout:30000});
  const visionImages=page.locator("img.ora-vision-plan-thumbnail");
  await visionImages.first().waitFor({timeout:60000});
  await page.waitForFunction(()=>document.querySelectorAll("img.ora-vision-plan-thumbnail").length===4,null,{timeout:60000});
