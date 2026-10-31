@@ -36,7 +36,6 @@ export default function VisionFramePlanningPanel({
   fromPrimaryAnalysis?:boolean;
 }) {
   const [requested, setRequested] = useState(4);
-  const autoPreparedSeriesKey = useRef<string | null>(null);
   const [targetFrame, setTargetFrame] = useState("");
   const [report, setReport] = useState<VisionFramePlan | null>(null);
   const [notice, setNotice] = useState("");
@@ -103,22 +102,17 @@ export default function VisionFramePlanningPanel({
     setDetectorBusy(false);
     setIchWorkerReady(false);
     setIchWorkerNotice("");
-    setReport(null);
+    // Selection changes must invalidate old source pixels AND prepare the
+    // new eligible preview in the SAME reset effect. A one-shot ref was unsafe
+    // under React Strict Mode: the second effect replay cleared the preview,
+    // but its ref then blocked the second automatic preparation.
+    setReport(activeSeriesKey&&universal.status==="eligible_for_authorization"&&
+      choice.status==="ready-for-local-preview"?choice:null);
     setDetectorResult(null);
     setUnifiedStarted(false);
     setNotice("");
     setThumbnails({});
-  }, [series, activeSeriesKey, requested]);
-  useEffect(() => {
-    // Automatically prepare the bounded local preview when a CT/MR series opens.
-    // This does not authorize provider calls or send any pixels off device.
-    if(activeSeriesKey && autoPreparedSeriesKey.current!==activeSeriesKey &&
-       universal.status==="eligible_for_authorization" &&
-       choice.status==="ready-for-local-preview"){
-      autoPreparedSeriesKey.current=activeSeriesKey;
-      setReport(choice);
-    }
-  },[universal,choice,activeSeriesKey]);
+  }, [series, activeSeriesKey, requested, universal, choice]);
   useEffect(() => {
     if (!report) return;
     let cancelled = false;
