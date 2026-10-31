@@ -270,7 +270,7 @@ test("Four-frame pilot requests provider-enforced JSON with every source ID and 
  assert.equal(seen.length,2);
  assert.deepEqual(seen.map(x=>x.model),[PILOT_GEMINI,PILOT_OPUS]);
  for(const request of seen){
-  assert.equal(request.maxTokens,1800);
+  assert.equal(request.maxTokens,request.model===PILOT_GEMINI?1800:3000);
   assert.equal(request.requireParameters,true);
   const format=request.responseFormat;
   assert.equal(format?.type,"json_schema");
