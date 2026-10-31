@@ -50,13 +50,14 @@ export default function DeidentifiedOpenRouterPanel({
     setReadinessNote("");setError("");setServer(null);
     try{
       const r=await fetch("/api/ai/deidentified-openrouter-review",{cache:"no-store"});
-      if(!r.ok)throw Error();
+      if(r.status===404)throw Error("Этот API разрешён только в режиме разработки на localhost/127.0.0.1; на Vercel и других публичных серверах он намеренно закрыт.");
+      if(!r.ok)throw Error("Сервер не подтвердил готовность OpenRouter.");
       const x=await r.json() as Ready;
       if(x.schema!=="opus-deidentified-openrouter-pilot-readiness/v1"||
          x.productionPatientCloudRelease!==false)throw Error();
       setServer(x);
       if(!x.enabled)setReadinessNote("Локальный пилот не включён администратором.");
-    }catch{setReadinessNote("Локальный облачный пилот недоступен.");}
+    }catch(e){setReadinessNote(e instanceof Error?e.message:"Локальный облачный пилот недоступен.");}
   }
   async function send(){
     if(working||!enabledByLocalChecks||token.length<24||!transferAuthorized)return;
@@ -70,6 +71,7 @@ export default function DeidentifiedOpenRouterPanel({
         const probe=await fetch("/api/ai/deidentified-openrouter-review",{
           method:"GET",cache:"no-store",signal:controller.signal,credentials:"same-origin",
         });
+        if(probe.status===404)throw Error("Облачный пилот работает только на localhost в режиме разработки; публичный Vercel-маршрут отключён.");
         if(!probe.ok)throw Error("OpenRouter недоступен на локальном сервере.");
         ready=await probe.json() as Ready;
         if(ready.schema!=="opus-deidentified-openrouter-pilot-readiness/v1"||
