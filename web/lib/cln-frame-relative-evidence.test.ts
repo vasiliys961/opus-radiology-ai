@@ -39,6 +39,13 @@ const answer=(role:string,opus=false)=>({choices:[{finish_reason:"stop",message:
  ...(opus?{opusSynthesis:{
   schema:"opus-integrated-gemini-detector-synthesis/v1",
   summary:"Черновик: модельный кандидат пространственно привязан к frame-3.",
+  radiologistProtocol:{
+   schema:"opus-radiologist-protocol/v1",technique:"Оценены четыре изображения CT, не вся серия.",
+   description:"Неподтверждённая узловая находка в выбранной области лёгкого.",
+   conclusion:"Подозрительное модельное образование требует изучения исходных изображений.",
+   recommendations:"Проанализировать полный исходный объём КТ и сопоставить исследования.",
+   assessmentScope:"sampled_frames_only",physicianReviewRequired:true,
+  },
   comparisons:[{task:"lung_tumor",assessment:"not_comparable",reason:"Одна точка не доказывает совпадение."}],
   conflicts:[],limitations:["Нет контура очага."],sourceCoverage:"sampled_frames_only",clinicallyValidated:false,
  }}:{}),
