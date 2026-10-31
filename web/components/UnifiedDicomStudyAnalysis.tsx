@@ -211,7 +211,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  },[xrvPlan,series.key]);
  const ready=!!plan.route&&authorized&&!busy&&
    (xrvPlan?(xrvStatus==="ready"&&xrvChestConfirmed&&sourceUrl.startsWith("https://")):plan.route==="totalseg-abdomen"?true:chestPlan?true:
-     (plan.route==="ianpan-ich"?(autoIchReady|| (!!token&&!!endpoint.trim())):
+     (plan.route==="ianpan-ich"?true:
       plan.route==="wmh-flair"?((brainTask==="wmh"?autoWmhReady:autoBrainReady)|| (!!token&&!!endpoint.trim())):
       (!!token&&!!endpoint.trim())))&&
    (!plan.needsExplicitFlair||(
@@ -392,7 +392,23 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
        return;
      }
      if(plan.route==="ianpan-ich"){
-       const evidence=await runPublicIchWorker(autoIchReady?null:session,series,files,controller.signal,progress);
+       if(!autoIchReady&&!token.trim()){
+        setStatus("ICH-модель не установлена; КТ головы не оценена патологическим детектором.");
+        setDraftText("Исследовательская КТ головы. Детектор кровоизлияния не выполнен; отсутствие кровоизлияния не установлено.");
+        onReadyForVision?.(series.key);
+        return;
+       }
+       let evidence;
+       try{
+        evidence=await runPublicIchWorker(autoIchReady?null:session,series,files,controller.signal,progress);
+       }catch(cause){
+        if(version!==serial.current||controller.signal.aborted)return;
+        setStatus("ICH-модель не выполнилась; КТ головы не оценена патологическим детектором.");
+        setDraftText("Исследовательская КТ головы. Детектор кровоизлияния не выполнен; отсутствие кровоизлияния не установлено.");
+        setError(cause instanceof Error?cause.message:"Ошибка ICH worker");
+        onReadyForVision?.(series.key);
+        return;
+       }
        if(version!==serial.current||controller.signal.aborted)return;
        const sop=new Set(series.members.map(m=>m.metadata.sopInstanceUid));
        const uid=new Set(series.members.map(m=>m.metadata.seriesUid));
