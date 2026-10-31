@@ -8,7 +8,7 @@
 import {buildVisionPrivacyPacket,type VisionPrivacyPacket} from "./vision-privacy.ts";
 import {parseRoleResponse,parseStrictObject,readCompletionText,
   type RoleResponse} from "./vision-orchestra.ts";
-import type {AiGatewayRequest} from "./ai-gateway.ts";
+import type {AiGatewayRequest,AiJsonSchemaFormat} from "./ai-gateway.ts";
 import {parseLocalLungFacts,type LocalLungFacts} from "./local-lung-review.ts";
 import {validateSanitizedDetectorBundle,type SanitizedDetectorBundle} from "./detector-consilium-evidence.ts";
 import {safeXrvScores,type SanitizedCxrScores} from "./xrv-original-cxr.ts";
@@ -72,6 +72,50 @@ export function normalizeReviewedCloudPilot(value:unknown):NormalizedCloudPilot{
     imageId:f.frameId,reviewedPixelSha256:f.sha256,
   }))};
 }
+/** Provider-enforced minimal JSON shape for four independently sourced frames.
+ * The trusted frame-ID enum prevents a provider from inventing other studies.
+ * Local parseRoleResponse remains the authority for every value and source ID.
+ */
+export function sourceFrameReviewFormat(frameIds:readonly string[]):AiJsonSchemaFormat {
+  if(frameIds.length<1||frameIds.length>CLOUD_PILOT_MAX_FRAMES||
+     new Set(frameIds).size!==frameIds.length||
+     frameIds.some(id=>!/^frame-[1-4]$/.test(id)))
+    throw Error("invalid_structured_review_frame_ids");
+  return {
+    type:"json_schema",
+    json_schema:{
+      name:"source_anchored_observations",
+      strict:true,
+      schema:{
+        type:"object",
+        properties:{
+          role:{type:"string",enum:["observations"]},
+          reviewedImageIds:{type:"array",items:{type:"string",enum:[...frameIds]},
+            minItems:frameIds.length,maxItems:frameIds.length,
+            description:"Every supplied frame ID, exactly once, even when no findings are visible"},
+          observations:{type:"array",maxItems:8,items:{
+            type:"object",properties:{
+              id:{type:"string",description:"Unique short observation ID"},
+              imageId:{type:"string",enum:[...frameIds]},
+              anatomy:{type:"string",description:"Only the visible sampled anatomy; concise"},
+              sign:{type:"string",description:"Only visible observations; never assume absence of disease"},
+              uncertainty:{type:"string",description:"Short explicit limitations or uncertainty"},
+            },required:["id","imageId","anatomy","sign","uncertainty"],additionalProperties:false,
+          }},
+          limitations:{type:"array",maxItems:8,items:{type:"string"},
+            description:"Concise sampling, quality and image-privacy limitations"},
+        },
+        required:["role","reviewedImageIds","observations","limitations"],
+        additionalProperties:false,
+      },
+    },
+  };
+}
+function requireCompleteFrameCoverage(review:RoleResponse,frameIds:readonly string[]):void{
+  if(review.reviewedImageIds.length!==frameIds.length||
+     frameIds.some(id=>!review.reviewedImageIds.includes(id)))
+    throw Error("incomplete_sampled_frame_review");
+}
 function reviewMessages(data:NormalizedCloudPilot):AiGatewayRequest["messages"] {
   const frameIds=data.frames.map(f=>f.imageId);
   return [
@@ -82,7 +126,10 @@ function reviewMessages(data:NormalizedCloudPilot):AiGatewayRequest["messages"] 
       "Describe ONLY visible anatomical observations and uncertainty. Do not diagnose, "+
       "claim a negative screen, assert whole-volume coverage, invent measurements, or repeat any "+
       "possible identifying text. If identity/clinic/date/name is visible, do not transcribe it; "+
-      "state an image-privacy concern in limitations. Report no more than 8 findings and 8 limitations. "+
+      "state an image-privacy concern in limitations. Report no more than 8 brief findings total, "+
+      "no more than 8 brief limitations, and keep every field concise to avoid truncation. "+
+      "For every supplied frame ID include that ID exactly once in reviewedImageIds; "+
+      "if no confident observation exists on a frame, use zero observations for it, not invented normality. "+
       'Return only JSON {"role":"observations","reviewedImageIds":["frame-1"],"observations":'+
       '[{"id":"finding1","imageId":"frame-1","anatomy":"visible area","sign":"seen pattern",'+
       '"uncertainty":"limits"}],"limitations":["sampled 2D PNGs only"]}. '+
@@ -132,12 +179,14 @@ export async function reviewSanitizedSamples(
   if((checked.modality==="CR"||checked.modality==="DX")&&detectors)
     throw Error("CT/MR detector evidence must not be attached to CR/DX");
   const messages=reviewMessages(checked);
+  const responseFormat=sourceFrameReviewFormat(ids);
   // Sequential, not two independent simultaneous calls: Opus receives Gemini's
   // source-frame-validated observations and the same source-linked model facts.
   // Only two existing paid requests; no duplicate model inference.
   const gemini=await call({provider:"openrouter",role:"vision",
-    model:PILOT_GEMINI,maxTokens:850,messages},signal);
+    model:PILOT_GEMINI,maxTokens:1800,messages,responseFormat,requireParameters:true},signal);
   const a=parseRoleResponse(parseStrictObject(readCompletionText(gemini)),"observations",ids);
+  requireCompleteFrameCoverage(a,ids);
   if(signal?.aborted)throw Error("physician_cancelled_before_opus");
   const opusMessages:AiGatewayRequest["messages"]=[
     {role:"system",content:String(messages[0].content)+
@@ -169,8 +218,10 @@ export async function reviewSanitizedSamples(
         JSON.stringify(cxr)+". Absence of elevated scores does not exclude pathology."}]:[])]},
   ];
   const opus=await call({provider:"openrouter",role:"vision",
-    model:PILOT_OPUS,maxTokens:850,messages:opusMessages},signal);
+    model:PILOT_OPUS,maxTokens:1800,messages:opusMessages,
+    responseFormat,requireParameters:true},signal);
   const b=parseRoleResponse(parseStrictObject(readCompletionText(opus)),"observations",ids);
+  requireCompleteFrameCoverage(b,ids);
   return {
     schema:"opus-sanitized-cloud-pilot/v1",modality:checked.modality,
     coverage:"sampled-frames-only",
