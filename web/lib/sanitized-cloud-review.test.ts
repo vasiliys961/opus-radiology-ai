@@ -232,3 +232,63 @@ test("Real XRV numeric score evidence is withheld from Gemini CXR Vision, then s
  },undefined,null,null,sanitized),/CR\/DX/);
  assert.equal(attempted,0);
 });
+
+test("Four-frame pilot requests provider-enforced JSON with every source ID and fixed two-call budget",async()=>{
+ const sourceFrames=Array.from({length:4},(_,i)=>{
+  const frame=createPrivacyFrame(testPng(),"frame-"+(i+1),"CT");
+  return markPrivacyReview(markPrivacyReview(frame,"pixel",true),"visual",true);
+ });
+ const input=buildVisionPrivacyPacket(sourceFrames,UUID);
+ const seen:AiGatewayRequest[]=[];
+ const response={choices:[{finish_reason:"stop",message:{content:JSON.stringify({
+   role:"observations",
+   reviewedImageIds:["frame-1","frame-2","frame-3","frame-4"],
+   observations:[],limitations:["Only sampled synthetic frames were examined"],
+ })}}]};
+ const result=await reviewSanitizedSamples(input,async request=>{
+  seen.push(request);return response;
+ });
+ assert.equal(seen.length,2);
+ assert.deepEqual(seen.map(x=>x.model),[PILOT_GEMINI,PILOT_OPUS]);
+ for(const request of seen){
+  assert.equal(request.maxTokens,1800);
+  assert.equal(request.requireParameters,true);
+  const format=request.responseFormat;
+  assert.equal(format?.type,"json_schema");
+  assert.equal(format?.json_schema.strict,true);
+  const schema=format?.json_schema.schema as Record<string,unknown>;
+  const props=schema.properties as Record<string,unknown>;
+  assert.deepEqual((props.reviewedImageIds as {items:{enum:string[]}}).items.enum,
+    ["frame-1","frame-2","frame-3","frame-4"]);
+  assert.equal((props.reviewedImageIds as {minItems:number}).minItems,4);
+  assert.equal((props.reviewedImageIds as {maxItems:number}).maxItems,4);
+  assert.equal((props.observations as {maxItems:number}).maxItems,8);
+  assert.doesNotMatch(JSON.stringify(request),/PatientName|SOPInstanceUID|StudyInstanceUID|sourceFileId/);
+ }
+ assert.deepEqual(result.results.map(x=>x.review.reviewedImageIds),
+   [sourceFrames.map(f=>f.frameId),sourceFrames.map(f=>f.frameId)]);
+ assert.deepEqual(result.results.map(x=>x.review.observations.length),[0,0]);
+});
+test("Incomplete but syntactically valid Gemini coverage cannot silently reach Opus",async()=>{
+ const input=buildVisionPrivacyPacket(Array.from({length:2},(_,i)=>{
+  const frame=createPrivacyFrame(testPng(),"frame-"+(i+1),"CT");
+  return markPrivacyReview(markPrivacyReview(frame,"pixel",true),"visual",true);
+ }),UUID);
+ let requests=0;
+ await assert.rejects(reviewSanitizedSamples(input,async()=>{
+  requests++;
+  return {choices:[{finish_reason:"stop",message:{content:JSON.stringify({
+    role:"observations",reviewedImageIds:["frame-1"],
+    observations:[],limitations:["frame-2 unknown"],
+  })}}]};
+ }),/incomplete_sampled_frame_review/);
+ assert.equal(requests,1,"Incomplete first-model coverage must block ungrounded follow-up");
+});
+test("Truncated Gemini structured JSON is never repaired into invented observations",async()=>{
+ let requests=0;
+ await assert.rejects(reviewSanitizedSamples(packet(),async()=>{
+  requests++;
+  return {choices:[{finish_reason:"length",message:{content:'{"role":"observations"'}}]};
+ }),/incomplete/);
+ assert.equal(requests,1);
+});
