@@ -9,7 +9,7 @@ export type ClnReport={
  schema:"opus-original-cln-upload-result/v1";
  sourceNiftiSha256:string;realOriginalModelForwardCompleted:true;
  checkpointSha256:string;candidateCount:number;
- nativeCandidates:Array<{candidateVolumeMl:number}>;
+ nativeCandidates:Array<{candidateVolumeMl:number;modelComponentId?:number;sourceVoxelCentroidIJK?:number[]}>;
  researchOnly:true;clinicalValidation:false;negativeDiagnosisPermitted:false;
 };
 const JOB=/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
