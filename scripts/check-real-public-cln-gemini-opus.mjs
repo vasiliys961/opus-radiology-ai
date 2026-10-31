@@ -14,6 +14,7 @@ import {TASKS_BY_REGION,validateSanitizedDetectorBundle}
 import {reviewSanitizedSamples,PILOT_GEMINI,PILOT_OPUS}
  from "../web/lib/sanitized-cloud-review.ts";
 import {callAiGateway} from "../web/lib/ai-gateway.ts";
+import {createClnFrameRelativeEvidence} from "../web/lib/cln-frame-relative-evidence.ts";
 
 if(process.env.RADIOLOGY_PUBLIC_MSD_CLOUD_TRANSFER_APPROVED!=="1"||
    !process.env.OPENROUTER_API_KEY)throw Error("public_research_and_provider_auth_missing");
@@ -44,6 +45,16 @@ const taskBundle={
  clinicalValidation:false,negativeDiagnosisPermitted:false,
 };
 assert.ok(validateSanitizedDetectorBundle(taskBundle));
+const geometry=JSON.parse(readFileSync(join(folder,"frame-relative-map.json"),"utf8"));
+assert.equal(geometry.sourceImageSha256,evidence.sourceSha256UploadedNative);
+const spatial=createClnFrameRelativeEvidence({...geometry,
+ nativeCandidates:evidence.candidates.map(c=>({
+  componentId:c.componentId,sourceVoxelCentroidIJK:c.sourceVoxelCentroidIJK,
+  candidateVolumeMl:c.candidateVolumeMl,
+ }))});
+assert.equal(spatial.candidateAnchors.length,evidence.candidateCount);
+assert.ok(spatial.candidateAnchors.some(x=>Math.abs(x.axialSliceOffset)<=.5),
+ "one sampled frame must intersect CLN centroid axial plane");
 const names=readdirSync(folder).filter(x=>/^frame-[1-4]\.png$/.test(x)).sort();
 assert.deepEqual(names,["frame-1.png","frame-2.png","frame-3.png","frame-4.png"]);
 const frames=names.map((name,i)=>{
@@ -60,19 +71,23 @@ const doc=await reviewSanitizedSamples(packet,async(req,signal)=>{
  assert.equal(req.provider,"openrouter");
  if(calls===1){
    assert.equal(req.model,PILOT_GEMINI);
-   assert.doesNotMatch(JSON.stringify(req.messages),/lung_tumor|2\.303572|CLN-Segmenter/);
+   assert.doesNotMatch(JSON.stringify(req.messages),/lung_tumor|2\\.303572|CLN-Segmenter|xFraction|candidateAnchors|axialSliceOffset/);
  }else{
    assert.equal(req.model,PILOT_OPUS);
    const sent=JSON.stringify(req.messages);
    assert.ok(sent.includes("lung_tumor"));
    assert.ok(sent.includes("candidateCount"));
+   assert.ok(sent.includes("xFraction")&&sent.includes("yFraction"));
+   assert.ok(sent.includes("axialSliceOffset"));
+   assert.ok(sent.includes("candidateId"));
+   assert.ok(sent.includes(spatial.candidateAnchors[0].frameId));
    assert.ok(sent.includes("Prior source-checked Gemini observations"));
  }
  const res=await callAiGateway(req,signal);
  receipts.push({model:req.model,promptTokens:res.usage?.prompt_tokens??null,
    completionTokens:res.usage?.completion_tokens??null});
  return res;
-},undefined,null,taskBundle);
+},undefined,null,taskBundle,null,null,spatial);
 assert.equal(calls,2);
 assert.equal(doc.results.length,2);
 assert.deepEqual(doc.results.map(r=>r.reviewer),["gemini","opus"]);
@@ -81,6 +96,8 @@ assert.equal(doc.opusSynthesis?.comparisons[0].task,"lung_tumor");
 assert.equal(doc.opusSynthesis?.clinicallyValidated,false);
 assert.equal(doc.detectorEvidence?.facts.find(f=>f.task==="lung_tumor")?.candidateCount,1);
 assert.ok(doc.opusSynthesis?.summary);
+assert.deepEqual(doc.frameRelativeClnEvidence,spatial);
+assert.equal(doc.frameRelativeClnEvidence?.originalDicomSopRegistrationVerified,false);
 const publicReport={
  schema:"opus-real-licensed-public-ct-cln-gemini-opus/v1",
  source:"MSD Task06 Lung, publicly licensed CC-BY-SA-4.0, study lung_043",
@@ -97,6 +114,7 @@ const publicReport={
  opusJson:doc.results[1].review,
  opusIntegratedSynthesis:doc.opusSynthesis,
  numericDetectorTasks:doc.detectorEvidence?.facts,
+ clnSpatialCandidateAnchors:doc.frameRelativeClnEvidence?.candidateAnchors,
  independentClinicalValidation:false,
 };
 writeFileSync(output,JSON.stringify(publicReport,null,2)+"\n",{flag:"wx",mode:0o600});
@@ -105,4 +123,4 @@ console.log("REAL PUBLIC MSD CLN + Gemini JSON + Opus structured synthesis SUCCE
  models:receipts.map(r=>r.model),sampledCTFrames:frames.length,
  originalCLNForwardPreviouslyVerified:true,
  newCLNForwardThisRun:false,originalDicomSopRegistrationVerified:false,
- clinicallyValidated:false}));
+ clinicallyValidated:false,clnSpatialAnchorsSent:spatial.candidateAnchors.length}));
