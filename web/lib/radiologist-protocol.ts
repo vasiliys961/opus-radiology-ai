@@ -72,7 +72,7 @@ export function formatRadiologistProtocol(
   ...standardRadiologistSections("DX",null),
  ])].sort((a,b)=>b.length-a.length);
  for(const h of headings)
-  anatomicalDescription=anatomicalDescription.replaceAll(h+":","\\n\\n"+h+":");
+  anatomicalDescription=anatomicalDescription.replaceAll(h+":","\n\n"+h+":");
  anatomicalDescription=anatomicalDescription.trim();
  return [
   heading+" — предварительный протокол описания (для проверки врачом)",
