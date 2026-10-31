@@ -7,6 +7,8 @@ const destination = process.argv[2] ? resolve(process.argv[2]) : fileURLToPath(n
 const modality=process.argv[3]??"MR";
 if(!["MR","CT"].includes(modality))throw new Error("Synthetic fixture supports only MR or CT tags");
 const huMode=process.argv[4]==='rescale-hu';
+const region=process.argv[5]??null;
+if(region!==null&&!["CHEST","HEAD","ABDOMEN"].includes(region))throw new Error("Unsupported synthetic BodyPartExamined region");
 if(process.argv[4]&&(!huMode||modality!=='CT'))throw new Error('Optional rescale-hu requires CT');
 const slices = resolve(destination,"dicom");
 await mkdir(slices,{recursive:true});
@@ -42,6 +44,7 @@ for(let k=0;k<nz;k++) {
   const dataset=Buffer.concat([
     tag(8,0x16,"UI",sopClass),tag(8,0x18,"UI",instance),tag(8,0x60,"CS",modality),
     tag(8,0x103e,"LO","SYNTHETIC PHANTOM - NOT PATIENT DATA"),
+    ...(region?[tag(0x18,0x15,"CS",region)]:[]),
     tag(0x18,0x50,"DS","2"),tag(0x18,0x88,"DS","2"),
     tag(0x20,0x0d,"UI",`${root}.1`),tag(0x20,0x0e,"UI",`${root}.2`),tag(0x20,0x13,"IS",String(k+1)),
     tag(0x20,0x32,"DS",`-32\\-32\\${k*2-31}`),tag(0x20,0x37,"DS","1\\0\\0\\0\\1\\0"),tag(0x20,0x52,"UI",`${root}.3`),
