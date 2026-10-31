@@ -85,3 +85,42 @@ test("Gateway reveals neither provider response body nor server key on rejection
     else process.env.OPENROUTER_API_KEY=oldKey;
   }
 });
+
+test("Strict OpenRouter schema reaches only schema-supporting endpoints with bounded tokens",async()=>{
+ const oldKey=process.env.OPENROUTER_API_KEY,oldFetch=globalThis.fetch;
+ process.env.OPENROUTER_API_KEY="synthetic-key";
+ let calls=0;
+ const format={type:"json_schema" as const,json_schema:{
+  name:"synthetic_source_frame",strict:true as const,
+  schema:{type:"object",properties:{reviewedImageIds:{type:"array",items:{type:"string"}}},
+   required:["reviewedImageIds"],additionalProperties:false},
+ }};
+ globalThis.fetch=async(_url,opts)=>{
+  calls++;
+  const data=JSON.parse(String(opts?.body));
+  assert.deepEqual(data.response_format,format);
+  assert.deepEqual(data.provider,{require_parameters:true});
+  assert.equal(data.max_tokens,1800);
+  assert.equal(data.model,"google/gemini-3.8-flash");
+  return new Response(JSON.stringify({model:data.model,choices:[
+   {finish_reason:"stop",message:{content:'{"reviewedImageIds":["frame-1"]}'}}]}));
+ };
+ try{
+  const output=await callAiGateway({...request,model:"google/gemini-3.8-flash",
+    responseFormat:format,requireParameters:true,maxTokens:1800});
+  assert.equal(output.choices.length,1);
+  assert.equal(calls,1);
+  await assert.rejects(
+   callAiGateway({...request,model:"google/gemini-3.8-flash",responseFormat:format}),
+   /compatible OpenRouter endpoint/);
+  assert.equal(calls,1,"Structured request without endpoint enforcement must fail locally");
+  await assert.rejects(
+   callAiGateway({...request,provider:"polza",responseFormat:format,requireParameters:true}),
+   /compatible OpenRouter endpoint/);
+  assert.equal(calls,1);
+ }finally{
+  globalThis.fetch=oldFetch;
+  if(oldKey===undefined)delete process.env.OPENROUTER_API_KEY;
+  else process.env.OPENROUTER_API_KEY=oldKey;
+ }
+});
