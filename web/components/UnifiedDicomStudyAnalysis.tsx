@@ -139,8 +139,8 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  const chestPlan=plan.route==="monai-nodules";
  useEffect(()=>{
   if(plan.route!=="wmh-flair"||brainTask==="wmh")return;
-  const controller=new AbortController();setAutoBrainReady(false);setAutoBrainChecking(true);
-  void checkAutomaticBrainReady(brainTask,controller.signal).then(v=>{
+  const controller=new AbortController();const probeSignal=AbortSignal.any([controller.signal,AbortSignal.timeout(12_000)]);setAutoBrainReady(false);setAutoBrainChecking(true);
+  void checkAutomaticBrainReady(brainTask,probeSignal).then(v=>{
    if(!controller.signal.aborted)setAutoBrainReady(v);
   }).catch(()=>{if(!controller.signal.aborted)setAutoBrainReady(false);})
    .finally(()=>{if(!controller.signal.aborted)setAutoBrainChecking(false);});
@@ -148,8 +148,8 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  },[plan.route,brainTask,series.key]);
  useEffect(()=>{
   if(plan.route!=="wmh-flair")return;
-  const controller=new AbortController();setAutoWmhReady(false);setAutoWmhChecking(true);
-  void fetch("/api/local-wmh",{signal:controller.signal,credentials:"same-origin",cache:"no-store"})
+  const controller=new AbortController();const probeSignal=AbortSignal.any([controller.signal,AbortSignal.timeout(12_000)]);setAutoWmhReady(false);setAutoWmhChecking(true);
+  void fetch("/api/local-wmh",{signal:probeSignal,credentials:"same-origin",cache:"no-store"})
    .then(r=>r.ok?r.json():null).then(c=>{
     if(!controller.signal.aborted)setAutoWmhReady(!!c&&c.schema==="opus-direct-wmh-worker/v1"&&c.originalModelReady===true&&c.imageUpload===true&&c.patientMode===false&&c.dataPolicy==="approved-public-research-only"&&c.modelVersion==="1.6.0");
    }).catch(()=>{if(!controller.signal.aborted)setAutoWmhReady(false);})
@@ -158,32 +158,32 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  },[plan.route,series.key]);
  useEffect(()=>{
   if(!chestPlan)return;
-  const controller=new AbortController();
+  const controller=new AbortController();const probeSignal=AbortSignal.any([controller.signal,AbortSignal.timeout(12_000)]);
   setLungscapeReady(false);setLungscapeChecking(true);
-  void checkAutomaticLungscapeReady(controller.signal).then(ok=>{if(!controller.signal.aborted)setLungscapeReady(ok);})
+  void checkAutomaticLungscapeReady(probeSignal).then(ok=>{if(!controller.signal.aborted)setLungscapeReady(ok);})
    .catch(()=>{if(!controller.signal.aborted)setLungscapeReady(false);})
    .finally(()=>{if(!controller.signal.aborted)setLungscapeChecking(false);});
   setClnReady(false);setClnChecking(true);
-  void checkAutomaticClnReady(controller.signal).then(ok=>{if(!controller.signal.aborted)setClnReady(ok);})
+  void checkAutomaticClnReady(probeSignal).then(ok=>{if(!controller.signal.aborted)setClnReady(ok);})
    .catch(()=>{if(!controller.signal.aborted)setClnReady(false);})
    .finally(()=>{if(!controller.signal.aborted)setClnChecking(false);});
   setAutoMonaiChecking(true);setAutoMonaiReady(false);
-  void checkAutomaticMonaiReady(controller.signal).then(ok=>{
+  void checkAutomaticMonaiReady(probeSignal).then(ok=>{
    if(!controller.signal.aborted)setAutoMonaiReady(ok);
   }).catch(()=>{if(!controller.signal.aborted)setAutoMonaiReady(false);})
    .finally(()=>{if(!controller.signal.aborted)setAutoMonaiChecking(false);});
   setAutoNodesChecking(true);setAutoNodesReady(false);
-  void checkAutomaticNodesReady(controller.signal).then(ok=>{
+  void checkAutomaticNodesReady(probeSignal).then(ok=>{
    if(!controller.signal.aborted)setAutoNodesReady(ok);
   }).catch(()=>{if(!controller.signal.aborted)setAutoNodesReady(false);})
    .finally(()=>{if(!controller.signal.aborted)setAutoNodesChecking(false);});
   setAutoPeChecking(true);setAutoPeReady(false);
-  void checkAutomaticPeReady(controller.signal).then(ok=>{
+  void checkAutomaticPeReady(probeSignal).then(ok=>{
    if(!controller.signal.aborted)setAutoPeReady(ok);
   }).catch(()=>{if(!controller.signal.aborted)setAutoPeReady(false);})
    .finally(()=>{if(!controller.signal.aborted)setAutoPeChecking(false);});
   setAutoEffusionChecking(true);setAutoEffusionReady(false);
-  void checkAutomaticEffusionReady(controller.signal).then(ok=>{
+  void checkAutomaticEffusionReady(probeSignal).then(ok=>{
    if(!controller.signal.aborted)setAutoEffusionReady(ok);
   }).catch(()=>{if(!controller.signal.aborted)setAutoEffusionReady(false);})
     .finally(()=>{if(!controller.signal.aborted)setAutoEffusionChecking(false);});
@@ -191,9 +191,9 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  },[chestPlan,series.key]);
  useEffect(()=>{
   if(plan.route!=="ianpan-ich")return;
-  const controller=new AbortController();
+  const controller=new AbortController();const probeSignal=AbortSignal.any([controller.signal,AbortSignal.timeout(12_000)]);
   setAutoIchReady(false);setAutoIchChecking(true);
-  void checkAutomaticIchReady(controller.signal).then(ok=>{
+  void checkAutomaticIchReady(probeSignal).then(ok=>{
    if(!controller.signal.aborted)setAutoIchReady(ok);
   }).catch(()=>{if(!controller.signal.aborted)setAutoIchReady(false);})
    .finally(()=>{if(!controller.signal.aborted)setAutoIchChecking(false);});
@@ -202,9 +202,9 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  const xrvPlan=plan.route==="xrv-cxr";
  useEffect(()=>{
   if(plan.route!=="totalseg-abdomen")return;
-  const controller=new AbortController();
+  const controller=new AbortController();const probeSignal=AbortSignal.any([controller.signal,AbortSignal.timeout(12_000)]);
   setAutoAbdomenChecking(true);setAutoAbdomenReady(false);
-  void checkAutomaticAbdomenReady(controller.signal).then(ready=>{
+  void checkAutomaticAbdomenReady(probeSignal).then(ready=>{
    if(!controller.signal.aborted)setAutoAbdomenReady(ready);
   }).catch(()=>{if(!controller.signal.aborted)setAutoAbdomenReady(false);})
     .finally(()=>{if(!controller.signal.aborted)setAutoAbdomenChecking(false);});
@@ -212,9 +212,9 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  },[plan.route,series.key]);
  useEffect(()=>{
    if(!xrvPlan)return;
-   const controller=new AbortController();
+   const controller=new AbortController();const probeSignal=AbortSignal.any([controller.signal,AbortSignal.timeout(12_000)]);
    setXrvStatus("checking");
-   void checkOriginalXrvReady(controller.signal).then(ok=>{
+   void checkOriginalXrvReady(probeSignal).then(ok=>{
      if(!controller.signal.aborted)setXrvStatus(ok?"ready":"unavailable");
    }).catch(()=>{if(!controller.signal.aborted)setXrvStatus("unavailable");});
    return()=>controller.abort();
