@@ -5,11 +5,13 @@ on:
     branches:
       - test/real-public-cln-gemini-opus-20261031
       - feat/frame-relative-cln-opus-20261031
+      - feat/opus-radiologist-report-20261031
     paths:
       - "scripts/check-real-public-cln-gemini-opus.mjs"
       - "scripts/prepare-public-cln-gemini-opus-frames.py"
       - "web/lib/cln-frame-relative-evidence.ts"
       - "web/lib/sanitized-cloud-review.ts"
+      - "web/lib/radiologist-protocol.ts"
       - ".github/workflows/real-public-cln-gemini-opus.yml"
   workflow_dispatch:
 
@@ -87,13 +89,16 @@ jobs:
             scripts/check-real-public-cln-gemini-opus.mjs \
             "$RUNNER_TEMP/verified-cln-numeric.json" \
             "$RUNNER_TEMP/public-ct-png" \
-            "$RUNNER_TEMP/real-public-ct-gemini-opus-report.json"
+            "$RUNNER_TEMP/real-public-ct-gemini-opus-report.json" \
+            "$RUNNER_TEMP/real-public-ct-gemini-opus-report-radiologist-report.txt"
       - name: Upload public case model observations only; never original image pixels
         if: steps.access.outputs.ready == 'true' && success()
         uses: actions/upload-artifact@v4
         with:
           name: real-public-cln-gemini-opus-numeric-and-text
-          path: ${{ runner.temp }}/real-public-ct-gemini-opus-report.json
+          path: |
+            ${{ runner.temp }}/real-public-ct-gemini-opus-report.json
+            ${{ runner.temp }}/real-public-ct-gemini-opus-report-radiologist-report.txt
           retention-days: 7
           if-no-files-found: error
       - name: Delete source images, raster copies, artifact and local caches
