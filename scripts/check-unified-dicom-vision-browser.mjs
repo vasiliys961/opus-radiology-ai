@@ -61,6 +61,7 @@ try{
  await page.getByText(/Первый шаг главного маршрута DICOM завершён/).waitFor();
  const visionImages=page.locator("img.ora-vision-plan-thumbnail");
  await visionImages.first().waitFor({timeout:60000});
+ await page.waitForFunction(()=>document.querySelectorAll("img.ora-vision-plan-thumbnail").length===4,null,{timeout:60000});
  assert.equal(await visionImages.count(),4,"Four exact sampled DICOM previews");
  assert.equal(aiRequests.length,0,"Vision planning must not send any pixels");
  console.log("PASS browser: synthetic CT DICOM -> automatic worker absence -> independent four PNG Vision frames");
