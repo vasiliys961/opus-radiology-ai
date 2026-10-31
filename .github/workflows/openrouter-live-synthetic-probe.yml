@@ -1,0 +1,32 @@
+name: One-time real OpenRouter synthetic Gemini Opus check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "scripts/probe-openrouter-real-synthetic.mjs"
+      - ".github/workflows/openrouter-live-synthetic-probe.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-two-models:
+    if: ${{ github.head_ref == 'test/openrouter-live-synthetic-20261031' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    defaults:
+      run:
+        working-directory: web
+    env:
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      OPUS_SYNTHETIC_LIVE_TEST_APPROVED: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Install exact pinned dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Make two real paid OpenRouter calls with generated mathematical PNG
+        run: node --disable-warning=ExperimentalWarning --experimental-strip-types ../scripts/probe-openrouter-real-synthetic.mjs
