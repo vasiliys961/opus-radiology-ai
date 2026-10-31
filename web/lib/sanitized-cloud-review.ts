@@ -14,7 +14,7 @@ import {validateSanitizedDetectorBundle,type SanitizedDetectorBundle,type Consil
 import {safeXrvScores,type SanitizedCxrScores} from "./xrv-original-cxr.ts";
 import {validateSanitizedClnEvidence,type SanitizedClnTumorEvidence} from "./cln-tumor-consilium.ts";
 import {validateClnFrameRelativeEvidence,type ClnFrameRelativeEvidence} from "./cln-frame-relative-evidence.ts";
-import {validateRadiologistProtocol,type RadiologistProtocol} from "./radiologist-protocol.ts";
+import {validateRadiologistProtocol,validateStandardAnatomicalDescription,standardRadiologistSections,type RadiologistProtocol} from "./radiologist-protocol.ts";
 
 export const CLOUD_PILOT_MAX_IMAGE_BASE64=2_000_000;
 export const CLOUD_PILOT_MAX_FRAMES=4;
@@ -276,6 +276,7 @@ export async function reviewSanitizedSamples(
   const completedTasks:ConsiliumTask[]=detectors?.facts.filter(x=>x.status==="completed").map(x=>x.task)??[];
   if(cln&&!completedTasks.includes("lung_tumor"))completedTasks.push("lung_tumor");
   const opusFormat=sourceFrameReviewFormat(ids,completedTasks);
+  const standardAnatomy=standardRadiologistSections(checked.modality,detectors?.region??null);
   // Sequential, not two independent simultaneous calls: Opus receives Gemini's
   // source-frame-validated observations and the same source-linked model facts.
   // Only two existing paid requests; no duplicate model inference.
@@ -303,6 +304,19 @@ export async function reviewSanitizedSamples(
       "not_comparable, not agreement or contradiction. Disagreements and uncertainties "+
       "must be explicit. Unperformed tasks must remain NOT ASSESSED. "+
       "If source-bound frame-relative CLN candidate anchors are supplied, compare their position to Gemini and your own image observation for the referenced frame, explicitly explain spatial concordance or discordance instead of merely saying location unavailable. An anchor is not a lesion contour or ground truth. "+
+      "MANDATORY STANDARD PROTOCOL: In the radiologistProtocol.description, "+
+      "write classic organ-by-organ Russian CT/MRI findings under the following "+
+      "EXACT headings (each heading followed by colon), in this order: "+
+      (standardAnatomy.length?standardAnatomy.join("; "):
+       "Область исследования; Описываемые структуры")+
+      ". For each heading, record image-supported morphology when visible. "+
+      "For anatomy NOT reviewed in the limited set, state 'По представленным "+
+      "изображениям достоверно не оценивается' rather than fabricated normality. "+
+      "Technique must state actual modality and sampled images. Do NOT claim "+
+      "full-body screening, adequate contrast or protocol sequences absent metadata. "+
+      "The conclusion must prioritize imaging pattern, key suspected pathology "+
+      "and differential, WITHOUT fake normal findings, stage or diagnosis certainty. "+
+      "Keep total radiologistProtocol text concise (roughly 1300-2300 Russian chars). "+
       "Take the role of an EXPERIENCED BOARD-CERTIFIED RADIOLOGIST preparing "+
       "a professional Russian radiology protocol for the treating physician, not "+
       "a software debugging log. The PRIMARY deliverable MUST be "+
@@ -350,13 +364,16 @@ export async function reviewSanitizedSamples(
         JSON.stringify(cxr)+". Absence of elevated scores does not exclude pathology."}]:[])]},
   ];
   const opus=await call({provider:"openrouter",role:"vision",
-    model:PILOT_OPUS,maxTokens:3000,messages:opusMessages,
+    model:PILOT_OPUS,maxTokens:6000,messages:opusMessages,
     responseFormat:opusFormat,requireParameters:true},signal);
   const opusRaw=parseStrictObject(readCompletionText(opus));
   const b=parseRoleResponse(opusRaw,"observations",ids);
   const synthesis=(opusRaw as Record<string,unknown>).opusSynthesis;
   if(!validateOpusIntegratedSynthesis(synthesis,completedTasks))
    throw Error("opus_synthesis_missing_or_unbound_to_executed_detector_tasks");
+  if(!validateStandardAnatomicalDescription(synthesis.radiologistProtocol,
+      checked.modality,detectors?.region??null))
+   throw Error("opus_radiologist_protocol_missing_standard_anatomical_sections");
   requireCompleteFrameCoverage(b,ids);
   return {
     schema:"opus-sanitized-cloud-pilot/v1",modality:checked.modality,
