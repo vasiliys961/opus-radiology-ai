@@ -121,8 +121,8 @@ const publicReport={
  independentClinicalValidation:false,
 };
 writeFileSync(output,JSON.stringify(publicReport,null,2)+"\n",{flag:"wx",mode:0o600});
-const reportPath=output.replace(/\\.json$/,".txt");
-assert.notEqual(reportPath,output,"report output must have .json suffix");
+assert.ok(output.endsWith(".json"),"report output must have .json suffix");
+const reportPath=output.slice(0,-5)+".txt";
 writeFileSync(reportPath,doc.opusSynthesis.summary.trim()+"\n",{flag:"wx",mode:0o600});
 console.log("REAL PUBLIC MSD CLN + Gemini JSON + Opus structured synthesis SUCCESS",
  JSON.stringify({actualOpenRouterCalls:calls,
