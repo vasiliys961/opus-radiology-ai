@@ -29,11 +29,21 @@ function packet(modality:"CT"|"MR"|"CR"|"DX"="CT"){
     markPrivacyReview(markPrivacyReview(f,"pixel",true),"visual",true),
   ],UUID);
 }
-const answer=(label:string)=>({choices:[{finish_reason:"stop",message:{content:JSON.stringify({
+const integrated=(tasks:readonly string[]=[])=>({
+ schema:"opus-integrated-gemini-detector-synthesis/v1",
+ summary:"Исследовательский черновик: наблюдения Gemini и модельные кандидаты требуют врачебной проверки.",
+ comparisons:tasks.map(task=>({task,assessment:"not_comparable" as const,
+   reason:"Выбранные кадры не подтверждают положение модельного кандидата."})),
+ conflicts:["Выборка изображений не охватывает полный объём."],
+ limitations:["Не исследованы все срезы.","Отсутствие иных очагов не установлено."],
+ sourceCoverage:"sampled_frames_only",clinicallyValidated:false,
+});
+const answer=(label:string,tasks:readonly string[]=[])=>({choices:[{finish_reason:"stop",message:{content:JSON.stringify({
   role:"observations",reviewedImageIds:["frame-1"],
   observations:[{id:label,imageId:"frame-1",anatomy:"abstract synthetic region",
     sign:"visible pixels",uncertainty:"sampled 2D image only"}],
   limitations:["No full 3D study was reviewed."],
+  opusSynthesis:integrated(tasks),
 })}}]});
 test("Exact reviewed and metadata-stripped PNG is all that can reach the gateway",async()=>{
   const sent:AiGatewayRequest[]=[];
@@ -165,7 +175,7 @@ test("Genuine selected-study model counts join Gemini Vision -> Opus without DIC
  };
  const sent:AiGatewayRequest[]=[];
  const result=await reviewSanitizedSamples(packet(),async req=>{
-  sent.push(req);return answer(req.model===PILOT_GEMINI?"gemini-source-frame":"opus-source-frame");
+  sent.push(req);return answer(req.model===PILOT_GEMINI?"gemini-source-frame":"opus-source-frame",req.model===PILOT_GEMINI?[]:["lung_nodules"]);
  },undefined,null,bundle);
  assert.equal(sent.length,2);
  assert.deepEqual(sent.map(x=>x.model),[PILOT_GEMINI,PILOT_OPUS]);
@@ -244,6 +254,7 @@ test("Four-frame pilot requests provider-enforced JSON with every source ID and 
    role:"observations",
    reviewedImageIds:["frame-1","frame-2","frame-3","frame-4"],
    observations:[],limitations:["Only sampled synthetic frames were examined"],
+   opusSynthesis:integrated(),
  })}}]};
  const result=await reviewSanitizedSamples(input,async request=>{
   seen.push(request);return response;
@@ -291,4 +302,55 @@ test("Truncated Gemini structured JSON is never repaired into invented observati
   return {choices:[{finish_reason:"length",message:{content:'{"role":"observations"'}}]};
  }),/incomplete/);
  assert.equal(requests,1);
+});
+
+
+test("Opus's 2nd paid call must receive Gemini source-frame JSON AND real CLN task and deliver comparisons",async()=>{
+ const bound={
+  schema:"opus-sanitized-detector-consilium/v1" as const,modality:"CT" as const,
+  region:"chest" as const,
+  facts:([
+   ["lung_nodules","not_assessed"],["lung_tumor","completed"],
+   ["lungscape_model_regions","not_assessed"],["pleural_effusion","not_assessed"],
+   ["pericardial_effusion","not_assessed"],["pulmonary_embolism","not_assessed"],
+   ["mediastinal_nodes","not_assessed"],
+  ] as const).map(([task,status])=>status==="completed"?
+   {task,status,candidateCount:1,candidateVolumeMl:2.303572}:
+   {task,status,candidateCount:null,candidateVolumeMl:null}),
+  sourceIdentifiersSent:false as const,sourcePixelsSent:false as const,
+  clinicalValidation:false as const,negativeDiagnosisPermitted:false as const,
+ };
+ const seen:AiGatewayRequest[]=[];
+ const result=await reviewSanitizedSamples(packet("CT"),async request=>{
+   seen.push(request);
+   if(request.model===PILOT_GEMINI)return answer("gemini-first");
+   const raw=JSON.stringify(request.messages);
+   assert.match(raw,/gemini-first/);
+   assert.match(raw,/lung_tumor/);
+   assert.match(raw,/2\.303572/);
+   assert.doesNotMatch(JSON.stringify(seen[0].messages),/lung_tumor|2\.303572/);
+   assert.equal((request.responseFormat?.json_schema.schema.properties as Record<string,unknown>).opusSynthesis!==undefined,true);
+   return answer("opus-second",["lung_tumor"]);
+ },undefined,null,bound);
+ assert.equal(seen.length,2,"Only Gemini Vision and combined Opus calls");
+ assert.equal(result.opusSynthesis?.comparisons[0].task,"lung_tumor");
+ assert.equal(result.opusSynthesis?.comparisons[0].assessment,"not_comparable");
+ assert.match(result.opusSynthesis!.summary,/черновик/);
+ assert.equal(result.detectorEvidence?.facts[1].candidateVolumeMl,2.303572);
+});
+test("Opus cannot omit one completed detector from integrated JSON",async()=>{
+ const bound={
+  schema:"opus-sanitized-detector-consilium/v1" as const,modality:"CT" as const,region:"chest" as const,
+  facts:([
+   "lung_nodules","lung_tumor","lungscape_model_regions","pleural_effusion",
+   "pericardial_effusion","pulmonary_embolism","mediastinal_nodes",
+  ] as const).map(task=>task==="lung_tumor"?
+   {task,status:"completed" as const,candidateCount:1,candidateVolumeMl:2.304}:
+   {task,status:"not_assessed" as const,candidateCount:null,candidateVolumeMl:null}),
+  sourceIdentifiersSent:false as const,sourcePixelsSent:false as const,
+  clinicalValidation:false as const,negativeDiagnosisPermitted:false as const,
+ };
+ await assert.rejects(reviewSanitizedSamples(packet("CT"),async request=>
+  request.model===PILOT_GEMINI?answer("gemini"):answer("opus"),undefined,null,bound),
+  /opus_synthesis_missing_or_unbound_to_executed_detector_tasks/);
 });
