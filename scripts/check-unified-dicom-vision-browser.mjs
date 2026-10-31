@@ -113,7 +113,7 @@ try{
    researchOnly:true,diagnosticAccuracyValidated:false,
    opusSynthesis:{
     schema:"opus-integrated-gemini-detector-synthesis/v1",
-    summary:"Синтетическая учебная КТ. Получены наблюдения Gemini и Opus. Клиническая интерпретация не выполнялась.",
+    summary:"ИССЛЕДОВАНИЕ:\nСинтетическая учебная КТ, представлены отдельные кадры.\nМЕТОДИКА:\nОценены выборочные кадры, весь томографический ряд недоступен.\nОПИСАНИЕ:\nИсследуется фантом, клинические изменения не оцениваются.\nЗАКЛЮЧЕНИЕ:\nКлинических выводов по синтетическому фантому нет.\nРЕКОМЕНДАЦИИ:\nИспользовать исключительно для проверки программного интерфейса.",
     comparisons:[],conflicts:[],
     limitations:["Синтетический фантом; не отражает реальных пациентов."],
     sourceCoverage:"sampled_frames_only",clinicallyValidated:false,
@@ -130,9 +130,16 @@ try{
  assert.match(responses,/Gemini Vision/);assert.match(responses,/Opus Vision/);
  const integrated=cloud.locator('section[aria-label="Объединённое заключение Opus по Gemini JSON и детекторам"]');
  await integrated.waitFor();
- await integrated.getByRole("textbox",{name:"Редактируемое заключение врача"})
+ await integrated.getByRole("textbox",{name:"Редактируемое описание и заключение рентгенолога"})
    .fill("SYNTHETIC OPUS INTEGRATED REPORT after Gemini JSON.");
 
+ const reportDownloadPromise=page.waitForEvent("download");
+ await integrated.getByRole("button",{name:"Скачать заключение рентгенолога TXT"}).click();
+ const reportDownload=await reportDownloadPromise;
+ assert.equal(reportDownload.suggestedFilename(),"opus-preliminary-radiologist-report.txt");
+ const txt=join(fixture,"radiologist-report.txt");
+ await reportDownload.saveAs(txt);
+ assert.match(await readFile(txt,"utf8"),/SYNTHETIC OPUS INTEGRATED REPORT/);
  await cloud.getByRole("button",{name:"Показать исходный срез"}).first().click();
  await cloud.getByRole("button",{name:"На перепроверку"}).first().click();
  await cloud.getByRole("textbox",{name:/Рабочий синтез врача/}).fill("SYNTHETIC physician review — no diagnosis.");

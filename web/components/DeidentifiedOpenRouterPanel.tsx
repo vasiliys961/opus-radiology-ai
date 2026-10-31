@@ -201,6 +201,26 @@ export default function DeidentifiedOpenRouterPanel({
     }catch(e){if(!ctrl.signal.aborted)setError(e instanceof Error?e.message:"Ошибка позднего согласования Opus");}
     finally{setLateWorking(false);if(ctl.current===ctrl)ctl.current=null;}
   }
+  const downloadRadiologistText=()=>{
+    if(!result?.opusSynthesis)return;
+    try{
+      // Do not export a stale interpretation for changed/unbound DICOM frames.
+      bindLocalSanitizedReview(result,
+        exactReviewedHashes.map(f=>({imageId:f.imageId,reviewedPixelSha256:f.sha256})),
+        originalLocalFileIds);
+      const draft=validLateReview?lateDraft:integratedDraft;
+      if(!draft.trim()||draft.length>6000)throw Error("empty_report");
+      const blob=new Blob([draft.trim()+"\n"],{type:"text/plain;charset=utf-8"});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement("a");a.href=url;
+      a.download="opus-preliminary-radiologist-report.txt";
+      document.body.appendChild(a);a.click();a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),1000);
+      setDraftError("");
+    }catch{
+      setDraftError("Исходный срез изменён или текст заключения пуст. Сохранение запрещено.");
+    }
+  };
   const downloadLocalReview=()=>{
     if(!result)return;
     try{
@@ -305,14 +325,20 @@ export default function DeidentifiedOpenRouterPanel({
         наблюдения по отдельным срезам, не полноценный анализ исследования
         и не диагноз. Врач сверяет их с исходным DICOM локально.</p>
       {result.opusSynthesis&&<section aria-label="Объединённое заключение Opus по Gemini JSON и детекторам" className="ora-reviewer-note">
-        <h4>Claude Opus · предварительное объединённое заключение</h4>
+        <h4>Заключение врача-рентгенолога · предварительный протокол Opus</h4>
         <p>Opus сопоставил независимый JSON Gemini, собственный просмотр выбранных кадров
           и выполненные детекторы. Охват ограничен выборкой, а не всей КТ/МРТ.
           Повторный вызов Gemini не нужен.</p>
-        <label>Редактируемое заключение врача
-          <textarea rows={8} maxLength={4000} value={integratedDraft}
+        <label>Редактируемое описание и заключение рентгенолога
+          <textarea rows={14} maxLength={4000} value={integratedDraft}
             onChange={e=>setIntegratedDraft(e.target.value)}/>
         </label>
+        <button type="button" onClick={downloadRadiologistText}>
+          Скачать заключение рентгенолога TXT
+        </button>
+        <p>Машинный JSON остаётся внутренним протоколом аудита;
+          для врача основным результатом является текст выше.</p>
+        <details><summary>Техническая сверка с детекторами</summary>
         {result.opusSynthesis.comparisons.map(entry=><p key={entry.task}>
           <strong>{entry.task}</strong>: {entry.assessment==="compatible"?"согласуется в доступных кадрах":
             entry.assessment==="discordant"?"расхождение":"недостаточно данных для сопоставления"}.
@@ -320,6 +346,7 @@ export default function DeidentifiedOpenRouterPanel({
         </p>)}
         {result.opusSynthesis.conflicts.map((x,i)=><p key={i}>Расхождение: {x}</p>)}
         {result.opusSynthesis.limitations.map((x,i)=><p key={i}>Ограничение: {x}</p>)}
+        </details>
       </section>}
       {lateEvidenceReady&&<section aria-label="Позднее согласование детекторов с Opus" className="ora-reviewer-note">
         <h4>Детектор завершился после Vision · согласовать с Claude Opus</h4>
@@ -340,7 +367,7 @@ export default function DeidentifiedOpenRouterPanel({
         {lateWorking&&<button type="button" onClick={()=>ctl.current?.abort()}>Отменить Opus</button>}
         {validLateReview&&<div role="status">
           <h4>Opus · общий предварительный отчёт для врача</h4>
-          <textarea rows={7} maxLength={6000} value={lateDraft}
+          <textarea rows={14} maxLength={6000} value={lateDraft}
             onChange={e=>setLateDraft(e.target.value)}/>
           {validLateReview.draft.limitations.map((t,i)=><p key={i}>{t}</p>)}
           <p>Отчёт сохраняется с первоначальными наблюдениями и решениями врача

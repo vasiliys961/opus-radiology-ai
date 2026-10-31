@@ -14,6 +14,7 @@ import {validateSanitizedDetectorBundle,type SanitizedDetectorBundle,type Consil
 import {safeXrvScores,type SanitizedCxrScores} from "./xrv-original-cxr.ts";
 import {validateSanitizedClnEvidence,type SanitizedClnTumorEvidence} from "./cln-tumor-consilium.ts";
 import {validateClnFrameRelativeEvidence,type ClnFrameRelativeEvidence} from "./cln-frame-relative-evidence.ts";
+import {SENIOR_RADIOLOGIST_PROMPT,hasRadiologistReportSections} from "./senior-radiologist-report.ts";
 
 export const CLOUD_PILOT_MAX_IMAGE_BASE64=2_000_000;
 export const CLOUD_PILOT_MAX_FRAMES=4;
@@ -44,7 +45,7 @@ export function validateOpusIntegratedSynthesis(
    ["schema","summary","comparisons","conflicts","limitations","sourceCoverage","clinicallyValidated"].sort().join(",")||
    v.schema!=="opus-integrated-gemini-detector-synthesis/v1"||
    v.sourceCoverage!=="sampled_frames_only"||v.clinicallyValidated!==false||
-   !short(v.summary,4000)||!Array.isArray(v.comparisons)||
+   !hasRadiologistReportSections(v.summary)||!Array.isArray(v.comparisons)||
    v.comparisons.length!==completedTasks.length||
    !Array.isArray(v.conflicts)||v.conflicts.length>8||
    !v.conflicts.every(x=>short(x,400))||
@@ -147,7 +148,7 @@ export function sourceFrameReviewFormat(frameIds:readonly string[],opusTasks?:re
             type:"object",additionalProperties:false,
             properties:{
               schema:{type:"string",enum:["opus-integrated-gemini-detector-synthesis/v1"]},
-              summary:{type:"string",description:"Editable provisional radiology report in Russian. Compare independent Gemini JSON and actual detector findings; partial image coverage only."},
+              summary:{type:"string",description:"Standard Russian radiology protocol in five sections ИССЛЕДОВАНИЕ, МЕТОДИКА, ОПИСАНИЕ (organ-by-organ), ЗАКЛЮЧЕНИЕ, РЕКОМЕНДАЦИИ, based on actual sampled image coverage, with no invented normal structures, no AI jargon."},
               comparisons:{type:"array",minItems:opusTasks.length,maxItems:opusTasks.length,
                 description:"Exactly one entry for EACH actually completed detector task. Do NOT include unavailable or unperformed tasks.",
                 items:{type:"object",additionalProperties:false,properties:{
@@ -287,7 +288,8 @@ export async function reviewSanitizedSamples(
       "must be explicit. Unperformed tasks must remain NOT ASSESSED. "+
       "If source-bound frame-relative CLN candidate anchors are supplied, compare their position to Gemini and your own image observation for the referenced frame, explicitly explain spatial concordance or discordance instead of merely saying location unavailable. An anchor is not a lesion contour or ground truth. "+
       "Your summary is not a confirmed diagnosis, whole-series review or validated AI accuracy. "+
-      "No invented anatomy, lesion side, staging, measurements or history."},
+      "No invented anatomy, lesion side, staging, measurements or history. "+
+      SENIOR_RADIOLOGIST_PROMPT},
     {role:"user",content:[...(messages[1].content as Array<Record<string,unknown>>),
       {type:"text",text:"Prior source-checked Gemini observations, NOT "+
         "independent clinical validation: "+JSON.stringify(a)},
@@ -317,7 +319,7 @@ export async function reviewSanitizedSamples(
         JSON.stringify(cxr)+". Absence of elevated scores does not exclude pathology."}]:[])]},
   ];
   const opus=await call({provider:"openrouter",role:"vision",
-    model:PILOT_OPUS,maxTokens:1800,messages:opusMessages,
+    model:PILOT_OPUS,maxTokens:3500,messages:opusMessages,
     responseFormat:opusFormat,requireParameters:true},signal);
   const opusRaw=parseStrictObject(readCompletionText(opus));
   const b=parseRoleResponse(opusRaw,"observations",ids);
