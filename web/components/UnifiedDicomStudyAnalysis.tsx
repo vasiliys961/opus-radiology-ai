@@ -227,7 +227,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
    const controller=new AbortController();active.current=controller;
    setBusy(true);setStatus("Проверяем совместимость и доступность настоящей модели...");
    onDetectorEvidence?.(series.key,null);
-   setError("");setIch(null);setWmh(null);setBrainResult(null);setChestSource(null);setChestNodules(null);
+   setError("");setIch(null);setWmh(null);setBrainResult(null);setChestSource(null);setChestNodules(null);setChestCln(null);setLungscapeResult(null);
    setChestEffusion(null);setChestPe(null);setChestNodes(null);setChestIssues([]);setAbdomenResult(null);setRenalMonaiResult(null);setRenalMonaiIssue("");setXrvReport(null);setDecisions({});setDraftText("");
    const session:WorkerSession={endpoint,token};
    const progress=(message:string)=>{

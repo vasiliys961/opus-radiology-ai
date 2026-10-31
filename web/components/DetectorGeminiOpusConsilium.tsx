@@ -17,7 +17,7 @@ export default function DetectorGeminiOpusConsilium({snapshot,onBundleReady}:{
   try{return {data:assembleSanitizedDetectorBundle(snapshot),error:""};}
   catch(e){return {data:null,error:e instanceof Error?e.message:"Не исследовано"};}
  },[snapshot.modality,snapshot.region,snapshot.nativeSourceSha256,snapshot.nodules,
-    snapshot.effusion,snapshot.pe,snapshot.nodes,snapshot.abdomen,
+    snapshot.cln,snapshot.lungscape,snapshot.effusion,snapshot.pe,snapshot.nodes,snapshot.abdomen,
     snapshot.ich,snapshot.wmh,snapshot.brain]);
  const stamp=JSON.stringify(result.data);
  useEffect(()=>{
