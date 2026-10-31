@@ -11,6 +11,7 @@ on:
       - "scripts/prepare-public-cln-gemini-opus-frames.py"
       - "web/lib/cln-frame-relative-evidence.ts"
       - "web/lib/sanitized-cloud-review.ts"
+      - "web/lib/ai-gateway.ts"
       - "web/lib/radiologist-protocol.ts"
       - ".github/workflows/real-public-cln-gemini-opus.yml"
   workflow_dispatch:
