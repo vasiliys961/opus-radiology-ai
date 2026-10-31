@@ -62,13 +62,25 @@ export function formatRadiologistProtocol(
 ):string{
  if(!validateRadiologistProtocol(protocol))throw Error("invalid_radiologist_protocol");
  const heading=modality==="CT"?"КТ":modality==="MR"?"МРТ":"Рентгенография";
+ // Render the provider's conventional anatomical headings as real paragraphs.
+ // This only adds presentation breaks and never changes clinical observations.
+ let anatomicalDescription=protocol.description.trim();
+ const headings=[...new Set([
+  ...standardRadiologistSections("CT","chest"),
+  ...standardRadiologistSections("CT","abdomen"),
+  ...standardRadiologistSections("MR","brain"),
+  ...standardRadiologistSections("DX",null),
+ ])].sort((a,b)=>b.length-a.length);
+ for(const h of headings)
+  anatomicalDescription=anatomicalDescription.replaceAll(h+":","\\n\\n"+h+":");
+ anatomicalDescription=anatomicalDescription.trim();
  return [
   heading+" — предварительный протокол описания (для проверки врачом)",
   "",
   "МЕТОДИКА",
   protocol.technique.trim(),"",
   "ОПИСАНИЕ",
-  protocol.description.trim(),"",
+  anatomicalDescription,"",
   "ЗАКЛЮЧЕНИЕ",
   protocol.conclusion.trim(),"",
   "РЕКОМЕНДАЦИИ",
