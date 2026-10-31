@@ -48,7 +48,7 @@ export function createClnFrameRelativeEvidence(input:{
  const anchors=nativeCandidates.map(c=>{
   if(!Number.isSafeInteger(c.componentId)||c.componentId<1||seen.has(c.componentId)||
      !Array.isArray(c.sourceVoxelCentroidIJK)||c.sourceVoxelCentroidIJK.length!==3||
-     c.sourceVoxelCentroidIJK.some((v,i)=>!Number.isFinite(v)||v<0||v>imageDimensions[i]-1)||
+     c.sourceVoxelCentroidIJK.some((v:number,i:number)=>!Number.isFinite(v)||v<0||v>imageDimensions[i]-1)||
      !Number.isFinite(c.candidateVolumeMl)||c.candidateVolumeMl<=0||c.candidateVolumeMl>100000)
     throw Error("invalid_original_cln_candidate_geometry");
   seen.add(c.componentId);
