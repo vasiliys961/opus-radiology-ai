@@ -42,14 +42,19 @@ jobs:
       - name: Install original nnU-Net CPU runtime plus local private HTTP dependencies
         run: |
           set -euo pipefail
-          python -m pip install --no-cache-dir "torch==2.5.1+cpu" --index-url https://download.pytorch.org/whl/cpu
-          python -m pip install --no-cache-dir "nnunetv2==2.7.0" "huggingface_hub==0.35.3" \
+          python -m pip install --no-cache-dir "torch==2.5.1+cpu" "torchvision==0.20.1+cpu" --index-url https://download.pytorch.org/whl/cpu
+          # Both pins must also be present in the SECOND resolution command.
+          # Otherwise pip can replace the CPU-only model runtime with new CUDA torch.
+          python -m pip install --no-cache-dir \
+            --extra-index-url https://download.pytorch.org/whl/cpu \
+            "torch==2.5.1+cpu" "torchvision==0.20.1+cpu" "numpy==1.26.4" \
+            "nnunetv2==2.7.0" "huggingface_hub==0.35.3" \
             "nibabel==5.3.2" "psutil==7.0.0" "fastapi==0.115.12" \
             "uvicorn==0.34.2" "requests==2.32.3"
           python -m pip check
           python - <<'PY'
           import torch,shutil
-          assert torch.version.cuda is None
+          assert torch.version.cuda is None and torch.__version__.startswith("2.5.1")
           assert shutil.which("nnUNetv2_predict") is not None
           PY
       - name: GENUINE published CLN checkpoint and native positive CT → worker upload, 3D CPU inference, source-bound report
