@@ -18,8 +18,9 @@ test("ordinary CT protocol must have lungs, pleura, mediastinum, heart and bones
  assert.ok(validateStandardAnatomicalDescription(chest,"CT","chest"));
  const text=formatRadiologistProtocol(chest,"CT");
  assert.match(text,/МЕТОДИКА[\s\S]*ОПИСАНИЕ[\s\S]*ЗАКЛЮЧЕНИЕ[\s\S]*РЕКОМЕНДАЦИИ/);
- for(const h of standardRadiologistSections("CT","chest"))
-  assert.ok(text.includes("\n\n"+h+":"),"Each organ should be on its own paragraph: "+h);
+ for(const [i,h] of standardRadiologistSections("CT","chest").entries())
+  assert.ok(text.includes((i===0?"ОПИСАНИЕ\\n":"\\n\\n")+h+":"),
+    "Each organ should be on its own paragraph: "+h);
  assert.doesNotMatch(text,/PatientName|SOPInstanceUID|StudyInstanceUID/);
  assert.match(text,/По представленным изображениям отдел достоверно не оценивается/);
 });
