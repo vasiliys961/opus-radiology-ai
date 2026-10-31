@@ -62,7 +62,7 @@ def main():
   window=(np.clip(plane,-1000,400)+1000)*(255/1400)
   pixels=np.uint8(np.round(window))
   # Public pixel-only PNG with no annotations, NIfTI headers, names or UID.
-  Image.fromarray(np.flipud(pixels.T)).save(a.dest/f"frame-{i}.png",optimize=True)
+  Image.fromarray(np.flipud(pixels.T)).convert("RGB").save(a.dest/f"frame-{i}.png",optimize=True)
  print("PINNED MSD SOURCE FRAMES VERIFIED",json.dumps({
   "case":"public-MSD-Lung-043","sourceSHA256":SHA_CT,
   "checkpointSHA256":SHA_MODEL,"sliceCount":4,
