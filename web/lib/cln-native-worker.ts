@@ -3,6 +3,8 @@
  */
 import {originalNiftiSha256} from "./live-nodule-worker.ts";
 import {pause} from "./local-worker.ts";
+/** SHA-256 of the original publisher checkpoint measured on verified positive MSD CT. */
+export const CLN_ORIGINAL_CHECKPOINT_SHA256="8c08ec796fa2b786fe99ddfad4fe6314e98fdd8820c59527be3c4105f7955d87";
 export type ClnReport={
  schema:"opus-original-cln-upload-result/v1";
  sourceNiftiSha256:string;realOriginalModelForwardCompleted:true;
@@ -23,12 +25,16 @@ export async function checkAutomaticClnReady(signal?:AbortSignal){
     c.modelId==="Lab-Rasool/CLN-Segmenter-MSD-fold0"&&
     c.originalWeightsVerified===true&&c.imageUpload===true&&
     c.researchOnly===true&&c.patientMode===false&&
-    typeof c.checkpointSha256==="string"&&/^[a-f0-9]{64}$/.test(c.checkpointSha256);
+    c.checkpointSha256===CLN_ORIGINAL_CHECKPOINT_SHA256;
  }catch{return false;}
 }
 export async function executeOriginalCln(source:File,signal:AbortSignal,onProgress:(message:string)=>void):Promise<ClnReport>{
  const cap=await call("/v1/cln/capabilities",{signal});
- if(cap.originalWeightsVerified!==true||cap.patientMode!==false||cap.imageUpload!==true)
+ if(cap.schema!=="opus-original-cln-upload-worker/v1"||
+    cap.modelId!=="Lab-Rasool/CLN-Segmenter-MSD-fold0"||
+    cap.checkpointSha256!==CLN_ORIGINAL_CHECKPOINT_SHA256||
+    cap.originalWeightsVerified!==true||cap.patientMode!==false||
+    cap.researchOnly!==true||cap.imageUpload!==true)
   throw Error("Оригинальный CLN worker не готов");
  const sha=await originalNiftiSha256(source,signal);
  onProgress("CLN: передаём исходный HU-объём на приватный исполнитель...");
@@ -54,9 +60,10 @@ export async function executeOriginalCln(source:File,signal:AbortSignal,onProgre
     raw.researchOnly!==true||raw.clinicalValidation!==false||
     raw.negativeDiagnosisPermitted!==false||!Array.isArray(raw.nativeCandidates)||
     !Number.isSafeInteger(raw.candidateCount)||Number(raw.candidateCount)!==raw.nativeCandidates.length||
-    !/^[a-f0-9]{64}$/.test(String(raw.checkpointSha256))||
+    raw.checkpointSha256!==CLN_ORIGINAL_CHECKPOINT_SHA256||
     raw.nativeCandidates.some((x:unknown)=>!x||typeof x!=="object"||
-      !Number.isFinite((x as {candidateVolumeMl?:number}).candidateVolumeMl)))
+      !Number.isFinite((x as {candidateVolumeMl?:number}).candidateVolumeMl)||
+      Number((x as {candidateVolumeMl?:number}).candidateVolumeMl)<0))
     throw Error("CLN не вернул подтверждённую модельную маску");
   return raw as ClnReport;
  }finally{
