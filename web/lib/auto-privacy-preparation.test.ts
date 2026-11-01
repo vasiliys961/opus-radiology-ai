@@ -81,6 +81,6 @@ test("automatic privacy OCR retries after Strict Mode replay abort",()=>{
   "Cleanup must release its aborted preview lease for React Strict Mode replay");
  assert.match(component,/version!==generation\.current\|\|controller\.signal\.aborted/,
   "Stale aborted OCR must never replace the next attempt's source-bound frames");
- assert.match(component,/pixelReviewSha256&&f\.visualReviewSha256/,
+ assert.match(component,/f\.pixelReviewSha256===f\.sha256&&f\.visualReviewSha256===f\.sha256/,
   "Auto OCR must not bypass clinician review");
 });
