@@ -9,10 +9,12 @@ import {readNoduleNiftiHeader,verifyNoduleSource} from "../lib/live-nodule-repor
 import {transformPoint} from "../lib/segmentation-mask";
 import type {ClnReport} from "../lib/cln-native-worker";
 import {bindOriginalClnCandidates,type ClnSliceCandidate,type ClnVerifiedLocalEvidence} from "../lib/cln-physician-local-review";
+import {restoreMissingClnSource} from "../lib/cln-original-source-recovery";
+import {prepareDicomMonaiFile} from "../lib/dicom-monai-direct";
 
 type Decision="suspicious_on_review"|"dismissed_on_review"|"unreviewed";
-export default function ClnOriginalPhysicianReview({report,series,source,onNavigate,onVerifiedCandidates}:{
- report:ClnReport;series:DicomSeries;source:File;onNavigate:(slice:number)=>void;
+export default function ClnOriginalPhysicianReview({report,series,source,sourceFiles,onNavigate,onVerifiedCandidates}:{
+ report:ClnReport;series:DicomSeries;source:File;sourceFiles:readonly File[];onNavigate:(slice:number)=>void;
  onVerifiedCandidates?:(evidence:ClnVerifiedLocalEvidence)=>void;
 }){
  const [items,setItems]=useState<ClnSliceCandidate[]|null>(null);
@@ -23,7 +25,20 @@ export default function ClnOriginalPhysicianReview({report,series,source,onNavig
   setItems(null);setError("");setDecisions({});
   void (async()=>{
    try{
-    const geometry=fullCtGeometry(series),native=await readNoduleNiftiHeader(source);
+    // The original nnU-Net result is already final. Only reconstruct the
+    // temporary HU-NIfTI if Chromium has evicted its OPFS-backed File, and
+    // always verify the exact model-source SHA before binding coordinates.
+    const verified=await restoreMissingClnSource(source,async candidate=>{
+      await readNoduleNiftiHeader(candidate);
+      await verifyNoduleSource(candidate,report.sourceNiftiSha256,controller.signal);
+    },async()=>{
+      if(sourceFiles.length!==series.members.length)
+        throw Error("Исходная DICOM-серия недоступна для восстановления HU.");
+      return prepareDicomMonaiFile(series,[...sourceFiles],controller.signal);
+    });
+    if(controller.signal.aborted)return;
+    const geometry=fullCtGeometry(series);
+    const native=await readNoduleNiftiHeader(verified.source);
     if(native.dimensions.some((n,i)=>n!==geometry.dimensions[i]))
      throw Error("CLN native dimensions differ from original DICOM");
     // Check the physical position of all eight volume corners, not only spacing.
@@ -33,7 +48,7 @@ export default function ClnOriginalPhysicianReview({report,series,source,onNavig
      if(Math.hypot(...actual.map((n,i)=>n-expected[i]))>0.05)
       throw Error("CLN NIfTI/DICOM geometry mismatch");
     }
-    await verifyNoduleSource(source,report.sourceNiftiSha256,controller.signal);
+    // SHA-256 of the restored or original source was validated above.
     if(controller.signal.aborted)return;
     const candidates=bindOriginalClnCandidates(report,native.dimensions,
      series.members.map(m=>m.metadata.sopInstanceUid??""));
@@ -45,7 +60,7 @@ export default function ClnOriginalPhysicianReview({report,series,source,onNavig
    }
   })();
   return ()=>controller.abort();
- },[report,series,source]);
+ },[report,series,source,sourceFiles]);
  function exportReview(){
   if(!items)return;
   const payload={
