@@ -25,8 +25,6 @@ import {checkOriginalXrvReady,runCxrXrvFromDicom,XRV_CXR_LABELS,type OriginalXrv
 import CxrIndependentVisionReview from "./CxrIndependentVisionReview";
 import OriginalWorkerFleetReadiness from "./OriginalWorkerFleetReadiness";
 import {checkAutomaticClnReady,executeOriginalCln,type ClnReport} from "../lib/cln-native-worker";
-import {readNoduleNiftiHeader,verifyNoduleSource} from "../lib/live-nodule-report";
-import {restoreMissingClnSource} from "../lib/cln-original-source-recovery";
 import ClnOriginalPhysicianReview from "./ClnOriginalPhysicianReview";
 import type {ClnVerifiedLocalEvidence} from "../lib/cln-physician-local-review";
 import {checkAutomaticLungscapeReady,executeOriginalLungscape,type LungscapeReport} from "../lib/lungscape-native-worker";
@@ -335,22 +333,10 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
           try{
             const tumor=await executeOriginalCln(nifti,controller.signal,progress);
             if(version!==serial.current||controller.signal.aborted)return;
-            // The original browser-owned OPFS File can be invalidated during
-            // a long CPU model execution. Rebuild only if it has disappeared.
-            // Verify the *exact* original CLN SHA before enabling DICOM slices.
-            const reviewed=await restoreMissingClnSource(nifti,
-              async source=>{
-                await readNoduleNiftiHeader(source);
-                await verifyNoduleSource(source,tumor.sourceNiftiSha256,controller.signal);
-              },
-              ()=>prepareDicomMonaiFile(sourceSeries,original as File[],
-                controller.signal,progress));
-            if(version!==serial.current||controller.signal.aborted)return;
-            if(reviewed.restored){
-              nifti=reviewed.source;
-              setChestSource(nifti);
-              progress("Исходный HU-объём восстановлен из DICOM и подтверждён SHA-256 CLN.");
-            }
+            // Publish the genuine CLN report immediately. The physician
+            // component separately verifies exact source SHA/geometry and
+            // can rebuild an evicted OPFS source from the ORIGINAL DICOM.
+            // Never block model completion on an unreadable browser File.
             setChestCln(tumor);completed++;
           }catch(e){if(controller.signal.aborted)return;
             problems.push("CLN опухоль лёгкого: "+(e instanceof Error?e.message:"недоступен"));
@@ -1010,7 +996,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
       координаты кандидатов и решения врача. Не загружайте такой файл в публичный GitHub или облачный LLM.
       Это не подписанное клиническое заключение.</p>
   </div>}
-  {chestCln&&chestSource&&<ClnOriginalPhysicianReview report={chestCln} series={sourceSeries} source={chestSource} onNavigate={onNavigate}
+  {chestCln&&chestSource&&<ClnOriginalPhysicianReview report={chestCln} series={sourceSeries} source={chestSource} sourceFiles={sourceSeries.members.map(m=>files.get(m.id)).filter((f):f is File=>!!f)} onNavigate={onNavigate}
      onVerifiedCandidates={verified=>onClnBoundReady?.(series.key,verified)}/>}
    {lungscapeResult&&<p role="status">LungSCAPE191: настоящий инференс завершён, компонентов {lungscapeResult.componentCount}. Классы модели не являются диагнозом ILD/UIP/IPF.</p>}
   {(chestNodules||chestCln||lungscapeResult||chestEffusion||chestPe||chestNodes||abdomenResult||ich||wmh||brainResult)&&
