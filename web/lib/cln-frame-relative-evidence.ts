@@ -16,7 +16,7 @@ export type ClnFrameRelativeAnchor={
 export type ClnFrameRelativeEvidence={
  schema:"opus-cln-frame-relative-anchors/v1";
  task:"lung_tumor";
- alignment:"same-public-nifti-voxel-to-png";
+ alignment:"same-public-nifti-voxel-to-png"|"source-dicom-pixel-to-png";
  candidateAnchors:ClnFrameRelativeAnchor[];
  sourceVoxelCoordinatesSent:false;
  originalDicomIdentifiersSent:false;
@@ -31,8 +31,13 @@ export function createClnFrameRelativeEvidence(input:{
  imageDimensions:[number,number,number];
  nativeCandidates:readonly {componentId:number;sourceVoxelCentroidIJK:[number,number,number];candidateVolumeMl:number}[];
  reviewedFrames:readonly {frameId:string;sourceAxialIndex:number}[];
+ /** DICOM canvas preserves source row top-to-bottom; public NIfTI PNG uses flipud. */
+ alignment?:"same-public-nifti-voxel-to-png"|"source-dicom-pixel-to-png";
 }):ClnFrameRelativeEvidence{
  const {sourceImageSha256,detectorSourceImageSha256,imageDimensions,nativeCandidates,reviewedFrames}=input;
+ const alignment=input.alignment??"same-public-nifti-voxel-to-png";
+ if(alignment!=="same-public-nifti-voxel-to-png"&&alignment!=="source-dicom-pixel-to-png")
+  throw Error("unsupported_original_frame_pixel_orientation");
  if(!/^[a-f0-9]{64}$/.test(sourceImageSha256)||sourceImageSha256!==detectorSourceImageSha256)
   throw Error("candidate_source_not_bound_to_reviewed_png_volume");
  if(imageDimensions.length!==3||!imageDimensions.every(n=>Number.isSafeInteger(n)&&n>20&&n<=4096))
@@ -58,14 +63,15 @@ export function createClnFrameRelativeEvidence(input:{
   // PIL image is built by np.flipud(nativePlane.T):
   // native axis 0 -> PNG pixel X, native axis 1 -> inverted PNG pixel Y.
   const xFraction=four((x+.5)/imageDimensions[0]);
-  const yFraction=four((imageDimensions[1]-y-.5)/imageDimensions[1]);
+  const yFraction=four(alignment==="source-dicom-pixel-to-png"?
+   (y+.5)/imageDimensions[1]:(imageDimensions[1]-y-.5)/imageDimensions[1]);
   const axialSliceOffset=four(z-closest.sourceAxialIndex);
   return {candidateId:c.componentId,frameId:closest.frameId,
     xFraction,yFraction,axialSliceOffset,candidateVolumeMl:four(c.candidateVolumeMl)};
  });
  const result:ClnFrameRelativeEvidence={
   schema:"opus-cln-frame-relative-anchors/v1",task:"lung_tumor",
-  alignment:"same-public-nifti-voxel-to-png",candidateAnchors:anchors,
+  alignment,candidateAnchors:anchors,
   sourceVoxelCoordinatesSent:false,originalDicomIdentifiersSent:false,
   originalDicomSopRegistrationVerified:false,clinicalValidation:false,researchOnly:true,
  };
@@ -82,7 +88,7 @@ export function validateClnFrameRelativeEvidence(
    "sourceVoxelCoordinatesSent","originalDicomIdentifiersSent",
    "originalDicomSopRegistrationVerified","clinicalValidation","researchOnly"].sort().join(",")||
    v.schema!=="opus-cln-frame-relative-anchors/v1"||v.task!=="lung_tumor"||
-   v.alignment!=="same-public-nifti-voxel-to-png"||
+   !["same-public-nifti-voxel-to-png","source-dicom-pixel-to-png"].includes(String(v.alignment))||
    v.sourceVoxelCoordinatesSent!==false||v.originalDicomIdentifiersSent!==false||
    v.originalDicomSopRegistrationVerified!==false||v.clinicalValidation!==false||
    v.researchOnly!==true||!Array.isArray(v.candidateAnchors)||
