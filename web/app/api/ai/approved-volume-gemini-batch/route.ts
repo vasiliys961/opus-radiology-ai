@@ -18,7 +18,7 @@ function allowedLocal(req:NextRequest):boolean{
   const host=req.headers.get("host")??"";
   return process.env.NODE_ENV==="development"&&LOCAL_HOST.test(host)&&
     ["localhost","127.0.0.1"].includes(req.nextUrl.hostname)&&
-    !req.nextUrl.search()&&
+    !req.nextUrl.search&&
     [null,"same-origin"].includes(req.headers.get("sec-fetch-site"))&&
     req.headers.get("origin")==="http://"+host;
 }
