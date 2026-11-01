@@ -22,7 +22,7 @@ const actionLabels:Record<PrivacyAction["kind"],string>={redacted:"Скрыти�
   "text-retained":"Надписи оставлены по ручной отметке","review-set":"Ручная проверка","copy-restored":"Копия восстановлена · проверки сняты"};
 
 /** OCR reads same-origin fixed assets only. No image upload or recognized-text export. */
-export default function VisionPrivacyPreparation({previews,modality,originalLocalFileIds,onOpenOriginalSlice,specialistFacts,specialistLocalBinding,localLaa950,originalDetectorEvidence=null,originalCxrEvidence=null,frameRelativeClnEvidence=null,autoStartAfterDetectors=false}:{
+export default function VisionPrivacyPreparation({previews,modality,originalLocalFileIds,onOpenOriginalSlice,specialistFacts,specialistLocalBinding,localLaa950,originalDetectorEvidence=null,originalCxrEvidence=null,frameRelativeClnEvidence=null,autoStartAfterDetectors=false,originalDetectorsBusy=false}:{
   previews:readonly (string|undefined)[];modality:string;
   originalLocalFileIds:readonly string[];
   onOpenOriginalSlice:(localFileId:string)=>void;
@@ -33,6 +33,7 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
   originalCxrEvidence?:OriginalXrvCxrResult|null;
   frameRelativeClnEvidence?:ClnFrameRelativeEvidence|null;
   autoStartAfterDetectors?:boolean;
+  originalDetectorsBusy?:boolean;
 }) {
   const [frames,setFrames]=useState<PrivacyFrame[]>([]),[selected,setSelected]=useState(0);
   const [error,setError]=useState(""),[busy,setBusy]=useState(false);
@@ -298,6 +299,7 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
       </section>}
     </>}
     {frames.length>0&&<DeidentifiedOpenRouterPanel
+      originalDetectorsBusy={originalDetectorsBusy}
       key={frames.map(f=>f.sha256).join(":")}
       enabledByLocalChecks={pilotReady}
       exactReviewedHashes={frames.map(f=>({imageId:f.frameId,sha256:f.sha256}))}
