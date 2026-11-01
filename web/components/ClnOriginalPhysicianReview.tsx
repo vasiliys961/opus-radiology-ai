@@ -23,7 +23,14 @@ export default function ClnOriginalPhysicianReview({report,series,source,onNavig
   setItems(null);setError("");setDecisions({});
   void (async()=>{
    try{
-    const geometry=fullCtGeometry(series),native=await readNoduleNiftiHeader(source);
+    // OPFS File objects can become stale during a long original-model CPU run.
+    // Re-open the exact local browser-owned source (never create/reconstruct it).
+    // SHA-256 below still proves the bytes match this CLN result.
+    const original=source.name==="opus-active-monai-chest-ct.nii"
+      ?await (await (await navigator.storage.getDirectory())
+        .getFileHandle(source.name,{create:false})).getFile():source;
+    if(original.size!==source.size)throw Error("Исходный HU-объём изменён после инференса CLN");
+    const geometry=fullCtGeometry(series),native=await readNoduleNiftiHeader(original);
     if(native.dimensions.some((n,i)=>n!==geometry.dimensions[i]))
      throw Error("CLN native dimensions differ from original DICOM");
     // Check the physical position of all eight volume corners, not only spacing.
@@ -33,7 +40,7 @@ export default function ClnOriginalPhysicianReview({report,series,source,onNavig
      if(Math.hypot(...actual.map((n,i)=>n-expected[i]))>0.05)
       throw Error("CLN NIfTI/DICOM geometry mismatch");
     }
-    await verifyNoduleSource(source,report.sourceNiftiSha256,controller.signal);
+    await verifyNoduleSource(original,report.sourceNiftiSha256,controller.signal);
     if(controller.signal.aborted)return;
     const candidates=bindOriginalClnCandidates(report,native.dimensions,
      series.members.map(m=>m.metadata.sopInstanceUid??""));
