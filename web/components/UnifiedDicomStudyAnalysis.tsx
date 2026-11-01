@@ -3,6 +3,7 @@
 import {useEffect,useMemo,useRef,useState} from "react";
 import type {DicomSeries} from "../lib/dicom-series";
 import {planNativeStudyAnalysis} from "../lib/unified-study-dispatch";
+import {eligibleVisionOnlyFallback} from "../lib/vision-only-fallback";
 import {verifyRenalThreePhaseStudy,type RenalPhaseRole} from "../lib/renal-three-phase-gate";
 import {runRenalMonaiThreePhase,type RenalMonaiResult} from "../lib/renal-monai-direct";
 import {prepareDicomMonaiFile,prepareDicomCtForPathology} from "../lib/dicom-monai-direct";
@@ -653,6 +654,17 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
   <p><strong>{plan.title}</strong> · текущая исходная DICOM-серия. Автоматический выбор по известной модальности;
     наличие настоящих весов подтверждается только worker при запуске.</p>
   {plan.reason&&<p role="status">Не запущено: {plan.reason}</p>}
+  {!plan.route&&eligibleVisionOnlyFallback(series,available)&&
+    <div className="cs-geometry" aria-label="Независимый Vision без патологического детектора">
+      <p>Специализированный детектор для данной исходной КТ/МРТ недоступен.
+        Можно продолжить независимую локальную подготовку изображений для Gemini
+        и Opus. Несмотренные срезы не будут объявлены нормальными.</p>
+      <button type="button" onClick={()=>onReadyForVision?.(series.key)}>
+        Начать анализ изображений без детектора
+      </button>
+      <p>Исходные DICOM остаются локально. Передача обезличенных изображений
+        в облако возможна только после отдельной проверки и разрешения.</p>
+    </div>}
   {plan.route&&<>
    <details>
     <summary>Настройки приватного исполнителя и разрешение</summary>
