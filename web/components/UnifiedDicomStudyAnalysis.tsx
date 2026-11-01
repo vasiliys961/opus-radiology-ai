@@ -65,7 +65,8 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
    clinicianConfirmedChest:clinicianConfirmedChest&&confirmableChest,
  }),[sourceSeries,available,clinicianConfirmedChest,confirmableChest]);
  const visionOnlyAvailable=useMemo(()=>
-  canUseVisionOnlyAsPrimary(series,available),[series,available]);
+  plan.route===null&&canUseVisionOnlyAsPrimary(series,available),
+  [plan.route,series,available]);
  useEffect(()=>{setClinicianConfirmedChest(false);},[series,files]);
  const [renalPhaseRoles,setRenalPhaseRoles]=useState<Partial<Record<RenalPhaseRole,string>>>({});
  const [renalMonaiResult,setRenalMonaiResult]=useState<RenalMonaiResult|null>(null);
