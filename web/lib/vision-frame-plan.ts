@@ -13,7 +13,7 @@ export type VisionFramePlanEntry = {
 export type VisionFramePlan = {
   schema: "opus-vision-frame-plan/v1";
   status: "ready-for-local-preview" | "blocked";
-  selection: "uniform-sampling" | "none";
+  selection: "uniform-sampling" | "verified-candidate-sampling" | "none";
   coverage: "sampled-frames-only" | "not-assessed";
   transmissionPermitted: false;
   deidentificationVerified: false;
@@ -48,6 +48,7 @@ export function uniformIndices(length: number, requested: number): number[] {
  */
 export function planVisionFrameSamples(
   series: readonly DicomSeries[], preferredSeriesKey: string | null = null, count = MAX_VISION_SAMPLE_FRAMES,
+ focusSliceIndex: number | null = null,
 ): VisionFramePlan {
   if (!Number.isInteger(count) || count < 1 || count > MAX_VISION_SAMPLE_FRAMES)
     throw new Error("Invalid requested sample count");
@@ -102,9 +103,17 @@ export function planVisionFrameSamples(
     frames: [], blockers, warnings,
   };
   const ids = uniformIndices(selected.members.length, count);
+  const focusValid=focusSliceIndex!==null&&Number.isSafeInteger(focusSliceIndex)&&
+    focusSliceIndex>=0&&focusSliceIndex<selected.members.length;
+  if(focusValid&&!ids.includes(focusSliceIndex)){
+    const nearest=ids.reduce((best,index,i)=>
+      Math.abs(index-focusSliceIndex)<Math.abs(ids[best]-focusSliceIndex)?i:best,0);
+    ids[nearest]=focusSliceIndex;
+    ids.sort((a,b)=>a-b);
+  }
   return {
     schema: "opus-vision-frame-plan/v1", status: "ready-for-local-preview",
-    selection: "uniform-sampling", coverage: "sampled-frames-only",
+    selection: focusValid?"verified-candidate-sampling":"uniform-sampling", coverage: "sampled-frames-only",
     transmissionPermitted: false, deidentificationVerified: false, seriesKey: selected.key,
     frames: ids.map(idx => {
       const member = selected.members[idx];
