@@ -7,7 +7,7 @@ import {createSyntheticTrialLimiter} from "../../../../lib/synthetic-live-resear
 
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
-export const maxDuration=90;
+export const maxDuration=600; // research-only opt-in for slow paid vision/reasoning
 const HEADERS={"Cache-Control":"no-store","X-Content-Type-Options":"nosniff","Referrer-Policy":"no-referrer"};
 const LOCAL_HOST=/^(?:localhost|127\.0\.0\.1)(?::[0-9]{1,5})?$/;
 const BODY_LIMIT=2_350_000;
@@ -109,7 +109,8 @@ export async function POST(req:NextRequest){
   if(!release)return reply(429,"One active request; maximum two starts in twenty minutes");
   try{
     const result=await reviewSanitizedSamples(
-      v.packet,callAiGateway,AbortSignal.any([req.signal,AbortSignal.timeout(75_000)]),
+      v.packet,callAiGateway,AbortSignal.any([req.signal,AbortSignal.timeout(process.env.NODE_ENV==="development"&&
+       process.env.RADIOLOGY_PUBLIC_ORIGINAL_DICOM_EXTENDED_REVIEW==="1"?540_000:75_000)]),
       specialistProvided?v.specialistFacts:null,
       detectorProvided?v.detectorEvidence:null,
       cxrProvided?v.cxrModelEvidence:null,null,
