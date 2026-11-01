@@ -1,0 +1,131 @@
+name: REAL public CT DICOM to CLN to Gemini to Opus radiology
+
+on:
+  pull_request:
+    paths:
+      - "scripts/prepare-public-msd-derived-dicom.py"
+      - "scripts/prepare-public-derived-dicom-cln-frames.py"
+      - "scripts/test-cln-original-http-public-positive.py"
+      - "scripts/check-real-public-cln-gemini-opus.mjs"
+      - ".github/workflows/real-public-derived-dicom-cln-gemini-opus.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  actual-dicom-cln-gemini-opus:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    env:
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      HF_HUB_DISABLE_PROGRESS_BARS: "1"
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "1"
+      CUDA_VISIBLE_DEVICES: "-1"
+      PYTHONUNBUFFERED: "1"
+      HF_HOME: /tmp/opus-derived-msd-cln-hf
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Check public research case and provider availability
+        shell: bash
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$OPENROUTER_API_KEY" ]; then
+            echo "::error::Real E2E requires configured OPENROUTER_API_KEY secret."
+            exit 1
+          fi
+          python - <<'PY'
+          from pathlib import Path
+          import shutil
+          available=int(next(line.split()[1] for line in Path("/proc/meminfo").read_text().splitlines() if line.startswith("MemAvailable:")))*1024
+          disk=shutil.disk_usage("/tmp").free
+          print("Original CLN CPU host: RAM GiB",round(available/2**30,2),"scratch GiB",round(disk/2**30,2))
+          assert available>=12*2**30 and disk>=6*2**30
+          PY
+      - name: Install source DICOM and renderer
+        run: |
+          python -m pip install --no-cache-dir \
+            "numpy==1.26.4" "nibabel==5.3.2" "pydicom==3.0.1" \
+            "pillow==11.3.0" "huggingface_hub==0.35.3"
+      - name: Re-encode pinned real CT pixels as DICOM and verify source native HU
+        run: |
+          python scripts/prepare-public-msd-derived-dicom.py \
+            --dicom-dir "$RUNNER_TEMP/public-derived-dicom" \
+            --native "$RUNNER_TEMP/public-derived-cln.nii" \
+            --manifest "$RUNNER_TEMP/public-derived-dicom-map.json"
+      - name: Install original CLN CPU nnU-Net and private HTTP server
+        run: |
+          set -euo pipefail
+          python -m pip install --no-cache-dir "torch==2.5.1+cpu" "torchvision==0.20.1+cpu" --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --no-cache-dir \
+            --extra-index-url https://download.pytorch.org/whl/cpu \
+            "torch==2.5.1+cpu" "torchvision==0.20.1+cpu" "numpy==1.26.4" \
+            "nnunetv2==2.7.0" "huggingface_hub==0.35.3" \
+            "nibabel==5.3.2" "psutil==7.0.0" "fastapi==0.115.12" \
+            "uvicorn==0.34.2" "requests==2.32.3"
+          python -m pip check
+          python - <<'PY'
+          import torch,shutil
+          assert torch.version.cuda is None and torch.__version__.startswith("2.5.1")
+          assert shutil.which("nnUNetv2_predict") is not None
+          PY
+      - name: Fresh original CLN weights on converted DICOM via authenticated local HTTP worker
+        run: |
+          python scripts/test-cln-original-http-public-positive.py \
+            --workdir "$RUNNER_TEMP/new-cln-private-worker" \
+            --derived-native "$RUNNER_TEMP/public-derived-cln.nii" \
+            --derived-manifest "$RUNNER_TEMP/public-derived-dicom-map.json" \
+            --report "$RUNNER_TEMP/fresh-cln-original-model-report.json"
+      - name: Validate CLN candidate on DICOM SOP slice and create DICOM-pixel PNGs
+        run: |
+          python scripts/prepare-public-derived-dicom-cln-frames.py \
+            --dicom-dir "$RUNNER_TEMP/public-derived-dicom" \
+            --native "$RUNNER_TEMP/public-derived-cln.nii" \
+            --manifest "$RUNNER_TEMP/public-derived-dicom-map.json" \
+            --worker "$RUNNER_TEMP/fresh-cln-original-model-report.json" \
+            --folder "$RUNNER_TEMP/public-derived-cln-png"
+      - name: Install application dependencies for actual review function
+        working-directory: web
+        run: npm ci --no-audit --no-fund
+      - name: Paid independent Gemini Vision then Claude Opus with fresh CLN evidence
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          RADIOLOGY_PUBLIC_MSD_CLOUD_TRANSFER_APPROVED: "1"
+          RADIOLOGY_VERIFIED_PUBLIC_DERIVED_DICOM: "1"
+        run: |
+          node --disable-warning=ExperimentalWarning --experimental-strip-types \
+            scripts/check-real-public-cln-gemini-opus.mjs \
+            "$RUNNER_TEMP/fresh-cln-original-model-report.json" \
+            "$RUNNER_TEMP/public-derived-cln-png" \
+            "$RUNNER_TEMP/new-real-dicom-cln-gemini-opus.json"
+      - name: Save nonpatient numeric evidence and Russian radiologist TXT
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-pixel-derived-dicom-new-cln-gemini-opus-protocol
+          path: |
+            ${{ runner.temp }}/new-real-dicom-cln-gemini-opus.json
+            ${{ runner.temp }}/new-real-dicom-cln-gemini-opus.txt
+          retention-days: 7
+          if-no-files-found: error
+      - name: Delete local CT pixels and private SOP map, weights and model caches
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/public-derived-dicom" \
+            "$RUNNER_TEMP/public-derived-cln.nii" \
+            "$RUNNER_TEMP/public-derived-cln.admission.json" \
+            "$RUNNER_TEMP/public-derived-dicom-map.json" \
+            "$RUNNER_TEMP/public-derived-cln-png" \
+            "$RUNNER_TEMP/new-cln-private-worker" \
+            "$RUNNER_TEMP/fresh-cln-original-model-report.json" \
+            "/tmp/opus-derived-msd-cln-hf"
