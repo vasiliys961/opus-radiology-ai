@@ -660,13 +660,14 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
    setBusy(false);onAnalysisState?.(series.key,false);setStatus("Анализ отменён. Неинтерпретированные зоны остаются неоценёнными.");
  }
  return <section className="cs-geometry" aria-label="Единый анализ DICOM">
-  <h2>Анализ исследования</h2>
+  <h2>2. Анализ исследования — один запуск</h2>
+  <p>Приложение выбирает совместимые оригинальные детекторы по DICOM и запускает их автоматически. Одновременно готовятся кадры для независимого Gemini; по результатам двух путей Claude Opus создаёт единое описание и заключение.</p>
    {confirmableChest&&<label><input type="checkbox" checked={clinicianConfirmedChest}
      disabled={busy} onChange={e=>setClinicianConfirmedChest(e.target.checked)}/>
      Подтверждаю, что это КТ грудной клетки (исходные DICOM без однозначного анатомического кода либо с признаком реконструкции).
      Изображения и геометрию проверил; это не локализатор. Разрешаю исследовательский запуск на данной серии.
    </label>}
-  <OriginalWorkerFleetReadiness/>
+  <details><summary>Дополнительно · состояние серверов и оригинальных весов</summary><OriginalWorkerFleetReadiness/></details>
   <p><strong>{plan.title}</strong> · текущая исходная DICOM-серия. Автоматический выбор по известной модальности;
     наличие настоящих весов подтверждается только worker при запуске.</p>
   {plan.reason&&<p role="status">{visionOnlyAvailable?
