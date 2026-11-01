@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {hasRadiologistReportSections,MAX_RADIOLOGIST_REPORT_CHARS,SENIOR_RADIOLOGIST_PROMPT}
+import {hasRadiologistReportSections,canonicalizeRadiologistHeadings,MAX_RADIOLOGIST_REPORT_CHARS,SENIOR_RADIOLOGIST_PROMPT}
  from "./senior-radiologist-report.ts";
 
 const protocol=[
@@ -17,6 +17,17 @@ test("Human radiology report must have correct sections and order",()=>{
  assert.equal(hasRadiologistReportSections(protocol.replace("МЕТОДИКА:","ТЕХНИКА:")),false);
  assert.equal(hasRadiologistReportSections(protocol.replace("ЗАКЛЮЧЕНИЕ:","ПРИМЕЧАНИЕ:")),false);
  assert.equal(hasRadiologistReportSections(protocol.replace("ЗАКЛЮЧЕНИЕ:","ЗАКЛЮЧЕНИЕ:\nSOPInstanceUID:1.2.3")),false);
+});
+test("Opus Markdown decorations are normalized without synthesizing absent anatomy",()=>{
+ const markdown=protocol.replace("ИССЛЕДОВАНИЕ:","### **ИССЛЕДОВАНИЕ:**")
+  .replace("МЕТОДИКА:","**МЕТОДИКА:**")
+  .replace("ОПИСАНИЕ:","**ОПИСАНИЕ**:")
+  .replace("РЕКОМЕНДАЦИИ:","### РЕКОМЕНДАЦИИ:");
+ const normalized=canonicalizeRadiologistHeadings(markdown);
+ assert.equal(normalized,protocol);
+ assert.equal(hasRadiologistReportSections(normalized),true);
+ assert.equal(hasRadiologistReportSections(canonicalizeRadiologistHeadings(
+  markdown.replace("ЗАКЛЮЧЕНИЕ:","НЕТ РАЗДЕЛА:"))),false);
 });
 test("Complete organ-by-organ prose over 4000 characters remains valid",()=>{
  const extended=protocol.replace("ЗАКЛЮЧЕНИЕ:",
