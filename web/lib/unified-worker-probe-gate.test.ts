@@ -9,7 +9,9 @@ test("one-click analysis waits for model discovery before fallback",()=>{
   for(const name of ["clnChecking","lungscapeChecking","autoMonaiChecking","autoEffusionChecking",
     "autoPeChecking","autoNodesChecking","autoAbdomenChecking","autoIchChecking",
     "autoBrainChecking","autoWmhChecking"])assert.ok(gate.includes(name),name+" absent");
-  assert.match(source,/const ready=!!plan\.route&&authorized&&!busy&&!readinessChecksPending&&/);
+  assert.match(source,/const ready=\(!!plan\.route\|\|visionOnlyAvailable\)&&authorized&&!busy&&!readinessChecksPending&&/);
+  assert.match(source,/plan\.route===null&&canUseVisionOnlyAsPrimary\(series,available\)/,
+    "Universal Vision must be fallback-only, never bypass a compatible native model");
   for(const name of ["setClnChecking","setLungscapeChecking","setAutoBrainChecking",
     "setAutoWmhChecking"]){
     assert.match(source,new RegExp(name+"\\(true\\)"),name+" start missing");
