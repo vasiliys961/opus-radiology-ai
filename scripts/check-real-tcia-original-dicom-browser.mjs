@@ -3,8 +3,8 @@
  */
 import {createRequire} from "node:module";
 import {spawn} from "node:child_process";
-import {readdir,mkdir,open} from "node:fs/promises";
-import {parseDicomSeriesHeader,groupDicomSeries} from "../web/lib/dicom-series.ts";
+import {readdir,mkdir,readFile} from "node:fs/promises";
+import {readDicomSeriesHeader,groupDicomSeries} from "../web/lib/dicom-series.ts";
 import {createServer} from "node:net";
 import {join} from "node:path";
 import {fileURLToPath} from "node:url";
@@ -20,13 +20,10 @@ assert.equal(files.length,103,"Exactly 103 unchanged public original CT files");
 // No patient fields, UID values or source pixels enter logs/artifacts.
 const metadata=[];
 for(const file of files){
- const handle=await open(file,"r");
- try{
-  const block=Buffer.alloc(512*1024);
-  const {bytesRead}=await handle.read(block,0,block.length,0);
-  metadata.push(parseDicomSeriesHeader(block.subarray(0,bytesRead).buffer.slice(
-   block.byteOffset,block.byteOffset+bytesRead)));
- }finally{await handle.close();}
+ const bytes=await readFile(file);
+ const name=file.split("/").at(-1)??"public-original.dcm";
+ metadata.push(await readDicomSeriesHeader(new File([bytes],name)));
+
 }
 const tally=key=>Object.fromEntries([...new Set(metadata.map(m=>String(m[key])))].map(
  v=>[v,metadata.filter(m=>String(m[key])===v).length]));
