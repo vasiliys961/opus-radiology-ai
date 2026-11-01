@@ -4,6 +4,7 @@
  */
 import type {DicomSeries} from "./dicom-series.ts";
 import {planNativeStudyAnalysis} from "./unified-study-dispatch.ts";
+import {assessAutomaticBrainFlair} from "./automatic-brain-flair.ts";
 import {planVisionFrameSamples} from "./vision-frame-plan.ts";
 
 export type PrimarySeriesSuggestion={
@@ -24,7 +25,13 @@ export function suggestPrimaryDicomSeries(series:readonly DicomSeries[],
   // Never prefer an incomplete series or a scout merely because it has many files.
   // A modest original diagnostic stack is preferable to an oversized reconstruction.
   const size=Math.min(s.members.length,300);
+  // When an actual original MR volume has strong long-TI FLAIR evidence,
+  // it is a safer automatic WMH starting series than an arbitrary larger T1
+  // or localizer. Unknown MR weighting remains unspecialized Vision.
+  const sourceFlair=executable&&complete&&plan.route==="wmh-flair"&&
+    assessAutomaticBrainFlair(s).eligible;
   const score=(executable?100000:0)+(native?10000:0)+
+   (sourceFlair?25000:0)+
    (s.volumeReady&&s.spatiallySorted?1000:0)+
    (complete?500:0)+size;
   return {s,index,plan,native,executable,score};
