@@ -26,17 +26,19 @@ import CxrIndependentVisionReview from "./CxrIndependentVisionReview";
 import OriginalWorkerFleetReadiness from "./OriginalWorkerFleetReadiness";
 import {checkAutomaticClnReady,executeOriginalCln,type ClnReport} from "../lib/cln-native-worker";
 import ClnOriginalPhysicianReview from "./ClnOriginalPhysicianReview";
+import type {ClnVerifiedLocalEvidence} from "../lib/cln-physician-local-review";
 import {checkAutomaticLungscapeReady,executeOriginalLungscape,type LungscapeReport} from "../lib/lungscape-native-worker";
 
 /** A single primary action that reuses the real DICOM -> MONAI/ianpan/WMH paths.
  * Never advertises a checkpoint as installed until its private worker proves it.
  * No automatic cloud image transfer; Gemini/Opus require a separate privacy gate.
  */
-export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMonaiReady,onNavigate,onDetectorEvidence,onReadyForVision}:{
+export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMonaiReady,onNavigate,onDetectorEvidence,onReadyForVision,onClnBoundReady}:{
  series:DicomSeries;allSeries:ReadonlyArray<DicomSeries>;files:ReadonlyMap<string,File>;
  onMonaiReady:(source:File,session:WorkerSession,completedReport?:BoundNoduleReport)=>void;
  onNavigate:(slice:number)=>void;
  onDetectorEvidence?:(seriesKey:string,bundle:SanitizedDetectorBundle|null)=>void;
+ onClnBoundReady?:(seriesKey:string,verified:ClnVerifiedLocalEvidence)=>void;
  onReadyForVision?:(seriesKey:string)=>void;
 }){
  const available=useMemo(()=>new Set(files.keys()),[files]);
@@ -966,7 +968,8 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
       координаты кандидатов и решения врача. Не загружайте такой файл в публичный GitHub или облачный LLM.
       Это не подписанное клиническое заключение.</p>
   </div>}
-  {chestCln&&chestSource&&<ClnOriginalPhysicianReview report={chestCln} series={series} source={chestSource} onNavigate={onNavigate}/>}
+  {chestCln&&chestSource&&<ClnOriginalPhysicianReview report={chestCln} series={series} source={chestSource} onNavigate={onNavigate}
+     onVerifiedCandidates={verified=>onClnBoundReady?.(series.key,verified)}/>}
    {lungscapeResult&&<p role="status">LungSCAPE191: настоящий инференс завершён, компонентов {lungscapeResult.componentCount}. Классы модели не являются диагнозом ILD/UIP/IPF.</p>}
   {(chestNodules||chestCln||lungscapeResult||chestEffusion||chestPe||chestNodes||abdomenResult||ich||wmh||brainResult)&&
     <DetectorGeminiOpusConsilium onBundleReady={bundle=>onDetectorEvidence?.(series.key,bundle)} snapshot={{
