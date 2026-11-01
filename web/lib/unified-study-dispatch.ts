@@ -12,16 +12,24 @@ export type StudyAnalysisPlan={
   needsExplicitFlair:boolean;
 };
 
-export function planNativeStudyAnalysis(series:DicomSeries, availableFiles:ReadonlySet<string>):StudyAnalysisPlan{
+export function planNativeStudyAnalysis(series:DicomSeries, availableFiles:ReadonlySet<string>,
+ options:{clinicianConfirmedChest?:boolean}={}):StudyAnalysisPlan{
   const denied=(reason:string):StudyAnalysisPlan=>({route:null,title:"Нет совместимого исполнительного пути",reason,needsExplicitFlair:false});
   if(!series.members.length)return denied("Серия DICOM пуста.");
   const uids=new Set(series.members.map(m=>m.metadata.seriesUid));
   if(uids.size!==1||uids.has(null)||series.members.some(m=>
       !m.metadata.sopInstanceUid||!m.metadata.studyUid||
       !availableFiles.has(m.id)||
-      m.metadata.imageRole==="DERIVED"||m.metadata.imageRole==="LOCALIZER"||
+      (m.metadata.imageRole==="DERIVED"&&!(options.clinicianConfirmedChest&&series.modality==="CT"))||
+      m.metadata.imageRole==="LOCALIZER"||
       (m.metadata.numberOfFrames!==null&&m.metadata.numberOfFrames!==1)))
     return denied("Неполная, смешанная, производная или не подтверждённая по UID исходная серия.");
+  // A clinician may explicitly classify a source-verified CT chest when a
+  // scanner leaves BodyPartExamined blank. The permission never overrides UIDs,
+  // mixed known anatomy, localizers, multi-frame or physical volume checks.
+  const confirmedChest=options.clinicianConfirmedChest===true&&series.modality==="CT"&&
+    series.members.every(m=>m.metadata.modality==="CT"&&
+      (m.metadata.bodyRegion==="CHEST"||m.metadata.bodyRegion==null));
   const allRegion=(region:string)=>series.members.every(m=>m.metadata.bodyRegion===region);
   // Radiography is a SINGLE 2-D image, not a 3-D DICOM CT volume.
   if((series.modality==="CR"||series.modality==="DX")&&
@@ -33,7 +41,7 @@ export function planNativeStudyAnalysis(series:DicomSeries, availableFiles:Reado
       reason:null,needsExplicitFlair:false};
   if(!series.volumeReady||!series.spatiallySorted)
     return denied("Нужна исходная серия с подтверждённым пространственным порядком и геометрией.");
-  if(series.modality==="CT"&&allRegion("CHEST"))
+  if(series.modality==="CT"&&(allRegion("CHEST")||confirmedChest))
     return {route:"monai-nodules",title:"Грудная клетка · MONAI узлы, task315 выпоты, PE на CTPA и Raidionics средостение",reason:null,needsExplicitFlair:false};
   if(series.modality==="CT"&&allRegion("ABDOMEN"))
     return {route:"totalseg-abdomen",
