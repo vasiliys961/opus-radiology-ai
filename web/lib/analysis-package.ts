@@ -59,6 +59,10 @@ function niftiHeader(geometry: MaskGeometry, maximum:number): {header: ArrayBuff
   const header = new ArrayBuffer(352), view = new DataView(header);
   view.setInt32(0,348,true);view.setInt16(40,3,true);
   dimensions.forEach((n,i)=>view.setInt16(42+i*2,n,true));
+  // NIfTI-1 requires unused dimensions dim[4..7] to be singleton axes.
+  // Zeroes were accepted by nnU-Net but rejected by the exact CLN DICOM
+  // source verifier after genuine inference, blocking physician slice review.
+  for(let axis=4;axis<=7;axis++)view.setInt16(40+axis*2,1,true);
   view.setInt16(70,16,true);view.setInt16(72,32,true);view.setFloat32(76,1,true);
   for (let i=0;i<3;i++) view.setFloat32(80+i*4,Math.hypot(a[i],a[4+i],a[8+i]),true);
   view.setFloat32(108,352,true);view.setFloat32(112,1,true);view.setUint8(123,2);

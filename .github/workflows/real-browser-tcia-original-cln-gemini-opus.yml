@@ -11,6 +11,10 @@ on:
       - "web/lib/cln-original-source-recovery.test.ts"
       - "web/lib/dicom-monai-direct.ts"
       - "web/lib/cln-native-worker.ts"
+      - "web/lib/analysis-package.ts"
+      - "web/lib/full-ct-stream.ts"
+      - "web/lib/full-ct-stream.test.ts"
+      - "web/lib/live-nodule-report.ts"
       - ".github/workflows/real-browser-tcia-original-cln-gemini-opus.yml"
   workflow_dispatch:
 

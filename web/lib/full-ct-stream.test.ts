@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {groupDicomSeries,type TechnicalDicomMetadata} from "./dicom-series.ts";
 import {fullCtGeometry,fullCtChunks,prepareFullCtStream,type PlaneReader} from "./full-ct-stream.ts";
 import {fullCtNiftiHeader,scalarNiftiHeader,writeScalarNifti,sha256} from "./analysis-package.ts";
+import {readNoduleNiftiHeader} from "./live-nodule-report.ts";
 
 function series(rows=4,columns=6,frames=40) {
   const m:TechnicalDicomMetadata={studyUid:"2.25.1",seriesUid:"2.25.2",frameOfReferenceUid:"2.25.3",sopInstanceUid:null,
@@ -18,6 +19,17 @@ test("Separate full header accepts 103 native frames while all legacy full-buffe
   for(const s of [series(513,512),series(512,512,301),{...series(),modality:"MR"},{...series(),volumeReady:false}])assert.throws(()=>fullCtGeometry(s));
   const jitter=series();jitter.members[20].metadata.imagePositionPatient![2]+=0.09;
   assert.throws(()=>fullCtGeometry(jitter),/сетка|сеткой/);
+});
+test("Actual 3-D HU NIfTI header passes the same strict CLN source reader after inference",async()=>{
+  const geometry=fullCtGeometry(series(8,8,8));
+  const {header}=fullCtNiftiHeader(geometry);
+  const v=new DataView(header);
+  assert.equal(v.getInt16(40,true),3);
+  assert.deepEqual([4,5,6,7].map(axis=>v.getInt16(40+axis*2,true)),[1,1,1,1]);
+  const volume=await writeScalarNifti(geometry,()=>-800,{yieldControl:async()=>{}});
+  const checked=await readNoduleNiftiHeader(new Blob([volume]));
+  assert.deepEqual(checked.dimensions,geometry.dimensions);
+  assert.equal(checked.datatype,16);
 });
 test("Full two-pass native stream equals independent scalar NIfTI with exact LPS and rescale",async()=>{
   const s=series(),geometry=fullCtGeometry(s),reads:number[]=[],released:number[]=[];
