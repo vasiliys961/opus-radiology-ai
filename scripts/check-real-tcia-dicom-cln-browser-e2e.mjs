@@ -68,7 +68,8 @@ try{
   return !!button&&!button.disabled;
  },null,{timeout:90000});
  await run.click();
- await page.getByRole("heading",{name:/Gemini Orchestra · подготовка кадров/})
+  await page.getByText("Дополнительно · анализ отдельных срезов",{exact:true}).click();
+  await page.getByRole("heading",{name:/Gemini Orchestra · подготовка кадров/})
   .waitFor({timeout:45000});
  // This is ACTUAL 3-D original CLN model execution. Allow bounded CPU time.
  const cln=page.locator('section[aria-label="CLN original lung-tumor physician review"]');
