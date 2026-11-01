@@ -5,6 +5,7 @@
 import {normalizeReviewedCloudPilot,sourceFrameReviewFormat,PILOT_GEMINI} from "./sanitized-cloud-review.ts";
 import {parseRoleResponse,parseStrictObject,readCompletionText,type RoleResponse} from "./vision-orchestra.ts";
 import type {AiGatewayRequest} from "./ai-gateway.ts";
+import {normalizeAutoPublicVolumePacket} from "./auto-volume-research-packet.ts";
 
 export type VolumeGeminiBatchResult={
   schema:"opus-gemini-volume-batch/v1";
@@ -25,8 +26,10 @@ export type VolumeGeminiBatchCaller=
   }>;
 export async function reviewApprovedVolumeGeminiBatch(
   packet:unknown,call:VolumeGeminiBatchCaller,signal?:AbortSignal,
+  mode:"clinician-reviewed"|"auto-ocr-public-study"="clinician-reviewed",
 ):Promise<VolumeGeminiBatchResult>{
-  const checked=normalizeReviewedCloudPilot(packet);
+  const checked=mode==="auto-ocr-public-study"?
+    normalizeAutoPublicVolumePacket(packet):normalizeReviewedCloudPilot(packet);
   if(checked.modality!=="CT"&&checked.modality!=="MR")
     throw Error("Only CT/MR volume frames are allowed");
   const ids=checked.frames.map(x=>x.imageId);
