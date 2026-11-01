@@ -199,9 +199,10 @@ export default function ViewerPage() {
           {selected && (selected.modality==="CT"||selected.modality==="MR") && <section className="cs-geometry" aria-label="Подготовка Gemini и Opus по открытому DICOM">
             <h3>Gemini Vision + Claude Opus · просмотр отдельных кадров</h3>
             <p>Используется именно выбранная исходная серия. Сначала локальный план и проверка обезличенных PNG-копий; платный вызов только после отдельного разрешения. Без доступа к модели исходная КТ/МРТ остаётся доступной.</p>
-            <button type="button" disabled={reading} onClick={()=>{setVisionOpen(v=>!v);setVisionFromPrimary(false);}}>
+            {!visionFromPrimary&&<button type="button" disabled={reading} onClick={()=>setVisionOpen(v=>!v)}>
               {visionOpen?"Закрыть подготовку кадров":"Подготовить кадры для Gemini + Opus"}
-            </button>
+            </button>}
+            {visionFromPrimary&&<p role="status">Единый анализ запущен из кнопки врача: кадры и OCR подготавливаются автоматически. Рабочая область останется открытой до заключения.</p>}
             {visionOpen && <AnalysisSoundProvider>
               <VisionFramePlanningPanel key={"vision-"+selected.key} series={visionSeries}
                 activeSeriesKey={selected.key} fileById={indexedById}
