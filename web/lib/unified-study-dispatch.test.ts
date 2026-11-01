@@ -25,6 +25,19 @@ assert.equal(plan(mr).route,"wmh-flair");
 assert.equal(plan(mr).needsExplicitFlair,true);
 assert.equal(plan(make("MR","ABDOMEN",24)).route,null);
 assert.equal(plan(make("CT","ABDOMEN",24)).route,"totalseg-abdomen");
+const uncodedChest={...chest,members:chest.members.map(m=>({...m,
+ metadata:{...m.metadata,bodyRegion:null,imageRole:"DERIVED" as const}}))};
+assert.equal(plan(uncodedChest).route,null,"Never infer absent anatomy or derived series automatically");
+assert.equal(planNativeStudyAnalysis(uncodedChest,new Set(uncodedChest.members.map(m=>m.id)),
+ {clinicianConfirmedChest:true}).route,"monai-nodules");
+const mixedUnknown={...uncodedChest,members:uncodedChest.members.map((m,i)=>
+ i===0?{...m,metadata:{...m.metadata,bodyRegion:"ABDOMEN" as const}}:m)};
+assert.equal(planNativeStudyAnalysis(mixedUnknown,new Set(mixedUnknown.members.map(m=>m.id)),
+ {clinicianConfirmedChest:true}).route,null,"Never override conflicting known anatomy");
+const missingSource={...uncodedChest,members:uncodedChest.members.map((m,i)=>
+ i===0?{...m,metadata:{...m.metadata,sopInstanceUid:null}}:m)};
+assert.equal(planNativeStudyAnalysis(missingSource,new Set(missingSource.members.map(m=>m.id)),
+ {clinicianConfirmedChest:true}).route,null,"Anatomy approval cannot bypass source UID proof");
 assert.equal(plan({...chest,volumeReady:false}).route,null);
 assert.equal(plan({...chest,spatiallySorted:false}).route,null);
 assert.equal(planNativeStudyAnalysis(chest,new Set(["file-0"])).route,null);
