@@ -40,7 +40,7 @@ try{
  const errors=[],transfers=[];
  page.on("pageerror",e=>errors.push(String(e)));
  page.on("request",r=>{
-  if(/\/api\/ai\/|\/api\/local-cln/.test(new URL(r.url()).pathname))
+  if(r.method()!=="GET"&&/\/api\/ai\/|\/api\/local-cln/.test(new URL(r.url()).pathname))
    transfers.push(new URL(r.url()).pathname);
  });
  await page.goto(origin+"/viewer",{waitUntil:"domcontentloaded",timeout:45000});
