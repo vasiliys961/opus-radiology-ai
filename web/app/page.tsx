@@ -283,6 +283,13 @@ export default function Home() {
       <div className="ora-content">
         <div className="ora-heading"><div><div className="ora-eyebrow"><span className="ora-eyebrow-line"/> RADIOLOGY INTELLIGENCE PLATFORM</div><h1>Рабочая станция <em>КТ / МРТ</em></h1><p>Исследование, визуализация и клинический контекст — в одном пространстве.</p></div><span className="ora-preview-label"><Icon name="info" size={15}/> Единая рабочая станция · β</span></div>
 
+        <section className="ora-card" aria-label="Единый запуск DICOM с заключением" style={{padding:20,marginBottom:18}}>
+          <strong>Единый анализ КТ/МРТ · оригинальные детекторы + Gemini Vision + Claude Opus</strong>
+          <p>Рабочий маршрут врача: загрузите DICOM-серию, нажмите «Анализировать исследование», проверьте обезличенные кадры и разрешите облачный этап. Получите редактируемый предварительный протокол КТ/МРТ и TXT. Gemini пока оценивает выбранные кадры, а не весь томографический объём; недоступные детекторы явно отмечаются.</p>
+          <a className="ora-primary-button" href="/viewer">Открыть единый анализ DICOM → заключение</a>
+          <p>На текущей странице доступен локальный просмотр; сквозной запуск выполняется в рабочем месте DICOM.</p>
+        </section>
+
         <div className="ora-pipeline">
           <div className="ora-pipeline-step ora-pipeline-active"><span className="ora-step-number">01</span><div><strong>Загрузка исследования</strong><small>Локальные файлы</small></div><Icon name="check" size={16}/></div>
           <div className="ora-pipeline-divider"/>

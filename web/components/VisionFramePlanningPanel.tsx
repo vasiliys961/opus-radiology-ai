@@ -23,7 +23,7 @@ import {sameSeriesR231Facts,type CapturedLocalSpecialist} from "../lib/same-seri
 import {sameSeriesLaa950ForReview,type CapturedLocalLaa950} from "../lib/same-series-laa950-review";
 
 export default function VisionFramePlanningPanel({
-  series, activeSeriesKey, fileById, onOpenSlice,capturedSpecialist,capturedLaa950,ichRuntime,publicResearchAuthorized=false,originalDetectorEvidence=null,clnVerifiedLocal=null,fromPrimaryAnalysis=false,
+  series, activeSeriesKey, fileById, onOpenSlice,capturedSpecialist,capturedLaa950,ichRuntime,publicResearchAuthorized=false,originalDetectorEvidence=null,clnVerifiedLocal=null,fromPrimaryAnalysis=false,primaryAnalysisStage="idle",
 }: {
   series: readonly DicomSeries[];
   activeSeriesKey: string | null;
@@ -37,6 +37,7 @@ export default function VisionFramePlanningPanel({
   originalDetectorEvidence?:SanitizedDetectorBundle|null;
   clnVerifiedLocal?:ClnVerifiedLocalEvidence|null;
   fromPrimaryAnalysis?:boolean;
+  primaryAnalysisStage?:"idle"|"running"|"completed"|"vision-only"|"cancelled";
 }) {
   const [requested, setRequested] = useState(4);
   // Editing the sampled frame count must invalidate privacy approval until the
@@ -329,7 +330,19 @@ export default function VisionFramePlanningPanel({
         <p>Запуск ICH не требует второй кнопки: после настройки он входит в «Запустить единый анализ КТ/МРТ» выше.</p>
       </details>
     </div>}
-    {fromPrimaryAnalysis&&<p role="status">Основной анализ DICOM запущен: локальные детекторы могут ещё выполняться. Кадры Vision подготавливаются независимо и локально; доступность Gemini не зависит от завершения моделей. Окончательное разрешение передачи изображений выдаётся отдельно после проверки обезличивания и стоимости. Результаты детекторов добавляются по мере готовности.</p>}
+    {fromPrimaryAnalysis&&<div role="status" aria-label="Этапы единого исследования">
+      <strong>Один запуск · два независимых пути</strong>
+      <ol>
+        <li>Исходные DICOM и серия проверены</li>
+        <li>{primaryAnalysisStage==="running"?"Оригинальные детекторы выполняются…":
+          primaryAnalysisStage==="completed"?"Запуск диагностических детекторов завершён":
+          primaryAnalysisStage==="vision-only"?"Совместимый оригинальный детектор не назначен — доступен независимый Vision":
+          primaryAnalysisStage==="cancelled"?"Детекторы отменены":"Ожидание запуска детекторов"}</li>
+        <li>Кадры Vision подготавливаются независимо и локально, OCR запускается автоматически — врачу остаётся проверить изображения</li>
+        <li>После завершения детекторов и разрешения врача Gemini и Opus сформируют единое заключение TXT</li>
+      </ol>
+      {primaryAnalysisStage==="running"&&<p>Пока модель работает, можно осматривать изображения; отправка Gemini/Opus откроется после её завершения.</p>}
+    </div>}
     <div className="ora-vision-budget-preview" role="status" aria-label="Универсальный анализ КТ и МРТ">
       <strong>Gemini + Opus · универсальный анализ {universal.modality==="CT"?"КТ":universal.modality==="MR"?"МРТ":"DICOM"}</strong>
       <p>{universal.reason}</p>
@@ -436,6 +449,7 @@ export default function VisionFramePlanningPanel({
         и не подтверждают диагноз эмфиземы.</p>}
       {laaWarning&&<p role="status">{laaWarning}</p>}
       <VisionPrivacyPreparation autoStartAfterDetectors={fromPrimaryAnalysis}
+        primaryAnalysisStage={primaryAnalysisStage}
         originalDetectorEvidence={originalDetectorEvidence}
         frameRelativeClnEvidence={clnSpatial}
         key={JSON.stringify(report.frames.map(f=>f.fileId))+requested}

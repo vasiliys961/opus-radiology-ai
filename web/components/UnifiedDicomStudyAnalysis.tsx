@@ -34,13 +34,14 @@ import {checkAutomaticLungscapeReady,executeOriginalLungscape,type LungscapeRepo
  * Never advertises a checkpoint as installed until its private worker proves it.
  * No automatic cloud image transfer; Gemini/Opus require a separate privacy gate.
  */
-export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMonaiReady,onNavigate,onDetectorEvidence,onReadyForVision,onClnBoundReady}:{
+export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMonaiReady,onNavigate,onDetectorEvidence,onReadyForVision,onClnBoundReady,onAnalysisStage}:{
  series:DicomSeries;allSeries:ReadonlyArray<DicomSeries>;files:ReadonlyMap<string,File>;
  onMonaiReady:(source:File,session:WorkerSession,completedReport?:BoundNoduleReport)=>void;
  onNavigate:(slice:number)=>void;
  onDetectorEvidence?:(seriesKey:string,bundle:SanitizedDetectorBundle|null)=>void;
  onClnBoundReady?:(seriesKey:string,verified:ClnVerifiedLocalEvidence)=>void;
  onReadyForVision?:(seriesKey:string)=>void;
+ onAnalysisStage?:(seriesKey:string,stage:"running"|"completed"|"vision-only"|"cancelled")=>void;
 }){
  const available=useMemo(()=>new Set(files.keys()),[files]);
  const [clinicianConfirmedChest,setClinicianConfirmedChest]=useState(false);
@@ -271,6 +272,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
      // Neither an artificial negative model result nor a provider request
      // is emitted. Paid Gemini/Opus authorization stays in Vision.
      onDetectorEvidence?.(series.key,null);
+     onAnalysisStage?.(series.key,"vision-only");
      setError("");
      setStatus("Для этой КТ/МРТ оригинальный патологический детектор не назначен. Локальная подготовка кадров Gemini + Opus открыта; передача в облако требует отдельного разрешения.");
      onReadyForVision?.(series.key);
@@ -279,7 +281,8 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
    const version=++serial.current;
    active.current?.abort();
    const controller=new AbortController();active.current=controller;
-   setBusy(true);setStatus("Проверяем совместимость и доступность настоящей модели...");
+   setBusy(true);onAnalysisStage?.(series.key,"running");
+   setStatus("Проверяем совместимость и доступность настоящей модели...");
    onDetectorEvidence?.(series.key,null);
    setError("");setIch(null);setWmh(null);setBrainResult(null);setChestSource(null);setChestNodules(null);setChestCln(null);setLungscapeResult(null);
    setChestEffusion(null);setChestPe(null);setChestNodes(null);setChestIssues([]);setAbdomenResult(null);setRenalMonaiResult(null);setRenalMonaiIssue("");setXrvReport(null);setDecisions({});setDraftText("");
@@ -621,7 +624,10 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
      if(version===serial.current&&!controller.signal.aborted)
        setError(e instanceof Error?e.message:"Анализ не завершился. Результата нет.");
    }finally{
-     if(version===serial.current)setBusy(false);
+     if(version===serial.current){
+       setBusy(false);
+       onAnalysisStage?.(series.key,"completed");
+     }
    }
  }
  async function saveUnsignedDraft(){
@@ -655,7 +661,8 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  }
  function cancel(){
    serial.current++;active.current?.abort();active.current=null;
-   setBusy(false);setStatus("Анализ отменён. Неинтерпретированные зоны остаются неоценёнными.");
+   setBusy(false);onAnalysisStage?.(series.key,"cancelled");
+   setStatus("Анализ отменён. Неинтерпретированные зоны остаются неоценёнными.");
  }
  return <section className="cs-geometry" aria-label="Единый анализ DICOM">
   <h2>Анализ исследования</h2>
