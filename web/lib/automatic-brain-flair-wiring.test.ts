@@ -8,6 +8,8 @@ test("automatic FLAIR metadata enters the real WMH route; unknown MRI enters Vis
  assert.match(source,/const autoFlair=useMemo\(\(\)=>assessAutomaticBrainFlair\(series\)/);
  assert.match(source,/\(flairConfirmed\|\|autoFlair\.eligible\)&&sourceUrl\.startsWith\("https:\/\/"\)/);
  assert.match(source,/const brainVisionOnly=plan\.route==="wmh-flair"&&brainTask==="wmh"&&/);
+ assert.match(source,/\(!autoWmhReady&&!token\.trim\(\)\)/,
+   "An unavailable original WMH worker must not block independent Vision");
  const fallback=source.indexOf('if(brainVisionOnly){');
  const actualModel=source.indexOf('const version=++serial.current;',fallback);
  assert.ok(fallback>0&&actualModel>fallback,"Vision-only fallback must precede heavy WMH inference");
