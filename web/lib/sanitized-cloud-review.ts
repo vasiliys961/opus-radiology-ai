@@ -48,16 +48,16 @@ export function validateOpusIntegratedSynthesis(
    !hasRadiologistReportSections(v.summary)||!Array.isArray(v.comparisons)||
    v.comparisons.length!==completedTasks.length||
    !Array.isArray(v.conflicts)||v.conflicts.length>8||
-   !v.conflicts.every(x=>short(x,400))||
+   !v.conflicts.every(x=>short(x,1000))||
    !Array.isArray(v.limitations)||v.limitations.length>8||
-   !v.limitations.every(x=>short(x,400)))return false;
+   !v.limitations.every(x=>short(x,1000)))return false;
  const seen=new Set<string>();
  return v.comparisons.every(x=>{
    if(!x||typeof x!=="object"||Array.isArray(x)||
       Object.keys(x).sort().join(",")!==["task","assessment","reason"].sort().join(",")||
       !completedTasks.includes(x.task)||seen.has(x.task)||
       !["compatible","discordant","not_comparable"].includes(x.assessment)||
-      !short(x.reason,350))return false;
+      !short(x.reason,1000))return false;
    seen.add(x.task);return true;
  });
 }
@@ -343,6 +343,15 @@ export async function reviewSanitizedSamples(
       !comparisons?"missing_comparisons":
       comparisons.length!==completedTasks.length?"comparison_count_mismatch":
       !Array.isArray(v.conflicts)||!Array.isArray(v.limitations)?"missing_audit_lists":
+      v.schema!=="opus-integrated-gemini-detector-synthesis/v1"?"invalid_schema":
+      v.sourceCoverage!=="sampled_frames_only"?"invalid_coverage":
+      v.clinicallyValidated!==false?"invalid_clinical_flag":
+      v.conflicts.some(x=>!short(x,1000))?"invalid_conflict_length":
+      v.limitations.some(x=>!short(x,1000))?"invalid_limitation_length":
+      comparisons.some(x=>!x||typeof x!=="object"||Array.isArray(x)||
+        !completedTasks.includes((x as {task?:ConsiliumTask}).task!)||
+        !["compatible","discordant","not_comparable"].includes((x as {assessment?:string}).assessment??"")||
+        !short((x as {reason?:string}).reason,1000))?"invalid_comparison_content":
       "invalid_comparison_or_envelope";
     throw Error("opus_synthesis_missing_or_unbound_to_executed_detector_tasks:"+reason);
   }
