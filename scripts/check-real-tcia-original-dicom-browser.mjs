@@ -3,7 +3,8 @@
  */
 import {createRequire} from "node:module";
 import {spawn} from "node:child_process";
-import {readdir,mkdir,rm} from "node:fs/promises";
+import {readdir,mkdir,open} from "node:fs/promises";
+import {parseDicomSeriesHeader,groupDicomSeries} from "../web/lib/dicom-series.ts";
 import {createServer} from "node:net";
 import {join} from "node:path";
 import {fileURLToPath} from "node:url";
@@ -15,6 +16,32 @@ const directory=process.argv[2];
 if(!directory)throw Error("exact pinned TCIA reference directory is required");
 const files=(await readdir(join(directory,"dicom"))).sort().map(n=>join(directory,"dicom",n));
 assert.equal(files.length,103,"Exactly 103 unchanged public original CT files");
+// Audit only nonidentifying technical gating fields before browser launch.
+// No patient fields, UID values or source pixels enter logs/artifacts.
+const metadata=[];
+for(const file of files){
+ const handle=await open(file,"r");
+ try{
+  const block=Buffer.alloc(512*1024);
+  const {bytesRead}=await handle.read(block,0,block.length,0);
+  metadata.push(parseDicomSeriesHeader(block.subarray(0,bytesRead).buffer.slice(
+   block.byteOffset,block.byteOffset+bytesRead)));
+ }finally{await handle.close();}
+}
+const tally=key=>Object.fromEntries([...new Set(metadata.map(m=>String(m[key])))].map(
+ v=>[v,metadata.filter(m=>String(m[key])===v).length]));
+const grouped=groupDicomSeries(metadata.map((m,i)=>({id:String(i),name:"public-source",metadata:m})));
+console.log("Public original CT technical route audit",JSON.stringify({
+ modality:tally("modality"),bodyRegion:tally("bodyRegion"),imageRole:tally("imageRole"),
+ numberOfFrames:tally("numberOfFrames"),missingStudyUid:metadata.filter(m=>!m.studyUid).length,
+ missingSeriesUid:metadata.filter(m=>!m.seriesUid).length,
+ missingSopUid:metadata.filter(m=>!m.sopInstanceUid).length,
+ uniqueSopUidCount:new Set(metadata.map(m=>m.sopInstanceUid)).size,
+ groupCount:grouped.length,grouped:grouped.map(g=>({
+  frameCount:g.members.length,volumeReady:g.volumeReady,spatiallySorted:g.spatiallySorted,
+  hasSelection:!!g.selection,warning:g.warning
+ }))}));
+
 const port=await new Promise((resolve,reject)=>{
  const s=createServer();s.once("error",reject);
  s.listen(0,"127.0.0.1",()=>{const a=s.address();s.close(()=>resolve(a.port))});
