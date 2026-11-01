@@ -94,7 +94,7 @@ export const MAX_RADIOLOGIST_REPORT_CHARS=12_000;
  * omitted clinical sections, findings, measurements or model comparisons. */
 export function canonicalizeRadiologistHeadings(value:string):string {
  return value.replace(
-   /^[ \\t]*(?:#{1,4}[ \\t]*)?(?:\\*\\*)?(ИССЛЕДОВАНИЕ|МЕТОДИКА|ОПИСАНИЕ|ЗАКЛЮЧЕНИЕ|РЕКОМЕНДАЦИИ)(?:\\*\\*)?[ \\t]*:(?:\\*\\*)?/gim,
+   /^[ \t]*(?:#{1,4}[ \t]*)?(?:\*\*)?(ИССЛЕДОВАНИЕ|МЕТОДИКА|ОПИСАНИЕ|ЗАКЛЮЧЕНИЕ|РЕКОМЕНДАЦИИ)(?:\*\*)?[ \t]*:(?:\*\*)?/gim,
    (_match,heading:string)=>heading.toUpperCase()+":",
  );
 }
