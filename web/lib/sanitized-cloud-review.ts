@@ -297,7 +297,9 @@ export async function reviewSanitizedSamples(
         "Now compare these independent visual observations against the same-study completed and not-assessed "+
         "numeric model tasks. Completed is not diagnosis, not-assessed is never normal, and zero candidates "+
         "does not exclude disease: "+JSON.stringify(detectors.facts)}]:[]),
-      ...(spatial?[{type:"text",text:"VERIFIED same-public-NIfTI frame-relative CLN centroid PROJECTIONS (withheld from Gemini). "+
+      ...(spatial?[{type:"text",text:(spatial.alignment==="source-dicom-pixel-to-png"?
+          "Locally verified source-DICOM-pixel CLN centroid PROJECTIONS (withheld from Gemini). ":
+          "VERIFIED same-public-NIfTI frame-relative CLN centroid PROJECTIONS (withheld from Gemini). ")+
         "Candidate location is a pointer, not an outline or true visual validation. "+
         "xFraction and yFraction refer to the displayed PNG: origin TOP LEFT, "+
         "x rightward, y downward, both 0..1. axialSliceOffset is native slice-index "+
