@@ -1,0 +1,34 @@
+name: One-command original CLN Linux launcher checks
+on:
+  pull_request:
+    paths:
+      - "scripts/start-opus-cln-app.py"
+      - "deploy/CLN_ONE_COMMAND_APP.md"
+      - ".github/workflows/one-command-cln-launcher.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  launcher-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Syntax, CLI and fail-closed unavailable-model preflight (NO inference)
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/start-opus-cln-app.py
+          python scripts/start-opus-cln-app.py --help | grep -F -- '--enable-public-cloud'
+          if python scripts/start-opus-cln-app.py --check-only > /tmp/cln-preflight.txt 2>&1; then
+            echo "::error::Expected no-model runner to fail preflight, but it reported ready."
+            exit 1
+          fi
+          grep -F 'BLOCKED:' /tmp/cln-preflight.txt
+          if grep -E 'http://127.0.0.1:3000/viewer|ONE-SESSION OPERATOR TOKEN' /tmp/cln-preflight.txt; then
+            echo "::error::Preflight must never start services or issue tokens."
+            exit 1
+          fi
+          echo "CLN launcher preflight rejects unconfigured host without any model inference."
