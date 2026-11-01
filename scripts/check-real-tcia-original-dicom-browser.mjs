@@ -77,6 +77,8 @@ try{
  await selected.first().click();
  const analysis=page.locator('section[aria-label="Единый анализ DICOM"]');
  await analysis.waitFor({timeout:30000});
+ const confirmation=analysis.getByRole("checkbox",{name:/Подтверждаю, что это КТ грудной клетки/});
+ if(await confirmation.count())await confirmation.check();
  const info=await analysis.innerText();
  assert.match(info,/Грудная клетка|CHEST|Лёгк/i,
    "The genuine public DICOM anatomy must dispatch as chest CT");
