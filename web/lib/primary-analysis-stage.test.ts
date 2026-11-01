@@ -34,5 +34,7 @@ test("paid Gemini and Opus calls remain a direct clinician action after source-b
  assert.match(cloud,/if\(controller\.signal\.aborted\)return;/);
  assert.match(cloud,/ctl\.current\?\.abort\(\);setTransferAuthorized\(false\);setResult\(null\)/);
  assert.match(cloud,/acknowledgeTwoPaidCalls:true/);
+ assert.match(cloud,/primaryAnalysisStage!=="idle"\|\|includeDetectors/);
+ assert.match(cloud,/Оригинальные детекторы текущего исследования будут переданы Claude Opus автоматически/);
  assert.match(cloud,/downloadRadiologistText/);
 });
