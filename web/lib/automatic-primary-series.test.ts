@@ -1,5 +1,5 @@
 import {strict as assert} from "node:assert";
-import {suggestPrimaryDicomSeries,canAutoPrepareLocalVision} from "./automatic-primary-series.ts";
+import {suggestPrimaryDicomSeries,canAutoPrepareLocalVision,canUseVisionOnlyAsPrimary} from "./automatic-primary-series.ts";
 import type {DicomSeries,TechnicalDicomMetadata} from "./dicom-series.ts";
 
 // Realistic numeric DICOM identifiers and affine geometry are required by
@@ -60,4 +60,17 @@ assert.equal(canAutoPrepareLocalVision({...chest,members:chest.members.map((m,i)
 assert.equal(canAutoPrepareLocalVision({...chest,members:chest.members.map((m,i)=>i===1?
  {...m,metadata:{...m.metadata,imageOrientationPatient:null}}:m)}),false,
  "Missing physical affine must not auto-open Vision");
+const pelvis=series("pelvis","CT","PELVIS",100,true);
+const knee=series("knee","MR","EXTREMITY",28,true);
+const allIds=(study:DicomSeries)=>new Set(study.members.map(m=>m.id));
+assert.equal(canUseVisionOnlyAsPrimary(pelvis,allIds(pelvis)),true,
+ "Verified CT pelvis without a local detector must have a universal Vision path");
+assert.equal(canUseVisionOnlyAsPrimary(knee,allIds(knee)),true,
+ "Verified MRI of a joint must remain reviewable even without a native detector");
+assert.equal(canUseVisionOnlyAsPrimary(chest,allIds(chest)),false,
+ "Original chest model route takes precedence over Vision-only fallback");
+assert.equal(canUseVisionOnlyAsPrimary(derived,allIds(derived)),false);
+assert.equal(canUseVisionOnlyAsPrimary(pelvis,new Set()),false,
+ "Vision-only must reject missing source pixels");
+assert.equal(canUseVisionOnlyAsPrimary({...pelvis,spatiallySorted:false},allIds(pelvis)),false);
 console.log("PASS automatic native DICOM primary series selection and fail-closed routes");
