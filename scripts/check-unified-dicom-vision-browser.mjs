@@ -58,7 +58,8 @@ try{
  await launch.click();
  // The SAME primary action must open offline Vision planning immediately.
  // The heavy original worker path is independent and may still be running.
- await page.getByRole("heading",{name:/Gemini Orchestra · подготовка кадров/}).waitFor({timeout:30000});
+  await page.getByText("Дополнительно · анализ отдельных срезов",{exact:true}).click();
+  await page.getByRole("heading",{name:/Gemini Orchestra · подготовка кадров/}).waitFor({timeout:30000});
  await page.getByText(/Основной анализ DICOM запущен/).waitFor({timeout:30000});
  assert.equal(await page.getByRole("button",{name:"Запустить единый анализ КТ/МРТ"}).count(),0,
   "Only one physician Analyze action; duplicate research launch must be hidden");
