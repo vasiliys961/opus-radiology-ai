@@ -105,6 +105,10 @@ def main():
         "OMP_NUM_THREADS":"2","MKL_NUM_THREADS":"2","OPENBLAS_NUM_THREADS":"1",
         "CUDA_VISIBLE_DEVICES":"-1",
     })
+    # systemd and CI stop signals must also terminate both child processes.
+    def on_terminate(_signum,_frame):
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGTERM,on_terminate)
     worker=viewer=None
     try:
         worker=subprocess.Popen([sys.executable,str(ROOT/"services/imaging-ai/cln_native_upload_worker.py")],
