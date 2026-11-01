@@ -73,4 +73,33 @@ assert.equal(canUseVisionOnlyAsPrimary(derived,allIds(derived)),false);
 assert.equal(canUseVisionOnlyAsPrimary(pelvis,new Set()),false,
  "Vision-only must reject missing source pixels");
 assert.equal(canUseVisionOnlyAsPrimary({...pelvis,spatiallySorted:false},allIds(pelvis)),false);
+// Selection must treat source-verified universal Vision as a real local route,
+// without ever claiming that a trained disease detector has executed.
+const eligibleFallback=select([scout,derived,pelvis]);
+assert.equal(eligibleFallback.key,pelvis.key,
+ "Verified pelvis CT must outrank scout and an oversized derived reconstruction");
+assert.equal(eligibleFallback.runnable,false,
+ "Universal Vision must not be mislabeled as native pathology inference");
+assert.equal(eligibleFallback.visionOnly,true);
+assert.match(eligibleFallback.reason,/Gemini\/Opus без патологического детектора/);
+const primaryNative=select([pelvis,chest]);
+assert.equal(primaryNative.key,chest.key,"Native model route takes priority when present");
+assert.equal(primaryNative.runnable,true);
+assert.equal(primaryNative.visionOnly,false);
+assert.equal(primaryNative.ambiguity,true,
+ "Competing viable Vision and native series need an explicit selection warning");
+const twoVision=select([knee,pelvis]);
+assert.equal(twoVision.key,pelvis.key);
+assert.equal(twoVision.visionOnly,true);
+assert.equal(twoVision.ambiguity,true);
+const badGeometry={...pelvis,spatiallySorted:false,volumeReady:false};
+const invalidUid={...pelvis,members:pelvis.members.map((m,i)=>i===0?
+ {...m,metadata:{...m.metadata,sopInstanceUid:"not-a-valid-uid"}}:m)};
+assert.equal(select([scout,badGeometry]).visionOnly,false);
+assert.equal(select([scout,invalidUid]).visionOnly,false);
+assert.equal(suggestPrimaryDicomSeries([pelvis],
+ new Set(pelvis.members.slice(1).map(m=>m.id))).visionOnly,false,
+ "Missing original pixel file must not be presented as a runnable Vision study");
+assert.equal(onlyUnknown.visionOnly,true,
+ "Valid but unknown anatomy can use the independent Vision route");
 console.log("PASS automatic native DICOM primary series selection and fail-closed routes");
