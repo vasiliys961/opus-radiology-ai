@@ -57,6 +57,29 @@ test("Verified CLN center is automatically included without increasing paid fram
  const normal=planVisionFrameSamples([selected],selected.key);
  assert.equal(normal.selection,"uniform-sampling");
 });
+test("Both independent source-verified CLN centers enter the same four-frame Vision budget",()=>{
+ const source=series(32,{modality:"CT"},{modality:"CT"});
+ const plan=planVisionFrameSamples([source],source.key,4,[5,27]);
+ assert.equal(plan.status,"ready-for-local-preview");
+ assert.equal(plan.selection,"verified-candidate-sampling");
+ assert.deepEqual(plan.frames.map(f=>f.ordinal),[1,6,28,32]);
+ assert.equal(plan.frames.length,4);
+ assert.equal(new Set(plan.frames.map(f=>f.sopInstanceUid)).size,4);
+ assert.equal(plan.transmissionPermitted,false);
+ assert.equal(plan.deidentificationVerified,false);
+});
+test("Duplicate, out-of-range and already-sampled candidates cannot displace a verified source frame",()=>{
+ const source=series(32,{modality:"CT"},{modality:"CT"});
+ const plan=planVisionFrameSamples([source],source.key,4,[10,10,-1,999,Number.NaN,27]);
+ assert.deepEqual(plan.frames.map(f=>f.ordinal),[1,11,28,32]);
+ const none=planVisionFrameSamples([source],source.key,4,[-1,999,Number.NaN]);
+ assert.equal(none.selection,"uniform-sampling");
+ assert.deepEqual(none.frames.map(f=>f.ordinal),[1,11,22,32]);
+ const short=planVisionFrameSamples([source],source.key,3,[5,27]);
+ assert.equal(short.frames.length,3);
+ assert.deepEqual(short.frames.map(f=>f.ordinal),[1,6,32]);
+});
+
 test("Active selection never falls through to unrelated healthy series", () => {
   const broken = series(32, {}, {key:"broken",volumeReady:false,warning:"bad"});
   const healthy = series(32, {}, {key:"healthy"});
