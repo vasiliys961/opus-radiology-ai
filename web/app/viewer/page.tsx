@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useMemo, useRef, useState, type ChangeEvent } from "react";
 import { groupDicomSeries, readDicomSeriesHeader, type DicomSeries } from "../../lib/dicom-series";
-import {suggestPrimaryDicomSeries} from "../../lib/automatic-primary-series";
+import {suggestPrimaryDicomSeries,canAutoPrepareLocalVision} from "../../lib/automatic-primary-series";
 import { validateViewerFileSelection } from "../../lib/viewer-limits";
 import "./viewer.css";
 import "../radiology.css";
@@ -98,7 +98,9 @@ export default function ViewerPage() {
       // Replace, rather than merge, series so stale patient data cannot persist.
       setIndexed(parsed);
       setPreparedMonaiSource(null);setPreparedMonaiSession(null);setPreparedMonaiResult(null);
-      setWmhSlice(undefined);setCurrentSeriesKey("");setVisionOpen(false);setVisionFromPrimary(false);setVisionDetectorEvidence(null);setClnVerified(null);
+      setWmhSlice(undefined);setCurrentSeriesKey("");
+      // Local Vision samples are prepared automatically, with no provider call.
+      setVisionOpen(true);setVisionFromPrimary(false);setVisionDetectorEvidence(null);setClnVerified(null);
       const mostCommon = [...reasons.entries()].sort((a, b) => b[1] - a[1])[0];
       setMessage(`Проиндексировано ${parsed.length} DICOM; пропущено ${rejected}.${mostCommon ? ` Основная причина (${mostCommon[1]}): ${mostCommon[0]}.` : ""} Изображения остаются на вашем Mac.`);
     } finally { setReading(false); }
@@ -144,7 +146,7 @@ export default function ViewerPage() {
           {series.length > 0 && <>
             <h3>Серии ({series.length})</h3>
             {!currentSeriesKey&&<p className="cs-message" role="status">{suggestion.reason}</p>}
-            <div className="cs-series-list">{series.map((s) => <button type="button" className={selected?.key === s.key ? "cs-series active" : "cs-series"} key={s.key} onClick={() => {setWmhSlice(undefined);setVisionOpen(false);setVisionFromPrimary(false);setVisionDetectorEvidence(null);setClnVerified(null);setCurrentSeriesKey(s.key);}}>{s.label}</button>)}</div>
+            <div className="cs-series-list">{series.map((s) => <button type="button" className={selected?.key === s.key ? "cs-series active" : "cs-series"} key={s.key} onClick={() => {setWmhSlice(undefined);setVisionOpen(canAutoPrepareLocalVision(s));setVisionFromPrimary(false);setVisionDetectorEvidence(null);setClnVerified(null);setCurrentSeriesKey(s.key);}}>{s.label}</button>)}</div>
           </>}
           {selected && <div className="cs-geometry"><h3>Контроль геометрии</h3><p>{selected.spatiallySorted ? "✓ Пространственный порядок подтверждён" : "⚠ Порядок условный"}</p><p>{selected.volumeReady ? `✓ Предварительная геометрия для будущего 3D · ${selected.sliceSpacingMm?.toFixed(2)} мм` : "3D/MPR НЕ РАЗРЕШЕНЫ"}</p>{selected.warning && <p>{selected.warning}</p>}</div>}
           {selected && <UnifiedDicomStudyAnalysis key={"unified-"+selected.key} series={selected} allSeries={series} files={indexedById}
