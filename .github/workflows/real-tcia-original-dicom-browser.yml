@@ -1,0 +1,44 @@
+name: Real original TCIA DICOM Chromium viewer sampling
+
+on:
+  pull_request:
+    paths:
+      - "scripts/check-real-tcia-original-dicom-browser.mjs"
+      - "scripts/download-original-tcia-idc-fallback.py"
+      - ".github/workflows/real-tcia-original-dicom-browser.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  authentic-original-dicom-browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 28
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pinned public source validator
+        run: python -m pip install --no-cache-dir "numpy==1.26.4" "pydicom==3.0.1" idc-index
+      - name: Fetch verified 103 unchanged scanner-original DICOM files from TCIA
+        run: python scripts/download-original-tcia-idc-fallback.py --output "$RUNNER_TEMP/tcia-original-ct-browser"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Install and compile real viewer
+        working-directory: web
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+      - name: Install Chromium
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+      - name: Open true CT source in browser and generate four source PNGs
+        run: |
+          node scripts/check-real-tcia-original-dicom-browser.mjs \
+            "$RUNNER_TEMP/tcia-original-ct-browser"
+      - name: Remove temporary original DICOM source
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/tcia-original-ct-browser"

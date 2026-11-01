@@ -329,11 +329,71 @@ export function renderDicomPixels(frame: DicomFrame): Uint8ClampedArray {
   return output;
 }
 
+/** Standards-aware fallback for source DICOM containing undefined-length SQ.
+ * Original pixels remain unchanged. The parser reads no patient text into output.
+ * Only single-frame uncompressed monochrome sources are admitted. */
+async function parseDicomFrameWithSequences(buffer:ArrayBuffer):Promise<DicomFrame>{
+ const bytes=new Uint8Array(buffer);
+ if(bytes.length<160||ascii(bytes,128,4)!=="DICM")
+  throw new DicomPreviewError("Нужен исходный DICOM Part 10.");
+ const module=await import("dicom-parser");
+ const parser=module.default??module;
+ const ds=parser.parseDicom(bytes,{untilTag:"x7fe00010"});
+ const str=(tag:string)=>ds.string(tag)?.trim()??"";
+ const syntax=str("x00020010");
+ if(syntax!==EXPLICIT_LE&&syntax!==IMPLICIT_LE)
+  throw new DicomPreviewError("Неподдерживаемый исходный Transfer Syntax.");
+ const pixel=ds.elements.x7fe00010;
+ const width=ds.uint16("x00280011")??0,height=ds.uint16("x00280010")??0;
+ const bitsAllocated=ds.uint16("x00280100")??0;
+ const bitsStored=ds.uint16("x00280101")??bitsAllocated;
+ const highBit=ds.uint16("x00280102")??bitsStored-1;
+ const samples=ds.uint16("x00280002")??0;
+ const frames=Number.parseInt(str("x00280008")||"1",10);
+ const photometric=str("x00280004");
+ if(!pixel||pixel.length===0xffffffff||
+    !Number.isSafeInteger(pixel.dataOffset)||!Number.isSafeInteger(pixel.length)||
+    pixel.length<0||pixel.dataOffset+pixel.length>bytes.length)
+  throw new DicomPreviewError("Некорректная несжатая Pixel Data.");
+ if(!width||!height||width*height>MAX_PIXELS||samples!==1||frames!==1||
+    !["MONOCHROME1","MONOCHROME2"].includes(photometric)||
+    (bitsAllocated!==8&&bitsAllocated!==16)||bitsStored<1||bitsStored>bitsAllocated||
+    highBit>=bitsAllocated||highBit+1<bitsStored||
+    pixel.length<width*height*(bitsAllocated/8))
+  throw new DicomPreviewError("Исходный монохромный однокадровый DICOM не поддерживается.");
+ const scalar=(tag:string,defaultValue:number)=>{
+   const value=str(tag);
+   const number=value?Number.parseFloat(value.split("\\")[0]):defaultValue;
+   if(!Number.isFinite(number))throw new DicomPreviewError("Неверная калибровка исходного DICOM.");
+   return number;
+ };
+ const instanceNumber=Number.parseInt(str("x00200013"),10);
+ return {
+  metadata:{
+   width,height,bitsAllocated:bitsAllocated as 8|16,transferSyntax:syntax,
+   modality:str("x00080060"),instanceNumber:Number.isFinite(instanceNumber)?instanceNumber:null,
+   windowCenter:str("x00281050")?scalar("x00281050",0):null,
+   windowWidth:str("x00281051")?scalar("x00281051",0):null,
+  },bytes:buffer,pixelOffset:pixel.dataOffset,pixelLength:pixel.length,
+  signed:ds.uint16("x00280103")===1,
+  bitsStored,highBit,
+  slope:scalar("x00281053",1),intercept:scalar("x00281052",0),
+  inverse:photometric==="MONOCHROME1",
+ };
+}
+
 export async function decodeDicomPreview(file: File,options:{maxPixels?:number}={}): Promise<{url: string; metadata: DicomPreviewMetadata}> {
   if (file.size > MAX_PREVIEW_FILE_BYTES) {
     throw new DicomPreviewError("Файл больше 64 МБ. Не загружаем его целиком в память; нужен потоковый DICOM-декодер.");
   }
-  const frame = parseDicomFrame(await file.arrayBuffer());
+  const bytes=await file.arrayBuffer();
+  let frame:DicomFrame;
+  try{frame=parseDicomFrame(bytes);}
+  catch(error){
+   if(!(error instanceof DicomPreviewError)||
+     !error.message.includes("Последовательности неопределённой длины"))throw error;
+   frame=await parseDicomFrameWithSequences(bytes);
+  }
   if(options.maxPixels!==undefined&&(!Number.isSafeInteger(options.maxPixels)||options.maxPixels<1||frame.metadata.width*frame.metadata.height>options.maxPixels))
     throw new DicomPreviewError("Кадр превышает лимит локальной копии. Откройте исходный срез в Cornerstone.");
   const pixels = renderDicomPixels(frame);
