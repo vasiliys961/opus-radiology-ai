@@ -134,6 +134,7 @@ export default function FullVolumeLocalPreparation({
  }
  useEffect(()=>{
    if(!autoStart||!plan||started.current)return;
+   if(sessionReady===null)return;
    started.current=true;
    const controller=new AbortController();ctl.current=controller;
    if(!sessionReady){
@@ -147,9 +148,10 @@ export default function FullVolumeLocalPreparation({
      setNotice(e instanceof Error?e.message:"Автоматический анализ не завершён");
    });
  // Only the primary action can initiate automatic paid study-wide cloud analysis.
- // A subsequent session status change never silently triggers a paid retry.
+ // Once the operator session is resolved, a user-initiated primary analysis starts.
+ // No subsequent admin reconnection silently restarts failed paid inference.
  // eslint-disable-next-line react-hooks/exhaustive-deps
- },[autoStart]);
+ },[autoStart,sessionReady]);
  function stop(){
    ctl.current?.abort();setStage("interrupted");
    setNotice("Анализ остановлен. Результат неполный; повторный платный запуск не выполняется.");
