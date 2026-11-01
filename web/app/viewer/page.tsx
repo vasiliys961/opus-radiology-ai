@@ -57,6 +57,7 @@ export default function ViewerPage() {
   const [wmhSlice,setWmhSlice]=useState<number|undefined>(undefined);
   const [visionOpen,setVisionOpen]=useState(false);
   const [visionFromPrimary,setVisionFromPrimary]=useState(false);
+  const [originalDetectorsBusy,setOriginalDetectorsBusy]=useState(false);
   const [visionDetectorEvidence,setVisionDetectorEvidence]=useState<{seriesKey:string;bundle:SanitizedDetectorBundle}|null>(null);
   const [clnVerified,setClnVerified]=useState<{seriesKey:string;value:ClnVerifiedLocalEvidence}|null>(null);
   const [preparedMonaiSource,setPreparedMonaiSource]=useState<File|null>(null);
@@ -109,7 +110,7 @@ export default function ViewerPage() {
         new Set(parsed.map(item=>item.id)));
       setVisionOpen(canAutoPrepareLocalVision(
         loadedSeries.find(item=>item.key===primary.key)));
-      setVisionFromPrimary(false);setVisionDetectorEvidence(null);setClnVerified(null);
+      setVisionFromPrimary(false);setOriginalDetectorsBusy(false);setVisionDetectorEvidence(null);setClnVerified(null);
       const mostCommon = [...reasons.entries()].sort((a, b) => b[1] - a[1])[0];
       setMessage(`Проиндексировано ${parsed.length} DICOM; пропущено ${rejected}.${mostCommon ? ` Основная причина (${mostCommon[1]}): ${mostCommon[0]}.` : ""} Изображения остаются на вашем Mac.`);
     } finally { setReading(false); }
@@ -139,6 +140,12 @@ export default function ViewerPage() {
       </div>
       {sourceMode==="nodules" ? <NoduleBoundResearchView initialSource={preparedMonaiSource} initialAutoSession={preparedMonaiSession} initialCompletedReport={preparedMonaiResult}/> : sourceMode==="nifti" ? <NiftiCtResearchView/> : sourceMode==="colon" ? <ColonCancerResearchResults/> : sourceMode==="coverage" ? <PathologyCoverageResearch/> : sourceMode==="morphometry" ? <MorphometryEvidenceReview/> : <>
       <div className="cs-intro"><div><div className="cs-kicker">IMAGING LAB / 2D STACK</div><h1>DICOM Viewer <em>β</em></h1><p>Просмотр исходных DICOM-серий и исследовательский анализ на проверенных локальных исполнителях. Без автоматической передачи в облако.</p></div><span className="cs-watermark">ИССЛЕДОВАТЕЛЬСКИЙ ПРОТОТИП · НЕ ДЛЯ ДИАГНОСТИКИ</span></div>
+      <div className="cs-geometry" role="status" aria-label="Этапы обработки исследования">
+        <strong>Порядок работы: DICOM → оригинальные детекторы → Gemini → Claude Opus → заключение</strong>
+        <p>{reading?"1. Индексируем загруженные DICOM…":selected?`1. DICOM готовы: ${selected.members.length} файлов, ${selected.modality}.`:"1. Загрузите файлы DICOM или папку исследования."}</p>
+        <p>{originalDetectorsBusy?"2. Оригинальные детекторы выполняются; Gemini подготавливается параллельно.":visionFromPrimary?"2. Анализ запущен. Доступные детекторы выполнены или отмечены как недоступные.":"2. После загрузки нажмите «Анализировать исследование» — модели будут выбраны автоматически."}</p>
+        <p>{visionFromPrimary?"3. Проверьте подготовленные обезличенные кадры и подтвердите облачную передачу. Затем получите редактируемое заключение и TXT.":"3. Приложение подготовит Gemini и Opus; заключение появится после разрешённого анализа."}</p>
+      </div>
       <div className="cs-layout">
         <aside className="cs-sidebar">
           <h2>Загрузка серии</h2>
@@ -155,12 +162,13 @@ export default function ViewerPage() {
           {series.length > 0 && <>
             <h3>Серии ({series.length})</h3>
             {!currentSeriesKey&&<p className="cs-message" role="status">{suggestion.reason}</p>}
-            <div className="cs-series-list">{series.map((s) => <button type="button" className={selected?.key === s.key ? "cs-series active" : "cs-series"} key={s.key} onClick={() => {setWmhSlice(undefined);setVisionOpen(canAutoPrepareLocalVision(s));setVisionFromPrimary(false);setVisionDetectorEvidence(null);setClnVerified(null);setCurrentSeriesKey(s.key);}}>{s.label}</button>)}</div>
+            <div className="cs-series-list">{series.map((s) => <button type="button" className={selected?.key === s.key ? "cs-series active" : "cs-series"} key={s.key} onClick={() => {setWmhSlice(undefined);setVisionOpen(canAutoPrepareLocalVision(s));setVisionFromPrimary(false);setOriginalDetectorsBusy(false);setVisionDetectorEvidence(null);setClnVerified(null);setCurrentSeriesKey(s.key);}}>{s.label}</button>)}</div>
           </>}
           {selected && <div className="cs-geometry"><h3>Контроль геометрии</h3><p>{selected.spatiallySorted ? "✓ Пространственный порядок подтверждён" : "⚠ Порядок условный"}</p><p>{selected.volumeReady ? `✓ Предварительная геометрия для будущего 3D · ${selected.sliceSpacingMm?.toFixed(2)} мм` : "3D/MPR НЕ РАЗРЕШЕНЫ"}</p>{selected.warning && <p>{selected.warning}</p>}</div>}
           {selected && <UnifiedDicomStudyAnalysis key={"unified-"+selected.key} series={selected} allSeries={series} files={indexedById}
             onMonaiReady={(file,session,report)=>{setPreparedMonaiSource(file);setPreparedMonaiSession(session);setPreparedMonaiResult(report??null);setSourceMode("nodules");}}
             onNavigate={setWmhSlice}
+            onAnalysisState={(key,running)=>{if(selected.key===key)setOriginalDetectorsBusy(running);}}
             onReadyForVision={key=>{if(selected?.key===key){setVisionFromPrimary(true);setVisionOpen(true);}}}
             onClnBoundReady={(key,value)=>setClnVerified(previous=>{
               if(key!==selected.key)return previous;
@@ -190,7 +198,7 @@ export default function ViewerPage() {
           {selected && selected.modality==="MR" && <WmhSourceReview key={"wmh-"+selected.key} series={selected} files={indexedById} onNavigate={setWmhSlice}/>}
           {selected && <NativeCtResearchExport key={"native-export-"+selected.key} series={selected} files={selectedFiles} onPreparedSource={(file,session)=>{setPreparedMonaiSession(session??null);setPreparedMonaiSource(file);setPreparedMonaiResult(null);setSourceMode("nodules");}}/> }
           </details>
-          <button type="button" className="cs-clear" disabled={reading || indexed.length === 0} onClick={() => { setIndexed([]); setPreparedMonaiSource(null);setPreparedMonaiSession(null);setPreparedMonaiResult(null); setCurrentSeriesKey(""); setVisionOpen(false); setVisionFromPrimary(false); setVisionDetectorEvidence(null);setClnVerified(null); setMessage("Список очищен, файлы на диске не изменены."); }}>Очистить загруженное</button>
+          <button type="button" className="cs-clear" disabled={reading || indexed.length === 0} onClick={() => { setIndexed([]); setPreparedMonaiSource(null);setPreparedMonaiSession(null);setPreparedMonaiResult(null); setCurrentSeriesKey(""); setVisionOpen(false); setVisionFromPrimary(false); setOriginalDetectorsBusy(false); setVisionDetectorEvidence(null);setClnVerified(null); setMessage("Список очищен, файлы на диске не изменены."); }}>Очистить загруженное</button>
         </aside>
         <div className="cs-stage">
           {selectedFiles.length ? <CornerstoneStack key={selected?.key} files={selectedFiles} modality={selected?.modality} selectedIndex={wmhSlice}/> : <div className="cs-placeholder"><span>✚</span><strong>Область DICOM-изображений</strong><p>Выберите файлы или папку DICOM, чтобы проверить работу Cornerstone3D.</p></div>}
@@ -206,6 +214,7 @@ export default function ViewerPage() {
                 originalDetectorEvidence={visionDetectorEvidence?.seriesKey===selected.key?visionDetectorEvidence.bundle:null}
                  clnVerifiedLocal={clnVerified?.seriesKey===selected.key?clnVerified.value:null}
                 fromPrimaryAnalysis={visionFromPrimary}
+                originalDetectorsBusy={originalDetectorsBusy}
                 onOpenSlice={id=>{
                   const index=selected.members.findIndex(m=>m.id===id);
                   if(index>=0)setWmhSlice(index);
