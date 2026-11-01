@@ -684,7 +684,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  }
  return <section className="cs-geometry" aria-label="Единый анализ DICOM">
   <h2>Анализ исследования</h2>
-  <p>Единый запуск: автоматический выбор доступных оригинальных детекторов и локальная подготовка кадров для Gemini. По окончании Claude Opus сопоставляет оба пути и формирует протокол рентгенолога.</p>
+  <p>Единый запуск: автоматический выбор доступных оригинальных детекторов и локальная подготовка кадров для Gemini. Gemini независимо просматривает изображения параллельно детекторам, затем Opus сопоставляет оба результата и формирует один протокол рентгенолога.</p>
    {confirmableChest&&<label><input type="checkbox" checked={clinicianConfirmedChest}
      disabled={busy} onChange={e=>setClinicianConfirmedChest(e.target.checked)}/>
      Подтверждаю, что это КТ грудной клетки (исходные DICOM без однозначного анатомического кода либо с признаком реконструкции).
@@ -820,7 +820,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
    </details>}
    {/* Authorization is a primary clinical action, not a hidden developer setting. */}
     <label><input type="checkbox" checked={authorized} disabled={busy} onChange={e=>setAuthorized(e.target.checked)}/>
-     Подтверждаю разрешённый публичный обезличенный исследовательский источник и полномочия на локальный запуск. Пациентские снимки этим маршрутом не передавать.</label>
+     Подтверждаю, что исследование разрешено к обработке и обезличено. Разрешаю локальный анализ и передачу очищенных копий изображений в Gemini для получения предварительного заключения Opus. Для обычных пациентских исследований без соответствующих разрешений облачная передача не выполняется.</label>
    <button type="button" disabled={!ready} onClick={()=>void launch()}>
     {busy?"Выполняется реальный анализ...":"Анализировать исследование"}
    </button>
