@@ -55,6 +55,8 @@ try{
  await page.locator(".cs-series-list button").first().click();
  const study=page.locator('section[aria-label="Единый анализ DICOM"]');
  await study.waitFor({timeout:45000});
+ const sourceConfirmation=study.getByRole("checkbox",{name:/Подтверждаю, что это КТ грудной клетки/});
+ if(await sourceConfirmation.count())await sourceConfirmation.check();
  assert.match(await study.innerText(),/Грудная клетка/);
  await study.getByText("Настройки приватного исполнителя и разрешение",{exact:true}).click();
  await study.getByRole("checkbox",{name:/Подтверждаю разрешённый публичный/}).check();
