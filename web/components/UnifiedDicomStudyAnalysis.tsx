@@ -25,6 +25,8 @@ import {checkOriginalXrvReady,runCxrXrvFromDicom,XRV_CXR_LABELS,type OriginalXrv
 import CxrIndependentVisionReview from "./CxrIndependentVisionReview";
 import OriginalWorkerFleetReadiness from "./OriginalWorkerFleetReadiness";
 import {checkAutomaticClnReady,executeOriginalCln,type ClnReport} from "../lib/cln-native-worker";
+import {readNoduleNiftiHeader,verifyNoduleSource} from "../lib/live-nodule-report";
+import {restoreMissingClnSource} from "../lib/cln-original-source-recovery";
 import ClnOriginalPhysicianReview from "./ClnOriginalPhysicianReview";
 import type {ClnVerifiedLocalEvidence} from "../lib/cln-physician-local-review";
 import {checkAutomaticLungscapeReady,executeOriginalLungscape,type LungscapeReport} from "../lib/lungscape-native-worker";
@@ -333,6 +335,22 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
           try{
             const tumor=await executeOriginalCln(nifti,controller.signal,progress);
             if(version!==serial.current||controller.signal.aborted)return;
+            // The original browser-owned OPFS File can be invalidated during
+            // a long CPU model execution. Rebuild only if it has disappeared.
+            // Verify the *exact* original CLN SHA before enabling DICOM slices.
+            const reviewed=await restoreMissingClnSource(nifti,
+              async source=>{
+                await readNoduleNiftiHeader(source);
+                await verifyNoduleSource(source,tumor.sourceNiftiSha256,controller.signal);
+              },
+              ()=>prepareDicomMonaiFile(sourceSeries,original as File[],
+                controller.signal,progress));
+            if(version!==serial.current||controller.signal.aborted)return;
+            if(reviewed.restored){
+              nifti=reviewed.source;
+              setChestSource(nifti);
+              progress("Исходный HU-объём восстановлен из DICOM и подтверждён SHA-256 CLN.");
+            }
             setChestCln(tumor);completed++;
           }catch(e){if(controller.signal.aborted)return;
             problems.push("CLN опухоль лёгкого: "+(e instanceof Error?e.message:"недоступен"));
