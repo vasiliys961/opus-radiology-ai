@@ -79,6 +79,12 @@ try{
  const bulk=privacy.getByRole("checkbox",{name:/Я просмотрел ВСЕ показанные PNG/});
  await bulk.check();
  assert.equal(await bulk.isChecked(),true);
+ const mockedLongProtocol="ИССЛЕДОВАНИЕ:\nСинтетическая учебная КТ, отдельные кадры.\n"+
+  "МЕТОДИКА:\nОценены выборочные кадры, полный ряд недоступен.\n"+
+  "ОПИСАНИЕ:\n"+("Учебное описание синтетического изображения, без клинической интерпретации.\n").repeat(90)+
+  "ЗАКЛЮЧЕНИЕ:\nКлинических выводов по фантому нет.\n"+
+  "РЕКОМЕНДАЦИИ:\nТолько программная проверка.";
+ assert.ok(mockedLongProtocol.length>6000&&mockedLongProtocol.length<12000);
  let posted=null,postCount=0;
  await page.route("**/api/ai/deidentified-openrouter-review",async route=>{
   const req=route.request();
@@ -113,7 +119,7 @@ try{
    researchOnly:true,diagnosticAccuracyValidated:false,
    opusSynthesis:{
     schema:"opus-integrated-gemini-detector-synthesis/v1",
-    summary:"ИССЛЕДОВАНИЕ:\nСинтетическая учебная КТ, представлены отдельные кадры.\nМЕТОДИКА:\nОценены выборочные кадры, весь томографический ряд недоступен.\nОПИСАНИЕ:\nИсследуется фантом, клинические изменения не оцениваются.\nЗАКЛЮЧЕНИЕ:\nКлинических выводов по синтетическому фантому нет.\nРЕКОМЕНДАЦИИ:\nИспользовать исключительно для проверки программного интерфейса.",
+    summary:mockedLongProtocol,
     comparisons:[],conflicts:[],
     limitations:["Синтетический фантом; не отражает реальных пациентов."],
     sourceCoverage:"sampled_frames_only",clinicallyValidated:false,
@@ -130,8 +136,13 @@ try{
  assert.match(responses,/Gemini Vision/);assert.match(responses,/Opus Vision/);
  const integrated=cloud.locator('section[aria-label="Объединённое заключение Opus по Gemini JSON и детекторам"]');
  await integrated.waitFor();
+ const reportField=integrated.getByRole("textbox",{name:"Редактируемое описание и заключение рентгенолога"});
+ assert.equal(await reportField.inputValue(),mockedLongProtocol,
+   "The entire >6000-character response must be visible in the physician editor");
+ const physicianRevision=mockedLongProtocol+"\nSYNTHETIC OPUS INTEGRATED REPORT after Gemini JSON.";
  await integrated.getByRole("textbox",{name:"Редактируемое описание и заключение рентгенолога"})
-   .fill("SYNTHETIC OPUS INTEGRATED REPORT after Gemini JSON.");
+   .fill(physicianRevision);
+ assert.equal(await reportField.inputValue(),physicianRevision,"Long clinician edits cannot truncate");
 
  const reportDownloadPromise=page.waitForEvent("download");
  await integrated.getByRole("button",{name:"Скачать заключение рентгенолога TXT"}).click();
@@ -139,7 +150,7 @@ try{
  assert.equal(reportDownload.suggestedFilename(),"opus-preliminary-radiologist-report.txt");
  const txt=join(fixture,"radiologist-report.txt");
  await reportDownload.saveAs(txt);
- assert.match(await readFile(txt,"utf8"),/SYNTHETIC OPUS INTEGRATED REPORT/);
+ assert.equal(await readFile(txt,"utf8"),physicianRevision+"\n","TXT must preserve all characters");
  await cloud.getByRole("button",{name:"Показать исходный срез"}).first().click();
  await cloud.getByRole("button",{name:"На перепроверку"}).first().click();
  await cloud.getByRole("textbox",{name:/Рабочий синтез врача/}).fill("SYNTHETIC physician review — no diagnosis.");
