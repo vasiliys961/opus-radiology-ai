@@ -55,7 +55,11 @@ async function readBounded(req:NextRequest):Promise<unknown>{
 export async function POST(req:NextRequest){
   if(!allowedLocal(req))return reply(404,"Local research endpoint only");
   if(!ready())return reply(503,"Deidentified OpenRouter research permission is not configured");
-  if(!operator(process.env.RADIOLOGY_LOCAL_RESEARCH_OPERATOR_TOKEN,
+  const autoPublic=req.headers.get("x-opus-auto-public-volume")==="1";
+  if(autoPublic){
+    if(process.env.RADIOLOGY_ENABLE_AUTOMATIC_PUBLIC_VOLUME_RESEARCH!=="1")
+      return reply(404,"Automatic public research disabled");
+  }else if(!operator(process.env.RADIOLOGY_LOCAL_RESEARCH_OPERATOR_TOKEN,
      req.headers.get("x-opus-local-operator-token")))
     return reply(401,"Operator authorization failed");
   if(!/^application\/json(?:\s*;.*)?$/i.test(req.headers.get("content-type")??""))
@@ -68,19 +72,24 @@ export async function POST(req:NextRequest){
   if(!raw||typeof raw!=="object"||Array.isArray(raw))
     return reply(400,"Invalid request");
   const v=raw as Record<string,unknown>;
-  if(Object.keys(v).sort().join(",")!==
-      ["packet","acknowledgeClinicianLawfulDisclosure","acknowledgeProviderHealthDataTerms",
-       "acknowledgePixelIdentityReviewed","acknowledgeOnePaidGeminiBatch"].sort().join(",")||
+  const expected=autoPublic?
+    ["packet","acknowledgeClinicianLawfulDisclosure","acknowledgeProviderHealthDataTerms",
+      "acknowledgeAutomaticOCRAndNoPerFramePhysicianReview","acknowledgeOnePaidGeminiBatch"]:
+    ["packet","acknowledgeClinicianLawfulDisclosure","acknowledgeProviderHealthDataTerms",
+      "acknowledgePixelIdentityReviewed","acknowledgeOnePaidGeminiBatch"];
+  if(Object.keys(v).sort().join(",")!==expected.sort().join(",")||
      v.acknowledgeClinicianLawfulDisclosure!==true||
      v.acknowledgeProviderHealthDataTerms!==true||
-     v.acknowledgePixelIdentityReviewed!==true||
+     (autoPublic?v.acknowledgeAutomaticOCRAndNoPerFramePhysicianReview!==true:
+       v.acknowledgePixelIdentityReviewed!==true)||
      v.acknowledgeOnePaidGeminiBatch!==true)
-    return reply(400,"Explicit consent for this single paid PNG batch required");
+    return reply(400,"Study-wide research cloud authorization required");
   const release=limiter.acquire();
   if(!release)return reply(429,"Another batch active or hourly research limit reached");
   try{
     const result=await reviewApprovedVolumeGeminiBatch(v.packet,callAiGateway,
-      AbortSignal.any([req.signal,AbortSignal.timeout(90_000)]));
+      AbortSignal.any([req.signal,AbortSignal.timeout(90_000)]),
+      autoPublic?"auto-ocr-public-study":"clinician-reviewed");
     return NextResponse.json(result,{headers:HEADERS});
   }catch{
     // Do not expose model output, uploaded pixels, sensitive errors or headers.
