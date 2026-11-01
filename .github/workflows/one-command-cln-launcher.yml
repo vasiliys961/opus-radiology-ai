@@ -1,0 +1,101 @@
+name: One-command original CLN Linux launcher checks
+on:
+  pull_request:
+    paths:
+      - "scripts/start-opus-cln-app.py"
+      - "deploy/CLN_ONE_COMMAND_APP.md"
+      - ".github/workflows/one-command-cln-launcher.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  launcher-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Syntax, CLI and fail-closed unavailable-model preflight (NO inference)
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/start-opus-cln-app.py
+          python scripts/start-opus-cln-app.py --help | grep -F -- '--enable-public-cloud'
+          if python scripts/start-opus-cln-app.py --check-only > /tmp/cln-preflight.txt 2>&1; then
+            echo "::error::Expected no-model runner to fail preflight, but it reported ready."
+            exit 1
+          fi
+          grep -F 'BLOCKED:' /tmp/cln-preflight.txt
+          if grep -E 'http://127.0.0.1:3000/viewer|ONE-SESSION OPERATOR TOKEN' /tmp/cln-preflight.txt; then
+            echo "::error::Preflight must never start services or issue tokens."
+            exit 1
+          fi
+          echo "CLN launcher preflight rejects unconfigured host without any model inference."
+
+  verified-worker-and-viewer-startup:
+    needs: launcher-smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      HF_HUB_DISABLE_PROGRESS_BARS: "1"
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "1"
+      CUDA_VISIBLE_DEVICES: "-1"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Install same ORIGINAL model dependencies as full real browser gate
+        run: |
+          set -euo pipefail
+          python -m pip install --no-cache-dir "numpy==1.26.4" "nibabel==5.3.2" "huggingface_hub==0.35.3" "requests==2.32.3"
+          python -m pip install --no-cache-dir "torch==2.5.1+cpu" "torchvision==0.20.1+cpu" --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu \
+            "torch==2.5.1+cpu" "torchvision==0.20.1+cpu" "nnunetv2==2.7.0" \
+            "numpy==1.26.4" "psutil==7.0.0" "fastapi==0.115.12" "uvicorn==0.34.2" \
+            "huggingface_hub==0.35.3" "nibabel==5.3.2"
+          python -m pip check
+          cd web && npm ci --no-audit --no-fund
+      - name: REAL original published checkpoint → private authenticated worker → live Next viewer
+        run: |
+          set -euo pipefail
+          python scripts/start-opus-cln-app.py --check-only
+          python scripts/start-opus-cln-app.py > "$RUNNER_TEMP/opus-local-startup.log" 2>&1 &
+          pid=$!
+          trap 'kill -TERM "$pid" 2>/dev/null || true; wait "$pid" || true' EXIT
+          export OPUS_STARTUP_PID="$pid"
+          python - <<'PY'
+          import json, os, time, urllib.request
+          pid=int(os.environ["OPUS_STARTUP_PID"])
+          deadline=time.monotonic()+420
+          while time.monotonic()<deadline:
+              try:
+                  os.kill(pid,0)
+              except ProcessLookupError:
+                  raise RuntimeError("original CLN launcher exited before viewer startup")
+              try:
+                  with urllib.request.urlopen("http://127.0.0.1:3000/viewer",timeout=4) as r:
+                      assert r.status==200
+                  with urllib.request.urlopen("http://127.0.0.1:3000/api/local-cln/v1/cln/capabilities",timeout=4) as r:
+                      info=json.load(r)
+                  assert info["schema"]=="opus-original-cln-upload-worker/v1"
+                  assert info["originalWeightsVerified"] is True
+                  assert info["checkpointSha256"]=="8c08ec796fa2b786fe99ddfad4fe6314e98fdd8820c59527be3c4105f7955d87"
+                  assert info["patientMode"] is False
+                  print("REAL original publisher weights + private CLN worker + live DICOM viewer READY")
+                  break
+              except (OSError,ValueError,AssertionError,KeyError,TimeoutError):
+                  time.sleep(2)
+          else:
+              raise RuntimeError("original model + live DICOM viewer not ready in bounded startup")
+          PY
+          # No source DICOM is uploaded in this readiness test. The separate
+          # #528 browser E2E proves a genuine forward + paid provider report.
