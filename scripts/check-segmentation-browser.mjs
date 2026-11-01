@@ -948,7 +948,8 @@ try {
   // volume. The local worker/inference response is mocked; no trained model runs.
   const huFixture=join(fixture,'full-native-hu');
   execFileSync(process.execPath,[join(root,'scripts/generate-segmentation-phantom.mjs'),huFixture,'CT','rescale-hu'],{stdio:'pipe'});
-  await page.reload({waitUntil:'networkidle'});
+  // Readiness/model probes may remain active; full network idleness is unnecessary.
+  await page.reload({waitUntil:'domcontentloaded',timeout:45000});
   await page.locator('input[accept*=".dcm"]').setInputFiles((await readdir(huFixture+'/dicom')).sort().map(n=>huFixture+'/dicom/'+n));
   await page.locator('.cs-stack').waitFor();
   let fullJobRequest,fullInput,fullMask,fullDeleted=false,fullMaskGets=0,fullSlabBad=true;
