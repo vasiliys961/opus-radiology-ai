@@ -25,7 +25,7 @@ test("long-TI T2-FLAIR candidate is automatically eligible for research WMH",()=
 test("MPRAGE, STIR, T2, malformed and varying parameters never auto-label FLAIR",()=>{
  for(const seq of [[2300,3,900],[4500,80,160],[9000,100,null],[9000,100,160],
     [9000,35,2200],[20000,120,2500]] as const)
-  assert.equal(assessAutomaticBrainFlair(mr(...seq)).eligible,false,String(seq));
+  assert.equal(assessAutomaticBrainFlair(mr(seq[0],seq[1],seq[2])).eligible,false,String(seq));
  let changed=mr(9000,120,2500);
  changed.members[4].metadata.inversionTimeMs=100;
  assert.equal(assessAutomaticBrainFlair(changed).eligible,false);
