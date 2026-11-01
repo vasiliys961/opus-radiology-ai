@@ -24,7 +24,7 @@ import {sameSeriesR231Facts,type CapturedLocalSpecialist} from "../lib/same-seri
 import {sameSeriesLaa950ForReview,type CapturedLocalLaa950} from "../lib/same-series-laa950-review";
 
 export default function VisionFramePlanningPanel({
-  series, activeSeriesKey, fileById, onOpenSlice,capturedSpecialist,capturedLaa950,ichRuntime,publicResearchAuthorized=false,originalDetectorEvidence=null,clnVerifiedLocal=null,fromPrimaryAnalysis=false,primaryAnalysisStage="idle",
+  series, activeSeriesKey, fileById, onOpenSlice,capturedSpecialist,capturedLaa950,ichRuntime,publicResearchAuthorized=false,originalDetectorEvidence=null,clnVerifiedLocal=null,fromPrimaryAnalysis=false,primaryActionAvailable=false,primaryAnalysisStage="idle",
 }: {
   series: readonly DicomSeries[];
   activeSeriesKey: string | null;
@@ -38,6 +38,7 @@ export default function VisionFramePlanningPanel({
   originalDetectorEvidence?:SanitizedDetectorBundle|null;
   clnVerifiedLocal?:ClnVerifiedLocalEvidence|null;
   fromPrimaryAnalysis?:boolean;
+  primaryActionAvailable?:boolean;
   primaryAnalysisStage?:"idle"|"running"|"completed"|"vision-only"|"cancelled";
 }) {
   const [requested, setRequested] = useState(4);
@@ -294,7 +295,7 @@ export default function VisionFramePlanningPanel({
       На этом этапе DICOM остаётся в браузере. Отправка обезличенных копий через OpenRouter
       возможна только после локальных проверок и отдельного разрешения исследовательского сервера.
     </p>
-    <div className="ora-vision-plan-controls">
+    {!primaryActionAvailable&&<div className="ora-vision-plan-controls">
       <label htmlFor="ora-frame-count">Кадров в выборке
         <select id="ora-frame-count" value={requested}
           onChange={e => setRequested(Number(e.target.value))}>
@@ -305,8 +306,8 @@ export default function VisionFramePlanningPanel({
       <button type="button" onClick={prepare} disabled={choice.status !== "ready-for-local-preview"}>
         Сформировать план
       </button>
-    </div>
-    {!fromPrimaryAnalysis&&<div className="ora-vision-budget-preview" aria-label="Единый запуск КТ МРТ">
+    </div>}
+    {!fromPrimaryAnalysis&&!primaryActionAvailable&&<div className="ora-vision-budget-preview" aria-label="Единый запуск КТ МРТ">
       <strong>Единый анализ · детекторы + Gemini + Opus</strong>
       <p>Одна точка входа: запуск доступных локальных моделей, затем проверка копий и разрешённый вызов Gemini + Opus в этой же панели.</p>
       <button type="button" disabled={detectorBusy||universal.status!=="eligible_for_authorization"} onClick={startUnified}>
@@ -349,7 +350,8 @@ export default function VisionFramePlanningPanel({
       <p>{universal.reason}</p>
       <p>Универсальный маршрут не зависит от установленных детекторов. Подготовка кадров и отдельное разрешение облачной передачи выполняются ниже; готовность маршрута не означает, что изображения уже проанализированы.</p>
     </div>
-    <div className="ora-vision-budget-preview" aria-label="Локальный маршрут диагностического консилиума">
+    <details className="ora-vision-budget-preview" aria-label="Локальный маршрут диагностического консилиума">
+      <summary>Дополнительно · доступные детекторы и модельные находки</summary>
       <strong>Диагностический консилиум · автоматический маршрут</strong>
       {consilium.status === "ready" ? <>
         <p>Выбранные специалисты Gemini: {consilium.specialists.join(", ")}.</p>
@@ -382,8 +384,9 @@ export default function VisionFramePlanningPanel({
           <p>R231/LAA−950 — количественный исследовательский показатель, не диагностический детектор эмфиземы. Отсутствие результатов не исключает патологию. Изображения никуда не передавались.</p>
         </div>}
       </> : <p role="status">{consilium.reason}</p>}
-    </div>
-    <div className="ora-vision-budget-preview" aria-label="Бюджет полного обзора Gemini">
+    </details>
+    <details className="ora-vision-budget-preview" aria-label="Бюджет полного обзора Gemini">
+      <summary>Дополнительно · расчёт полного обзора (не запущен)</summary>
       <strong>Двухэтапный обзор всей серии — локальный расчёт</strong>
       <p>Отдельно от выборки 2–4 кадров рассчитываем просмотр каждого среза в низком
         разрешении и выборочный повторный просмотр соседних кадров в высоком разрешении.</p>
@@ -408,7 +411,7 @@ export default function VisionFramePlanningPanel({
           облачная передача заблокирована. Отсутствие отметок не исключает патологию.</p>
       </> : <p role="status">План полного обзора недоступен: проверьте DICOM-геометрию
         и номер подозрительного среза.</p>}
-    </div>
+    </details>
     {choice.status === "blocked" && <div className="ora-vision-plan-blocked" role="status">
       <strong>План пока недоступен</strong>
       {choice.blockers.map((reason, i) => <p key={i}>{reason}</p>)}
