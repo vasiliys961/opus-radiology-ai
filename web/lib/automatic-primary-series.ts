@@ -9,35 +9,43 @@ import {planVisionFrameSamples} from "./vision-frame-plan.ts";
 export type PrimarySeriesSuggestion={
  key:string|null;
  runnable:boolean;
+ /** A source-verified CT/MR preview is available without a native detector. */
+ visionOnly:boolean;
  ambiguity:boolean;
  reason:string;
 };
 export function suggestPrimaryDicomSeries(series:readonly DicomSeries[],
  availableFiles:ReadonlySet<string>):PrimarySeriesSuggestion{
- if(series.length===0)return {key:null,runnable:false,ambiguity:false,reason:"Нет DICOM-серий."};
+ if(series.length===0)return {key:null,runnable:false,visionOnly:false,ambiguity:false,reason:"Нет DICOM-серий."};
  const ranked=series.map((s,index)=>{
   const plan=planNativeStudyAnalysis(s,availableFiles);
   const complete=s.members.length>0&&s.members.every(m=>availableFiles.has(m.id));
   const native=complete&&s.members.every(m=>m.metadata.imageRole!=="DERIVED"&&
    m.metadata.imageRole!=="LOCALIZER");
   const executable=plan.route!==null;
+  // An unsupported anatomy can still have a verified independent Vision path.
+  // Reuse the strict UID/physical geometry gate and require every source file.
+  const visionOnly=!executable&&complete&&canAutoPrepareLocalVision(s);
   // Never prefer an incomplete series or a scout merely because it has many files.
   // A modest original diagnostic stack is preferable to an oversized reconstruction.
   const size=Math.min(s.members.length,300);
-  const score=(executable?100000:0)+(native?10000:0)+
+  const score=(executable?100000:visionOnly?50000:0)+(native?10000:0)+
    (s.volumeReady&&s.spatiallySorted?1000:0)+
    (complete?500:0)+size;
-  return {s,index,plan,native,executable,score};
+  return {s,index,plan,native,executable,visionOnly,score};
  }).sort((a,b)=>b.score-a.score||a.index-b.index);
  const best=ranked[0];
- const viable=ranked.filter(item=>item.executable);
+ const viable=ranked.filter(item=>item.executable||item.visionOnly);
  const studies=new Set(viable.map(item=>item.s.members[0]?.metadata.studyUid).filter(Boolean));
  const ambiguity=viable.length>1||studies.size>1;
  return {
-  key:best.s.key,runnable:best.executable,ambiguity,
+  key:best.s.key,runnable:best.executable,visionOnly:best.visionOnly,ambiguity,
   reason:best.executable?
-   (ambiguity?"Автоматически выбрана подходящая серия; доступны другие диагностические серии. Проверьте выбор.":
-    "Автоматически выбрана исходная диагностическая серия для единого анализа."):
+   (ambiguity?"Автоматически выбрана серия для оригинального детектора; доступны другие диагностические серии. Проверьте выбор.":
+    "Автоматически выбрана исходная диагностическая серия для оригинального детектора."):
+   best.visionOnly?
+   (ambiguity?"Автоматически выбрана серия для локального Gemini/Opus без патологического детектора; есть другие подходящие серии. Проверьте выбор.":
+    "Автоматически выбрана исходная серия для локального Gemini/Opus без патологического детектора. Облачная передача требует отдельного разрешения."):
    "Достоверно совместимая серия не найдена. Выбрана лучшая для просмотра; диагноз и маршрут не определены.",
  };
 }
