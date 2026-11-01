@@ -42,7 +42,26 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  onReadyForVision?:(seriesKey:string)=>void;
 }){
  const available=useMemo(()=>new Set(files.keys()),[files]);
- const plan=useMemo(()=>planNativeStudyAnalysis(series,available),[series,available]);
+ const [clinicianConfirmedChest,setClinicianConfirmedChest]=useState(false);
+ const confirmableChest=series.modality==="CT"&&series.volumeReady&&series.spatiallySorted&&
+   series.members.length>=8&&series.members.length<=300&&
+   series.members.every(m=>m.metadata.modality==="CT"&&
+     (m.metadata.bodyRegion==="CHEST"||m.metadata.bodyRegion===null)&&
+     m.metadata.imageRole!=="LOCALIZER"&&!!m.metadata.studyUid&&
+     !!m.metadata.seriesUid&&!!m.metadata.sopInstanceUid&&files.has(m.id)&&
+     (m.metadata.numberOfFrames===null||m.metadata.numberOfFrames===1))&&
+   (series.members.some(m=>m.metadata.bodyRegion===null)||
+    series.members.some(m=>m.metadata.imageRole==="DERIVED"));
+ // Missing coded anatomy can be explicitly reviewed without rewriting original DICOM.
+ const sourceSeries=useMemo(()=>clinicianConfirmedChest&&confirmableChest?{
+   ...series,members:series.members.map(m=>({...m,metadata:{
+     ...m.metadata,bodyRegion:"CHEST" as const,
+   }})),
+ }:series,[clinicianConfirmedChest,confirmableChest,series]);
+ const plan=useMemo(()=>planNativeStudyAnalysis(sourceSeries,available,{
+   clinicianConfirmedChest:clinicianConfirmedChest&&confirmableChest,
+ }),[sourceSeries,available,clinicianConfirmedChest,confirmableChest]);
+ useEffect(()=>{setClinicianConfirmedChest(false);},[series,files]);
  const [renalPhaseRoles,setRenalPhaseRoles]=useState<Partial<Record<RenalPhaseRole,string>>>({});
  const [renalMonaiResult,setRenalMonaiResult]=useState<RenalMonaiResult|null>(null);
  const [renalMonaiIssue,setRenalMonaiIssue]=useState("");
@@ -287,7 +306,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
        }
        let nifti:File;
        try{
-         nifti=await prepareDicomMonaiFile(series,original as File[],controller.signal,progress);
+         nifti=await prepareDicomMonaiFile(sourceSeries,original as File[],controller.signal,progress);
        }catch(cause){
          if(controller.signal.aborted||version!==serial.current)return;
          setStatus("Подготовка КТ для патологических моделей не выполнена; детекторы не запускались.");
@@ -619,6 +638,11 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  }
  return <section className="cs-geometry" aria-label="Единый анализ DICOM">
   <h2>Анализ исследования</h2>
+   {confirmableChest&&<label><input type="checkbox" checked={clinicianConfirmedChest}
+     disabled={busy} onChange={e=>setClinicianConfirmedChest(e.target.checked)}/>
+     Подтверждаю, что это КТ грудной клетки (исходные DICOM без однозначного анатомического кода либо с признаком реконструкции).
+     Изображения и геометрию проверил; это не локализатор. Разрешаю исследовательский запуск на данной серии.
+   </label>}
   <OriginalWorkerFleetReadiness/>
   <p><strong>{plan.title}</strong> · текущая исходная DICOM-серия. Автоматический выбор по известной модальности;
     наличие настоящих весов подтверждается только worker при запуске.</p>
@@ -968,7 +992,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
       координаты кандидатов и решения врача. Не загружайте такой файл в публичный GitHub или облачный LLM.
       Это не подписанное клиническое заключение.</p>
   </div>}
-  {chestCln&&chestSource&&<ClnOriginalPhysicianReview report={chestCln} series={series} source={chestSource} onNavigate={onNavigate}
+  {chestCln&&chestSource&&<ClnOriginalPhysicianReview report={chestCln} series={sourceSeries} source={chestSource} onNavigate={onNavigate}
      onVerifiedCandidates={verified=>onClnBoundReady?.(series.key,verified)}/>}
    {lungscapeResult&&<p role="status">LungSCAPE191: настоящий инференс завершён, компонентов {lungscapeResult.componentCount}. Классы модели не являются диагнозом ILD/UIP/IPF.</p>}
   {(chestNodules||chestCln||lungscapeResult||chestEffusion||chestPe||chestNodes||abdomenResult||ich||wmh||brainResult)&&
