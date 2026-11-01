@@ -337,7 +337,8 @@ export default function VisionFramePlanningPanel({
       <p>{universal.reason}</p>
       <p>Универсальный маршрут не зависит от установленных детекторов. Подготовка кадров и отдельное разрешение облачной передачи выполняются ниже; готовность маршрута не означает, что изображения уже проанализированы.</p>
     </div>
-    <div className="ora-vision-budget-preview" aria-label="Локальный маршрут диагностического консилиума">
+    <details className="ora-vision-budget-preview" aria-label="Локальный маршрут диагностического консилиума">
+      <summary>Дополнительно · подробности о выполненных детекторах</summary>
       <strong>Диагностический консилиум · автоматический маршрут</strong>
       {consilium.status === "ready" ? <>
         <p>Выбранные специалисты Gemini: {consilium.specialists.join(", ")}.</p>
@@ -370,7 +371,7 @@ export default function VisionFramePlanningPanel({
           <p>R231/LAA−950 — количественный исследовательский показатель, не диагностический детектор эмфиземы. Отсутствие результатов не исключает патологию. Изображения никуда не передавались.</p>
         </div>}
       </> : <p role="status">{consilium.reason}</p>}
-    </div>
+    </details>
     <details className="ora-vision-budget-preview" aria-label="Бюджет полного обзора Gemini">
       <summary>Дополнительно · расчёт полного обзора серии (пока без запуска)</summary>
       <strong>Двухэтапный обзор всей серии — локальный расчёт</strong>
