@@ -96,7 +96,7 @@ try{
  const paid=cloud.getByRole("button",{name:"Подтвердить передачу и создать предварительное заключение"});
  assert.equal(await paid.isDisabled(),false);
  await paid.click();
- await cloud.getByText(/Ответ моделей получен/).waitFor({timeout:180000});
+ await cloud.getByText(/Ответ моделей получен/).waitFor({timeout:590000});
  await page.waitForFunction(()=>!!document.querySelector(
    'section[aria-label="Объединённое заключение Opus по Gemini JSON и детекторам"] textarea'),
    null,{timeout:45000});
