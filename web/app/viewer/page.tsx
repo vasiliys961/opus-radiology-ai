@@ -140,6 +140,12 @@ export default function ViewerPage() {
       </div>
       {sourceMode==="nodules" ? <NoduleBoundResearchView initialSource={preparedMonaiSource} initialAutoSession={preparedMonaiSession} initialCompletedReport={preparedMonaiResult}/> : sourceMode==="nifti" ? <NiftiCtResearchView/> : sourceMode==="colon" ? <ColonCancerResearchResults/> : sourceMode==="coverage" ? <PathologyCoverageResearch/> : sourceMode==="morphometry" ? <MorphometryEvidenceReview/> : <>
       <div className="cs-intro"><div><div className="cs-kicker">IMAGING LAB / 2D STACK</div><h1>DICOM Viewer <em>β</em></h1><p>Просмотр исходных DICOM-серий и исследовательский анализ на проверенных локальных исполнителях. Без автоматической передачи в облако.</p></div><span className="cs-watermark">ИССЛЕДОВАТЕЛЬСКИЙ ПРОТОТИП · НЕ ДЛЯ ДИАГНОСТИКИ</span></div>
+      <div className="cs-geometry" role="status" aria-label="Этапы обработки исследования">
+        <strong>DICOM → оригинальные детекторы + независимый Gemini → Claude Opus → заключение</strong>
+        <p>{reading?"1. Индексируем DICOM…":selected?`1. DICOM готовы: ${selected.members.length} срезов, модальность ${selected.modality}.`:"1. Загрузите файлы или папку DICOM."}</p>
+        <p>{visionFromPrimary?primaryStage?.stage==="running"?"2. Оригинальные детекторы работают, кадры Gemini подготавливаются локально.":primaryStage?.stage==="cancelled"?"2. Анализ отменён; повторите запуск.":"2. Доступные оригинальные детекторы завершили работу; необработанные зоны указаны отдельно.":"2. Нажмите «Анализировать исследование» — приложение само выберет доступные оригинальные модели."}</p>
+        <p>{visionFromPrimary?"3. Проверьте обезличенные PNG и разрешите Gemini/Opus. Затем получите редактируемое заключение и TXT.":"3. После проверки врачом Gemini и Opus сформируют предварительный протокол."}</p>
+      </div>
       <div className="cs-layout">
         <aside className="cs-sidebar">
           <h2>Загрузка серии</h2>
@@ -209,6 +215,7 @@ export default function ViewerPage() {
                 originalDetectorEvidence={visionDetectorEvidence?.seriesKey===selected.key?visionDetectorEvidence.bundle:null}
                  clnVerifiedLocal={clnVerified?.seriesKey===selected.key?clnVerified.value:null}
                 fromPrimaryAnalysis={visionFromPrimary}
+                primaryActionAvailable={true}
                 primaryAnalysisStage={visionFromPrimary&&primaryStage?.seriesKey===selected.key?primaryStage.stage:"idle"}
                 onOpenSlice={id=>{
                   const index=selected.members.findIndex(m=>m.id===id);
