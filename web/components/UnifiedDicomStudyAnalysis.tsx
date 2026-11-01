@@ -761,10 +761,11 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
       <label>Лицензия исходного исследования <input type="text" value={sourceLicense}
         disabled={busy} onChange={e=>setSourceLicense(e.target.value)}/></label>
     </div>}
-    <label><input type="checkbox" checked={authorized} disabled={busy} onChange={e=>setAuthorized(e.target.checked)}/>
-     Подтверждаю разрешённый публичный обезличенный исследовательский источник и полномочия на локальный запуск. Пациентские снимки этим маршрутом не передавать.</label>
     <p>MONAI, task315, оригинальный Raidionics, исследовательский PE, TotalSegmentator живота и WMH используют разрешённые изображения в loopback worker; ianpan передаёт только SHA-256 и анализирует заранее установленную идентичную публичную КТ. Облачная передача не выполняется.</p>
    </details>
+   {/* Authorization is a primary clinical action, not a hidden developer setting. */}
+    <label><input type="checkbox" checked={authorized} disabled={busy} onChange={e=>setAuthorized(e.target.checked)}/>
+     Подтверждаю разрешённый публичный обезличенный исследовательский источник и полномочия на локальный запуск. Пациентские снимки этим маршрутом не передавать.</label>
    <button type="button" disabled={!ready} onClick={()=>void launch()}>
     {busy?"Выполняется реальный анализ...":"Анализировать исследование"}
    </button>
