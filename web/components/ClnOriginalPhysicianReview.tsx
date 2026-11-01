@@ -9,6 +9,7 @@ import {readNoduleNiftiHeader,verifyNoduleSource} from "../lib/live-nodule-repor
 import {transformPoint} from "../lib/segmentation-mask";
 import type {ClnReport} from "../lib/cln-native-worker";
 import {bindOriginalClnCandidates,type ClnSliceCandidate,type ClnVerifiedLocalEvidence} from "../lib/cln-physician-local-review";
+import {isMissingBrowserFile} from "../lib/cln-original-source-recovery";
 
 type Decision="suspicious_on_review"|"dismissed_on_review"|"unreviewed";
 export default function ClnOriginalPhysicianReview({report,series,source,onNavigate,onVerifiedCandidates}:{
@@ -23,12 +24,19 @@ export default function ClnOriginalPhysicianReview({report,series,source,onNavig
   setItems(null);setError("");setDecisions({});
   void (async()=>{
    try{
-    // OPFS File objects can become stale during a long original-model CPU run.
-    // Re-open the exact local browser-owned source (never create/reconstruct it).
-    // SHA-256 below still proves the bytes match this CLN result.
-    const original=source.name==="opus-active-monai-chest-ct.nii"
-      ?await (await (await navigator.storage.getDirectory())
-        .getFileHandle(source.name,{create:false})).getFile():source;
+    // Prefer the already source-verified File from the just-finished CLN task.
+    // A fresh OPFS getFileHandle() is not guaranteed when the browser evicted
+    // the directory entry during long CPU execution. Only retry on NotFound;
+    // never bypass the full SHA-256/geometry checks below.
+    let original=source;
+    try{
+      await original.slice(0,352).arrayBuffer();
+    }catch(e){
+      if(!isMissingBrowserFile(e)||
+         source.name!=="opus-active-monai-chest-ct.nii")throw e;
+      original=await (await (await navigator.storage.getDirectory())
+        .getFileHandle(source.name,{create:false})).getFile();
+    }
     if(original.size!==source.size)throw Error("Исходный HU-объём изменён после инференса CLN");
     const geometry=fullCtGeometry(series),native=await readNoduleNiftiHeader(original);
     if(native.dimensions.some((n,i)=>n!==geometry.dimensions[i]))
