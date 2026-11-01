@@ -452,7 +452,9 @@ export default function VisionFramePlanningPanel({
         Только локальный исследовательский контекст: эти цифры не отправляются в OpenRouter
         и не подтверждают диагноз эмфиземы.</p>}
       {laaWarning&&<p role="status">{laaWarning}</p>}
-      <VisionPrivacyPreparation autoStartAfterDetectors={fromPrimaryAnalysis}
+      <details>
+        <summary>Дополнительно · исследовать отдельные выбранные срезы</summary>
+      <VisionPrivacyPreparation autoStartAfterDetectors={false}
         primaryAnalysisStage={primaryAnalysisStage}
         originalDetectorEvidence={originalDetectorEvidence}
         frameRelativeClnEvidence={clnSpatial}
@@ -465,16 +467,19 @@ export default function VisionFramePlanningPanel({
           capturedSpecialist.evidence.source.inputSha256+":"+capturedSpecialist.evidence.mask.sha256:""}
         originalLocalFileIds={report.frames.map(f=>f.fileId)}
         onOpenOriginalSlice={onOpenSlice}/>
+      </details>
     </div>}
-    {fullVolumeCost&&choice.seriesKey&&series.find(s=>s.key===choice.seriesKey)&&<details>
-      <summary>Дополнительно · реальная локальная OCR-подготовка всего тома</summary>
+    {fullVolumeCost&&choice.seriesKey&&series.find(s=>s.key===choice.seriesKey)&&
       <FullVolumeLocalPreparation
         key={"full-volume-"+choice.seriesKey}
         series={series.find(s=>s.key===choice.seriesKey)!}
         files={fileById}
         flaggedIndex={targetFrame.trim()?Number(targetFrame)-1:null}
-        onOpenSlice={onOpenSlice}/>
-    </details>}
+        autoStart={fromPrimaryAnalysis}
+        detectorStage={primaryAnalysisStage}
+        detectorEvidence={originalDetectorEvidence}
+        onOpenSlice={onOpenSlice}/>}
+
     <p className="ora-vision-plan-footnote">Отбираем по равномерным индексам геометрически проверенной серии,
       сохраняя исходные SOPInstanceUID локально. Выборка не гарантирует обнаружения очагов между срезами.</p>
   </section>;
