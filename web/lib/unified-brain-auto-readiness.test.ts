@@ -13,5 +13,6 @@ test("unified Analyze button admits verified automatic original brain workers wi
  assert.match(source,/executeOriginalBrain\(autoBrainReady\?null:session/);
  assert.match(source,/const wmhSession=autoWmhReady\?null:session/);
  assert.match(source,/brainSequenceApproved&&brainAssignedReady&&sourceUrl\.startsWith\("https:\/\/"\)/);
- assert.match(source,/flairConfirmed&&sourceUrl\.startsWith\("https:\/\/"\)/);
+ assert.match(source,/\(flairConfirmed\|\|autoFlair\.eligible\)&&sourceUrl\.startsWith\("https:\/\/"\)&&!!sourceLicense\.trim\(\)/);
+ assert.match(source,/const brainVisionOnly=plan\.route==="wmh-flair"&&brainTask==="wmh"&&/);
 });

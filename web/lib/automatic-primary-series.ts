@@ -4,6 +4,7 @@
  */
 import type {DicomSeries} from "./dicom-series.ts";
 import {planNativeStudyAnalysis} from "./unified-study-dispatch.ts";
+import {assessAutomaticBrainFlair} from "./automatic-brain-flair.ts";
 import {planVisionFrameSamples} from "./vision-frame-plan.ts";
 
 export type PrimarySeriesSuggestion={
@@ -29,7 +30,12 @@ export function suggestPrimaryDicomSeries(series:readonly DicomSeries[],
   // Never prefer an incomplete series or a scout merely because it has many files.
   // A modest original diagnostic stack is preferable to an oversized reconstruction.
   const size=Math.min(s.members.length,300);
+  // Prefer a geometry-verified long-inversion brain FLAIR among otherwise
+  // eligible native MRI series; preserve the CT/MR Vision-only fallback.
+  const sourceFlair=executable&&complete&&plan.route==="wmh-flair"&&
+    assessAutomaticBrainFlair(s).eligible;
   const score=(executable?100000:visionOnly?50000:0)+(native?10000:0)+
+   (sourceFlair?25000:0)+
    (s.volumeReady&&s.spatiallySorted?1000:0)+
    (complete?500:0)+size;
   return {s,index,plan,native,executable,visionOnly,score};
