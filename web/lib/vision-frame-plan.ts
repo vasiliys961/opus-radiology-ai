@@ -106,8 +106,8 @@ export function planVisionFrameSamples(
   // Preserve both endpoints while allowing distinct source-verified lesion
   // centers to replace separate interior positions within the SAME frame budget.
   // Unverified, duplicate and out-of-range indices never enter the manifest.
-  const requestedFocus=focusSliceIndex===null?[]:
-    Array.isArray(focusSliceIndex)?focusSliceIndex:[focusSliceIndex];
+  const requestedFocus:readonly number[]=focusSliceIndex===null?[]:
+    typeof focusSliceIndex==="number"?[focusSliceIndex]:focusSliceIndex;
   const focuses=[...new Set(requestedFocus.filter((index):index is number=>
     Number.isSafeInteger(index)&&index>=0&&index<selected.members.length))];
   const reserved=new Set(ids.flatMap((index,slot)=>focuses.includes(index)?[slot]:[]));
