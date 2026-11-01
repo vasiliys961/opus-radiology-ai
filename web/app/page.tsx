@@ -18,7 +18,7 @@ import VisionFramePlanningPanel from "../components/VisionFramePlanningPanel";
 import CtHuRoiPanel from "../components/CtHuRoiPanel";
 import DicomCaliperPanel from "../components/DicomCaliperPanel";
 import type {CapturedLocalSpecialist} from "../lib/same-series-r231-cloud-evidence";
-import type {CapturedLocalLaa950} from "../lib/same-series-laa950-review";
+import {sameSeriesLaa950ForReview,type CapturedLocalLaa950} from "../lib/same-series-laa950-review";
 import CtSlabSelection from "../components/CtSlabSelection";
 import FullCtPanel from "../components/FullCtPanel";
 import type {FullCtTicket} from "../lib/full-ct-worker";
@@ -392,6 +392,16 @@ export default function Home() {
               <div className="ora-viewer-footer"><span><span className="ora-tiny-dot"/> {hasCornerstone ? "Cornerstone3D · локальный экспериментальный просмотр" : dicomPreview?.id === activeId ? `${dicomPreview.metadata.modality || "DICOM"} · ${dicomPreview.metadata.width}×${dicomPreview.metadata.height} · WC ${dicomPreview.metadata.windowCenter ?? "auto"} / WW ${dicomPreview.metadata.windowWidth ?? "auto"}` : "Локальный предпросмотр · исследовательский режим"}</span><span>3D MIP / MPR <b>{mprCheck.eligible ? "экспериментальные" : "недоступны"}</b></span></div>
             </div>
             <div className="ora-finding-strip"><div className="ora-finding-icon"><Icon name="sparkles" size={21}/></div><div><strong>Локальная сегментация и Evidence</strong><p>В MPR доступны импорт масок и Lungmask R231 при установленном worker и весах. R231 разрешён только для открытой исследовательской КТ; полнота охвата и клиническая точность не подтверждены.</p></div><span className="ora-coming-soon">RESEARCH</span></div>
+            {(()=>{let metric=null;
+              try{metric=sameSeriesLaa950ForReview(activeSeries,specialistCapture,laaCapture);}catch{return null;}
+              return metric?<div className="ora-finding-strip" role="status">
+                <div><strong>Эмфизема · количественная LAA-950 (R231)</strong>
+                  <p>Доля участков HU ≤ −950 в подтверждённой маске выбранной КТ: {metric.lowAttenuationPctOfSampledMask.toFixed(2)}%.
+                   Правая: {metric.rightLungPct.toFixed(2)}%; левая: {metric.leftLungPct.toFixed(2)}%.
+                   Источник: та же DICOM-серия и локальная маска R231; измерение только для исследованного объёма.</p>
+                </div>
+              </div>:null;
+            })()}
             {active?.kind==="nifti"&&
               <LiveNoduleDetection initialSource={active.file}/>}
             <CtHuRoiPanel file={active?.kind==="dicom"?active.file:null}
