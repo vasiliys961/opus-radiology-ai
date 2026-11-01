@@ -118,7 +118,7 @@ def run(directory:Path,native:Path,manifest:Path):
         "derivedSopGeometryVerified":True,
         "scannerOriginalSopRegistrationVerified":False,
         "dimensions":list(dims),"nativeSopInstanceUids":native_sops,
-        "sourceIntegerHuLossless":True,"publicStudyOnly":True,
+        "sourceIntegerHuLossless":True,"sourceZReversed":reverse,"publicStudyOnly":True,
     })+"\n")
     print("DERIVED REAL-PIXEL DICOM VERIFIED",json.dumps({
         "slices":dims[2],"nativeSHA":proof["sha256"],
