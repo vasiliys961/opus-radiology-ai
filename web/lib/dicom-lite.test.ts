@@ -34,6 +34,33 @@ function syntheticDicom({syntax = "1.2.840.10008.1.2.1", signed = false, inverte
   return Uint8Array.from(parts).buffer;
 }
 
+function withOriginalUndefinedLengthSq(data:ArrayBuffer):ArrayBuffer{
+ const input=Buffer.from(new Uint8Array(data));
+ const pixel=input.indexOf(Buffer.from([0xe0,0x7f,0x10,0x00]));
+ assert.ok(pixel>132);
+ const header=Buffer.alloc(12);header.writeUInt16LE(0x0008,0);
+ header.writeUInt16LE(0x1115,2);header.write("SQ",4);
+ header.writeUInt32LE(0xffffffff,8);
+ const item=Buffer.alloc(8);item.writeUInt16LE(0xfffe,0);
+ item.writeUInt16LE(0xe000,2);item.writeUInt32LE(0xffffffff,4);
+ const field=Buffer.alloc(14);field.writeUInt16LE(0x0008,0);
+ field.writeUInt16LE(0x1150,2);field.write("UI",4);
+ field.writeUInt16LE(6,6);field.write("1.2.3",8);
+ const closeItem=Buffer.alloc(8);closeItem.writeUInt16LE(0xfffe,0);
+ closeItem.writeUInt16LE(0xe00d,2);
+ const closeSq=Buffer.alloc(8);closeSq.writeUInt16LE(0xfffe,0);
+ closeSq.writeUInt16LE(0xe0dd,2);
+ const out=Buffer.concat([input.subarray(0,pixel),header,item,field,closeItem,closeSq,input.subarray(pixel)]);
+ return Uint8Array.from(out).buffer;
+}
+test("source-original undefined-length SQ is decoded only by validated bounded fallback",async()=>{
+ const raw=withOriginalUndefinedLengthSq(syntheticDicom());
+ assert.throws(()=>parseDicomFrame(raw),/неопределённой длины/);
+ const original=new File([raw],"public-source-ct.dcm");
+ await assert.rejects(
+  decodeDicomPreview(original,{maxPixels:3}),/лимит локальной копии/,
+  "Standards-aware SQ fallback must reach the same pixel limits");
+});
 test("reads uncompressed Part 10 technical metadata without patient fields", () => {
   const frame = parseDicomFrame(syntheticDicom());
   assert.equal(frame.metadata.width, 2);
