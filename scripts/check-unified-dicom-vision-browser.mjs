@@ -49,7 +49,7 @@ try{
  assert.match(await analysis.innerText(),/Грудная клетка/);
  assert.doesNotMatch(await analysis.innerText(),/Нет совместимого исполнительного пути/);
  await analysis.getByText("Настройки приватного исполнителя и разрешение",{exact:true}).click();
- await analysis.getByRole("checkbox",{name:/Подтверждаю разрешённый публичный/}).check();
+ await analysis.getByRole("checkbox",{name:/Подтверждаю, что исследование разрешено/}).check();
  const launch=analysis.getByRole("button",{name:"Анализировать исследование"});
  await page.waitForFunction(()=>{const section=document.querySelector('section[aria-label="Единый анализ DICOM"]');
   const button=[...(section?.querySelectorAll("button")??[])].find(x=>x.textContent?.trim()==="Анализировать исследование");
@@ -71,7 +71,8 @@ try{
  assert.equal(await visionImages.count(),4,"Four exact sampled DICOM previews");
  assert.equal(aiRequests.length,0,"Vision planning must not send any pixels");
  console.log("PASS browser: synthetic CT DICOM -> automatic worker absence -> independent four PNG Vision frames");
- const privacy=page.locator('section[aria-label="Подготовка обезличенных кадров"]');
+  await page.getByText("Дополнительно · исследовать отдельные выбранные срезы",{exact:true}).click();
+  const privacy=page.locator('section[aria-label="Подготовка обезличенных кадров"]');
  await privacy.waitFor();
  await privacy.getByText(/Проверьте все 4 исходящих PNG/).waitFor({timeout:180000});
  await page.waitForFunction(()=>{const s=document.querySelector('section[aria-label="Подготовка обезличенных кадров"]');
