@@ -34,13 +34,14 @@ import {checkAutomaticLungscapeReady,executeOriginalLungscape,type LungscapeRepo
  * Never advertises a checkpoint as installed until its private worker proves it.
  * No automatic cloud image transfer; Gemini/Opus require a separate privacy gate.
  */
-export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMonaiReady,onNavigate,onDetectorEvidence,onReadyForVision,onClnBoundReady}:{
+export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMonaiReady,onNavigate,onDetectorEvidence,onReadyForVision,onClnBoundReady,onAnalysisState}:{
  series:DicomSeries;allSeries:ReadonlyArray<DicomSeries>;files:ReadonlyMap<string,File>;
  onMonaiReady:(source:File,session:WorkerSession,completedReport?:BoundNoduleReport)=>void;
  onNavigate:(slice:number)=>void;
  onDetectorEvidence?:(seriesKey:string,bundle:SanitizedDetectorBundle|null)=>void;
  onClnBoundReady?:(seriesKey:string,verified:ClnVerifiedLocalEvidence)=>void;
  onReadyForVision?:(seriesKey:string)=>void;
+ onAnalysisState?:(seriesKey:string,running:boolean)=>void;
 }){
  const available=useMemo(()=>new Set(files.keys()),[files]);
  const [clinicianConfirmedChest,setClinicianConfirmedChest]=useState(false);
@@ -277,6 +278,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
      return;
    }
    const version=++serial.current;
+   onAnalysisState?.(series.key,true);
    active.current?.abort();
    const controller=new AbortController();active.current=controller;
    setBusy(true);setStatus("Проверяем совместимость и доступность настоящей модели...");
@@ -621,7 +623,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
      if(version===serial.current&&!controller.signal.aborted)
        setError(e instanceof Error?e.message:"Анализ не завершился. Результата нет.");
    }finally{
-     if(version===serial.current)setBusy(false);
+     if(version===serial.current){setBusy(false);onAnalysisState?.(series.key,false);}
    }
  }
  async function saveUnsignedDraft(){
@@ -655,7 +657,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  }
  function cancel(){
    serial.current++;active.current?.abort();active.current=null;
-   setBusy(false);setStatus("Анализ отменён. Неинтерпретированные зоны остаются неоценёнными.");
+   setBusy(false);onAnalysisState?.(series.key,false);setStatus("Анализ отменён. Неинтерпретированные зоны остаются неоценёнными.");
  }
  return <section className="cs-geometry" aria-label="Единый анализ DICOM">
   <h2>Анализ исследования</h2>
