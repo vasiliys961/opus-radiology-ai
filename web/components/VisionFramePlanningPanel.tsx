@@ -293,7 +293,7 @@ export default function VisionFramePlanningPanel({
       На этом этапе DICOM остаётся в браузере. Отправка обезличенных копий через OpenRouter
       возможна только после локальных проверок и отдельного разрешения исследовательского сервера.
     </p>
-    <div className="ora-vision-plan-controls">
+    {!fromPrimaryAnalysis&&<div className="ora-vision-plan-controls">
       <label htmlFor="ora-frame-count">Кадров в выборке
         <select id="ora-frame-count" value={requested}
           onChange={e => setRequested(Number(e.target.value))}>
@@ -304,7 +304,7 @@ export default function VisionFramePlanningPanel({
       <button type="button" onClick={prepare} disabled={choice.status !== "ready-for-local-preview"}>
         Сформировать план
       </button>
-    </div>
+    </div>}
     {!fromPrimaryAnalysis&&<div className="ora-vision-budget-preview" aria-label="Единый запуск КТ МРТ">
       <strong>Единый анализ · детекторы + Gemini + Opus</strong>
       <p>Одна точка входа: запуск доступных локальных моделей, затем проверка копий и разрешённый вызов Gemini + Opus в этой же панели.</p>
@@ -370,7 +370,8 @@ export default function VisionFramePlanningPanel({
         </div>}
       </> : <p role="status">{consilium.reason}</p>}
     </div>
-    <div className="ora-vision-budget-preview" aria-label="Бюджет полного обзора Gemini">
+    <details className="ora-vision-budget-preview" aria-label="Бюджет полного обзора Gemini">
+      <summary>Дополнительно · расчёт полного обзора серии (пока без запуска)</summary>
       <strong>Двухэтапный обзор всей серии — локальный расчёт</strong>
       <p>Отдельно от выборки 2–4 кадров рассчитываем просмотр каждого среза в низком
         разрешении и выборочный повторный просмотр соседних кадров в высоком разрешении.</p>
@@ -395,7 +396,7 @@ export default function VisionFramePlanningPanel({
           облачная передача заблокирована. Отсутствие отметок не исключает патологию.</p>
       </> : <p role="status">План полного обзора недоступен: проверьте DICOM-геометрию
         и номер подозрительного среза.</p>}
-    </div>
+    </details>
     {choice.status === "blocked" && <div className="ora-vision-plan-blocked" role="status">
       <strong>План пока недоступен</strong>
       {choice.blockers.map((reason, i) => <p key={i}>{reason}</p>)}
