@@ -77,7 +77,8 @@ def preflight():
         raise RuntimeError("authentic_CLN_worker_requires_12GiB_available_and_6GiB_disk")
 
 
-def run(root: Path, work: Path):
+def run(root: Path, work: Path, *, derived_native: Path | None = None,
+        derived_manifest: Path | None = None):
     import requests
 
     preflight()
@@ -95,7 +96,25 @@ def run(root: Path, work: Path):
             manifest["publisherLfsWeightSHA256Verified"] is not True):
         raise RuntimeError("not_original_author_model_SHA256")
     raw = work / "native-original-source.nii"
-    native_sha, byte_count = unzip_public_nii(public["ct"], raw)
+    derived_map = None
+    if derived_native is not None:
+        if derived_manifest is None or not derived_native.is_file():
+            raise ValueError("DICOM_native_source_and_manifest_required")
+        derived_map=json.loads(derived_manifest.read_text())
+        if (derived_map.get("schema") != "opus-public-msd-reencoded-dicom/v1" or
+            derived_map.get("scannerOriginalDicom") is not False or
+            derived_map.get("sourceNiftiCompressedSha256") != EXPECTED_CT_SHA or
+            derived_map.get("derivedSopGeometryVerified") is not True or
+            derived_map.get("scannerOriginalSopRegistrationVerified") is not False or
+            derived_map.get("sourceIntegerHuLossless") is not True or
+            derived_map.get("convertedNativeSha256") != sha256(derived_native) or
+            not isinstance(derived_map.get("nativeSopInstanceUids"), list) or
+            len(set(derived_map["nativeSopInstanceUids"])) != len(derived_map["nativeSopInstanceUids"])):
+            raise ValueError("derived_DICOM_not_source_verified")
+        shutil.copyfile(derived_native, raw)
+        native_sha, byte_count = sha256(raw), raw.stat().st_size
+    else:
+        native_sha, byte_count = unzip_public_nii(public["ct"], raw)
     if not (352 < byte_count <= SOURCE_MAX):
         raise RuntimeError("public_CT_not_a_bounded_3D_native_volume")
 
@@ -214,8 +233,11 @@ def run(root: Path, work: Path):
                 "sourceVoxelCentroidIJK":[round(float(x),3) for x in center],
                 "candidateVolumeMl":round(vol,6),
             })
+        native_center=[148.04,231.323,99.345]
+        if derived_map is not None and derived_map.get("sourceZReversed") is True:
+            native_center[2]=derived_map["dimensions"][2]-1-native_center[2]
         if not any(
-            sum((p - e)**2 for p,e in zip(item["sourceVoxelCentroidIJK"],[148.04,231.323,99.345]))**.5 < 25
+            sum((p-e)**2 for p,e in zip(item["sourceVoxelCentroidIJK"],native_center))**.5 < 25
             for item in originals
         ):
             raise RuntimeError("original_model_no_candidate_near_prior_expert_positive_region")
@@ -236,6 +258,8 @@ def run(root: Path, work: Path):
             "sourceIsTrainingOrValidationAmbiguous":True,
             "independentValidation":False,
             "originalDicomSopRegistrationVerified":False,
+            "derivedDicomSopRegistrationVerified": derived_map is not None,
+            "derivedDicomSourceNativeSHA256":native_sha if derived_map is not None else None,
             "clinicalAccuracyValidated":False,
             "negativeDiagnosisPermitted":False,
             "patientCloudTransfer":False,
@@ -262,12 +286,17 @@ def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--workdir",type=Path,required=True)
     ap.add_argument("--report",type=Path,required=True)
+    ap.add_argument("--derived-native", type=Path)
+    ap.add_argument("--derived-manifest", type=Path)
     args=ap.parse_args()
+    if (args.derived_native is None) != (args.derived_manifest is None):
+        raise SystemExit("derived_DICOM_source_requires_both_files")
     if args.report.exists():
         raise SystemExit("original_report_already_exists")
     args.workdir.mkdir(parents=True,exist_ok=True)
     root=Path(__file__).resolve().parents[1]
-    report=run(root,args.workdir)
+    report=run(root,args.workdir,derived_native=args.derived_native,
+               derived_manifest=args.derived_manifest)
     args.report.write_text(json.dumps(report,indent=2)+"\n")
 
 
