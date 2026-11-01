@@ -23,7 +23,7 @@ import {sameSeriesR231Facts,type CapturedLocalSpecialist} from "../lib/same-seri
 import {sameSeriesLaa950ForReview,type CapturedLocalLaa950} from "../lib/same-series-laa950-review";
 
 export default function VisionFramePlanningPanel({
-  series, activeSeriesKey, fileById, onOpenSlice,capturedSpecialist,capturedLaa950,ichRuntime,publicResearchAuthorized=false,originalDetectorEvidence=null,clnVerifiedLocal=null,fromPrimaryAnalysis=false,originalDetectorsBusy=false,
+  series, activeSeriesKey, fileById, onOpenSlice,capturedSpecialist,capturedLaa950,ichRuntime,publicResearchAuthorized=false,originalDetectorEvidence=null,clnVerifiedLocal=null,fromPrimaryAnalysis=false,primaryActionAvailable=false,originalDetectorsBusy=false,
 }: {
   series: readonly DicomSeries[];
   activeSeriesKey: string | null;
@@ -37,6 +37,7 @@ export default function VisionFramePlanningPanel({
   originalDetectorEvidence?:SanitizedDetectorBundle|null;
   clnVerifiedLocal?:ClnVerifiedLocalEvidence|null;
   fromPrimaryAnalysis?:boolean;
+  primaryActionAvailable?:boolean;
   originalDetectorsBusy?:boolean;
 }) {
   const [requested, setRequested] = useState(4);
@@ -293,7 +294,7 @@ export default function VisionFramePlanningPanel({
       На этом этапе DICOM остаётся в браузере. Отправка обезличенных копий через OpenRouter
       возможна только после локальных проверок и отдельного разрешения исследовательского сервера.
     </p>
-    {!fromPrimaryAnalysis&&<div className="ora-vision-plan-controls">
+    {!fromPrimaryAnalysis&&!primaryActionAvailable&&<div className="ora-vision-plan-controls">
       <label htmlFor="ora-frame-count">Кадров в выборке
         <select id="ora-frame-count" value={requested}
           onChange={e => setRequested(Number(e.target.value))}>
@@ -305,7 +306,7 @@ export default function VisionFramePlanningPanel({
         Сформировать план
       </button>
     </div>}
-    {!fromPrimaryAnalysis&&<div className="ora-vision-budget-preview" aria-label="Единый запуск КТ МРТ">
+    {!fromPrimaryAnalysis&&!primaryActionAvailable&&<div className="ora-vision-budget-preview" aria-label="Единый запуск КТ МРТ">
       <strong>Единый анализ · детекторы + Gemini + Opus</strong>
       <p>Одна точка входа: запуск доступных локальных моделей, затем проверка копий и разрешённый вызов Gemini + Opus в этой же панели.</p>
       <button type="button" disabled={detectorBusy||universal.status!=="eligible_for_authorization"} onClick={startUnified}>
