@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {deflateSync} from "node:zlib";
+import {readFileSync} from "node:fs";
 import {autoPrepareVisionPrivacy} from "./auto-privacy-preparation.ts";
 import {createPrivacyFrame,type PrivacyFrame} from "./vision-privacy.ts";
 import {exportPrivacyJournal} from "./privacy-review-journal.ts";
@@ -69,4 +70,17 @@ test("failed OCR aborts local privacy readiness and never creates consent",async
  await assert.rejects(
   autoPrepareVisionPrivacy([preview(1),undefined],"CT",new AbortController().signal),
   /не все/i);
+});
+
+test("automatic privacy OCR retries after Strict Mode replay abort",()=>{
+ const component=readFileSync(
+  new URL("../components/VisionPrivacyPreparation.tsx",import.meta.url),"utf8");
+ assert.match(component,/autoAttempt\.current===previews/,
+  "Exact preview snapshot is leased rather than globally claimed");
+ assert.match(component,/controller\.abort\(\);[\s\S]*if\(autoAttempt\.current===previews\)autoAttempt\.current=null;/,
+  "Cleanup must release its aborted preview lease for React Strict Mode replay");
+ assert.match(component,/version!==generation\.current\|\|controller\.signal\.aborted/,
+  "Stale aborted OCR must never replace the next attempt's source-bound frames");
+ assert.match(component,/pixelReviewSha256&&f\.visualReviewSha256/,
+  "Auto OCR must not bypass clinician review");
 });
