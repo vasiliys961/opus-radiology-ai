@@ -684,12 +684,13 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  }
  return <section className="cs-geometry" aria-label="Единый анализ DICOM">
   <h2>Анализ исследования</h2>
+  <p>Единый запуск: автоматический выбор доступных оригинальных детекторов и локальная подготовка кадров для Gemini. По окончании Claude Opus сопоставляет оба пути и формирует протокол рентгенолога.</p>
    {confirmableChest&&<label><input type="checkbox" checked={clinicianConfirmedChest}
      disabled={busy} onChange={e=>setClinicianConfirmedChest(e.target.checked)}/>
      Подтверждаю, что это КТ грудной клетки (исходные DICOM без однозначного анатомического кода либо с признаком реконструкции).
      Изображения и геометрию проверил; это не локализатор. Разрешаю исследовательский запуск на данной серии.
    </label>}
-  <OriginalWorkerFleetReadiness/>
+  <details><summary>Дополнительно · состояние серверов и оригинальных весов</summary><OriginalWorkerFleetReadiness/></details>
   <p><strong>{plan.title}</strong> · текущая исходная DICOM-серия. Автоматический выбор по известной модальности;
     наличие настоящих весов подтверждается только worker при запуске.</p>
   {plan.reason&&<p role="status">{visionOnlyAvailable?
@@ -1059,7 +1060,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
      onVerifiedCandidates={verified=>onClnBoundReady?.(series.key,verified)}/>}
    {lungscapeResult&&<p role="status">LungSCAPE191: настоящий инференс завершён, компонентов {lungscapeResult.componentCount}. Классы модели не являются диагнозом ILD/UIP/IPF.</p>}
   {(chestNodules||chestCln||lungscapeResult||chestEffusion||chestPe||chestNodes||abdomenResult||ich||wmh||brainResult)&&
-    <DetectorGeminiOpusConsilium onBundleReady={bundle=>onDetectorEvidence?.(series.key,bundle)} snapshot={{
+    <details><summary>Дополнительно · числовой исследовательский консилиум (не основной Vision)</summary><DetectorGeminiOpusConsilium onBundleReady={bundle=>onDetectorEvidence?.(series.key,bundle)} snapshot={{
       modality:series.modality as "CT"|"MR",
       region:plan.route==="monai-nodules"?"chest":
         plan.route==="totalseg-abdomen"?"abdomen":"brain",
@@ -1070,8 +1071,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
         abdomenResult?.sourceNiftiSha256??null,
       nodules:chestNodules,cln:chestCln,lungscape:lungscapeResult,effusion:chestEffusion,pe:chestPe,nodes:chestNodes,
       abdomen:abdomenResult,ich,wmh,brain:brainResult,
-    }}/>}
-  <p>Gemini Vision по исходным кадрам выполняется отдельно после обезличивания.
-    В этой версии единый консилиум анализирует только обезличенные числа моделей.</p>
+    }}/></details>}
+  <p>Основной Gemini Vision → Claude Opus доступен справа после проверки обезличенных кадров. Второй числовой консилиум не нужен для стандартного заключения.</p>
  </section>;
 }
