@@ -5,6 +5,7 @@ import {accountReportedVisionUsage} from "./vision-batch-ledger.ts";
 import type {VisionBatch,ModelUsage} from "./vision-batch-ledger.ts";
 import type {VisionBudgetPlan} from "./vision-budget-plan.ts";
 import type {VolumeGeminiBatchResult} from "./approved-volume-batch-review.ts";
+import {validateSanitizedDetectorBundle,type SanitizedDetectorBundle} from "./detector-consilium-evidence.ts";
 
 export type LocalVolumeFinding={
   sourceIndex:number;pass:"overview"|"targeted";
@@ -83,16 +84,22 @@ export type SafeVolumeOpusInput={
   observations:Array<{sliceNumber:number;pass:"overview"|"targeted";
     anatomy:string;sign:string;uncertainty:string}>;
   limitations:string[];
+  detectorState:"completed"|"unavailable"|"timeout";
+  detectorEvidence:SanitizedDetectorBundle|null;
   acknowledgePaidOpusSynthesis:true;
 };
 /** Explicitly NO SOP UID, filenames, local IDs or patient descriptions. */
 export function makeSafeVolumeOpusInput(
   modality:"CT"|"MR",plan:VisionBudgetPlan,
   batches:readonly VisionBatch[],receipts:readonly LocalVolumeReceipt[],
+  detectorEvidence:SanitizedDetectorBundle|null=null,
+  detectorState:"completed"|"unavailable"|"timeout"="unavailable",
 ):SafeVolumeOpusInput{
   const ledger=volumeLedger(plan,batches,receipts);
   if(!receipts.length||receipts.length!==batches.length||
      !ledger.completedFullOverview)throw Error("Full Gemini overview must complete before Opus");
+  if(detectorEvidence&&(!validateSanitizedDetectorBundle(detectorEvidence)||
+     detectorEvidence.modality!==modality))throw Error("Detector facts not verified");
   const findings=receipts.flatMap(x=>x.findings);
   if(findings.length>180)throw Error("Too many observations for one safe Opus request");
   const limitations=[...new Set(receipts.flatMap(x=>x.limitations))].slice(0,30);
@@ -104,7 +111,7 @@ export function makeSafeVolumeOpusInput(
     completedBatches:receipts.length,totalBatches:batches.length,
     observations:findings.map(f=>({sliceNumber:f.sourceIndex+1,pass:f.pass,
       anatomy:f.anatomy,sign:f.sign,uncertainty:f.uncertainty})),
-    limitations,acknowledgePaidOpusSynthesis:true,
+    limitations,detectorState,detectorEvidence,acknowledgePaidOpusSynthesis:true,
   };
   if(JSON.stringify(result).length>110000)throw Error("Opus input context too large");
   return result;
