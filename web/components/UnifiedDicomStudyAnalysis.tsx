@@ -252,7 +252,8 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  // Missing or inconsistent MR weighting must not run the WMH model.
  // Keep the native source-bound, consent-gated Vision pathway available.
  const brainVisionOnly=plan.route==="wmh-flair"&&brainTask==="wmh"&&
-   !flairConfirmed&&!autoFlair.eligible&&canAutoPrepareLocalVision(series);
+   canAutoPrepareLocalVision(series)&&
+   ((!flairConfirmed&&!autoFlair.eligible)||(!autoWmhReady&&!token.trim()));
  const readinessChecksPending=chestPlan?
    (clnChecking||lungscapeChecking||autoMonaiChecking||autoEffusionChecking||autoPeChecking||autoNodesChecking):
    plan.route==="totalseg-abdomen"?autoAbdomenChecking:
@@ -287,7 +288,9 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
      // non-FLAIR original DICOM to WMH, open the same independent Vision path.
      onDetectorEvidence?.(series.key,null);
      setError("");
-     setStatus("FLAIR не подтверждена по DICOM TR/TE/TI. WMH не запускалась; открыт независимый просмотр Gemini + Opus с отдельным разрешением передачи.");
+     setStatus(!autoWmhReady&&!token.trim()?
+       "Оригинальная WMH-модель недоступна. Открыта независимая подготовка Gemini + Opus; результатов WMH нет.":
+       "FLAIR не подтверждена по DICOM TR/TE/TI. WMH не запускалась; открыт независимый просмотр Gemini + Opus с отдельным разрешением передачи.");
      onReadyForVision?.(series.key);
      return;
    }
