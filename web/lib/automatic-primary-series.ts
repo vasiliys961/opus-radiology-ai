@@ -40,3 +40,15 @@ export function suggestPrimaryDicomSeries(series:readonly DicomSeries[],
    "Достоверно совместимая серия не найдена. Выбрана лучшая для просмотра; диагноз и маршрут не определены.",
  };
 }
+
+/** Local image planning needs no provider account or image-transfer consent.
+ * Unverified scouts, reconstructions and incomplete geometry cannot be
+ * silently sent to Vision; this gate NEVER permits an external request.
+ */
+export function canAutoPrepareLocalVision(series:DicomSeries|undefined):boolean{
+ return !!series&&(series.modality==="CT"||series.modality==="MR")&&
+  series.volumeReady&&series.spatiallySorted&&series.members.length>=2&&
+  series.members.every(m=>m.metadata.imageRole!=="LOCALIZER"&&
+   m.metadata.imageRole!=="DERIVED"&&!!m.metadata.sopInstanceUid&&
+   !!m.metadata.seriesUid&&!!m.metadata.studyUid);
+}
