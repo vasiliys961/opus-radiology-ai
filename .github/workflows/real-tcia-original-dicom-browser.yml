@@ -38,14 +38,6 @@ jobs:
         run: |
           node scripts/check-real-tcia-original-dicom-browser.mjs \
             "$RUNNER_TEMP/tcia-original-ct-browser"
-      - name: Upload no patient data; capture only browser failure screenshot
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: original-tcia-dicom-browser-failure
-          path: web/browser-results/tcia-original-dicom-browser-failure.png
-          retention-days: 7
-          if-no-files-found: ignore
       - name: Remove temporary original DICOM source
         if: always()
         run: rm -rf "$RUNNER_TEMP/tcia-original-ct-browser"
