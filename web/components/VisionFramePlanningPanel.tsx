@@ -453,8 +453,6 @@ export default function VisionFramePlanningPanel({
         Только локальный исследовательский контекст: эти цифры не отправляются в OpenRouter
         и не подтверждают диагноз эмфиземы.</p>}
       {laaWarning&&<p role="status">{laaWarning}</p>}
-      <details>
-        <summary>Дополнительно · исследовать отдельные выбранные срезы</summary>
       <VisionPrivacyPreparation autoStartAfterDetectors={fromPrimaryAnalysis}
         primaryAnalysisStage={primaryAnalysisStage}
         originalDetectorEvidence={originalDetectorEvidence}
@@ -468,7 +466,6 @@ export default function VisionFramePlanningPanel({
           capturedSpecialist.evidence.source.inputSha256+":"+capturedSpecialist.evidence.mask.sha256:""}
         originalLocalFileIds={report.frames.map(f=>f.fileId)}
         onOpenOriginalSlice={onOpenSlice}/>
-      </details>
     </div>}
 
     <p className="ora-vision-plan-footnote">Отбираем по равномерным индексам геометрически проверенной серии,
