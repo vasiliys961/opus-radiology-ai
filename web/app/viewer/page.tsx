@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useMemo, useRef, useState, type ChangeEvent } from "react";
 import { groupDicomSeries, readDicomSeriesHeader, type DicomSeries } from "../../lib/dicom-series";
+import {suggestPrimaryDicomSeries} from "../../lib/automatic-primary-series";
 import { validateViewerFileSelection } from "../../lib/viewer-limits";
 import "./viewer.css";
 import "../radiology.css";
@@ -65,7 +66,10 @@ export default function ViewerPage() {
   const [reading, setReading] = useState(false);
 
   const series = useMemo(() => groupDicomSeries(indexed.map((item) => ({ id: item.id, name: item.file.name, metadata: item.header }))), [indexed]);
-  const selected: DicomSeries | undefined = series.find((item) => item.key === currentSeriesKey) ?? series[0];
+  const suggestion=useMemo(()=>suggestPrimaryDicomSeries(series,
+    new Set(indexed.map(item=>item.id))),[series,indexed]);
+  const selected: DicomSeries | undefined =
+    series.find(item=>item.key===(currentSeriesKey||suggestion.key)) ?? series[0];
   const visionSeries = useMemo(()=>selected?[selected]:[],[selected]);
   const indexedById = useMemo(() => new Map(indexed.map((item) => [item.id, item.file])), [indexed]);
   const selectedFiles = useMemo(() => selected?.members.map((item) => indexedById.get(item.id)).filter((file): file is File => !!file) ?? [], [selected, indexedById]);
@@ -139,6 +143,7 @@ export default function ViewerPage() {
           <div className="cs-message" role="status">{reading ? "Идёт индексация…" : message}</div>
           {series.length > 0 && <>
             <h3>Серии ({series.length})</h3>
+            {!currentSeriesKey&&<p className="cs-message" role="status">{suggestion.reason}</p>}
             <div className="cs-series-list">{series.map((s) => <button type="button" className={selected?.key === s.key ? "cs-series active" : "cs-series"} key={s.key} onClick={() => {setWmhSlice(undefined);setVisionOpen(false);setVisionFromPrimary(false);setVisionDetectorEvidence(null);setClnVerified(null);setCurrentSeriesKey(s.key);}}>{s.label}</button>)}</div>
           </>}
           {selected && <div className="cs-geometry"><h3>Контроль геометрии</h3><p>{selected.spatiallySorted ? "✓ Пространственный порядок подтверждён" : "⚠ Порядок условный"}</p><p>{selected.volumeReady ? `✓ Предварительная геометрия для будущего 3D · ${selected.sliceSpacingMm?.toFixed(2)} мм` : "3D/MPR НЕ РАЗРЕШЕНЫ"}</p>{selected.warning && <p>{selected.warning}</p>}</div>}
