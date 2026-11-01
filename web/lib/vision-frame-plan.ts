@@ -106,8 +106,10 @@ export function planVisionFrameSamples(
   const focusValid=focusSliceIndex!==null&&Number.isSafeInteger(focusSliceIndex)&&
     focusSliceIndex>=0&&focusSliceIndex<selected.members.length;
   if(focusValid&&!ids.includes(focusSliceIndex)){
-    const nearest=ids.reduce((best,index,i)=>
-      Math.abs(index-focusSliceIndex)<Math.abs(ids[best]-focusSliceIndex)?i:best,0);
+    // Preserve full-craniocaudal endpoints when there are interior samples.
+    const pool=ids.length>2?ids.map((_,i)=>i).slice(1,-1):ids.map((_,i)=>i);
+    const nearest=pool.reduce((best,i)=>
+      Math.abs(ids[i]-focusSliceIndex)<Math.abs(ids[best]-focusSliceIndex)?i:best,pool[0]);
     ids[nearest]=focusSliceIndex;
     ids.sort((a,b)=>a-b);
   }
