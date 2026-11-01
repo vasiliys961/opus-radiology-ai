@@ -4,6 +4,7 @@
  */
 import type {DicomSeries} from "./dicom-series.ts";
 import {planNativeStudyAnalysis} from "./unified-study-dispatch.ts";
+import {planVisionFrameSamples} from "./vision-frame-plan.ts";
 
 export type PrimarySeriesSuggestion={
  key:string|null;
@@ -46,9 +47,11 @@ export function suggestPrimaryDicomSeries(series:readonly DicomSeries[],
  * silently sent to Vision; this gate NEVER permits an external request.
  */
 export function canAutoPrepareLocalVision(series:DicomSeries|undefined):boolean{
- return !!series&&(series.modality==="CT"||series.modality==="MR")&&
-  series.volumeReady&&series.spatiallySorted&&series.members.length>=2&&
-  series.members.every(m=>m.metadata.imageRole!=="LOCALIZER"&&
-   m.metadata.imageRole!=="DERIVED"&&!!m.metadata.sopInstanceUid&&
-   !!m.metadata.seriesUid&&!!m.metadata.studyUid);
+ if(!series||(series.modality!=="CT"&&series.modality!=="MR")||
+    !series.volumeReady||!series.spatiallySorted||series.members.length<2||
+    series.members.some(m=>m.metadata.imageRole==="LOCALIZER"||
+      m.metadata.imageRole==="DERIVED"))return false;
+ // Use the same source, SOP and physical geometry validation as the preview
+ // planner. A panel must not auto-open for a source that cannot be decoded.
+ return planVisionFrameSamples([series],series.key).status==="ready-for-local-preview";
 }
