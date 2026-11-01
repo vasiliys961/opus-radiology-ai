@@ -1,0 +1,99 @@
+name: REAL browser original DICOM to original CLN to Gemini Opus report
+
+on:
+  pull_request:
+    paths:
+      - "scripts/launch-real-tcia-dicom-cln-browser-e2e.py"
+      - "scripts/check-real-tcia-dicom-cln-browser-e2e.mjs"
+      - ".github/workflows/real-browser-tcia-original-cln-gemini-opus.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-browser-all-the-way:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 95
+    env:
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      HF_HUB_DISABLE_PROGRESS_BARS: "1"
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "1"
+      CUDA_VISIBLE_DEVICES: "-1"
+      PYTHONUNBUFFERED: "1"
+      HF_HOME: /tmp/opus-tcia-live-browser-model-cache
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Require real provider credentials and enough original-model CPU memory
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$OPENROUTER_API_KEY" ]; then
+            echo "::error::No OPENROUTER_API_KEY - real model E2E must FAIL."
+            exit 1
+          fi
+          python - <<'PY'
+          from pathlib import Path
+          import shutil
+          available=int(next(s.split()[1] for s in Path("/proc/meminfo").read_text().splitlines() if s.startswith("MemAvailable:")))*1024
+          free=shutil.disk_usage("/tmp").free
+          assert available>=12*2**30 and free>=6*2**30
+          print("Actual browser CLN CPU RAM GiB",round(available/2**30,2))
+          PY
+      - name: Install original DICOM and original published CLN dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --no-cache-dir "numpy==1.26.4" "pydicom==3.0.1" "nibabel==5.3.2" "huggingface_hub==0.35.3" "requests==2.32.3"
+          python -m pip install --no-cache-dir "torch==2.5.1+cpu" "torchvision==0.20.1+cpu" --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --no-cache-dir \
+            --extra-index-url https://download.pytorch.org/whl/cpu \
+            "torch==2.5.1+cpu" "torchvision==0.20.1+cpu" "numpy==1.26.4" \
+            "nnunetv2==2.7.0" "huggingface_hub==0.35.3" \
+            "nibabel==5.3.2" "psutil==7.0.0" "fastapi==0.115.12" \
+            "uvicorn==0.34.2" "requests==2.32.3"
+          python -m pip check
+          python - <<'PY'
+          import shutil,torch
+          assert torch.version.cuda is None and torch.__version__.startswith("2.5.1")
+          assert shutil.which("nnUNetv2_predict")
+          PY
+      - name: Download immutable 103 original scanner DICOM files from official TCIA NBIA
+        run: python scripts/download-ai-cac-known-lctsc.py --output "$RUNNER_TEMP/actual-original-DICOM"
+      - name: Build actual Next DICOM clinical viewer and install real Chromium
+        working-directory: web
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: REAL: Upload 103 TCIA DICOM in browser and click Analyze to run original CLN, Gemini, Opus
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          python scripts/launch-real-tcia-dicom-cln-browser-e2e.py \
+            --reference "$RUNNER_TEMP/actual-original-DICOM" \
+            --work "$RUNNER_TEMP/private-live-original-CLN" \
+            --report "$RUNNER_TEMP/tcia-browser-real-CT-cln-gemini-opus.json"
+      - name: Export only actual physician CT report and privacy-preserving numeric test receipt
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: actual-browser-103-original-DICOM-CLN-Gemini-Opus-physician-report
+          path: |
+            ${{ runner.temp }}/tcia-browser-real-CT-cln-gemini-opus.json
+            ${{ runner.temp }}/tcia-browser-real-CT-cln-gemini-opus.txt
+          retention-days: 7
+          if-no-files-found: error
+      - name: Erase real deidentified original DICOM pixels and private workers
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/actual-original-DICOM" \
+            "$RUNNER_TEMP/private-live-original-CLN" \
+            "/tmp/opus-tcia-live-browser-model-cache"
