@@ -4,6 +4,7 @@
  */
 import type {DicomSeries} from "./dicom-series.ts";
 import {planNativeStudyAnalysis} from "./unified-study-dispatch.ts";
+import {planVisionFrameSamples} from "./vision-frame-plan.ts";
 
 export type PrimarySeriesSuggestion={
  key:string|null;
@@ -39,4 +40,18 @@ export function suggestPrimaryDicomSeries(series:readonly DicomSeries[],
     "Автоматически выбрана исходная диагностическая серия для единого анализа."):
    "Достоверно совместимая серия не найдена. Выбрана лучшая для просмотра; диагноз и маршрут не определены.",
  };
+}
+
+/** Local image planning needs no provider account or image-transfer consent.
+ * Unverified scouts, reconstructions and incomplete geometry cannot be
+ * silently sent to Vision; this gate NEVER permits an external request.
+ */
+export function canAutoPrepareLocalVision(series:DicomSeries|undefined):boolean{
+ if(!series||(series.modality!=="CT"&&series.modality!=="MR")||
+    !series.volumeReady||!series.spatiallySorted||series.members.length<2||
+    series.members.some(m=>m.metadata.imageRole==="LOCALIZER"||
+      m.metadata.imageRole==="DERIVED"))return false;
+ // Use the same source, SOP and physical geometry validation as the preview
+ // planner. A panel must not auto-open for a source that cannot be decoded.
+ return planVisionFrameSamples([series],series.key).status==="ready-for-local-preview";
 }
