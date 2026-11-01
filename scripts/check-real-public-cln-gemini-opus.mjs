@@ -17,6 +17,7 @@ import {callAiGateway} from "../web/lib/ai-gateway.ts";
 import {hasRadiologistReportSections} from "../web/lib/senior-radiologist-report.ts";
 import {createClnFrameRelativeEvidence} from "../web/lib/cln-frame-relative-evidence.ts";
 
+const derivedDicomMode=process.env.RADIOLOGY_VERIFIED_PUBLIC_DERIVED_DICOM==="1";
 if(process.env.RADIOLOGY_PUBLIC_MSD_CLOUD_TRANSFER_APPROVED!=="1"||
    !process.env.OPENROUTER_API_KEY)throw Error("public_research_and_provider_auth_missing");
 const [source,folder,output]=process.argv.slice(2);
@@ -28,7 +29,13 @@ assert.equal(evidence.realOriginalModelForwardCompleted,true);
 assert.equal(evidence.testedViaAuthenticatedLocalHttpWorker,true);
 assert.equal(evidence.sourceBound,true);
 assert.equal(evidence.sourceSha256Compressed,"08b7aa88ee9946b0bf0a5fcd08af1d9b7720c4295e4f900a3e2f13d5c3b6b694");
-assert.equal(evidence.sourceSha256UploadedNative,"941745d629a2242abd373ebfe440bfaa557073233db7693ecb209f41489f8c88");
+if(derivedDicomMode){
+ assert.match(evidence.sourceSha256UploadedNative,/^[0-9a-f]{64}$/);
+ assert.equal(evidence.derivedDicomSopRegistrationVerified,true);
+ assert.equal(evidence.derivedDicomSourceNativeSHA256,evidence.sourceSha256UploadedNative);
+}else{
+ assert.equal(evidence.sourceSha256UploadedNative,"941745d629a2242abd373ebfe440bfaa557073233db7693ecb209f41489f8c88");
+}
 assert.equal(evidence.publisherCheckpointSHA256,"8c08ec796fa2b786fe99ddfad4fe6314e98fdd8820c59527be3c4105f7955d87");
 assert.equal(evidence.originalDicomSopRegistrationVerified,false);
 assert.equal(evidence.candidateCount,evidence.candidates.length);
@@ -48,6 +55,17 @@ const taskBundle={
 assert.ok(validateSanitizedDetectorBundle(taskBundle));
 const geometry=JSON.parse(readFileSync(join(folder,"frame-relative-map.json"),"utf8"));
 assert.equal(geometry.sourceImageSha256,evidence.sourceSha256UploadedNative);
+if(derivedDicomMode){
+ assert.equal(geometry.detectorSourceImageSha256,evidence.sourceSha256UploadedNative);
+ assert.equal(geometry.derivedDicomSopRegistrationVerified,true);
+ assert.equal(geometry.originalDicomSopRegistrationVerified,false);
+ assert.equal(geometry.scannerOriginalDicom,false);
+ assert.equal(geometry.localSopBinding?.length,4);
+ for(const [index,link] of geometry.localSopBinding.entries()){
+   assert.equal(link.imageId,"frame-"+(index+1));
+   assert.match(link.sop,/^[0-9.]{8,64}$/);
+ }
+}
 const spatial=createClnFrameRelativeEvidence({...geometry,
  nativeCandidates:evidence.candidates.map(c=>({
   componentId:c.componentId,sourceVoxelCentroidIJK:c.sourceVoxelCentroidIJK,
@@ -83,6 +101,9 @@ const doc=await reviewSanitizedSamples(packet,async(req,signal)=>{
    assert.ok(sent.includes("candidateId"));
    assert.ok(sent.includes(spatial.candidateAnchors[0].frameId));
    assert.ok(sent.includes("Prior source-checked Gemini observations"));
+ if(derivedDicomMode)
+   for(const link of geometry.localSopBinding)
+     assert.ok(!sent.includes(link.sop),"DICOM SOP must never reach cloud");
  }
  const res=await callAiGateway(req,signal);
  receipts.push({model:req.model,promptTokens:res.usage?.prompt_tokens??null,
@@ -104,13 +125,16 @@ assert.equal(doc.frameRelativeClnEvidence?.originalDicomSopRegistrationVerified,
 const publicReport={
  schema:"opus-real-licensed-public-ct-cln-gemini-opus/v1",
  source:"MSD Task06 Lung, publicly licensed CC-BY-SA-4.0, study lung_043",
- originalCLNHttpWorkerRun:41231610839,
+ originalCLNHttpWorkerRun:derivedDicomMode?null:41231610839,
  originalCLNHttpCheckpointSHA256:evidence.publisherCheckpointSHA256,
  originalPublicNiftiSHA256:evidence.sourceSha256Compressed,
  originalRealModelForwardCompleted:true,
- currentRunReusedVerifiedNumericArtifact:true,
- currentRunPerformedNewCLNForward:false,
+ currentRunReusedVerifiedNumericArtifact:!derivedDicomMode,
+ currentRunPerformedNewCLNForward:derivedDicomMode,
  originalDicomSopRegistrationVerified:false,
+ sourceDerivedFromRealPublicPixelCT:derivedDicomMode,
+ generatedDicomSopGeometryVerified:derivedDicomMode,
+ originalScannerDicomTested:false,
  actualOpenRouterCalls:calls,models:receipts,
  sampledCTFrames:frames.length,sourceCoverage:"sampled_frames_only",
  geminiJson:doc.results[0].review,
@@ -127,6 +151,6 @@ writeFileSync(reportPath,doc.opusSynthesis.summary.trim()+"\n",{flag:"wx",mode:0
 console.log("REAL PUBLIC MSD CLN + Gemini JSON + Opus structured synthesis SUCCESS",
  JSON.stringify({actualOpenRouterCalls:calls,
  models:receipts.map(r=>r.model),sampledCTFrames:frames.length,
- originalCLNForwardPreviouslyVerified:true,
- newCLNForwardThisRun:false,originalDicomSopRegistrationVerified:false,
+ originalCLNForwardPreviouslyVerified:!derivedDicomMode,
+ newCLNForwardThisRun:derivedDicomMode,originalDicomSopRegistrationVerified:false,
  clinicallyValidated:false,clnSpatialAnchorsSent:spatial.candidateAnchors.length}));
