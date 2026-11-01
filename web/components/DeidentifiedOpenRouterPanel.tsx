@@ -105,7 +105,7 @@ export default function DeidentifiedOpenRouterPanel({
          f.sha256!==exactReviewedHashes[i]?.sha256))
         throw Error("Проверенная копия изменилась: повторите проверку.");
       const sentSpecialist=includeSpecialist&&specialistFacts?specialistFacts:null;
-      const sentDetectors=includeDetectors&&originalDetectorEvidence?
+      const sentDetectors=(primaryAnalysisStage!=="idle"||includeDetectors)&&originalDetectorEvidence?
         originalDetectorEvidence:null;
       const sentCxr=includeCxr&&originalCxrEvidence?toSafeXrvScores(originalCxrEvidence):null;
       if(sentCxr&&packet.frames.some(f=>f.modality!=="CR"&&f.modality!=="DX"))
@@ -325,7 +325,9 @@ export default function DeidentifiedOpenRouterPanel({
       Claude Opus ПОСЛЕ независимого разбора рентгенограммы Gemini Vision.
       Это не диагноз и не вероятность заболевания.
     </label>}
-    {originalDetectorEvidence&&validateSanitizedDetectorBundle(originalDetectorEvidence)&&
+    {originalDetectorEvidence&&validateSanitizedDetectorBundle(originalDetectorEvidence)&&primaryAnalysisStage!=="idle"&&
+      <p role="status">Оригинальные детекторы текущего исследования будут переданы Claude Opus автоматически после независимого просмотра исходных кадров Gemini. Результаты детекторов не раскрываются Gemini до её первого ответа.</p>}
+    {originalDetectorEvidence&&validateSanitizedDetectorBundle(originalDetectorEvidence)&&primaryAnalysisStage==="idle"&&
       <label><input type="checkbox" disabled={working}
         checked={includeDetectors} onChange={e=>{
           setIncludeDetectors(e.target.checked);setResult(null);
