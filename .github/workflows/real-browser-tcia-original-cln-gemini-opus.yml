@@ -18,6 +18,10 @@ on:
       - ".github/workflows/real-browser-tcia-original-cln-gemini-opus.yml"
   workflow_dispatch:
 
+concurrency:
+  group: original-real-cln-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
