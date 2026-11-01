@@ -3,6 +3,7 @@ import {timingSafeEqual} from "node:crypto";
 import {callAiGateway} from "../../../../lib/ai-gateway";
 import {createSyntheticTrialLimiter} from "../../../../lib/synthetic-live-research";
 import {synthesizeSafeFullVolumeOpus} from "../../../../lib/full-volume-opus-synthesis";
+import {validateVolumeSession,VOLUME_SESSION_COOKIE} from "../../../../lib/volume-operator-session";
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
 export const maxDuration=180;
@@ -14,14 +15,18 @@ function authorized(req:NextRequest):boolean{
  const host=req.headers.get("host")??"";
  const token=req.headers.get("x-opus-local-operator-token");
  const expected=process.env.RADIOLOGY_LOCAL_RESEARCH_OPERATOR_TOKEN;
+ const autoSession=req.headers.get("x-opus-auto-public-volume")==="1"&&
+   process.env.RADIOLOGY_ENABLE_AUTOMATIC_PUBLIC_VOLUME_RESEARCH==="1"&&
+   validateVolumeSession(req.cookies.get(VOLUME_SESSION_COOKIE)?.value??null);
  if(process.env.NODE_ENV!=="development"||!HOST.test(host)||
     !["localhost","127.0.0.1"].includes(req.nextUrl.hostname)||
     req.nextUrl.search||req.headers.get("origin")!=="http://"+host||
     ![null,"same-origin"].includes(req.headers.get("sec-fetch-site"))||
     process.env.RADIOLOGY_ENABLE_DEIDENTIFIED_OPENROUTER_PILOT!=="1"||
     process.env.RADIOLOGY_OPENROUTER_HEALTH_DATA_APPROVED!=="1"||
-    !process.env.OPENROUTER_API_KEY||!expected||expected.length<24||
-    !token||token.length>512)return false;
+    !process.env.OPENROUTER_API_KEY||!expected||expected.length<24)return false;
+ if(autoSession)return true;
+ if(!token||token.length>512)return false;
  const a=Buffer.from(token),b=Buffer.from(expected);
  return a.length===b.length&&timingSafeEqual(a,b);
 }
