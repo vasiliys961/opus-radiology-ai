@@ -93,10 +93,11 @@ export default function VisionFramePlanningPanel({
     return clnVerifiedLocal;
   },[series,activeSeriesKey,clnVerifiedLocal]);
   const choice = useMemo(() => {
-    // Include verified lesion center in the same four-frame budget; Gemini sees
-    // only source pixels, NOT the source-linked CLN result.
+    // Include up to two distinct source-verified lesion centers in the same
+    // four-frame budget. Gemini receives original source pixels independently,
+    // never the CLN model's labels or provisional diagnosis.
     return planVisionFrameSamples(series, activeSeriesKey, requested,
-      sourceBoundCln?.candidates[0]?.sliceIndex??null);
+      sourceBoundCln?.candidates.map(c=>c.sliceIndex)??null);
   }, [series, activeSeriesKey, requested,sourceBoundCln]);
   let clnSpatial:ClnFrameRelativeEvidence|null=null;
   if(sourceBoundCln?.candidates.length&&report?.status==="ready-for-local-preview"&&
