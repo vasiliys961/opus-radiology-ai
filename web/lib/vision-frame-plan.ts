@@ -48,7 +48,7 @@ export function uniformIndices(length: number, requested: number): number[] {
  */
 export function planVisionFrameSamples(
   series: readonly DicomSeries[], preferredSeriesKey: string | null = null, count = MAX_VISION_SAMPLE_FRAMES,
- focusSliceIndex: number | null = null,
+ focusSliceIndex: number | readonly number[] | null = null,
 ): VisionFramePlan {
   if (!Number.isInteger(count) || count < 1 || count > MAX_VISION_SAMPLE_FRAMES)
     throw new Error("Invalid requested sample count");
@@ -103,16 +103,26 @@ export function planVisionFrameSamples(
     frames: [], blockers, warnings,
   };
   const ids = uniformIndices(selected.members.length, count);
-  const focusValid=focusSliceIndex!==null&&Number.isSafeInteger(focusSliceIndex)&&
-    focusSliceIndex>=0&&focusSliceIndex<selected.members.length;
-  if(focusValid&&!ids.includes(focusSliceIndex)){
-    // Preserve full-craniocaudal endpoints when there are interior samples.
-    const pool=ids.length>2?ids.map((_,i)=>i).slice(1,-1):ids.map((_,i)=>i);
+  // Preserve both endpoints while allowing distinct source-verified lesion
+  // centers to replace separate interior positions within the SAME frame budget.
+  // Unverified, duplicate and out-of-range indices never enter the manifest.
+  const requestedFocus=focusSliceIndex===null?[]:
+    Array.isArray(focusSliceIndex)?focusSliceIndex:[focusSliceIndex];
+  const focuses=[...new Set(requestedFocus.filter((index):index is number=>
+    Number.isSafeInteger(index)&&index>=0&&index<selected.members.length))];
+  const reserved=new Set(ids.flatMap((index,slot)=>focuses.includes(index)?[slot]:[]));
+  for(const focus of focuses){
+    if(ids.includes(focus))continue;
+    const pool=ids.map((_,i)=>i).filter(i=>
+      (ids.length<=2||(i>0&&i<ids.length-1))&&!reserved.has(i));
+    if(!pool.length)break;
     const nearest=pool.reduce((best,i)=>
-      Math.abs(ids[i]-focusSliceIndex)<Math.abs(ids[best]-focusSliceIndex)?i:best,pool[0]);
-    ids[nearest]=focusSliceIndex;
-    ids.sort((a,b)=>a-b);
+      Math.abs(ids[i]-focus)<Math.abs(ids[best]-focus)?i:best,pool[0]);
+    ids[nearest]=focus;
+    reserved.add(nearest);
   }
+  ids.sort((a,b)=>a-b);
+  const focusValid=focuses.length>0;
   return {
     schema: "opus-vision-frame-plan/v1", status: "ready-for-local-preview",
     selection: focusValid?"verified-candidate-sampling":"uniform-sampling", coverage: "sampled-frames-only",
