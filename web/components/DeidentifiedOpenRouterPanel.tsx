@@ -15,6 +15,7 @@ import {validateLateDetectorReconciliation,type LateDetectorReconciliation} from
 
 type Props={
   enabledByLocalChecks:boolean;
+  primaryAnalysisStage?:"idle"|"running"|"completed"|"vision-only"|"cancelled";
   exactReviewedHashes:readonly {imageId:string;sha256:string}[];
   prepareReviewedPacket:()=>VisionPrivacyPacket;
   specialistFacts?:LocalLungFacts|null;
@@ -28,7 +29,7 @@ type Props={
 };
 type Ready={schema:string;enabled:boolean;productionPatientCloudRelease:false};
 export default function DeidentifiedOpenRouterPanel({
-  enabledByLocalChecks,exactReviewedHashes,prepareReviewedPacket,
+  enabledByLocalChecks,primaryAnalysisStage="idle",exactReviewedHashes,prepareReviewedPacket,
   originalLocalFileIds,onOpenOriginalSlice,specialistFacts,specialistLocalBinding,localLaa950,originalDetectorEvidence=null,frameRelativeClnEvidence=null,originalCxrEvidence=null,
 }:Props){
   const [server,setServer]=useState<Ready|null>(null),[token,setToken]=useState("");
@@ -47,6 +48,7 @@ export default function DeidentifiedOpenRouterPanel({
   const [lateDraft,setLateDraft]=useState("");
   const [lateWorking,setLateWorking]=useState(false),[lateConsent,setLateConsent]=useState(false);
   const ctl=useRef<AbortController|null>(null);
+  const modelPathSettled=primaryAnalysisStage!=="running"&&primaryAnalysisStage!=="cancelled";
   // Never probe even localhost without a clinician/operator click.
   // This is essential for offline DICOM review and fail-closed browser tests.
   useEffect(()=>()=>{ctl.current?.abort();},[]);
@@ -73,7 +75,7 @@ export default function DeidentifiedOpenRouterPanel({
     }catch{setReadinessNote("Локальный облачный пилот недоступен.");}
   }
   async function send(){
-    if(working||lateWorking||!enabledByLocalChecks||token.length<24||!transferAuthorized)return;
+    if(working||lateWorking||!enabledByLocalChecks||!modelPathSettled||token.length<24||!transferAuthorized)return;
     setError("");setResult(null);setDecisions({});setClinicalSynthesis("");setIntegratedDraft("");setDraftError("");setWorking(true);
     setLateReview(null);setLateDraft("");setLateConsent(false);
     const controller=new AbortController();ctl.current=controller;
@@ -289,6 +291,8 @@ export default function DeidentifiedOpenRouterPanel({
       <code> OPENROUTER_API_KEY</code> и
       <code> RADIOLOGY_LOCAL_RESEARCH_OPERATOR_TOKEN</code> (24+ символов).
       Включать только после проверки прав передачи медицинских данных провайдеру.</p>}
+    {primaryAnalysisStage==="running"&&<p role="status">Ожидаем завершения оригинальных детекторов. Независимые PNG готовятся параллельно, но запрос Gemini → Opus откроется только после локального этапа, чтобы сохранить все модельные результаты.</p>}
+    {primaryAnalysisStage==="cancelled"&&<p role="alert">Анализ детекторов отменён. Перезапустите исследование для согласованного заключения.</p>}
     {!enabledByLocalChecks&&<p role="status">Прежде чем отправлять, проверьте
       OCR на каждом кадре и подтвердите надписи и узнаваемые признаки на
       каждой точной PNG-копии. Любое изменение изображения сбрасывает допуск.</p>}
@@ -326,7 +330,7 @@ export default function DeidentifiedOpenRouterPanel({
         Исходные UID, SHA, координаты и сами маски не передаются.
       </label>}
     <div className="ora-evidence-actions">
-      <button type="button" disabled={working||lateWorking||!enabledByLocalChecks||
+      <button type="button" disabled={working||lateWorking||!enabledByLocalChecks||!modelPathSettled||
         token.length<24||!transferAuthorized}
         onClick={()=>void send()}>{working?"Gemini → Opus анализируют кадры…":
         "Подтвердить передачу и создать предварительное заключение"}</button>
