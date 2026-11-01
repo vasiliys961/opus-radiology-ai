@@ -202,7 +202,7 @@ export default function ViewerPage() {
             {!visionFromPrimary&&<button type="button" disabled={reading} onClick={()=>setVisionOpen(v=>!v)}>
               {visionOpen?"Закрыть подготовку кадров":"Подготовить кадры для Gemini + Opus"}
             </button>}
-            {visionFromPrimary&&<p role="status">Единый анализ запущен из кнопки врача: кадры и OCR подготавливаются автоматически. Рабочая область останется открытой до заключения.</p>}
+            {visionFromPrimary&&<p role="status">Основной анализ DICOM запущен из кнопки врача: кадры и OCR подготавливаются автоматически. Рабочая область останется открытой до заключения.</p>}
             {visionOpen && <AnalysisSoundProvider>
               <VisionFramePlanningPanel key={"vision-"+selected.key} series={visionSeries}
                 activeSeriesKey={selected.key} fileById={indexedById}
