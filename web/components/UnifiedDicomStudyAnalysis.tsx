@@ -3,7 +3,8 @@
 import {useEffect,useMemo,useRef,useState} from "react";
 import type {DicomSeries} from "../lib/dicom-series";
 import {planNativeStudyAnalysis} from "../lib/unified-study-dispatch";
-import {canUseVisionOnlyAsPrimary} from "../lib/automatic-primary-series";
+import {canUseVisionOnlyAsPrimary,canAutoPrepareLocalVision} from "../lib/automatic-primary-series";
+import {assessAutomaticBrainFlair} from "../lib/automatic-brain-flair";
 import {verifyRenalThreePhaseStudy,type RenalPhaseRole} from "../lib/renal-three-phase-gate";
 import {runRenalMonaiThreePhase,type RenalMonaiResult} from "../lib/renal-monai-direct";
 import {prepareDicomMonaiFile,prepareDicomCtForPathology} from "../lib/dicom-monai-direct";
@@ -247,19 +248,24 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
    }).catch(()=>{if(!controller.signal.aborted)setXrvStatus("unavailable");});
    return()=>controller.abort();
  },[xrvPlan,series.key]);
+ const autoFlair=useMemo(()=>assessAutomaticBrainFlair(series),[series]);
+ // Missing or inconsistent MR weighting must not run the WMH model.
+ // Keep the native source-bound, consent-gated Vision pathway available.
+ const brainVisionOnly=plan.route==="wmh-flair"&&brainTask==="wmh"&&
+   !flairConfirmed&&!autoFlair.eligible&&canAutoPrepareLocalVision(series);
  const readinessChecksPending=chestPlan?
    (clnChecking||lungscapeChecking||autoMonaiChecking||autoEffusionChecking||autoPeChecking||autoNodesChecking):
    plan.route==="totalseg-abdomen"?autoAbdomenChecking:
    plan.route==="ianpan-ich"?autoIchChecking:
    plan.route==="wmh-flair"?(brainTask==="wmh"?autoWmhChecking:autoBrainChecking):false;
  const ready=(!!plan.route||visionOnlyAvailable)&&authorized&&!busy&&!readinessChecksPending&&
-   (visionOnlyAvailable?true:xrvPlan?(xrvStatus==="ready"&&xrvChestConfirmed&&sourceUrl.startsWith("https://")):plan.route==="totalseg-abdomen"?true:chestPlan?true:
+   ((visionOnlyAvailable||brainVisionOnly)?true:xrvPlan?(xrvStatus==="ready"&&xrvChestConfirmed&&sourceUrl.startsWith("https://")):plan.route==="totalseg-abdomen"?true:chestPlan?true:
      (plan.route==="ianpan-ich"?true:
       plan.route==="wmh-flair"?true:
       (!!token&&!!endpoint.trim())))&&
-   (!plan.needsExplicitFlair||(
+   (!plan.needsExplicitFlair||brainVisionOnly||(
      brainTask==="wmh"?
-       (flairConfirmed&&sourceUrl.startsWith("https://")&&!!sourceLicense.trim()):
+       ((flairConfirmed||autoFlair.eligible)&&sourceUrl.startsWith("https://")&&!!sourceLicense.trim()):
        (brainSequenceApproved&&brainAssignedReady&&sourceUrl.startsWith("https://")&&!!sourceLicense.trim())
    ));
 
@@ -273,6 +279,15 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
      onDetectorEvidence?.(series.key,null);
      setError("");
      setStatus("Для этой КТ/МРТ оригинальный патологический детектор не назначен. Локальная подготовка кадров Gemini + Opus открыта; передача в облако требует отдельного разрешения.");
+     onReadyForVision?.(series.key);
+     return;
+   }
+   if(brainVisionOnly){
+     // The generic brain MRI route does not prove FLAIR. Instead of sending a
+     // non-FLAIR original DICOM to WMH, open the same independent Vision path.
+     onDetectorEvidence?.(series.key,null);
+     setError("");
+     setStatus("FLAIR не подтверждена по DICOM TR/TE/TI. WMH не запускалась; открыт независимый просмотр Gemini + Opus с отдельным разрешением передачи.");
      onReadyForVision?.(series.key);
      return;
    }
@@ -748,8 +763,18 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
        </select>
       </label>
       {brainTask==="wmh"?<>
-        <label><input type="checkbox" checked={flairConfirmed} disabled={busy} onChange={e=>setFlairConfirmed(e.target.checked)}/>
-         Врач подтвердил: выбранная исходная МР-серия действительно FLAIR.</label>
+        {autoFlair.eligible?<p role="status">
+          Автоматически распознана последовательность, совместимая с T2-FLAIR:
+          TR {autoFlair.parameters!.trMs} мс, TE {autoFlair.parameters!.teMs} мс,
+          TI {autoFlair.parameters!.tiMs} мс. При наличии оригинальной WMH-модели
+          отдельный выбор типа последовательности не требуется.
+        </p>:<>
+          <p role="status">{autoFlair.reason} По умолчанию доступен независимый
+            анализ кадров Gemini + Opus; WMH не запускается без подтверждения.</p>
+          <label><input type="checkbox" checked={flairConfirmed} disabled={busy}
+            onChange={e=>setFlairConfirmed(e.target.checked)}/>
+            Проверил исходную серию: это действительно FLAIR. Разрешаю оригинальную WMH-модель.</label>
+        </>}
       </>:<>
         <p>Для модели {brainTask==="stroke"?"ISLES22":"BraTS"} выберите различные
          исходные серии одного StudyUID и FrameOfReferenceUID. Названия последовательностей
@@ -773,10 +798,12 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
         {brainTask==="glioma"&&<p>BraTS требует четыре уже зарегистрированные
            МР-серии размером 240×240×155. Несовместимое исследование не запускается.</p>}
       </>}
-      <label>URL разрешённого публичного исследования <input type="url" value={sourceUrl}
-        disabled={busy} onChange={e=>setSourceUrl(e.target.value)}/></label>
-      <label>Лицензия исходного исследования <input type="text" value={sourceLicense}
-        disabled={busy} onChange={e=>setSourceLicense(e.target.value)}/></label>
+      {!brainVisionOnly&&<>
+        <label>URL разрешённого публичного исследования <input type="url" value={sourceUrl}
+          disabled={busy} onChange={e=>setSourceUrl(e.target.value)}/></label>
+        <label>Лицензия исходного исследования <input type="text" value={sourceLicense}
+          disabled={busy} onChange={e=>setSourceLicense(e.target.value)}/></label>
+      </>}
     </div>}
     <p>MONAI, task315, оригинальный Raidionics, исследовательский PE, TotalSegmentator живота и WMH используют разрешённые изображения в loopback worker; ianpan передаёт только SHA-256 и анализирует заранее установленную идентичную публичную КТ. Облачная передача не выполняется.</p>
    </details>}
