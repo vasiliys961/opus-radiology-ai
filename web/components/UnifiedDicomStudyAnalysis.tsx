@@ -58,6 +58,8 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
      ...m.metadata,bodyRegion:"CHEST" as const,
    }})),
  }:series,[clinicianConfirmedChest,confirmableChest,series]);
+ const clnSourceFiles=useMemo(()=>sourceSeries.members.map(m=>files.get(m.id))
+   .filter((f):f is File=>!!f),[sourceSeries,files]);
  const plan=useMemo(()=>planNativeStudyAnalysis(sourceSeries,available,{
    clinicianConfirmedChest:clinicianConfirmedChest&&confirmableChest,
  }),[sourceSeries,available,clinicianConfirmedChest,confirmableChest]);
@@ -996,7 +998,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
       координаты кандидатов и решения врача. Не загружайте такой файл в публичный GitHub или облачный LLM.
       Это не подписанное клиническое заключение.</p>
   </div>}
-  {chestCln&&chestSource&&<ClnOriginalPhysicianReview report={chestCln} series={sourceSeries} source={chestSource} sourceFiles={sourceSeries.members.map(m=>files.get(m.id)).filter((f):f is File=>!!f)} onNavigate={onNavigate}
+  {chestCln&&chestSource&&<ClnOriginalPhysicianReview report={chestCln} series={sourceSeries} source={chestSource} sourceFiles={clnSourceFiles} onNavigate={onNavigate}
      onVerifiedCandidates={verified=>onClnBoundReady?.(series.key,verified)}/>}
    {lungscapeResult&&<p role="status">LungSCAPE191: настоящий инференс завершён, компонентов {lungscapeResult.componentCount}. Классы модели не являются диагнозом ILD/UIP/IPF.</p>}
   {(chestNodules||chestCln||lungscapeResult||chestEffusion||chestPe||chestNodes||abdomenResult||ich||wmh||brainResult)&&
