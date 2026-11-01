@@ -409,15 +409,6 @@ export default function VisionFramePlanningPanel({
       </> : <p role="status">План полного обзора недоступен: проверьте DICOM-геометрию
         и номер подозрительного среза.</p>}
     </div>
-    {fullVolumeCost&&choice.seriesKey&&series.find(s=>s.key===choice.seriesKey)&&<details>
-      <summary>Дополнительно · реальная локальная OCR-подготовка всего тома</summary>
-      <FullVolumeLocalPreparation
-        key={"full-volume-"+choice.seriesKey}
-        series={series.find(s=>s.key===choice.seriesKey)!}
-        files={fileById}
-        flaggedIndex={targetFrame.trim()?Number(targetFrame)-1:null}
-        onOpenSlice={onOpenSlice}/>
-    </details>}
     {choice.status === "blocked" && <div className="ora-vision-plan-blocked" role="status">
       <strong>План пока недоступен</strong>
       {choice.blockers.map((reason, i) => <p key={i}>{reason}</p>)}
@@ -472,6 +463,15 @@ export default function VisionFramePlanningPanel({
         originalLocalFileIds={report.frames.map(f=>f.fileId)}
         onOpenOriginalSlice={onOpenSlice}/>
     </div>}
+    {fullVolumeCost&&choice.seriesKey&&series.find(s=>s.key===choice.seriesKey)&&<details>
+      <summary>Дополнительно · реальная локальная OCR-подготовка всего тома</summary>
+      <FullVolumeLocalPreparation
+        key={"full-volume-"+choice.seriesKey}
+        series={series.find(s=>s.key===choice.seriesKey)!}
+        files={fileById}
+        flaggedIndex={targetFrame.trim()?Number(targetFrame)-1:null}
+        onOpenSlice={onOpenSlice}/>
+    </details>}
     <p className="ora-vision-plan-footnote">Отбираем по равномерным индексам геометрически проверенной серии,
       сохраняя исходные SOPInstanceUID локально. Выборка не гарантирует обнаружения очагов между срезами.</p>
   </section>;
