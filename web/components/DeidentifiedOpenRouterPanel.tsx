@@ -3,6 +3,7 @@
 import {useEffect,useRef,useState} from "react";
 import type {VisionPrivacyPacket} from "../lib/vision-privacy";
 import {validateOpusIntegratedSynthesis,type SanitizedModelReview} from "../lib/sanitized-cloud-review";
+import {MAX_RADIOLOGIST_REPORT_CHARS} from "../lib/senior-radiologist-report";
 import {buildLocalDualReviewDraft,findingReviewKey,type LocalObservationAssessment} from "../lib/local-dual-vision-physician-draft";
 import type {LocalLungFacts} from "../lib/local-lung-review";
 import type {LocalSameSeriesLaa950} from "../lib/same-series-laa950-review";
@@ -209,7 +210,7 @@ export default function DeidentifiedOpenRouterPanel({
         exactReviewedHashes.map(f=>({imageId:f.imageId,reviewedPixelSha256:f.sha256})),
         originalLocalFileIds);
       const draft=validLateReview?lateDraft:integratedDraft;
-      if(!draft.trim()||draft.length>6000)throw Error("empty_report");
+      if(!draft.trim()||draft.length>MAX_RADIOLOGIST_REPORT_CHARS)throw Error("empty_report");
       const blob=new Blob([draft.trim()+"\n"],{type:"text/plain;charset=utf-8"});
       const url=URL.createObjectURL(blob);
       const a=document.createElement("a");a.href=url;
@@ -330,7 +331,7 @@ export default function DeidentifiedOpenRouterPanel({
           и выполненные детекторы. Охват ограничен выборкой, а не всей КТ/МРТ.
           Повторный вызов Gemini не нужен.</p>
         <label>Редактируемое описание и заключение рентгенолога
-          <textarea rows={14} maxLength={4000} value={integratedDraft}
+          <textarea rows={14} maxLength={MAX_RADIOLOGIST_REPORT_CHARS} value={integratedDraft}
             onChange={e=>setIntegratedDraft(e.target.value)}/>
         </label>
         <button type="button" onClick={downloadRadiologistText}>

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {hasRadiologistReportSections,SENIOR_RADIOLOGIST_PROMPT}
+import {hasRadiologistReportSections,MAX_RADIOLOGIST_REPORT_CHARS,SENIOR_RADIOLOGIST_PROMPT}
  from "./senior-radiologist-report.ts";
 
 const protocol=[
@@ -17,6 +17,14 @@ test("Human radiology report must have correct sections and order",()=>{
  assert.equal(hasRadiologistReportSections(protocol.replace("МЕТОДИКА:","ТЕХНИКА:")),false);
  assert.equal(hasRadiologistReportSections(protocol.replace("ЗАКЛЮЧЕНИЕ:","ПРИМЕЧАНИЕ:")),false);
  assert.equal(hasRadiologistReportSections(protocol.replace("ЗАКЛЮЧЕНИЕ:","ЗАКЛЮЧЕНИЕ:\nSOPInstanceUID:1.2.3")),false);
+});
+test("Complete organ-by-organ prose over 4000 characters remains valid",()=>{
+ const extended=protocol.replace("ЗАКЛЮЧЕНИЕ:",
+   ("Детальное описание наблюдаемой части исследуемого органа на доступных кадрах.\n").repeat(88)+
+   "ЗАКЛЮЧЕНИЕ:");
+ assert.ok(extended.length>6000&&extended.length<MAX_RADIOLOGIST_REPORT_CHARS);
+ assert.equal(hasRadiologistReportSections(extended),true);
+ assert.equal(hasRadiologistReportSections(extended+"Продолжение".repeat(900)),false);
 });
 test("Senior radiologist organ templates are modality and region-specific",()=>{
  for(const item of ["КТ ГРУДНОЙ КЛЕТКИ","Лёгочная паренхима","Плевра и плевральные полости",

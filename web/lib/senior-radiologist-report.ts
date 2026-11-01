@@ -87,8 +87,11 @@ export const SENIOR_RADIOLOGIST_PROMPT = `
 для машинного аудита, не показывать вместо заключения.
 `.trim();
 
+/** Allow full organ-by-organ protocols at the approved 3500-token Opus output ceiling. */
+export const MAX_RADIOLOGIST_REPORT_CHARS=12_000;
+
 export function hasRadiologistReportSections(value:unknown):value is string {
- if(typeof value!=="string"||value.length<180||value.length>4000)return false;
+ if(typeof value!=="string"||value.length<180||value.length>MAX_RADIOLOGIST_REPORT_CHARS)return false;
  const headings=["ИССЛЕДОВАНИЕ","МЕТОДИКА","ОПИСАНИЕ","ЗАКЛЮЧЕНИЕ","РЕКОМЕНДАЦИИ"];
  const positions=headings.map(h=>{
   const m=new RegExp("^"+h+"\\s*:","mi").exec(value);
