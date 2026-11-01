@@ -1,0 +1,71 @@
+name: Genuine original Raidionics ONNX vs Bouget on same expert LyNoS CT
+on:
+  pull_request:
+    paths:
+      - scripts/real-raidionics-lynos-head-to-head.py
+      - scripts/test-real-raidionics-lynos-head-to-head.py
+      - .github/workflows/real-raidionics-lynos-head-to-head.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  exact-source-and-authentic-ensemble-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python3 -m pip install 'numpy==1.26.4' 'nibabel==5.3.2'
+      - run: python3 -m unittest discover -s scripts -p 'test-real-raidionics-lynos-head-to-head.py'
+  real-original-two-models:
+    needs: exact-source-and-authentic-ensemble-contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 44
+    env:
+      PYTHONUNBUFFERED: '1'
+      OMP_NUM_THREADS: '2'
+      OPENBLAS_NUM_THREADS: '1'
+      MKL_NUM_THREADS: '2'
+      HF_HUB_DISABLE_TELEMETRY: '1'
+      HF_HUB_DISABLE_PROGRESS_BARS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Host resources for authentic SHA-bound public CT and two publisher models
+        run: |
+          set -euo pipefail
+          docker info >/dev/null
+          python3 - <<'PY'
+          import shutil
+          assert shutil.disk_usage("/").free > 8*1024**3, "separate_runner_insufficient_disk_budget"
+          PY
+      - name: Install exact original CPU runtime, no GPU or patient cloud
+        run: |
+          set -euo pipefail
+          python3 -m pip install --no-cache-dir \
+            'numpy==1.26.4' 'nibabel==5.3.2' 'scipy==1.15.3' \
+            'gdown==5.2.0' 'huggingface_hub==0.35.3' \
+            'psutil==6.1.1' 'requests==2.32.3' 'raidionicsseg==1.5.2'
+          python3 -m pip check
+      - name: FULL ORIGINAL publisher trained Bouget and Raidionics on same LyNoS expert CT
+        run: |
+          timeout --signal=TERM --kill-after=25s 2390s \
+            python3 scripts/real-raidionics-lynos-head-to-head.py \
+              --workdir "$RUNNER_TEMP/lynos-head-to-head" \
+              --report "$RUNNER_TEMP/lynos-two-original-models.json"
+      - name: Save only numeric same-case genuine model evidence, never CT/masks/weights
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-lynos-head-to-head-author-models-numbers-only
+          path: ${{ runner.temp }}/lynos-two-original-models.json
+          retention-days: 7
+          if-no-files-found: error
+      - name: Delete temporary medical data, models, probabilities and derived masks
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/lynos-head-to-head" "$RUNNER_TEMP/lynos-two-original-models.json"
