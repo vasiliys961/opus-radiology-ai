@@ -454,7 +454,7 @@ export default function VisionFramePlanningPanel({
       {laaWarning&&<p role="status">{laaWarning}</p>}
       <details>
         <summary>Дополнительно · исследовать отдельные выбранные срезы</summary>
-      <VisionPrivacyPreparation autoStartAfterDetectors={false}
+      <VisionPrivacyPreparation autoStartAfterDetectors={fromPrimaryAnalysis}
         primaryAnalysisStage={primaryAnalysisStage}
         originalDetectorEvidence={originalDetectorEvidence}
         frameRelativeClnEvidence={clnSpatial}
