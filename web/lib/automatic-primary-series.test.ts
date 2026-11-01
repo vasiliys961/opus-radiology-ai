@@ -1,5 +1,5 @@
 import {strict as assert} from "node:assert";
-import {suggestPrimaryDicomSeries} from "./automatic-primary-series.ts";
+import {suggestPrimaryDicomSeries,canAutoPrepareLocalVision} from "./automatic-primary-series.ts";
 import type {DicomSeries,TechnicalDicomMetadata} from "./dicom-series.ts";
 
 const series=(key:string,modality:string,region:TechnicalDicomMetadata["bodyRegion"],
@@ -37,4 +37,13 @@ assert.equal(multiple.key,other.key,"Choose larger complete native volume when m
 const incomplete=new Set(chest.members.slice(1).map(m=>m.id));
 assert.equal(suggestPrimaryDicomSeries([chest,scout],incomplete).runnable,false,
  "Missing original pixels must never be called runnable");
+assert.equal(canAutoPrepareLocalVision(chest),true,
+ "Original CT can prepare local PNG samples without cloud permission");
+assert.equal(canAutoPrepareLocalVision(series("brain","MR","HEAD",28,true)),true);
+assert.equal(canAutoPrepareLocalVision(scout),false);
+assert.equal(canAutoPrepareLocalVision(derived),false);
+assert.equal(canAutoPrepareLocalVision(series("broken","MR","HEAD",30,false)),false);
+assert.equal(canAutoPrepareLocalVision(series("xray","DX","CHEST",1,false)),false);
+assert.equal(canAutoPrepareLocalVision({...chest,members:chest.members.map((m,i)=>i===0?
+ {...m,metadata:{...m.metadata,studyUid:null}}:m)}),false);
 console.log("PASS automatic native DICOM primary series selection and fail-closed routes");
