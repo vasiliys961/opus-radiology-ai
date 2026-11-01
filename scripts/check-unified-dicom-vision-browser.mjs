@@ -60,6 +60,10 @@ try{
  // The heavy original worker path is independent and may still be running.
  await page.getByRole("heading",{name:/Gemini Orchestra · подготовка кадров/}).waitFor({timeout:30000});
  await page.getByText(/Основной анализ DICOM запущен/).waitFor({timeout:30000});
+ assert.equal(await page.getByRole("button",{name:"Запустить единый анализ КТ/МРТ"}).count(),0,
+  "Only one physician Analyze action; duplicate research launch must be hidden");
+ assert.equal(await analysis.getByRole("button",{name:"Анализировать исследование"}).count(),1);
+
  await analysis.getByText(/Патологические модели грудной клетки недоступны/).waitFor({timeout:30000});
  const visionImages=page.locator("img.ora-vision-plan-thumbnail");
  await visionImages.first().waitFor({timeout:60000});
