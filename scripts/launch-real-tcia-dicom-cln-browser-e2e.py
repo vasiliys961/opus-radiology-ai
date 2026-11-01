@@ -59,6 +59,7 @@ def run(public,work,report):
         "nnUNet_preprocessed":str(work/"nnunet-preprocessed"),
         "OMP_NUM_THREADS":"2","MKL_NUM_THREADS":"2","OPENBLAS_NUM_THREADS":"1",
         "RADIOLOGY_ENABLE_DEIDENTIFIED_OPENROUTER_PILOT":"1",
+        "RADIOLOGY_PUBLIC_ORIGINAL_DICOM_EXTENDED_REVIEW":"1",
         "RADIOLOGY_OPENROUTER_HEALTH_DATA_APPROVED":"1",
         "RADIOLOGY_LOCAL_RESEARCH_OPERATOR_TOKEN":operator,
         "CUDA_VISIBLE_DEVICES":"-1",
