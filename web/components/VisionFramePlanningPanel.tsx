@@ -16,6 +16,7 @@ import { createVisionBatches, accountReportedVisionUsage } from "../lib/vision-b
 import { decodeDicomPreview } from "../lib/dicom-lite";
 import { MAX_PRIVACY_PIXELS } from "../lib/vision-privacy";
 import VisionPrivacyPreparation from "./VisionPrivacyPreparation";
+import FullVolumeLocalPreparation from "./FullVolumeLocalPreparation";
 import type {SanitizedDetectorBundle} from "../lib/detector-consilium-evidence";
 import type {ClnVerifiedLocalEvidence} from "../lib/cln-physician-local-review";
 import {createClnFrameRelativeEvidence,type ClnFrameRelativeEvidence} from "../lib/cln-frame-relative-evidence";
@@ -465,6 +466,15 @@ export default function VisionFramePlanningPanel({
         originalLocalFileIds={report.frames.map(f=>f.fileId)}
         onOpenOriginalSlice={onOpenSlice}/>
     </div>}
+    {fullVolumeCost&&choice.seriesKey&&series.find(s=>s.key===choice.seriesKey)&&<details>
+      <summary>Дополнительно · реальная локальная OCR-подготовка всего тома</summary>
+      <FullVolumeLocalPreparation
+        key={"full-volume-"+choice.seriesKey}
+        series={series.find(s=>s.key===choice.seriesKey)!}
+        files={fileById}
+        flaggedIndex={targetFrame.trim()?Number(targetFrame)-1:null}
+        onOpenSlice={onOpenSlice}/>
+    </details>}
     <p className="ora-vision-plan-footnote">Отбираем по равномерным индексам геометрически проверенной серии,
       сохраняя исходные SOPInstanceUID локально. Выборка не гарантирует обнаружения очагов между срезами.</p>
   </section>;
