@@ -45,6 +45,18 @@ test("Frame manifest preserves exact SOP and projected physical geometry", () =>
   assert.equal(report.frames[2].fileId, "synthetic-21");
   assert.ok(report.warnings.some(x => x.includes("отдельные кадры")));
 });
+test("Verified CLN center is automatically included without increasing paid frame count",()=>{
+ const selected=series(32,{modality:"CT"},{modality:"CT"});
+ const report=planVisionFrameSamples([selected],selected.key,4,27);
+ assert.equal(report.status,"ready-for-local-preview");
+ assert.equal(report.selection,"verified-candidate-sampling");
+ assert.equal(report.frames.length,4);
+ assert.ok(report.frames.some(f=>f.ordinal===28));
+ assert.equal(new Set(report.frames.map(f=>f.sopInstanceUid)).size,4);
+ assert.deepEqual(report.frames.map(f=>f.ordinal),[1,11,28,32]);
+ const normal=planVisionFrameSamples([selected],selected.key);
+ assert.equal(normal.selection,"uniform-sampling");
+});
 test("Active selection never falls through to unrelated healthy series", () => {
   const broken = series(32, {}, {key:"broken",volumeReady:false,warning:"bad"});
   const healthy = series(32, {}, {key:"healthy"});

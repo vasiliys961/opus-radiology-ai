@@ -17,11 +17,13 @@ import { decodeDicomPreview } from "../lib/dicom-lite";
 import { MAX_PRIVACY_PIXELS } from "../lib/vision-privacy";
 import VisionPrivacyPreparation from "./VisionPrivacyPreparation";
 import type {SanitizedDetectorBundle} from "../lib/detector-consilium-evidence";
+import type {ClnVerifiedLocalEvidence} from "../lib/cln-physician-local-review";
+import {createClnFrameRelativeEvidence,type ClnFrameRelativeEvidence} from "../lib/cln-frame-relative-evidence";
 import {sameSeriesR231Facts,type CapturedLocalSpecialist} from "../lib/same-series-r231-cloud-evidence";
 import {sameSeriesLaa950ForReview,type CapturedLocalLaa950} from "../lib/same-series-laa950-review";
 
 export default function VisionFramePlanningPanel({
-  series, activeSeriesKey, fileById, onOpenSlice,capturedSpecialist,capturedLaa950,ichRuntime,publicResearchAuthorized=false,originalDetectorEvidence=null,fromPrimaryAnalysis=false,
+  series, activeSeriesKey, fileById, onOpenSlice,capturedSpecialist,capturedLaa950,ichRuntime,publicResearchAuthorized=false,originalDetectorEvidence=null,clnVerifiedLocal=null,fromPrimaryAnalysis=false,
 }: {
   series: readonly DicomSeries[];
   activeSeriesKey: string | null;
@@ -33,6 +35,7 @@ export default function VisionFramePlanningPanel({
   ichRuntime?:InstalledIchRuntime|null;
   publicResearchAuthorized?:boolean;
   originalDetectorEvidence?:SanitizedDetectorBundle|null;
+  clnVerifiedLocal?:ClnVerifiedLocalEvidence|null;
   fromPrimaryAnalysis?:boolean;
 }) {
   const [requested, setRequested] = useState(4);
@@ -77,10 +80,47 @@ export default function VisionFramePlanningPanel({
     capturedSpecialist,capturedLaa950,ichRuntime,publicResearchAuthorized:publicResearchAuthorized||ichResearchConfirmed,
     ianpanRuntime:liveIanpanRuntime,
   });
+  const sourceBoundCln=useMemo(()=>{
+    const selected=series.find(s=>s.key===activeSeriesKey);
+    if(!selected||selected.modality!=="CT"||!clnVerifiedLocal||
+       clnVerifiedLocal.dimensions[2]!==selected.members.length||
+       !/^[a-f0-9]{64}$/.test(clnVerifiedLocal.sourceNiftiSha256)||
+       clnVerifiedLocal.candidates.length>20||
+       clnVerifiedLocal.candidates.some(c=>!Number.isSafeInteger(c.sliceIndex)||
+         c.sliceIndex<0||c.sliceIndex>=selected.members.length||
+         selected.members[c.sliceIndex].metadata.sopInstanceUid!==c.sopInstanceUid))
+      return null;
+    return clnVerifiedLocal;
+  },[series,activeSeriesKey,clnVerifiedLocal]);
   const choice = useMemo(() => {
-    // Never silently choose some other series when a specific series is selected.
-    return planVisionFrameSamples(series, activeSeriesKey, requested);
-  }, [series, activeSeriesKey, requested]);
+    // Include verified lesion center in the same four-frame budget; Gemini sees
+    // only source pixels, NOT the source-linked CLN result.
+    return planVisionFrameSamples(series, activeSeriesKey, requested,
+      sourceBoundCln?.candidates[0]?.sliceIndex??null);
+  }, [series, activeSeriesKey, requested,sourceBoundCln]);
+  let clnSpatial:ClnFrameRelativeEvidence|null=null;
+  if(sourceBoundCln?.candidates.length&&report?.status==="ready-for-local-preview"&&
+     report.seriesKey===activeSeriesKey&&report.frames.length<=4){
+    try{
+      const selected=series.find(s=>s.key===activeSeriesKey)!;
+      const frames=report.frames.map((frame,i)=>({
+        frameId:"frame-"+(i+1),
+        sourceAxialIndex:selected.members.findIndex(m=>
+          m.id===frame.fileId&&m.metadata.sopInstanceUid===frame.sopInstanceUid),
+      }));
+      if(frames.some(f=>f.sourceAxialIndex<0))throw Error("CLN source slice missing");
+      clnSpatial=createClnFrameRelativeEvidence({
+        sourceImageSha256:sourceBoundCln.sourceNiftiSha256,
+        detectorSourceImageSha256:sourceBoundCln.sourceNiftiSha256,
+        imageDimensions:sourceBoundCln.dimensions,
+        reviewedFrames:frames,alignment:"source-dicom-pixel-to-png",
+        nativeCandidates:sourceBoundCln.candidates.map(c=>({
+          componentId:c.componentId,sourceVoxelCentroidIJK:c.sourceVoxelCentroidIJK,
+          candidateVolumeMl:c.candidateVolumeMl,
+        })),
+      });
+    }catch{clnSpatial=null;}
+  }
   const consilium = useMemo(() => routeDicomConsilium(series.find(s => s.key === activeSeriesKey) ?? null), [series, activeSeriesKey]);
   const universal = useMemo(() => routeUniversalCtMrVision(series.find(s => s.key === activeSeriesKey) ?? null), [series, activeSeriesKey]);
   const fullVolumeCost = useMemo(() => {
@@ -396,6 +436,7 @@ export default function VisionFramePlanningPanel({
       {laaWarning&&<p role="status">{laaWarning}</p>}
       <VisionPrivacyPreparation autoStartAfterDetectors={fromPrimaryAnalysis}
         originalDetectorEvidence={originalDetectorEvidence}
+        frameRelativeClnEvidence={clnSpatial}
         key={JSON.stringify(report.frames.map(f=>f.fileId))+requested}
         previews={stablePrivacyPreviews}
         modality={series.find(s=>s.key===report.seriesKey)?.modality??""}

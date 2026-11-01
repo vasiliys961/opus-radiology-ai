@@ -4,6 +4,7 @@ import {useEffect,useRef,useState} from "react";
 import type {VisionPrivacyPacket} from "../lib/vision-privacy";
 import {validateOpusIntegratedSynthesis,type SanitizedModelReview} from "../lib/sanitized-cloud-review";
 import {MAX_RADIOLOGIST_REPORT_CHARS} from "../lib/senior-radiologist-report";
+import {validateClnFrameRelativeEvidence,type ClnFrameRelativeEvidence} from "../lib/cln-frame-relative-evidence";
 import {buildLocalDualReviewDraft,findingReviewKey,type LocalObservationAssessment} from "../lib/local-dual-vision-physician-draft";
 import type {LocalLungFacts} from "../lib/local-lung-review";
 import type {LocalSameSeriesLaa950} from "../lib/same-series-laa950-review";
@@ -18,6 +19,7 @@ type Props={
   prepareReviewedPacket:()=>VisionPrivacyPacket;
   specialistFacts?:LocalLungFacts|null;
   originalDetectorEvidence?:SanitizedDetectorBundle|null;
+  frameRelativeClnEvidence?:ClnFrameRelativeEvidence|null;
   originalCxrEvidence?:OriginalXrvCxrResult|null;
   localLaa950?:LocalSameSeriesLaa950|null;
   specialistLocalBinding?:string;
@@ -27,7 +29,7 @@ type Props={
 type Ready={schema:string;enabled:boolean;productionPatientCloudRelease:false};
 export default function DeidentifiedOpenRouterPanel({
   enabledByLocalChecks,exactReviewedHashes,prepareReviewedPacket,
-  originalLocalFileIds,onOpenOriginalSlice,specialistFacts,specialistLocalBinding,localLaa950,originalDetectorEvidence=null,originalCxrEvidence=null,
+  originalLocalFileIds,onOpenOriginalSlice,specialistFacts,specialistLocalBinding,localLaa950,originalDetectorEvidence=null,frameRelativeClnEvidence=null,originalCxrEvidence=null,
 }:Props){
   const [server,setServer]=useState<Ready|null>(null),[token,setToken]=useState("");
   const [transferAuthorized,setTransferAuthorized]=useState(false);
@@ -104,6 +106,10 @@ export default function DeidentifiedOpenRouterPanel({
           !sentDetectors.facts.some(f=>f.status==="completed")||
           sentDetectors.modality!==packet.frames[0]?.modality))
         throw Error("Пакет патологических детекторов не соответствует проверенным кадрам.");
+      const sentSpatial=sentDetectors&&frameRelativeClnEvidence?frameRelativeClnEvidence:null;
+      if(sentSpatial&&(!validateClnFrameRelativeEvidence(sentSpatial,packet.frames.map(f=>f.frameId))||
+         !sentDetectors?.facts.some(f=>f.task==="lung_tumor"&&f.status==="completed")))
+        throw Error("Локальная CLN-привязка к текущим DICOM-кадрам не подтверждена.");
       const response=await fetch("/api/ai/deidentified-openrouter-review",{
         method:"POST",cache:"no-store",signal:controller.signal,credentials:"same-origin",
         headers:{"Content-Type":"application/json","X-Opus-Local-Operator-Token":token},
@@ -112,6 +118,7 @@ export default function DeidentifiedOpenRouterPanel({
           acknowledgeTwoPaidCalls:true,
           ...(sentSpecialist?{specialistFacts:sentSpecialist}:{}),
           ...(sentDetectors?{detectorEvidence:sentDetectors}:{}),
+          ...(sentSpatial?{frameRelativeClnEvidence:sentSpatial}:{}),
           ...(sentCxr?{cxrModelEvidence:sentCxr}:{})}),
       });
       const body:unknown=await response.json();
@@ -142,6 +149,12 @@ export default function DeidentifiedOpenRouterPanel({
           throw Error("Поставщик AI не вернул тот же обезличенный пакет детекторов.");
       }else if(doc.detectorEvidence)
         throw Error("Модель получила незапрошенные сведения детекторов.");
+      if(sentSpatial){
+        if(!doc.frameRelativeClnEvidence||
+           JSON.stringify(doc.frameRelativeClnEvidence)!==JSON.stringify(sentSpatial))
+          throw Error("Opus не подтвердил пространственную CLN-привязку.");
+      }else if(doc.frameRelativeClnEvidence)
+        throw Error("Получены непредусмотренные координаты CLN.");
       if(sentCxr){
         if(!doc.cxrModelEvidence||JSON.stringify(doc.cxrModelEvidence)!==JSON.stringify(sentCxr))
           throw Error("Оценки TorchXRayVision не совпадают с разрешённым набором.");

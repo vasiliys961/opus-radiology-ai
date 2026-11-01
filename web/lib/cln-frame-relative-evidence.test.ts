@@ -53,6 +53,17 @@ test("CLN voxel → displayed PNG fractional centroid (flipud transpose) and exa
  assert.equal(JSON.stringify(doc).includes(sha),false);
  assert.equal(doc.originalDicomSopRegistrationVerified,false);
 });
+test("Source-native DICOM canvas (unflipped rows) maps CLN centroid to correct y pixel",()=>{
+ const doc=createClnFrameRelativeEvidence({...mapping,alignment:"source-dicom-pixel-to-png"});
+ const c=doc.candidateAnchors[0];
+ assert.equal(c.xFraction,Math.round(128.5/256*10000)/10000);
+ assert.equal(c.yFraction,Math.round(84.5/256*10000)/10000);
+ assert.equal(c.frameId,"frame-3");
+ assert.equal(doc.originalDicomIdentifiersSent,false);
+ assert.equal(doc.originalDicomSopRegistrationVerified,false);
+ assert.equal(validateClnFrameRelativeEvidence(doc,ids),true);
+ assert.equal(validateClnFrameRelativeEvidence({...doc,alignment:"untrusted-pixel-orientation"},ids),false);
+});
 test("Reject unbound source, invalid coordinates and hallucinated source image",()=>{
  assert.throws(()=>createClnFrameRelativeEvidence({...mapping,detectorSourceImageSha256:"b".repeat(64)}));
  assert.throws(()=>createClnFrameRelativeEvidence({...mapping,nativeCandidates:[{...mapping.nativeCandidates[0],

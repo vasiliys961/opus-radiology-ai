@@ -3,6 +3,12 @@
  * and NIfTI/DICOM physical affine; never treats model regions as diagnoses.
  */
 import {CLN_ORIGINAL_CHECKPOINT_SHA256,type ClnReport} from "./cln-native-worker.ts";
+/** Exact hash/affine/SOP-bound local-only candidate locations; never forward UID to LLM. */
+export type ClnVerifiedLocalEvidence={
+ sourceNiftiSha256:string;
+ dimensions:[number,number,number];
+ candidates:ClnSliceCandidate[];
+};
 export type ClnSliceCandidate={
   componentId:number;
   candidateVolumeMl:number;

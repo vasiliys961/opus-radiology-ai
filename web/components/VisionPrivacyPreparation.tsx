@@ -13,6 +13,7 @@ import DeidentifiedOpenRouterPanel from "./DeidentifiedOpenRouterPanel";
 import type {LocalLungFacts} from "../lib/local-lung-review";
 import type {LocalSameSeriesLaa950} from "../lib/same-series-laa950-review";
 import type {SanitizedDetectorBundle} from "../lib/detector-consilium-evidence";
+import type {ClnFrameRelativeEvidence} from "../lib/cln-frame-relative-evidence";
 import type {OriginalXrvCxrResult} from "../lib/xrv-original-cxr";
 import { buildPrivacyReadinessReport } from "../lib/privacy-readiness";
 
@@ -21,7 +22,7 @@ const actionLabels:Record<PrivacyAction["kind"],string>={redacted:"Скрыти�
   "text-retained":"Надписи оставлены по ручной отметке","review-set":"Ручная проверка","copy-restored":"Копия восстановлена · проверки сняты"};
 
 /** OCR reads same-origin fixed assets only. No image upload or recognized-text export. */
-export default function VisionPrivacyPreparation({previews,modality,originalLocalFileIds,onOpenOriginalSlice,specialistFacts,specialistLocalBinding,localLaa950,originalDetectorEvidence=null,originalCxrEvidence=null,autoStartAfterDetectors=false}:{
+export default function VisionPrivacyPreparation({previews,modality,originalLocalFileIds,onOpenOriginalSlice,specialistFacts,specialistLocalBinding,localLaa950,originalDetectorEvidence=null,originalCxrEvidence=null,frameRelativeClnEvidence=null,autoStartAfterDetectors=false}:{
   previews:readonly (string|undefined)[];modality:string;
   originalLocalFileIds:readonly string[];
   onOpenOriginalSlice:(localFileId:string)=>void;
@@ -30,6 +31,7 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
   specialistLocalBinding?:string;
   originalDetectorEvidence?:SanitizedDetectorBundle|null;
   originalCxrEvidence?:OriginalXrvCxrResult|null;
+  frameRelativeClnEvidence?:ClnFrameRelativeEvidence|null;
   autoStartAfterDetectors?:boolean;
 }) {
   const [frames,setFrames]=useState<PrivacyFrame[]>([]),[selected,setSelected]=useState(0);
@@ -296,6 +298,7 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
       originalLocalFileIds={originalLocalFileIds}
       specialistFacts={specialistFacts}
       originalDetectorEvidence={originalDetectorEvidence}
+      frameRelativeClnEvidence={frameRelativeClnEvidence}
        originalCxrEvidence={originalCxrEvidence}
       localLaa950={localLaa950}
       specialistLocalBinding={specialistLocalBinding}

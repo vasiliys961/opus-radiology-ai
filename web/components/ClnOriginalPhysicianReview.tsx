@@ -8,11 +8,12 @@ import {fullCtGeometry} from "../lib/full-ct-stream";
 import {readNoduleNiftiHeader,verifyNoduleSource} from "../lib/live-nodule-report";
 import {transformPoint} from "../lib/segmentation-mask";
 import type {ClnReport} from "../lib/cln-native-worker";
-import {bindOriginalClnCandidates,type ClnSliceCandidate} from "../lib/cln-physician-local-review";
+import {bindOriginalClnCandidates,type ClnSliceCandidate,type ClnVerifiedLocalEvidence} from "../lib/cln-physician-local-review";
 
 type Decision="suspicious_on_review"|"dismissed_on_review"|"unreviewed";
-export default function ClnOriginalPhysicianReview({report,series,source,onNavigate}:{
+export default function ClnOriginalPhysicianReview({report,series,source,onNavigate,onVerifiedCandidates}:{
  report:ClnReport;series:DicomSeries;source:File;onNavigate:(slice:number)=>void;
+ onVerifiedCandidates?:(evidence:ClnVerifiedLocalEvidence)=>void;
 }){
  const [items,setItems]=useState<ClnSliceCandidate[]|null>(null);
  const [error,setError]=useState("");
@@ -37,6 +38,8 @@ export default function ClnOriginalPhysicianReview({report,series,source,onNavig
     const candidates=bindOriginalClnCandidates(report,native.dimensions,
      series.members.map(m=>m.metadata.sopInstanceUid??""));
     setItems(candidates);
+    onVerifiedCandidates?.({sourceNiftiSha256:report.sourceNiftiSha256,
+      dimensions:[...native.dimensions] as [number,number,number],candidates});
    }catch(e){
     if(!controller.signal.aborted)setError(e instanceof Error?e.message:"CLN candidate binding failed");
    }
