@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {deflateSync} from "node:zlib";
 import {buildVisionPrivacyPacket,createPrivacyFrame,markPrivacyReview} from "./vision-privacy.ts";
-import {normalizeReviewedCloudPilot,reviewSanitizedSamples,PILOT_GEMINI,PILOT_OPUS} from "./sanitized-cloud-review.ts";
+import {normalizeReviewedCloudPilot,validateOpusIntegratedSynthesis,reviewSanitizedSamples,PILOT_GEMINI,PILOT_OPUS} from "./sanitized-cloud-review.ts";
 import type {AiGatewayRequest} from "./ai-gateway.ts";
 import {toSafeXrvScores,type OriginalXrvCxrResult,SHA_XRV} from "./xrv-original-cxr.ts";
 
@@ -45,6 +45,18 @@ const answer=(label:string,tasks:readonly string[]=[])=>({choices:[{finish_reaso
   limitations:["No full 3D study was reviewed."],
   opusSynthesis:integrated(tasks),
 })}}]});
+test("Original CLN complete task permits detailed yet bounded clinical comparison prose",()=>{
+ const detailed=integrated(["lung_tumor"]);
+ detailed.comparisons[0].reason="Проверяется на выбранных кадрах; ".repeat(19);
+ assert.ok(detailed.comparisons[0].reason.length>350);
+ assert.ok(detailed.comparisons[0].reason.length<1000);
+ assert.equal(validateOpusIntegratedSynthesis(detailed,["lung_tumor"]),true);
+ detailed.comparisons[0].reason="x".repeat(1001);
+ assert.equal(validateOpusIntegratedSynthesis(detailed,["lung_tumor"]),false);
+ detailed.comparisons[0].reason="Объект сопоставлен только по исходной выборке";
+ detailed.comparisons[0].task="lung_nodules";
+ assert.equal(validateOpusIntegratedSynthesis(detailed,["lung_tumor"]),false);
+});
 test("Exact reviewed and metadata-stripped PNG is all that can reach the gateway",async()=>{
   const sent:AiGatewayRequest[]=[];
   const result=await reviewSanitizedSamples(packet(),async req=>{
