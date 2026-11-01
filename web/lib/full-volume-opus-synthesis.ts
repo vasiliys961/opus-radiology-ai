@@ -6,6 +6,7 @@ import {SENIOR_RADIOLOGIST_PROMPT,hasRadiologistReportSections,
   canonicalizeRadiologistHeadings} from "./senior-radiologist-report.ts";
 import {parseStrictObject,readCompletionText} from "./vision-orchestra.ts";
 import type {AiGatewayRequest} from "./ai-gateway.ts";
+import {validateSanitizedDetectorBundle} from "./detector-consilium-evidence.ts";
 
 export const FULL_VOLUME_OPUS="anthropic/claude-opus-5.5";
 export type FullVolumeOpusResult={
@@ -21,7 +22,7 @@ export function validateSafeFullVolumeOpusInput(value:unknown):value is SafeVolu
   if(Object.keys(v).sort().join("|")!==[
     "schema","modality","plannedFrames","overviewReviewed","targetedReviewed",
     "completedBatches","totalBatches","observations","limitations",
-    "acknowledgePaidOpusSynthesis",
+    "detectorState","detectorEvidence","acknowledgePaidOpusSynthesis",
   ].sort().join("|")||
     v.schema!=="opus-volume-synthesis-request/v1"||
     !["CT","MR"].includes(String(v.modality))||
@@ -32,6 +33,9 @@ export function validateSafeFullVolumeOpusInput(value:unknown):value is SafeVolu
     !Number.isSafeInteger(v.completedBatches)||(v.completedBatches as number)<1||
     v.completedBatches!==v.totalBatches||
     v.acknowledgePaidOpusSynthesis!==true||
+    !["completed","unavailable","timeout"].includes(String(v.detectorState))||
+    (v.detectorEvidence!==null&&(!validateSanitizedDetectorBundle(v.detectorEvidence)||
+      v.detectorEvidence.modality!==v.modality))||
     !Array.isArray(v.observations)||v.observations.length>180||
     !Array.isArray(v.limitations)||v.limitations.length>30||
     !v.limitations.every(x=>typeof x==="string"&&x.length<=500))return false;
@@ -74,6 +78,9 @@ export async function synthesizeSafeFullVolumeOpus(
         "ADDITIONAL INSTRUCTION: You receive text-only independent Gemini observations "+
         "from a frame-by-frame overview of the complete selected CT/MR DICOM series. "+
         "You did NOT directly see all original pixels, only Gemini observations. "+
+        "Detector candidate data are separate and can be incomplete or discordant. "+
+        "Compare positive findings, note which detectors did not run, and never "+
+        "infer a negative diagnosis from missing or empty detector output. "+
         "Do not claim a direct independent image review, completed MRI sequences, "+
         "other anatomical series, multi-window CT, contrast phases or absent findings. "+
         "Avoid the old sampled-only closing sentence if all planned frames were reviewed. "+
@@ -89,7 +96,10 @@ export async function synthesizeSafeFullVolumeOpus(
         sourceBoundGeminiObservations:study.observations,
         limitations:study.limitations,
         sourceImagesGivenToOpus:false,
-        originalDetectorEvidenceGivenToOpus:false,
+        originalDetectorEvidenceGivenToOpus:study.detectorEvidence!==null,
+        detectorState:study.detectorState,
+        verifiedDetectorFacts:study.detectorEvidence?.facts??[],
+        verifiedDetectorRegion:study.detectorEvidence?.region??null,
       })},
     ],
   },signal);
