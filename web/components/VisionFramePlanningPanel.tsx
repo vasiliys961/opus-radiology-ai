@@ -23,7 +23,7 @@ import {sameSeriesR231Facts,type CapturedLocalSpecialist} from "../lib/same-seri
 import {sameSeriesLaa950ForReview,type CapturedLocalLaa950} from "../lib/same-series-laa950-review";
 
 export default function VisionFramePlanningPanel({
-  series, activeSeriesKey, fileById, onOpenSlice,capturedSpecialist,capturedLaa950,ichRuntime,publicResearchAuthorized=false,originalDetectorEvidence=null,clnVerifiedLocal=null,fromPrimaryAnalysis=false,
+  series, activeSeriesKey, fileById, onOpenSlice,capturedSpecialist,capturedLaa950,ichRuntime,publicResearchAuthorized=false,originalDetectorEvidence=null,clnVerifiedLocal=null,fromPrimaryAnalysis=false,originalDetectorsBusy=false,
 }: {
   series: readonly DicomSeries[];
   activeSeriesKey: string | null;
@@ -37,6 +37,7 @@ export default function VisionFramePlanningPanel({
   originalDetectorEvidence?:SanitizedDetectorBundle|null;
   clnVerifiedLocal?:ClnVerifiedLocalEvidence|null;
   fromPrimaryAnalysis?:boolean;
+  originalDetectorsBusy?:boolean;
 }) {
   const [requested, setRequested] = useState(4);
   // Editing the sampled frame count must invalidate privacy approval until the
@@ -436,6 +437,7 @@ export default function VisionFramePlanningPanel({
         и не подтверждают диагноз эмфиземы.</p>}
       {laaWarning&&<p role="status">{laaWarning}</p>}
       <VisionPrivacyPreparation autoStartAfterDetectors={fromPrimaryAnalysis}
+        originalDetectorsBusy={originalDetectorsBusy}
         originalDetectorEvidence={originalDetectorEvidence}
         frameRelativeClnEvidence={clnSpatial}
         key={JSON.stringify(report.frames.map(f=>f.fileId))+requested}
