@@ -107,7 +107,7 @@ jobs:
         run: |
           npm ci --no-audit --no-fund
           npx playwright install --with-deps chromium
-      - name: REAL: Upload 103 TCIA DICOM in browser and click Analyze to run original CLN, Gemini, Opus
+      - name: Run complete original CT DICOM browser analysis with actual CLN and two real LLMs
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
