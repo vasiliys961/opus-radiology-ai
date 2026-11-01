@@ -84,7 +84,6 @@ try{
  await page.waitForFunction(()=>
   document.querySelectorAll("img.ora-vision-plan-thumbnail").length===4,
   null,{timeout:120000});
-  await page.getByText("Дополнительно · исследовать отдельные выбранные срезы",{exact:true}).click();
   const privacy=page.locator('section[aria-label="Подготовка обезличенных кадров"]');
  await privacy.getByText(/Проверьте все 4 исходящих PNG/).waitFor({timeout:240000});
  await privacy.getByRole("checkbox",{name:/Я просмотрел ВСЕ показанные PNG/}).check();
