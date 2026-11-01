@@ -55,3 +55,14 @@ export function canAutoPrepareLocalVision(series:DicomSeries|undefined):boolean{
  // planner. A panel must not auto-open for a source that cannot be decoded.
  return planVisionFrameSamples([series],series.key).status==="ready-for-local-preview";
 }
+
+/** On original CT/MR without an installed compatible specialty route, the
+ * physician can still open a LOCAL Vision plan from the primary action.
+ * This is NOT an inference result, clinical conclusion or cloud approval.
+ */
+export function canUseVisionOnlyAsPrimary(series:DicomSeries|undefined,
+ availableFiles:ReadonlySet<string>):boolean{
+ return !!series&&series.members.every(m=>availableFiles.has(m.id))&&
+  planNativeStudyAnalysis(series,availableFiles).route===null&&
+  canAutoPrepareLocalVision(series);
+}
