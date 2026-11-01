@@ -72,7 +72,6 @@ try{
  assert.equal(await visionImages.count(),4,"Four exact sampled DICOM previews");
  assert.equal(aiRequests.length,0,"Vision planning must not send any pixels");
  console.log("PASS browser: synthetic CT DICOM -> automatic worker absence -> independent four PNG Vision frames");
-  await page.getByText("Дополнительно · исследовать отдельные выбранные срезы",{exact:true}).click();
   const privacy=page.locator('section[aria-label="Подготовка обезличенных кадров"]');
  await privacy.waitFor();
  await privacy.getByText(/Проверьте все 4 исходящих PNG/).waitFor({timeout:180000});
