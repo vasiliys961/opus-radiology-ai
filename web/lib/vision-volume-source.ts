@@ -44,7 +44,8 @@ export function planOriginalVolumeSource(
   const verify=planVisionFrameSamples([series],series.key,4);
   if(verify.status!=="ready-for-local-preview")throw Error(
     "Full-volume DICOM source not verified: "+verify.blockers.join(" "));
-  if(series.modality!=="CT"&&series.modality!=="MR")throw Error("CT/MR only");
+  const modality=series.modality;
+  if(modality!=="CT"&&modality!=="MR")throw Error("CT/MR only");
   const budget=planBudgetedVisionReview({
     frameCount:series.members.length,
     flaggedIndices:options.flaggedIndices,
@@ -55,11 +56,14 @@ export function planOriginalVolumeSource(
     seriesUid:member.metadata.seriesUid!,
     sopInstanceUid:member.metadata.sopInstanceUid!,
     frameIndex:0 as const,
-    slicePositionMm:member.metadata.imagePositionPatient?
-      // This field is a coordinate, NOT the slice-plane projection; physical
-      // position is deliberately omitted here until the validated planner
-      // exposes all slice normals for the exhaustive volume.
-      null:null,
+    // The validated series has consistent orientation/geometry.
+    slicePositionMm:(()=>{
+      const p=member.metadata.imagePositionPatient!;
+      const [rx,ry,rz,cx,cy,cz]=member.metadata.imageOrientationPatient!;
+      const n=[ry*cz-rz*cy,rz*cx-rx*cz,rx*cy-ry*cx];
+      const length=Math.hypot(...n);
+      return p.reduce((sum,v,i)=>sum+v*n[i]/length,0);
+    })(),
   }));
   if(new Set(sourceFrames.map(f=>f.fileId)).size!==sourceFrames.length)
     throw Error("Duplicate local DICOM file ID");
@@ -76,6 +80,8 @@ export async function* prepareOriginalVolumeBatches(
   options:PrepareOptions,
 ):AsyncGenerator<VolumePreparedBatch>{
   const plan=planOriginalVolumeSource(series,options);
+  const modality=series.modality;
+  if(modality!=="CT"&&modality!=="MR")throw Error("CT/MR only");
   const decode=options.decode??decodeDicomPreview;
   const prepare=options.prepare??autoPrepareVisionPrivacy;
   for(const [batchIndex,batch] of plan.batches.entries()){
@@ -93,7 +99,7 @@ export async function* prepareOriginalVolumeBatches(
       previews.push(result.url);
     }
     options.onProgress?.("Local OCR/redaction: "+(batchIndex+1)+"/"+plan.batches.length);
-    const privacy=await prepare(previews,series.modality,options.signal,options.onProgress);
+    const privacy=await prepare(previews,modality,options.signal,options.onProgress);
     if(privacy.frames.length!==sources.length||
        privacy.frames.some((f,i)=>f.frameId!=="frame-"+(i+1)||
          !privacy.ocr[f.frameId]||
