@@ -214,6 +214,7 @@ export default function ViewerPage() {
                 originalDetectorEvidence={visionDetectorEvidence?.seriesKey===selected.key?visionDetectorEvidence.bundle:null}
                  clnVerifiedLocal={clnVerified?.seriesKey===selected.key?clnVerified.value:null}
                 fromPrimaryAnalysis={visionFromPrimary}
+                primaryActionAvailable={true}
                 originalDetectorsBusy={originalDetectorsBusy}
                 onOpenSlice={id=>{
                   const index=selected.members.findIndex(m=>m.id===id);
