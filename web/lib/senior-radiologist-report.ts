@@ -90,6 +90,15 @@ export const SENIOR_RADIOLOGIST_PROMPT = `
 /** Allow full organ-by-organ protocols at the approved 3500-token Opus output ceiling. */
 export const MAX_RADIOLOGIST_REPORT_CHARS=12_000;
 
+/** Strip only heading decorations from a provider response. This cannot invent
+ * omitted clinical sections, findings, measurements or model comparisons. */
+export function canonicalizeRadiologistHeadings(value:string):string {
+ return value.replace(
+   /^[ \t]*(?:#{1,4}[ \t]*)?(?:\*\*)?(ИССЛЕДОВАНИЕ|МЕТОДИКА|ОПИСАНИЕ|ЗАКЛЮЧЕНИЕ|РЕКОМЕНДАЦИИ)(?:\*\*)?[ \t]*:(?:\*\*)?/gim,
+   (_match,heading:string)=>heading.toUpperCase()+":",
+ );
+}
+
 export function hasRadiologistReportSections(value:unknown):value is string {
  if(typeof value!=="string"||value.length<180||value.length>MAX_RADIOLOGIST_REPORT_CHARS)return false;
  const headings=["ИССЛЕДОВАНИЕ","МЕТОДИКА","ОПИСАНИЕ","ЗАКЛЮЧЕНИЕ","РЕКОМЕНДАЦИИ"];

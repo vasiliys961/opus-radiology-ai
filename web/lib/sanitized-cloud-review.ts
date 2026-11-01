@@ -14,7 +14,7 @@ import {validateSanitizedDetectorBundle,type SanitizedDetectorBundle,type Consil
 import {safeXrvScores,type SanitizedCxrScores} from "./xrv-original-cxr.ts";
 import {validateSanitizedClnEvidence,type SanitizedClnTumorEvidence} from "./cln-tumor-consilium.ts";
 import {validateClnFrameRelativeEvidence,type ClnFrameRelativeEvidence} from "./cln-frame-relative-evidence.ts";
-import {SENIOR_RADIOLOGIST_PROMPT,hasRadiologistReportSections} from "./senior-radiologist-report.ts";
+import {SENIOR_RADIOLOGIST_PROMPT,hasRadiologistReportSections,canonicalizeRadiologistHeadings} from "./senior-radiologist-report.ts";
 
 export const CLOUD_PILOT_MAX_IMAGE_BASE64=2_000_000;
 export const CLOUD_PILOT_MAX_FRAMES=4;
@@ -326,8 +326,26 @@ export async function reviewSanitizedSamples(
   const opusRaw=parseStrictObject(readCompletionText(opus));
   const b=parseRoleResponse(opusRaw,"observations",ids);
   const synthesis=(opusRaw as Record<string,unknown>).opusSynthesis;
-  if(!validateOpusIntegratedSynthesis(synthesis,completedTasks))
-   throw Error("opus_synthesis_missing_or_unbound_to_executed_detector_tasks");
+  // Claude can add Markdown emphasis to headings despite strict JSON. Remove
+  // presentation-only markers; never fabricate a missing report section.
+  if(synthesis&&typeof synthesis==="object"&&!Array.isArray(synthesis)){
+    const item=synthesis as Record<string,unknown>;
+    if(typeof item.summary==="string")
+      item.summary=canonicalizeRadiologistHeadings(item.summary);
+  }
+  if(!validateOpusIntegratedSynthesis(synthesis,completedTasks)){
+    // Diagnostics disclose only contract shape, never model prose or source data.
+    const v=synthesis&&typeof synthesis==="object"&&!Array.isArray(synthesis)
+      ?synthesis as Record<string,unknown>:null;
+    const comparisons=Array.isArray(v?.comparisons)?v.comparisons:null;
+    const reason=!v?"missing":
+      !hasRadiologistReportSections(v.summary)?"invalid_radiologist_sections":
+      !comparisons?"missing_comparisons":
+      comparisons.length!==completedTasks.length?"comparison_count_mismatch":
+      !Array.isArray(v.conflicts)||!Array.isArray(v.limitations)?"missing_audit_lists":
+      "invalid_comparison_or_envelope";
+    throw Error("opus_synthesis_missing_or_unbound_to_executed_detector_tasks:"+reason);
+  }
   requireCompleteFrameCoverage(b,ids);
   return {
     schema:"opus-sanitized-cloud-pilot/v1",modality:checked.modality,

@@ -1,0 +1,124 @@
+name: Real original TCIA scanner DICOM to CLN Gemini Opus
+
+on:
+  pull_request:
+    paths:
+      - "scripts/test-tcia-original-dicom-cln-forward.py"
+      - "scripts/prepare-tcia-original-dicom-cln-frames.py"
+      - "scripts/check-real-tcia-dicom-cln-gemini-opus.mjs"
+      - ".github/workflows/real-tcia-original-dicom-cln-gemini-opus.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  original-dicom-real-cln-gemini-opus:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    env:
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      HF_HUB_DISABLE_PROGRESS_BARS: "1"
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+      OPENBLAS_NUM_THREADS: "1"
+      CUDA_VISIBLE_DEVICES: "-1"
+      PYTHONUNBUFFERED: "1"
+      HF_HOME: /tmp/opus-original-tcia-model-hf
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Verify original DICOM research and genuine provider availability
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$OPENROUTER_API_KEY" ]; then
+            echo "::error::Configured OPENROUTER_API_KEY is required for two actual paid requests."
+            exit 1
+          fi
+          python - <<'PY'
+          from pathlib import Path
+          import shutil
+          available=int(next(v.split()[1] for v in Path("/proc/meminfo").read_text().splitlines() if v.startswith("MemAvailable:")))*1024
+          free=shutil.disk_usage("/tmp").free
+          print("Free CLN CPU memory GiB",round(available/2**30,2),"scratch GiB",round(free/2**30,2))
+          assert available>=12*2**30 and free>=6*2**30
+          PY
+      - name: Install original DICOM source tools
+        run: |
+          python -m pip install --no-cache-dir \
+            "numpy==1.26.4" "pydicom==3.0.1" "nibabel==5.3.2" \
+            "pillow==11.3.0" "huggingface_hub==0.35.3"
+      - name: Download immutable TCIA LCTSC 103 ORIGINAL DICOM files and verify each SHA
+        run: |
+          python scripts/download-ai-cac-known-lctsc.py \
+            --output "$RUNNER_TEMP/official-tcia-original-dicom"
+      - name: Install original CLN pretrained nnU-Net CPU and private worker dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --no-cache-dir "torch==2.5.1+cpu" "torchvision==0.20.1+cpu" --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --no-cache-dir \
+            --extra-index-url https://download.pytorch.org/whl/cpu \
+            "torch==2.5.1+cpu" "torchvision==0.20.1+cpu" "numpy==1.26.4" \
+            "nnunetv2==2.7.0" "huggingface_hub==0.35.3" \
+            "nibabel==5.3.2" "psutil==7.0.0" "fastapi==0.115.12" \
+            "uvicorn==0.34.2" "requests==2.32.3"
+          python -m pip check
+          python - <<'PY'
+          import torch,shutil
+          assert torch.version.cuda is None and torch.__version__.startswith("2.5.1")
+          assert shutil.which("nnUNetv2_predict") is not None
+          PY
+      - name: 103 scanner-original SOP slices to exact HU and FRESH original CLN authenticated CPU forward
+        run: |
+          python scripts/test-tcia-original-dicom-cln-forward.py \
+            --reference "$RUNNER_TEMP/official-tcia-original-dicom" \
+            --work "$RUNNER_TEMP/tcia-private-cln-worker" \
+            --numeric "$RUNNER_TEMP/tcia-cln-numeric.json" \
+            --local-map "$RUNNER_TEMP/tcia-original-sop-map.json"
+      - name: Original scanner DICOM SOP to CLN location to four exact original DICOM pixel PNGs
+        run: |
+          python scripts/prepare-tcia-original-dicom-cln-frames.py \
+            --reference "$RUNNER_TEMP/official-tcia-original-dicom" \
+            --work "$RUNNER_TEMP/tcia-private-cln-worker" \
+            --numeric "$RUNNER_TEMP/tcia-cln-numeric.json" \
+            --local-map "$RUNNER_TEMP/tcia-original-sop-map.json" \
+            --output "$RUNNER_TEMP/tcia-verified-original-png"
+      - name: Install actual application model-review runtime
+        working-directory: web
+        run: npm ci --no-audit --no-fund
+      - name: PAID Gemini independent Vision JSON then Opus reconciles original model and writes clinical report
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          RADIOLOGY_PUBLIC_TCIA_CLOUD_TRANSFER_APPROVED: "1"
+        run: |
+          node --disable-warning=ExperimentalWarning --experimental-strip-types \
+            scripts/check-real-tcia-dicom-cln-gemini-opus.mjs \
+            "$RUNNER_TEMP/tcia-cln-numeric.json" \
+            "$RUNNER_TEMP/tcia-verified-original-png" \
+            "$RUNNER_TEMP/tcia-real-dicom-cln-gemini-opus.json"
+      - name: Upload only original CT numeric model receipt and physician TXT report
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-original-TCIA-DICOM-CLN-Gemini-Opus-radiology-protocol
+          path: |
+            ${{ runner.temp }}/tcia-real-dicom-cln-gemini-opus.json
+            ${{ runner.temp }}/tcia-real-dicom-cln-gemini-opus.txt
+          retention-days: 7
+          if-no-files-found: error
+      - name: Remove source DICOM files, SHA/SOP manifest, model cache and selected PNGs
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/official-tcia-original-dicom" \
+            "$RUNNER_TEMP/tcia-private-cln-worker" \
+            "$RUNNER_TEMP/tcia-original-sop-map.json" \
+            "$RUNNER_TEMP/tcia-cln-numeric.json" \
+            "$RUNNER_TEMP/tcia-verified-original-png" \
+            "/tmp/opus-original-tcia-model-hf"
