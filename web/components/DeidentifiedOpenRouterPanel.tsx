@@ -108,7 +108,7 @@ export default function DeidentifiedOpenRouterPanel({
         throw Error("Пакет патологических детекторов не соответствует проверенным кадрам.");
       const sentSpatial=sentDetectors&&frameRelativeClnEvidence?frameRelativeClnEvidence:null;
       if(sentSpatial&&(!validateClnFrameRelativeEvidence(sentSpatial,packet.frames.map(f=>f.frameId))||
-         !sentDetectors.facts.some(f=>f.task==="lung_tumor"&&f.status==="completed")))
+         !sentDetectors?.facts.some(f=>f.task==="lung_tumor"&&f.status==="completed")))
         throw Error("Локальная CLN-привязка к текущим DICOM-кадрам не подтверждена.");
       const response=await fetch("/api/ai/deidentified-openrouter-review",{
         method:"POST",cache:"no-store",signal:controller.signal,credentials:"same-origin",
