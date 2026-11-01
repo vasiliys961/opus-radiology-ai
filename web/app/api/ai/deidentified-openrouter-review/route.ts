@@ -90,10 +90,12 @@ export async function POST(req:NextRequest){
   const specialistProvided=Object.hasOwn(v,"specialistFacts");
   const detectorProvided=Object.hasOwn(v,"detectorEvidence");
   const cxrProvided=Object.hasOwn(v,"cxrModelEvidence");
-  if(keys.length!==allowed.length+(specialistProvided?1:0)+(detectorProvided?1:0)+(cxrProvided?1:0)||
+  const spatialProvided=Object.hasOwn(v,"frameRelativeClnEvidence");
+  if(keys.length!==allowed.length+(specialistProvided?1:0)+(detectorProvided?1:0)+(cxrProvided?1:0)+(spatialProvided?1:0)||
      !keys.every(k=>allowed.includes(k)||(specialistProvided&&k==="specialistFacts")||
        (detectorProvided&&k==="detectorEvidence")||
-       (cxrProvided&&k==="cxrModelEvidence"))||
+       (cxrProvided&&k==="cxrModelEvidence")||
+       (spatialProvided&&k==="frameRelativeClnEvidence"))||
      !allowed.every(k=>Object.hasOwn(v,k))||
      v.acknowledgeClinicianLawfulDisclosure!==true||
      v.acknowledgeProviderHealthDataTerms!==true||
@@ -110,7 +112,8 @@ export async function POST(req:NextRequest){
       v.packet,callAiGateway,AbortSignal.any([req.signal,AbortSignal.timeout(75_000)]),
       specialistProvided?v.specialistFacts:null,
       detectorProvided?v.detectorEvidence:null,
-      cxrProvided?v.cxrModelEvidence:null);
+      cxrProvided?v.cxrModelEvidence:null,null,
+      spatialProvided?v.frameRelativeClnEvidence:null);
     return NextResponse.json(result,{headers:HEADERS});
   }catch{
     // Never expose model replies, base64 images, user headers, tokens or PHI.
