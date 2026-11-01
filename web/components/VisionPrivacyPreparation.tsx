@@ -47,11 +47,13 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
   useEffect(()=>()=>{++generation.current;scan.current?.abort();},[]);
   // Prepare the SAME already selected four PNGs automatically, entirely offline.
   // OCR + actual black-pixel masking + second OCR never grants clinical/cloud clearance.
-  const autoAttempt=useRef(false);
+  // Lease the exact preview snapshot, not a permanent one-shot flag: React Strict
+  // Mode replays effect cleanup, and that abort must allow the second setup.
+  const autoAttempt=useRef<readonly (string|undefined)[]|null>(null);
   useEffect(()=>{
-    if(!autoStartAfterDetectors||autoAttempt.current||!previews.length||previews.some(p=>!p?.startsWith("data:image/png;base64,")))return;
+    if(!autoStartAfterDetectors||autoAttempt.current===previews||!previews.length||previews.some(p=>!p?.startsWith("data:image/png;base64,")))return;
     if(!["CT","MR","CR","DX"].includes(modality))return;
-    autoAttempt.current=true;
+    autoAttempt.current=previews;
     const controller=new AbortController();
     const version=++generation.current;
     scan.current=controller;
@@ -76,7 +78,12 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
     }).finally(()=>{
       if(version===generation.current){scan.current=null;setBusy(false);setOcrBusy(false);}
     });
-    return()=>controller.abort();
+    return()=>{
+      controller.abort();
+      // An aborted Strict Mode replay has NOT completed privacy preparation.
+      // Release only this snapshot's lease; never invalidate a newer attempt.
+      if(autoAttempt.current===previews)autoAttempt.current=null;
+    };
   },[previews,modality,autoStartAfterDetectors]);
   const frame=frames[selected];
   const currentOcr=frame&&ocr[frame.frameId]?.sha256===frame.sha256?ocr[frame.frameId]:undefined;
