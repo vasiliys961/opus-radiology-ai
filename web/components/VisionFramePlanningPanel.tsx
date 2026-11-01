@@ -42,6 +42,7 @@ export default function VisionFramePlanningPanel({
   primaryAnalysisStage?:"idle"|"running"|"completed"|"vision-only"|"cancelled";
 }) {
   const [requested, setRequested] = useState(4);
+  const [extraOpened,setExtraOpened]=useState(false);
   // Editing the sampled frame count must invalidate privacy approval until the
   // physician explicitly generates the new source-bound plan.
   const previousRequested=useRef(requested);
@@ -284,7 +285,7 @@ export default function VisionFramePlanningPanel({
     void completionChime(); // sound only after successful preparation and explicit opt-in
   };
   const stablePrivacyPreviews=useMemo(()=>report?.frames.map(f=>thumbnails[f.fileId]?.url)??[],[report,thumbnails]);
-  return <section className="ora-vision-plan" aria-label="Локальная подготовка кадров для Gemini">
+  const extraView=<section className="ora-vision-plan" aria-label="Дополнительный анализ отдельных кадров">
     <div className="ora-vision-plan-head">
       <div><h2>Gemini Orchestra · подготовка кадров</h2>
         <p>v1.8 · локальный предварительный этап</p></div>
@@ -466,16 +467,21 @@ export default function VisionFramePlanningPanel({
         originalLocalFileIds={report.frames.map(f=>f.fileId)}
         onOpenOriginalSlice={onOpenSlice}/>
     </div>}
-    {fullVolumeCost&&choice.seriesKey&&series.find(s=>s.key===choice.seriesKey)&&<details>
-      <summary>Дополнительно · реальная локальная OCR-подготовка всего тома</summary>
-      <FullVolumeLocalPreparation
-        key={"full-volume-"+choice.seriesKey}
-        series={series.find(s=>s.key===choice.seriesKey)!}
-        files={fileById}
-        flaggedIndex={targetFrame.trim()?Number(targetFrame)-1:null}
-        onOpenSlice={onOpenSlice}/>
-    </details>}
+
     <p className="ora-vision-plan-footnote">Отбираем по равномерным индексам геометрически проверенной серии,
       сохраняя исходные SOPInstanceUID локально. Выборка не гарантирует обнаружения очагов между срезами.</p>
+  </section>;
+  const selected=series.find(s=>s.key===choice.seriesKey);
+  if(!fromPrimaryAnalysis||!selected||!fullVolumeCost)return extraView;
+  return <section className="ora-vision-plan" aria-label="Автоматический анализ исследования">
+    <FullVolumeLocalPreparation key={"study-"+selected.key}
+      series={selected} files={fileById}
+      flaggedIndex={targetFrame.trim()?Number(targetFrame)-1:null}
+      autoStart={true} detectorStage={primaryAnalysisStage}
+      detectorEvidence={originalDetectorEvidence} onOpenSlice={onOpenSlice}/>
+    <details>
+      <summary onClick={()=>setExtraOpened(true)}>Дополнительно · анализ отдельных срезов</summary>
+      {extraOpened&&extraView}
+    </details>
   </section>;
 }

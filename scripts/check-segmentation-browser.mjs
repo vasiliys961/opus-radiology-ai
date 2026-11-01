@@ -564,7 +564,8 @@ try {
       metrics:{device:'cpu',inferenceSeconds:0,totalSeconds:0,peakRssMiB:0,platform:'synthetic',machine:'fixture',
         preflight:{...resourcePreflight,availableRamBytes:4*1024**3},guardDecision:'allow',resourceProfile:'safe',threads:1,interOpThreads:1}});
   });
-  await page.reload({waitUntil:'networkidle'});
+  await page.reload({waitUntil:'domcontentloaded',timeout:45000});
+  console.log('Full CT reload ready');
   await page.locator('input[accept*=".dcm"]').setInputFiles((await readdir(ctFixture+'/dicom')).sort().map(n=>ctFixture+'/dicom/'+n));
   await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='MPR · 3 плоскости'&&!b.disabled));
   await page.getByRole('button',{name:'MPR · 3 плоскости',exact:true}).click();
@@ -947,8 +948,10 @@ try {
   // Full-series path decodes actual mathematical DICOM planes without a full MPR
   // volume. The local worker/inference response is mocked; no trained model runs.
   const huFixture=join(fixture,'full-native-hu');
+  console.log('Preparing synthetic full CT fixture for browser reload');
   execFileSync(process.execPath,[join(root,'scripts/generate-segmentation-phantom.mjs'),huFixture,'CT','rescale-hu'],{stdio:'pipe'});
-  await page.reload({waitUntil:'networkidle'});
+  // Readiness/model probes may remain active; full network idleness is unnecessary.
+  await page.reload({waitUntil:'domcontentloaded',timeout:45000});
   await page.locator('input[accept*=".dcm"]').setInputFiles((await readdir(huFixture+'/dicom')).sort().map(n=>huFixture+'/dicom/'+n));
   await page.locator('.cs-stack').waitFor();
   let fullJobRequest,fullInput,fullMask,fullDeleted=false,fullMaskGets=0,fullSlabBad=true;
@@ -1033,7 +1036,7 @@ try {
   await page.locator('.ora-mask-success').waitFor({state:'detached'});assert.equal(fullMaskGets,0);
   console.log('Full CT: actual per-plane DICOM/rescale/SHA streaming, full job retained without full mask download, Evidence without token, forged crop refused, bound crop in MPR and explicit job/overlay deletion (mocked inference)');
   // Actual local OCR, separate synthetic text fixture. No clinical model/data.
-  await page.reload({waitUntil:'networkidle'});
+  await page.reload({waitUntil:'domcontentloaded',timeout:45000});
   const textPixels=await page.evaluate(()=>{
     const canvas=document.createElement('canvas');canvas.width=64;canvas.height=64;
     const ctx=canvas.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,64,64);

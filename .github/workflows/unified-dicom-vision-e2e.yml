@@ -5,6 +5,7 @@ on:
     paths:
       - "web/**"
       - "scripts/check-unified-dicom-vision-browser.mjs"
+      - "scripts/check-auto-full-volume-clinician-browser.mjs"
       - "scripts/generate-segmentation-phantom.mjs"
       - ".github/workflows/unified-dicom-vision-e2e.yml"
   push:
@@ -38,6 +39,8 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Run browser synthetic CT to Vision to physician review
         run: node ../scripts/check-unified-dicom-vision-browser.mjs
+      - name: Test one-button full original DICOM volume through Gemini and one Opus (mocked paid providers)
+        run: node ../scripts/check-auto-full-volume-clinician-browser.mjs
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
