@@ -3,6 +3,7 @@
 import {useEffect,useMemo,useRef,useState} from "react";
 import type {DicomSeries} from "../lib/dicom-series";
 import {planNativeStudyAnalysis} from "../lib/unified-study-dispatch";
+import {canUseVisionOnlyAsPrimary} from "../lib/automatic-primary-series";
 import {verifyRenalThreePhaseStudy,type RenalPhaseRole} from "../lib/renal-three-phase-gate";
 import {runRenalMonaiThreePhase,type RenalMonaiResult} from "../lib/renal-monai-direct";
 import {prepareDicomMonaiFile,prepareDicomCtForPathology} from "../lib/dicom-monai-direct";
@@ -63,6 +64,8 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  const plan=useMemo(()=>planNativeStudyAnalysis(sourceSeries,available,{
    clinicianConfirmedChest:clinicianConfirmedChest&&confirmableChest,
  }),[sourceSeries,available,clinicianConfirmedChest,confirmableChest]);
+ const visionOnlyAvailable=useMemo(()=>
+  canUseVisionOnlyAsPrimary(series,available),[series,available]);
  useEffect(()=>{setClinicianConfirmedChest(false);},[series,files]);
  const [renalPhaseRoles,setRenalPhaseRoles]=useState<Partial<Record<RenalPhaseRole,string>>>({});
  const [renalMonaiResult,setRenalMonaiResult]=useState<RenalMonaiResult|null>(null);
@@ -248,8 +251,8 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
    plan.route==="totalseg-abdomen"?autoAbdomenChecking:
    plan.route==="ianpan-ich"?autoIchChecking:
    plan.route==="wmh-flair"?(brainTask==="wmh"?autoWmhChecking:autoBrainChecking):false;
- const ready=!!plan.route&&authorized&&!busy&&!readinessChecksPending&&
-   (xrvPlan?(xrvStatus==="ready"&&xrvChestConfirmed&&sourceUrl.startsWith("https://")):plan.route==="totalseg-abdomen"?true:chestPlan?true:
+ const ready=(!!plan.route||visionOnlyAvailable)&&authorized&&!busy&&!readinessChecksPending&&
+   (visionOnlyAvailable?true:xrvPlan?(xrvStatus==="ready"&&xrvChestConfirmed&&sourceUrl.startsWith("https://")):plan.route==="totalseg-abdomen"?true:chestPlan?true:
      (plan.route==="ianpan-ich"?true:
       plan.route==="wmh-flair"?true:
       (!!token&&!!endpoint.trim())))&&
@@ -260,7 +263,18 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
    ));
 
  async function launch(){
-   if(!ready||!plan.route)return;
+   if(!ready||(!plan.route&&!visionOnlyAvailable))return;
+   if(!plan.route){
+     // No original detector is available for this anatomy. Open the same
+     // source-bound Vision/OCR/privacy workflow from the primary action.
+     // Neither an artificial negative model result nor a provider request
+     // is emitted. Paid Gemini/Opus authorization stays in Vision.
+     onDetectorEvidence?.(series.key,null);
+     setError("");
+     setStatus("Для этой КТ/МРТ оригинальный патологический детектор не назначен. Локальная подготовка кадров Gemini + Opus открыта; передача в облако требует отдельного разрешения.");
+     onReadyForVision?.(series.key);
+     return;
+   }
    const version=++serial.current;
    active.current?.abort();
    const controller=new AbortController();active.current=controller;
@@ -652,9 +666,11 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
   <OriginalWorkerFleetReadiness/>
   <p><strong>{plan.title}</strong> · текущая исходная DICOM-серия. Автоматический выбор по известной модальности;
     наличие настоящих весов подтверждается только worker при запуске.</p>
-  {plan.reason&&<p role="status">Не запущено: {plan.reason}</p>}
-  {plan.route&&<>
-   <details>
+  {plan.reason&&<p role="status">{visionOnlyAvailable?
+     "Локальный детектор не назначен: "+plan.reason+" Доступен независимый Gemini + Opus.":
+     "Не запущено: "+plan.reason}</p>}
+  {(plan.route||visionOnlyAvailable)&&<>
+   {plan.route&&<details>
     <summary>Настройки приватного исполнителя и разрешение</summary>
     {!xrvPlan&&!(plan.route==="totalseg-abdomen"&&autoAbdomenReady)&&!(chestPlan&&autoMonaiReady)&&!(plan.route==="wmh-flair"&&(brainTask==="wmh"?autoWmhReady:autoBrainReady))&&!(plan.route==="ianpan-ich"&&autoIchReady)&&<label>Адрес локального worker <input type="text" value={endpoint} disabled={busy} onChange={e=>setEndpoint(e.target.value)}/></label>}
     {!xrvPlan&&!(plan.route==="totalseg-abdomen"&&autoAbdomenReady)&&!(chestPlan&&autoMonaiReady)&&!(plan.route==="wmh-flair"&&(brainTask==="wmh"?autoWmhReady:autoBrainReady))&&!(plan.route==="ianpan-ich"&&autoIchReady)&&<label>Токен worker <input type="password" autoComplete="off" value={token} disabled={busy} onChange={e=>setToken(e.target.value)}/></label>}
@@ -762,7 +778,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
         disabled={busy} onChange={e=>setSourceLicense(e.target.value)}/></label>
     </div>}
     <p>MONAI, task315, оригинальный Raidionics, исследовательский PE, TotalSegmentator живота и WMH используют разрешённые изображения в loopback worker; ianpan передаёт только SHA-256 и анализирует заранее установленную идентичную публичную КТ. Облачная передача не выполняется.</p>
-   </details>
+   </details>}
    {/* Authorization is a primary clinical action, not a hidden developer setting. */}
     <label><input type="checkbox" checked={authorized} disabled={busy} onChange={e=>setAuthorized(e.target.checked)}/>
      Подтверждаю разрешённый публичный обезличенный исследовательский источник и полномочия на локальный запуск. Пациентские снимки этим маршрутом не передавать.</label>
@@ -773,6 +789,8 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
    {!ready&&!busy&&<p role="status">{readinessChecksPending?
       "Проверяем доступность оригинальных патологических моделей перед запуском.":plan.route==="totalseg-abdomen"?
       "Серверные оригинальные веса КТ живота пока не готовы либо источник не подтверждён. Токены в автоматическом режиме врачу не нужны.":
+      visionOnlyAvailable?
+      "Подтвердите разрешённый источник для локальной подготовки Gemini + Opus. Облачный вызов разрешается отдельно.":
       "Для запуска требуется доступная оригинальная модель и разрешение на исследовательские данные."}</p>}
   </>}
   {status&&<p role="status">{status}</p>}
