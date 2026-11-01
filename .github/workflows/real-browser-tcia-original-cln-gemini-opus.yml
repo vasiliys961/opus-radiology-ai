@@ -52,7 +52,7 @@ jobs:
       - name: Install original DICOM and original published CLN dependencies
         run: |
           set -euo pipefail
-          python -m pip install --no-cache-dir "numpy==1.26.4" "pydicom==3.0.1" "nibabel==5.3.2" "huggingface_hub==0.35.3" "requests==2.32.3"
+          python -m pip install --no-cache-dir "numpy==1.26.4" "pydicom==3.0.1" "nibabel==5.3.2" "huggingface_hub==0.35.3" "requests==2.32.3" idc-index
           python -m pip install --no-cache-dir "torch==2.5.1+cpu" "torchvision==0.20.1+cpu" --index-url https://download.pytorch.org/whl/cpu
           python -m pip install --no-cache-dir \
             --extra-index-url https://download.pytorch.org/whl/cpu \
@@ -66,8 +66,42 @@ jobs:
           assert torch.version.cuda is None and torch.__version__.startswith("2.5.1")
           assert shutil.which("nnUNetv2_predict")
           PY
-      - name: Download immutable 103 original scanner DICOM files from official TCIA NBIA
-        run: python scripts/download-ai-cac-known-lctsc.py --output "$RUNNER_TEMP/actual-original-DICOM"
+      - name: Download exact source DICOM from official IDC public mirror, or pinned TCIA NBIA
+        run: |
+          python - <<'PY'
+          import importlib.util,subprocess,sys,tempfile,zipfile
+          from pathlib import Path
+          repo=Path.cwd()
+          output=Path(__import__("os").environ["RUNNER_TEMP"])/"actual-original-DICOM"
+          spec=importlib.util.spec_from_file_location("original_tcia",repo/"scripts/download-r231-browser-reference.py")
+          ref=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(ref)
+          try:
+              with tempfile.TemporaryDirectory(prefix="original-tcia-idc-") as temp:
+                  wd=Path(temp)
+                  subprocess.run(["idc","download",ref.SERIES,"--download-dir",str(wd/"raw"),
+                      "--dir-template",""],check=True,timeout=300,capture_output=True,text=True)
+                  objects=[p for p in (wd/"raw").rglob("*") if p.is_file()]
+                  if len(objects)!=103:raise ValueError("IDC original DICOM count mismatch")
+                  import pydicom
+                  for obj in objects:
+                      d=pydicom.dcmread(str(obj),stop_before_pixels=True)
+                      if str(d.SeriesInstanceUID)!=ref.SERIES or d.Modality!="CT":
+                          raise ValueError("IDC source series mismatch")
+                  with zipfile.ZipFile(wd/"verified-original.zip","w") as z:
+                      z.writestr("LICENSE","TCIA LCTSC CC BY 3.0; DOI 10.7937/K9/TCIA.2017.3R3FVZ08")
+                      for i,obj in enumerate(objects):z.write(obj,f"original-{i:03d}.dcm")
+                  meta=ref.prepare(wd/"verified-original.zip",output,full_series=True)
+                  assert meta["sourceContentChainSha256"]==ref.CONTENT_CHAIN
+              print("IDC 103 original DICOM exact source file chain verified")
+          except Exception as error:
+              import shutil
+              if output.exists():shutil.rmtree(output)
+              print("IDC original byte verification unavailable",type(error).__name__,
+                  "fallback TCIA official NBIA original ZIP",flush=True)
+              subprocess.run([sys.executable,str(repo/"scripts/download-ai-cac-known-lctsc.py"),
+                  "--output",str(output)],check=True,timeout=520)
+          PY
       - name: Build actual Next DICOM clinical viewer and install real Chromium
         working-directory: web
         run: |
