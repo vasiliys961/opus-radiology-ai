@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {assessAutomaticBrainFlair} from "./automatic-brain-flair.ts";
+import {suggestPrimaryDicomSeries} from "./automatic-primary-series.ts";
 import type {DicomSeries,TechnicalDicomMetadata} from "./dicom-series.ts";
 
 function mr(tr:number|null,te:number|null,ti:number|null):DicomSeries{
@@ -47,5 +48,15 @@ test("source UID, Frame of Reference and physical geometry must be established",
  ];
  for(const [i,s] of variants.entries())assert.equal(
   assessAutomaticBrainFlair(s).eligible,false,"source variant "+i);
+});
+test("automatic primary selection prefers source-verified FLAIR over another brain MR sequence",()=>{
+ const t1=mr(2300,3,900);
+ t1.key="t1-mprage";
+ t1.members=t1.members.map((m,i)=>({...m,id:"t1-"+i,metadata:{...m.metadata,
+  seriesUid:"1.2.3.9",sopInstanceUid:"1.2.3.9."+String(i+1)}}));
+ const flair=mr(9000,120,2500);
+ const available=new Set([...t1.members,...flair.members].map(m=>m.id));
+ assert.equal(suggestPrimaryDicomSeries([t1,flair],available).key,flair.key);
+ assert.equal(suggestPrimaryDicomSeries([flair,t1],available).key,flair.key);
 });
 console.log("PASS conservative source-verified automatic brain FLAIR");
