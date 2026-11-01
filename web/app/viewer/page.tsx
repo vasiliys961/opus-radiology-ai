@@ -99,8 +99,17 @@ export default function ViewerPage() {
       setIndexed(parsed);
       setPreparedMonaiSource(null);setPreparedMonaiSession(null);setPreparedMonaiResult(null);
       setWmhSlice(undefined);setCurrentSeriesKey("");
-      // Local Vision samples are prepared automatically, with no provider call.
-      setVisionOpen(true);setVisionFromPrimary(false);setVisionDetectorEvidence(null);setClnVerified(null);
+      // Pick and validate the newly loaded source before opening local Vision.
+      // A scout, mixed study or incomplete geometry must not auto-open a
+      // misleading panel; this does not authorize any provider transfer.
+      const loadedSeries=groupDicomSeries(parsed.map(item=>({
+        id:item.id,name:item.file.name,metadata:item.header,
+      })));
+      const primary=suggestPrimaryDicomSeries(loadedSeries,
+        new Set(parsed.map(item=>item.id)));
+      setVisionOpen(canAutoPrepareLocalVision(
+        loadedSeries.find(item=>item.key===primary.key)));
+      setVisionFromPrimary(false);setVisionDetectorEvidence(null);setClnVerified(null);
       const mostCommon = [...reasons.entries()].sort((a, b) => b[1] - a[1])[0];
       setMessage(`Проиндексировано ${parsed.length} DICOM; пропущено ${rejected}.${mostCommon ? ` Основная причина (${mostCommon[1]}): ${mostCommon[0]}.` : ""} Изображения остаются на вашем Mac.`);
     } finally { setReading(false); }
