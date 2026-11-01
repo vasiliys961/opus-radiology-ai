@@ -2,6 +2,7 @@
 
 import {useEffect,useRef,useState} from "react";
 import type {VisionPrivacyPacket} from "../lib/vision-privacy";
+import {canSubmitCombinedVisionReview} from "../lib/primary-analysis-stage";
 import {validateOpusIntegratedSynthesis,type SanitizedModelReview} from "../lib/sanitized-cloud-review";
 import {MAX_RADIOLOGIST_REPORT_CHARS} from "../lib/senior-radiologist-report";
 import {validateClnFrameRelativeEvidence,type ClnFrameRelativeEvidence} from "../lib/cln-frame-relative-evidence";
@@ -48,10 +49,15 @@ export default function DeidentifiedOpenRouterPanel({
   const [lateDraft,setLateDraft]=useState("");
   const [lateWorking,setLateWorking]=useState(false),[lateConsent,setLateConsent]=useState(false);
   const ctl=useRef<AbortController|null>(null);
-  const modelPathSettled=primaryAnalysisStage!=="running"&&primaryAnalysisStage!=="cancelled";
+  const modelPathSettled=canSubmitCombinedVisionReview(primaryAnalysisStage);
   // Never probe even localhost without a clinician/operator click.
   // This is essential for offline DICOM review and fail-closed browser tests.
   useEffect(()=>()=>{ctl.current?.abort();},[]);
+  // Restart/cancellation of the local path invalidates an in-flight remote
+  // interpretation. A stale report must never surface against new DICOM.
+  useEffect(()=>{
+    if(!modelPathSettled){ctl.current?.abort();setTransferAuthorized(false);setResult(null);setIntegratedDraft("");}
+  },[modelPathSettled]);
   useEffect(()=>{setResult(null);setIncludeSpecialist(false);setDecisions({});setClinicalSynthesis("");setIntegratedDraft("");},[specialistLocalBinding]);
   // A real CLN/nnU-Net may finish AFTER an already paid Vision review.
   // Preserve Gemini/Opus observations and physician decisions; revoke permission
@@ -124,6 +130,7 @@ export default function DeidentifiedOpenRouterPanel({
           ...(sentCxr?{cxrModelEvidence:sentCxr}:{})}),
       });
       const body:unknown=await response.json();
+      if(controller.signal.aborted)return;
       if(!response.ok)throw Error((body as {error?:string}).error??"OpenRouter недоступен");
       const doc=body as SanitizedModelReview;
       if(doc.schema!=="opus-sanitized-cloud-pilot/v1"||doc.results.length!==2||
