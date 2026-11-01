@@ -15,6 +15,7 @@ import {validateLateDetectorReconciliation,type LateDetectorReconciliation} from
 
 type Props={
   enabledByLocalChecks:boolean;
+  originalDetectorsBusy?:boolean;
   exactReviewedHashes:readonly {imageId:string;sha256:string}[];
   prepareReviewedPacket:()=>VisionPrivacyPacket;
   specialistFacts?:LocalLungFacts|null;
@@ -28,7 +29,7 @@ type Props={
 };
 type Ready={schema:string;enabled:boolean;productionPatientCloudRelease:false};
 export default function DeidentifiedOpenRouterPanel({
-  enabledByLocalChecks,exactReviewedHashes,prepareReviewedPacket,
+  enabledByLocalChecks,exactReviewedHashes,prepareReviewedPacket,originalDetectorsBusy=false,
   originalLocalFileIds,onOpenOriginalSlice,specialistFacts,specialistLocalBinding,localLaa950,originalDetectorEvidence=null,frameRelativeClnEvidence=null,originalCxrEvidence=null,
 }:Props){
   const [server,setServer]=useState<Ready|null>(null),[token,setToken]=useState("");
@@ -73,7 +74,7 @@ export default function DeidentifiedOpenRouterPanel({
     }catch{setReadinessNote("Локальный облачный пилот недоступен.");}
   }
   async function send(){
-    if(working||lateWorking||!enabledByLocalChecks||token.length<24||!transferAuthorized)return;
+    if(working||lateWorking||originalDetectorsBusy||!enabledByLocalChecks||token.length<24||!transferAuthorized)return;
     setError("");setResult(null);setDecisions({});setClinicalSynthesis("");setIntegratedDraft("");setDraftError("");setWorking(true);
     setLateReview(null);setLateDraft("");setLateConsent(false);
     const controller=new AbortController();ctl.current=controller;
@@ -325,8 +326,9 @@ export default function DeidentifiedOpenRouterPanel({
         } из {originalDetectorEvidence.facts.length} задач.
         Исходные UID, SHA, координаты и сами маски не передаются.
       </label>}
+    {originalDetectorsBusy&&<p role="status">Ожидаем завершения оригинальных детекторов. Облачный этап станет доступен после их выполнения, чтобы Opus получил все готовые результаты за один проход.</p>}
     <div className="ora-evidence-actions">
-      <button type="button" disabled={working||lateWorking||!enabledByLocalChecks||
+      <button type="button" disabled={working||lateWorking||originalDetectorsBusy||!enabledByLocalChecks||
         token.length<24||!transferAuthorized}
         onClick={()=>void send()}>{working?"Gemini → Opus анализируют кадры…":
         "Подтвердить передачу и создать предварительное заключение"}</button>
