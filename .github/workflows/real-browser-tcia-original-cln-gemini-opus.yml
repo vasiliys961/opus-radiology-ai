@@ -5,6 +5,12 @@ on:
     paths:
       - "scripts/launch-real-tcia-dicom-cln-browser-e2e.py"
       - "scripts/check-real-tcia-dicom-cln-browser-e2e.mjs"
+      - "web/components/UnifiedDicomStudyAnalysis.tsx"
+      - "web/components/ClnOriginalPhysicianReview.tsx"
+      - "web/lib/cln-original-source-recovery.ts"
+      - "web/lib/cln-original-source-recovery.test.ts"
+      - "web/lib/dicom-monai-direct.ts"
+      - "web/lib/cln-native-worker.ts"
       - ".github/workflows/real-browser-tcia-original-cln-gemini-opus.yml"
   workflow_dispatch:
 
