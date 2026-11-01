@@ -1025,7 +1025,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
      onVerifiedCandidates={verified=>onClnBoundReady?.(series.key,verified)}/>}
    {lungscapeResult&&<p role="status">LungSCAPE191: настоящий инференс завершён, компонентов {lungscapeResult.componentCount}. Классы модели не являются диагнозом ILD/UIP/IPF.</p>}
   {(chestNodules||chestCln||lungscapeResult||chestEffusion||chestPe||chestNodes||abdomenResult||ich||wmh||brainResult)&&
-    <DetectorGeminiOpusConsilium onBundleReady={bundle=>onDetectorEvidence?.(series.key,bundle)} snapshot={{
+    <details><summary>Дополнительно · числовой исследовательский консилиум (не основной Gemini Vision)</summary><DetectorGeminiOpusConsilium onBundleReady={bundle=>onDetectorEvidence?.(series.key,bundle)} snapshot={{
       modality:series.modality as "CT"|"MR",
       region:plan.route==="monai-nodules"?"chest":
         plan.route==="totalseg-abdomen"?"abdomen":"brain",
@@ -1036,8 +1036,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
         abdomenResult?.sourceNiftiSha256??null,
       nodules:chestNodules,cln:chestCln,lungscape:lungscapeResult,effusion:chestEffusion,pe:chestPe,nodes:chestNodes,
       abdomen:abdomenResult,ich,wmh,brain:brainResult,
-    }}/>}
-  <p>Gemini Vision по исходным кадрам выполняется отдельно после обезличивания.
-    В этой версии единый консилиум анализирует только обезличенные числа моделей.</p>
+    }}/></details>}
+  <p>Основной маршрут Gemini Vision → Claude Opus с единым заключением доступен справа после подготовки и проверки обезличенных кадров. Дополнительный числовой консилиум не требуется для стандартного запуска.</p>
  </section>;
 }
