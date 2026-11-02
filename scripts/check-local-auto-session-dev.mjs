@@ -56,6 +56,17 @@ try{
  const value=await second.json();
  assert.equal(value.workstationConnected,true);
  assert.equal(value.status,"ready");
+ // Intentionally use the WRONG content type. An approved session must reach
+ // validation (415) but neither route must call a paid provider.
+ for(const route of ["approved-volume-gemini-batch","complete-volume-opus"]){
+   const result=await fetch(host+"/api/ai/"+route,{
+     method:"POST",signal:ctl.signal,headers:{
+       cookie,origin:host,"sec-fetch-site":"same-origin",
+       "x-opus-auto-public-volume":"1","content-type":"text/plain",
+     },body:"synthetic-no-provider-request",
+   });
+   assert.equal(result.status,415,route+" should accept signed session before payload validation");
+ }
  const cross=await fetch(url,{signal:ctl.signal,headers:{"sec-fetch-site":"cross-site"}});
  assert.equal(cross.status,404);
  console.log("PASS: npm dev localhost signed session restored automatically with existing approval and no operator token");
