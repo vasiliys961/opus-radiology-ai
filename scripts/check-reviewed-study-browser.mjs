@@ -17,11 +17,15 @@ const browser=await chromium.launch({headless:true,
 });
 try{
  const page=await browser.newPage();
- const paid=[];
+ const paid=[];let connectionChecks=0,connectionOffline=false;
  await page.route("**/api/ai/**",async route=>{
   if(route.request().method()==="POST"){
    paid.push(new URL(route.request().url()).pathname);
    return route.abort();
+  }
+  if(new URL(route.request().url()).pathname==="/api/ai/deidentified-openrouter-review"){
+   connectionChecks++;
+   if(connectionOffline)return route.fulfill({status:503,contentType:"application/json",body:"{}"});
   }
   return route.continue();
  });
@@ -30,16 +34,15 @@ try{
   (await readdir(join(fixture,"dicom"))).sort().map(n=>join(fixture,"dicom",n)));
  const analyze=page.getByRole("button",{name:"Анализировать исследование",exact:true});
  await analyze.waitFor({timeout:60_000});
+ assert.equal(connectionChecks,0,"Opening a study without Analyze does not connect cloud sessions");
  await analyze.click({timeout:45_000});
- const connect=page.getByRole("button",{name:"Подключить Gemini и Opus",exact:true});
- await connect.waitFor({timeout:60_000});
  assert.equal(await page.getByRole("region",{name:"Автоматический анализ всего исследования",exact:true}).count(),0);
- await connect.click();
- await page.getByText("Локальное рабочее место подключено.",{exact:false}).waitFor();
+ await page.getByText("Локальное рабочее место подключено.",{exact:false}).waitFor({timeout:60_000});
+ assert.ok(connectionChecks>0,"Analyze connects the preapproved local workstation without a second click");
  const send=page.getByRole("button",{name:"Подтвердить передачу и создать предварительное заключение",exact:true});
  assert.equal(await send.isDisabled(),true,"No inference without privacy review and transfer consent");
  assert.deepEqual(paid,[],"Opening, analyzing and connecting must not send unreviewed pixels");
- console.log("PASS: primary Analyze opens reviewed-frame workflow; connection needs no token; unreviewed upload blocked (synthetic only)");
+ console.log("PASS: primary Analyze connects automatically without another click or token; opening files does not connect; unreviewed upload blocked (synthetic only)");
  // Synthetic readiness followed by an explicit failure tests physician-facing
  // routing/status without pretending to produce trained model findings.
  let modelUploads=0;
@@ -57,6 +60,7 @@ try{
   modelUploads++;
   return route.fulfill({status:503,contentType:"application/json",body:JSON.stringify({error:"synthetic test: no inference"})});
  });
+ connectionOffline=true;
  await page.reload();
  await page.locator('input[accept*=".dcm"]').setInputFiles(
   (await readdir(join(fixture,"dicom"))).sort().map(n=>join(fixture,"dicom",n)));
@@ -64,7 +68,11 @@ try{
  await task.filter({hasText:"выбран подключённый приватный сервер"}).waitFor({timeout:45_000});
  await analyze.click({timeout:45_000});
  await task.filter({hasText:"детектор завершился с ошибкой"}).waitFor({timeout:60_000});
+ await page.getByText("Не удалось проверить подключение Gemini и Opus.",{exact:false}).waitFor({timeout:60_000});
+ connectionOffline=false;
+ await page.getByRole("button",{name:"Повторить проверку подключения",exact:true}).click();
+ await page.getByText("Локальное рабочее место подключено.",{exact:false}).waitFor();
  assert.equal(modelUploads,1,"A detector failure must not silently duplicate inference");
  assert.deepEqual(paid,[]);
- console.log("PASS: original DICOM primary action selects private MONAI without tokens, attempts once, shows failed/not-assessed and retains independent reviewed Vision (synthetic failure only)");
+ console.log("PASS: unavailable connection retries without repeating the detector or sending pixels; private MONAI failure remains explicitly not assessed (synthetic only)");
 }finally{await browser.close();}

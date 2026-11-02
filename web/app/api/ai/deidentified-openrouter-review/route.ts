@@ -5,7 +5,7 @@ import {HttpBodyTooLarge} from "../../../../lib/limited-body";
 import {reviewSanitizedSamples} from "../../../../lib/sanitized-cloud-review";
 import {createSyntheticTrialLimiter} from "../../../../lib/synthetic-live-research";
 import {REVIEWED_FRAME_COOKIE,reviewedFrameSessionEnabled,createReviewedFrameSession,
-  validReviewedFrameSession} from "../../../../lib/reviewed-frame-session";
+  validReviewedFrameSession,reviewedFrameConnectionStatus} from "../../../../lib/reviewed-frame-session";
 
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
@@ -46,11 +46,7 @@ function allowedLocalBrowser(req:NextRequest,post=false):boolean {
     (!post||req.headers.get("origin")==="http://"+host);
 }
 function configurationReady():boolean {
-  return process.env.RADIOLOGY_ENABLE_DEIDENTIFIED_OPENROUTER_PILOT==="1" &&
-    process.env.RADIOLOGY_OPENROUTER_HEALTH_DATA_APPROVED==="1" &&
-    (reviewedFrameSessionEnabled()||
-      (process.env.RADIOLOGY_LOCAL_RESEARCH_OPERATOR_TOKEN?.length??0)>=24) &&
-    !!process.env.OPENROUTER_API_KEY?.trim();
+  return reviewedFrameConnectionStatus()==="ready";
 }
 function validOperator(received:string|null):boolean {
   const expected=process.env.RADIOLOGY_LOCAL_RESEARCH_OPERATOR_TOKEN;
@@ -65,6 +61,7 @@ export async function GET(req:NextRequest){
     schema:"opus-deidentified-openrouter-pilot-readiness/v1",
     enabled:configurationReady(),
     workstationConnected:connected,
+    configurationStatus:reviewedFrameConnectionStatus(),
     provider:"openrouter",
     models:["google/gemini-3.8-flash","anthropic/claude-opus-5.5"],
     framesMaximum:4,sourceMustBePixelReviewed:true,

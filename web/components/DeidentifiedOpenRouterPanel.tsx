@@ -1,6 +1,6 @@
 "use client";
 
-import {useEffect,useRef,useState} from "react";
+import {useCallback,useEffect,useRef,useState} from "react";
 import type {VisionPrivacyPacket} from "../lib/vision-privacy";
 import {canSubmitCombinedVisionReview} from "../lib/primary-analysis-stage";
 import {validateOpusIntegratedSynthesis,type SanitizedModelReview} from "../lib/sanitized-cloud-review";
@@ -16,6 +16,7 @@ import {validateLateDetectorReconciliation,type LateDetectorReconciliation} from
 
 type Props={
   enabledByLocalChecks:boolean;
+  autoConnect?:boolean;
   primaryAnalysisStage?:"idle"|"running"|"completed"|"vision-only"|"cancelled";
   exactReviewedHashes:readonly {imageId:string;sha256:string}[];
   prepareReviewedPacket:()=>VisionPrivacyPacket;
@@ -28,9 +29,10 @@ type Props={
   originalLocalFileIds:readonly string[];
   onOpenOriginalSlice:(localFileId:string)=>void;
 };
-type Ready={schema:string;enabled:boolean;workstationConnected?:boolean;productionPatientCloudRelease:false};
+type Ready={schema:string;enabled:boolean;workstationConnected?:boolean;
+ configurationStatus?:string;productionPatientCloudRelease:false};
 export default function DeidentifiedOpenRouterPanel({
-  enabledByLocalChecks,primaryAnalysisStage="idle",exactReviewedHashes,prepareReviewedPacket,
+  enabledByLocalChecks,autoConnect=false,primaryAnalysisStage="idle",exactReviewedHashes,prepareReviewedPacket,
   originalLocalFileIds,onOpenOriginalSlice,specialistFacts,specialistLocalBinding,localLaa950,originalDetectorEvidence=null,frameRelativeClnEvidence=null,originalCxrEvidence=null,
 }:Props){
   const [server,setServer]=useState<Ready|null>(null),[token,setToken]=useState("");
@@ -49,10 +51,12 @@ export default function DeidentifiedOpenRouterPanel({
   const [lateDraft,setLateDraft]=useState("");
   const [lateWorking,setLateWorking]=useState(false),[lateConsent,setLateConsent]=useState(false);
   const ctl=useRef<AbortController|null>(null);
+  const readinessCtl=useRef<AbortController|null>(null);
+  const [checkingServer,setCheckingServer]=useState(false);
   const modelPathSettled=canSubmitCombinedVisionReview(primaryAnalysisStage);
-  // Never probe even localhost without a clinician/operator click.
-  // This is essential for offline DICOM review and fail-closed browser tests.
-  useEffect(()=>()=>{ctl.current?.abort();},[]);
+  // The primary Analyze click may connect this preapproved workstation, but
+  // merely opening files never probes providers or sends images.
+  useEffect(()=>()=>{ctl.current?.abort();readinessCtl.current?.abort();},[]);
   // Restart/cancellation of the local path invalidates an in-flight remote
   // interpretation. A stale report must never surface against new DICOM.
   useEffect(()=>{
@@ -67,19 +71,39 @@ export default function DeidentifiedOpenRouterPanel({
     setLateReview(null);setLateDraft("");setLateConsent(false);
   },[originalDetectorEvidence]);
   useEffect(()=>{setResult(null);setIncludeCxr(true);setTransferAuthorized(false);setDecisions({});setClinicalSynthesis("");setIntegratedDraft("");},[originalCxrEvidence]);
-  async function checkReadiness(){
-    if(working)return;
+  const checkReadiness=useCallback(async(parentSignal?:AbortSignal)=>{
+    readinessCtl.current?.abort();
+    const controller=new AbortController();readinessCtl.current=controller;
+    const cancelled=AbortSignal.any([controller.signal,...(parentSignal?[parentSignal]:[])]);
+    if(cancelled.aborted)return;
+    setCheckingServer(true);
     setReadinessNote("");setError("");setServer(null);
     try{
-      const r=await fetch("/api/ai/deidentified-openrouter-review",{cache:"no-store"});
+      const r=await fetch("/api/ai/deidentified-openrouter-review",{
+        cache:"no-store",credentials:"same-origin",
+        signal:AbortSignal.any([cancelled,AbortSignal.timeout(8000)]),
+      });
       if(!r.ok)throw Error();
       const x=await r.json() as Ready;
       if(x.schema!=="opus-deidentified-openrouter-pilot-readiness/v1"||
-         x.productionPatientCloudRelease!==false)throw Error();
+         typeof x.enabled!=="boolean"||typeof x.workstationConnected!=="boolean"||
+         (!x.enabled&&x.workstationConnected)||x.productionPatientCloudRelease!==false)throw Error();
+      if(cancelled.aborted)return;
       setServer(x);
-      if(!x.enabled)setReadinessNote("Локальный пилот не включён администратором.");
-    }catch{setReadinessNote("Локальный облачный пилот недоступен.");}
-  }
+      if(!x.enabled)setReadinessNote(x.configurationStatus==="missing-provider"?
+        "Gemini и Opus не подключены: на локальном сервере отсутствует ключ провайдера.":
+        x.configurationStatus==="not-approved"?
+        "Передача обезличенных кадров не разрешена в настройках рабочего места. Локальная обработка продолжается.":
+        "Рабочее место ещё не настроено для подключения Gemini и Opus.");
+    }catch{if(!cancelled.aborted)setReadinessNote("Не удалось проверить подключение Gemini и Opus. Повторите проверку; изображения не отправлялись.");}
+    finally{if(!cancelled.aborted)setCheckingServer(false);}
+  },[]);
+  useEffect(()=>{
+    if(!autoConnect)return;
+    const controller=new AbortController();
+    void checkReadiness(controller.signal);
+    return()=>controller.abort();
+  },[autoConnect,checkReadiness]);
   async function send(){
     if(working||lateWorking||!enabledByLocalChecks||!modelPathSettled||
       (!server?.workstationConnected&&token.length<24)||!transferAuthorized)return;
@@ -289,19 +313,21 @@ export default function DeidentifiedOpenRouterPanel({
     <p role="status"><strong>Режим исследования, не клиническая система.</strong> Даже
       обезличенные изображения остаются медицинскими данными; удаление метаданных
       и OCR не гарантируют анонимность. Ключ OpenRouter остаётся на сервере.</p>
-    <div>
-      <button type="button" disabled={working} onClick={()=>void checkReadiness()}>
-        Подключить Gemini и Opus
+    {checkingServer&&<p role="status">Проверяем подключение Gemini и Opus…</p>}
+    {!server?.workstationConnected&&<div>
+      <button type="button" disabled={working||checkingServer} onClick={()=>void checkReadiness()}>
+        {autoConnect?"Повторить проверку подключения":"Подключить Gemini и Opus"}
       </button>
-    </div>
+    </div>}
     {server?.workstationConnected&&<p role="status">Локальное рабочее место подключено.
       Передача снимков начнётся только после проверки кадров и вашего разрешения ниже.</p>}
-    {!server?.enabled&&<p>Серверный доступ по умолчанию выключен. Нужны
+    {!checkingServer&&!server?.enabled&&<details><summary>Администратору · настройка подключения</summary><p>Нужны
       <code> RADIOLOGY_ENABLE_DEIDENTIFIED_OPENROUTER_PILOT=1</code>,
       <code> RADIOLOGY_OPENROUTER_HEALTH_DATA_APPROVED=1</code>,
       <code> OPENROUTER_API_KEY</code> и
       <code> RADIOLOGY_LOCAL_RESEARCH_OPERATOR_TOKEN</code> (24+ символов).
-      Включать только после проверки прав передачи медицинских данных провайдеру.</p>}
+      либо настроенный локальный сеанс проверенных кадров.
+      Включать только после проверки прав передачи медицинских данных провайдеру.</p></details>}
     {primaryAnalysisStage==="running"&&<p role="status">Ожидаем завершения оригинальных детекторов. Независимые PNG готовятся параллельно, но запрос Gemini → Opus откроется только после локального этапа, чтобы сохранить все модельные результаты.</p>}
     {primaryAnalysisStage==="cancelled"&&<p role="alert">Анализ детекторов отменён. Перезапустите исследование для согласованного заключения.</p>}
     {!enabledByLocalChecks&&<p role="status">Прежде чем отправлять, проверьте

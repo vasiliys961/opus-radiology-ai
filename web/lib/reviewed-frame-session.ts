@@ -4,6 +4,15 @@ import {createHmac,timingSafeEqual} from "node:crypto";
 export const REVIEWED_FRAME_COOKIE="opus_reviewed_frames_operator";
 const AGE=4*60*60*1000;
 type Env=Readonly<Record<string,string|undefined>>;
+export function reviewedFrameConnectionStatus(env:Env=process.env):
+ "ready"|"not-development"|"missing-provider"|"not-approved"|"operator-required"{
+ if(env.NODE_ENV!=="development")return "not-development";
+ if(!env.OPENROUTER_API_KEY?.trim())return "missing-provider";
+ if(env.RADIOLOGY_ENABLE_DEIDENTIFIED_OPENROUTER_PILOT!=="1"||
+  env.RADIOLOGY_OPENROUTER_HEALTH_DATA_APPROVED!=="1")return "not-approved";
+ return env.RADIOLOGY_LOCAL_REVIEWED_FRAME_SESSION==="1"||
+  (env.RADIOLOGY_LOCAL_RESEARCH_OPERATOR_TOKEN?.length??0)>=24?"ready":"operator-required";
+}
 export function reviewedFrameSessionEnabled(env:Env=process.env):boolean{
  return env.NODE_ENV==="development"&&
   env.RADIOLOGY_LOCAL_REVIEWED_FRAME_SESSION==="1"&&

@@ -20,8 +20,12 @@ RADIOLOGY_OPENROUTER_HEALTH_DATA_APPROVED=1
 RADIOLOGY_LOCAL_REVIEWED_FRAME_SESSION=1
 ```
 
-After starting `npm run dev`, use **Подключить Gemini и Opus** in the prepared
-frame panel. This issues a four-hour HttpOnly, SameSite=Strict cookie scoped to
+After starting `npm run dev`, the primary **Анализировать исследование** action
+automatically connects the preapproved workstation while preparing frames.
+Opening DICOM files alone never establishes this connection. A failed check
+offers **Повторить проверку подключения** without rerunning a detector or
+initiating paid inference. Standalone technical panels retain manual connection.
+Connection issues a four-hour HttpOnly, SameSite=Strict cookie scoped to
 `/api/ai/deidentified-openrouter-review`. It authorizes neither the automatic
 public-volume endpoints nor any new image. Every submission still passes the
 existing exact-copy privacy journal, payload, acknowledgement and provider gates.

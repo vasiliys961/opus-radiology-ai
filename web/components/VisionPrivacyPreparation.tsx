@@ -301,6 +301,7 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
     {frames.length>0&&<DeidentifiedOpenRouterPanel
       key={frames.map(f=>f.sha256).join(":")}
       enabledByLocalChecks={pilotReady}
+      autoConnect={autoStartAfterDetectors}
       primaryAnalysisStage={primaryAnalysisStage}
       exactReviewedHashes={frames.map(f=>({imageId:f.frameId,sha256:f.sha256}))}
       prepareReviewedPacket={makePilotPacket}
