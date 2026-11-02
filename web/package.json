@@ -9,7 +9,8 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "node --disable-warning=ExperimentalWarning --experimental-strip-types --test lib/*.test.ts ../scripts/r231-full-browser.test.mjs",
-    "test:browser": "node ../scripts/check-segmentation-browser.mjs"
+    "test:browser": "node ../scripts/check-segmentation-browser.mjs",
+    "setup:analysis": "node ../scripts/setup-local-public-analysis.mjs"
   },
   "dependencies": {
     "@cornerstonejs/core": "4.18.3",
