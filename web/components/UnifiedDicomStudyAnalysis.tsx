@@ -256,7 +256,8 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,resear
  // Keep the native source-bound, consent-gated Vision pathway available.
  const brainVisionOnly=plan.route==="wmh-flair"&&brainTask==="wmh"&&
    canAutoPrepareLocalVision(series)&&
-   ((!flairConfirmed&&!autoFlair.eligible)||(!autoWmhReady&&!token.trim()));
+   ((!flairConfirmed&&!autoFlair.eligible)||(!autoWmhReady&&!token.trim())||
+     (!researchMode&&(!sourceUrl.startsWith("https://")||!sourceLicense.trim())));
  const readinessChecksPending=chestPlan?
    (clnChecking||lungscapeChecking||autoMonaiChecking||autoEffusionChecking||autoPeChecking||autoNodesChecking):
    plan.route==="totalseg-abdomen"?autoAbdomenChecking:
