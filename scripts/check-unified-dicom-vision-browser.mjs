@@ -38,7 +38,7 @@ try{
  page.on("pageerror",e=>errors.push(e.message));
  page.on("request",r=>{if(new URL(r.url()).pathname==="/api/ai/deidentified-openrouter-review")
   aiRequests.push(r.method());});
- await page.goto(baseUrl+"/viewer",{waitUntil:"domcontentloaded",timeout:45000});
+ await page.goto(baseUrl+"/viewer?research=1",{waitUntil:"domcontentloaded",timeout:45000});
  const files=(await readdir(join(fixture,"dicom"))).sort().map(name=>join(fixture,"dicom",name));
  assert.equal(files.length,32);
  await page.locator('input[accept*=".dcm"]').setInputFiles(files);
