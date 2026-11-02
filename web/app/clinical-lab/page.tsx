@@ -51,7 +51,7 @@ export default function ClinicalLab(){
     finally{setBusy(false);}
   }
   return <main className="cl-page">
-    <nav className="cl-top"><a href="/">← OPUS RADIOLOGY AI</a><span>Клиническая лаборатория · исследовательский режим</span></nav>
+    <nav className="cl-top"><a href="/technical">← Техническая панель</a><span>Клиническая лаборатория · исследовательский режим</span><a href="/guide">Руководство</a></nav>
     <section className="cl-wrap">
       <header className="cl-hero">
         <span>ПАТОЛОГИЧЕСКИЕ МОДЕЛИ · ЧЕСТНЫЙ СТАТУС</span>
