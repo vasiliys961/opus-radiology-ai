@@ -684,21 +684,24 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  }
  return <section className="cs-geometry" aria-label="Единый анализ DICOM">
   <h2>Анализ исследования</h2>
-  <p>Единый запуск: автоматический выбор доступных оригинальных детекторов и локальная подготовка кадров для Gemini. Gemini независимо просматривает изображения параллельно детекторам, затем Opus сопоставляет оба результата и формирует один протокол рентгенолога.</p>
+  <p>Одна кнопка для доступных моделей и формирования предварительного заключения.</p>
    {confirmableChest&&<label><input type="checkbox" checked={clinicianConfirmedChest}
      disabled={busy} onChange={e=>setClinicianConfirmedChest(e.target.checked)}/>
-     Подтверждаю, что это КТ грудной клетки (исходные DICOM без однозначного анатомического кода либо с признаком реконструкции).
-     Изображения и геометрию проверил; это не локализатор. Разрешаю исследовательский запуск на данной серии.
+     Проверил снимки: это КТ грудной клетки, не локализатор.
    </label>}
-  <details><summary>Дополнительно · состояние серверов и оригинальных весов</summary><OriginalWorkerFleetReadiness/></details>
-  <p><strong>{plan.title}</strong> · текущая исходная DICOM-серия. Автоматический выбор по известной модальности;
-    наличие настоящих весов подтверждается только worker при запуске.</p>
+  <p><strong>{plan.route==="monai-nodules"?"КТ грудной клетки":
+     plan.route==="totalseg-abdomen"?"КТ брюшной полости":
+     plan.route==="ianpan-ich"?"КТ головного мозга":
+     plan.route==="wmh-flair"?"МРТ головного мозга":
+     plan.route==="xrv-cxr"?"Рентгенография":"Исследование DICOM"}</strong>
+     {plan.route?" · подходящие модели выбираются автоматически":""}</p>
   {plan.reason&&<p role="status">{visionOnlyAvailable?
      "Локальный детектор не назначен: "+plan.reason+" Доступен независимый Gemini + Opus.":
      "Не запущено: "+plan.reason}</p>}
   {(plan.route||visionOnlyAvailable)&&<>
    {plan.route&&<details>
-    <summary>Настройки приватного исполнителя и разрешение</summary>
+    <summary>Дополнительно · параметры моделей и уточнение протокола</summary>
+    <details><summary>Состояние серверов моделей</summary><OriginalWorkerFleetReadiness/></details>
     {!xrvPlan&&!(plan.route==="totalseg-abdomen"&&autoAbdomenReady)&&!(chestPlan&&autoMonaiReady)&&!(plan.route==="wmh-flair"&&(brainTask==="wmh"?autoWmhReady:autoBrainReady))&&!(plan.route==="ianpan-ich"&&autoIchReady)&&<label>Адрес локального worker <input type="text" value={endpoint} disabled={busy} onChange={e=>setEndpoint(e.target.value)}/></label>}
     {!xrvPlan&&!(plan.route==="totalseg-abdomen"&&autoAbdomenReady)&&!(chestPlan&&autoMonaiReady)&&!(plan.route==="wmh-flair"&&(brainTask==="wmh"?autoWmhReady:autoBrainReady))&&!(plan.route==="ianpan-ich"&&autoIchReady)&&<label>Токен worker <input type="password" autoComplete="off" value={token} disabled={busy} onChange={e=>setToken(e.target.value)}/></label>}
     {plan.route==="totalseg-abdomen"&&<label><input type="checkbox" checked={ncctVerified} disabled={busy} onChange={e=>setNcctVerified(e.target.checked)}/> По исходному протоколу подтверждаю нативную КТ без контрастирования (иначе HU-поиск камней не выполняется)</label>}
@@ -819,8 +822,9 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
     <p>MONAI, task315, оригинальный Raidionics, исследовательский PE, TotalSegmentator живота и WMH используют разрешённые изображения в loopback worker; ianpan передаёт только SHA-256 и анализирует заранее установленную идентичную публичную КТ. Облачная передача не выполняется.</p>
    </details>}
    {/* Authorization is a primary clinical action, not a hidden developer setting. */}
-    <label><input type="checkbox" checked={authorized} disabled={busy} onChange={e=>setAuthorized(e.target.checked)}/>
-     Подтверждаю, что исследование разрешено к обработке и обезличено. Разрешаю локальный анализ и передачу очищенных копий изображений в Gemini для получения предварительного заключения Opus. Для обычных пациентских исследований без соответствующих разрешений облачная передача не выполняется.</label>
+    <label className="cs-clinician-consent"><input type="checkbox" checked={authorized} disabled={busy}
+      onChange={e=>setAuthorized(e.target.checked)}/>
+      Разрешаю анализ этого обезличенного исследования и передачу очищенных изображений в Gemini.</label>
    <button type="button" disabled={!ready} onClick={()=>void launch()}>
     {busy?"Выполняется реальный анализ...":"Анализировать исследование"}
    </button>
@@ -830,10 +834,12 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
       "Серверные оригинальные веса КТ живота пока не готовы либо источник не подтверждён. Токены в автоматическом режиме врачу не нужны.":
       visionOnlyAvailable?
       "Подтвердите разрешённый источник для локальной подготовки Gemini + Opus. Облачный вызов разрешается отдельно.":
-      "Для запуска требуется доступная оригинальная модель и разрешение на исследовательские данные."}</p>}
+      "Разрешите анализ исследования. Недоступные модели будут пропущены."}</p>}
   </>}
   {status&&<p role="status">{status}</p>}
   {error&&<p role="alert">Не выполнено: {error}</p>}
+  <details className="cs-geometry" aria-label="Детальные результаты моделей">
+    <summary>Результаты детекторов и проверка отдельных находок</summary>
   {xrvReport&&<section className="cs-geometry" aria-label="Шесть настоящих модельных показателей TorchXRayVision">
     <h3>TorchXRayVision NIH DenseNet121 · исследовательская рентгенография</h3>
     <p>Один обученный детектор, шесть некалиброванных показателей, а не шесть
@@ -1072,6 +1078,6 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
       nodules:chestNodules,cln:chestCln,lungscape:lungscapeResult,effusion:chestEffusion,pe:chestPe,nodes:chestNodes,
       abdomen:abdomenResult,ich,wmh,brain:brainResult,
     }}/></details>}
-  <p>Основной Gemini Vision → Claude Opus доступен справа после проверки обезличенных кадров. Второй числовой консилиум не нужен для стандартного заключения.</p>
+  </details>
  </section>;
 }

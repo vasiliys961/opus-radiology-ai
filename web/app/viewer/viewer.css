@@ -250,3 +250,17 @@
 .cs-nodule-candidates{max-height:310px;overflow:auto;display:grid;gap:7px}.cs-nodule-candidates button{border:1px solid #bdd9ce;background:#f5faf8;border-radius:9px;padding:10px;text-align:left;display:grid;gap:5px;color:#245348;cursor:pointer}
 .cs-nodule-candidates button span,.cs-nodule-candidates button small{font-size:11px}
 @media(max-width:780px){.cs-nodule-view{grid-template-columns:1fr}}
+
+/* Physician-first interface: one clear clinical action, technical controls secondary. */
+.cs-page .cs-geometry>summary{cursor:pointer;color:#547582;font-size:12px;font-weight:650;padding:9px 0}
+.cs-page .cs-sidebar section[aria-label="Единый анализ DICOM"]>h2{font-size:17px;margin:0 0 5px}
+.cs-page .cs-sidebar section[aria-label="Единый анализ DICOM"]>p{font-size:12px;line-height:1.45;color:#617783}
+.cs-page .cs-sidebar section[aria-label="Единый анализ DICOM"]>button:not(:disabled){background:#0c9183;color:#fff;border:1px solid #0c9183;border-radius:8px;font-weight:700;padding:13px 16px;width:100%;cursor:pointer}
+.cs-page .cs-clinician-consent{display:flex;gap:9px;align-items:flex-start;font-size:12px;line-height:1.45;color:#354c58;margin:12px 0}
+.cs-page .cs-clinician-consent input{flex:0 0 auto;margin-top:3px}
+.cs-page .cs-intro{margin-bottom:17px}
+.cs-page .cs-intro h1{font-size:clamp(23px,2.5vw,31px)}
+.cs-page .cs-container>details:first-child{margin:0 0 12px;border:0}
+.cs-page .cs-container>details:first-child>summary{font-size:11px;color:#798b96}
+.cs-page .cs-sidebar .cs-geometry>summary{font-weight:600}
+.cs-page .cs-stage>.cs-geometry{background:#fff;border:1px solid #e2ebed;border-radius:10px;padding:14px;margin-top:14px}

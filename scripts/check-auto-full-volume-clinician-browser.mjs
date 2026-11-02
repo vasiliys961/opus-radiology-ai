@@ -98,7 +98,7 @@ try{
  await page.locator(".cs-series-list button").first().click();
  const primary=page.locator('section[aria-label="Единый анализ DICOM"]');
  await primary.waitFor();
- const research=primary.getByRole("checkbox",{name:/Подтверждаю, что исследование разрешено/});
+ const research=primary.getByRole("checkbox",{name:/Разрешаю анализ этого обезличенного исследования/});
  await research.check();
  const button=primary.getByRole("button",{name:"Анализировать исследование"});
  await page.waitForFunction(()=>{
