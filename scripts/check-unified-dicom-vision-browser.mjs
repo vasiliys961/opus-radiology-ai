@@ -49,7 +49,7 @@ try{
     "Advanced planning must be absent until the doctor starts analysis");
   const analysis=page.locator('section[aria-label="Единый анализ DICOM"]');
  await analysis.waitFor();
- assert.match(await analysis.innerText(),/Грудная клетка/);
+ assert.match(await analysis.innerText(),/КТ грудной клетки/);
  assert.doesNotMatch(await analysis.innerText(),/Нет совместимого исполнительного пути/);
  await analysis.getByText("Дополнительно · параметры моделей и уточнение протокола",{exact:true}).click();
  await analysis.getByRole("checkbox",{name:/Разрешаю анализ этого обезличенного исследования/}).check();
