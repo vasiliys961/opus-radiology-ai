@@ -683,6 +683,30 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
    setBusy(false);onAnalysisStage?.(series.key,"cancelled");
    setStatus("Анализ отменён. Неинтерпретированные зоны остаются неоценёнными.");
  }
+ // Numerical findings are assembled automatically after real worker execution.
+ // A collapsed technical detail panel must never be required for Opus input.
+ const autoDetectorBundle=useMemo(()=>{
+   if(series.modality!=="CT"&&series.modality!=="MR")return null;
+   const region=plan.route==="monai-nodules"?"chest":
+     plan.route==="totalseg-abdomen"?"abdomen":"brain";
+   const nativeSourceSha256=lungscapeResult?.sourceNiftiSha256??
+      chestCln?.sourceNiftiSha256??chestNodules?.source.sha256??
+      chestEffusion?.sourceSha256??chestPe?.sourceNiftiSHA256??
+      chestNodes?.sourceNiftiSHA256??abdomenResult?.sourceNiftiSha256??null;
+   try{
+     return assembleSanitizedDetectorBundle({
+       modality:series.modality,region,nativeSourceSha256,
+       nodules:chestNodules,cln:chestCln,lungscape:lungscapeResult,
+       effusion:chestEffusion,pe:chestPe,nodes:chestNodes,
+       abdomen:abdomenResult,ich,wmh,brain:brainResult,
+     });
+   }catch{return null;}
+ },[series.modality,plan.route,lungscapeResult,chestCln,chestNodules,
+    chestEffusion,chestPe,chestNodes,abdomenResult,ich,wmh,brainResult]);
+ useEffect(()=>{
+   onDetectorEvidence?.(series.key,autoDetectorBundle);
+ },[series.key,autoDetectorBundle,onDetectorEvidence]);
+
  return <section className="cs-geometry" aria-label="Единый анализ DICOM">
   <h2>Анализ исследования</h2>
    <p>Модели выбираются автоматически по типу исследования.</p>
