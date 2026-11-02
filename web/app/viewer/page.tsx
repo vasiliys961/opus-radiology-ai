@@ -178,7 +178,7 @@ export default function ViewerPage() {
           </>}
           {researchMode&&selected && <details className="cs-geometry"><summary>Сведения об исследовании</summary><h3>Контроль геометрии</h3><p>{selected.spatiallySorted ? "✓ Пространственный порядок подтверждён" : "⚠ Порядок условный"}</p><p>{selected.volumeReady ? `✓ Предварительная геометрия для будущего 3D · ${selected.sliceSpacingMm?.toFixed(2)} мм` : "3D/MPR НЕ РАЗРЕШЕНЫ"}</p>{selected.warning && <p>{selected.warning}</p>}</details>}
           {selected && <UnifiedDicomStudyAnalysis researchMode={researchMode} key={"unified-"+selected.key} series={selected} allSeries={series} files={indexedById}
-            onMonaiReady={(file,session,report)=>{setPreparedMonaiSource(file);setPreparedMonaiSession(session);setPreparedMonaiResult(report??null);setSourceMode("nodules");}}
+            onMonaiReady={(file,session,report)=>{setPreparedMonaiSource(file);setPreparedMonaiSession(session);setPreparedMonaiResult(report??null);if(researchMode)setSourceMode("nodules");}}
             onNavigate={setWmhSlice}
             onReadyForVision={key=>{if(selected?.key===key){setVisionFromPrimary(true);setVisionOpen(true);}}}
             onAnalysisStage={(key,stage)=>{if(selected?.key===key)setPrimaryStage({seriesKey:key,stage});}}
