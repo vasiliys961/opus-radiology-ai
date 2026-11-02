@@ -63,8 +63,10 @@ export function suggestPrimaryDicomSeries(series:readonly DicomSeries[],
 export function canAutoPrepareLocalVision(series:DicomSeries|undefined):boolean{
  if(!series||(series.modality!=="CT"&&series.modality!=="MR")||
     !series.volumeReady||!series.spatiallySorted||series.members.length<2||
-    series.members.some(m=>m.metadata.imageRole==="LOCALIZER"||
-      m.metadata.imageRole==="DERIVED"))return false;
+    series.members.some(m=>m.metadata.imageRole==="LOCALIZER"))return false;
+ // DERIVED is not permission for quantitative/native model inference. It can
+ // still be a valid source-linked reconstructed image for reviewed 2-D Vision.
+ // Preserve the original tag and leave planNativeStudyAnalysis unchanged.
  // Use the same source, SOP and physical geometry validation as the preview
  // planner. A panel must not auto-open for a source that cannot be decoded.
  return planVisionFrameSamples([series],series.key).status==="ready-for-local-preview";

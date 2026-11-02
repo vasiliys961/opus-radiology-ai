@@ -62,6 +62,20 @@ test("automatically redacts actual burned-in pixels, OCR rechecks original-bound
   ["ocr-started","ocr-completed","redacted","ocr-started","ocr-completed"]);
  assert.doesNotThrow(()=>exportPrivacyJournal(result.journal,result.frames));
 });
+test("reviewed workflow preserves diagnostic pixels despite OCR false positives and still requires review",async()=>{
+ const original=createPrivacyFrame(png(55),"frame-1","CT");
+ const result=await autoPrepareVisionPrivacy([preview(55)],"CT",new AbortController().signal,()=>{},{
+  autoRedact:false,
+  scan:async f=>({sha256:f.sha256,regions:[{rectangle:{x:0,y:0,width:1,height:1},confidence:98}]}),
+  redact:async()=>{throw Error("Unreviewed OCR must not erase possible lesions");},
+ });
+ assert.equal(result.frames[0].sha256,original.sha256);
+ assert.equal(result.frames[0].redactions.length,0);
+ assert.equal(result.unresolved,1);
+ assert.equal(result.frames[0].pixelReviewSha256,null);
+ assert.equal(result.frames[0].visualReviewSha256,null);
+ assert.deepEqual(result.journal.events.map(x=>x.action.kind),["ocr-started","ocr-completed"]);
+});
 test("failed OCR aborts local privacy readiness and never creates consent",async()=>{
  await assert.rejects(
   autoPrepareVisionPrivacy([preview(1)],"CT",new AbortController().signal,

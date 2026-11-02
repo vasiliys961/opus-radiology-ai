@@ -15,8 +15,11 @@ export async function autoPrepareVisionPrivacy(
  previews:readonly (string|undefined)[], modality:"CT"|"MR"|"CR"|"DX",
  signal:AbortSignal,onProgress:(s:string)=>void=()=>{},
  options?:{
-  scan:(frame:PrivacyFrame,signal:AbortSignal)=>Promise<PrivacyOcrResult>;
-  redact:(frame:PrivacyFrame,regions:PrivacyFrame["redactions"])=>Promise<PrivacyFrame>;
+  scan?:(frame:PrivacyFrame,signal:AbortSignal)=>Promise<PrivacyOcrResult>;
+  redact?:(frame:PrivacyFrame,regions:PrivacyFrame["redactions"])=>Promise<PrivacyFrame>;
+  /** Reviewed workflow preserves diagnostic pixels until the physician decides.
+   * Existing explicitly approved public auto-volume mode retains its policy. */
+  autoRedact?:boolean;
  },
 ):Promise<AutomaticPrivacyPreparation>{
  if(previews.length===0||previews.length>4||previews.some(p=>!p?.startsWith("data:image/png;base64,")))
@@ -46,7 +49,7 @@ export async function autoPrepareVisionPrivacy(
    write(f,{kind:signal.aborted?"ocr-cancelled":"ocr-failed"});
    throw e;
   }
-  if(result.regions.length>0&&result.regions.length<=32){
+  if(options?.autoRedact!==false&&result.regions.length>0&&result.regions.length<=32){
    const before=f;
    const rectangles=result.regions.map(r=>r.rectangle);
    f=await redact(f,rectangles);

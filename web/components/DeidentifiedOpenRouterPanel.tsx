@@ -51,6 +51,12 @@ export default function DeidentifiedOpenRouterPanel({
   const [lateDraft,setLateDraft]=useState("");
   const [lateWorking,setLateWorking]=useState(false),[lateConsent,setLateConsent]=useState(false);
   const ctl=useRef<AbortController|null>(null);
+  const reportSection=useRef<HTMLElement|null>(null);
+  useEffect(()=>{
+    if(!result?.opusSynthesis)return;
+    reportSection.current?.scrollIntoView({behavior:"smooth",block:"start"});
+    reportSection.current?.focus({preventScroll:true});
+  },[result]);
   const readinessCtl=useRef<AbortController|null>(null);
   const [checkingServer,setCheckingServer]=useState(false);
   const modelPathSettled=canSubmitCombinedVisionReview(primaryAnalysisStage);
@@ -383,7 +389,8 @@ export default function DeidentifiedOpenRouterPanel({
       <p><strong>Ответ моделей получен.</strong> Это черновые визуальные
         наблюдения по отдельным срезам, не полноценный анализ исследования
         и не диагноз. Врач сверяет их с исходным DICOM локально.</p>
-      {result.opusSynthesis&&<section aria-label="Объединённое заключение Opus по Gemini JSON и детекторам" className="ora-reviewer-note">
+      {result.opusSynthesis&&<section ref={reportSection} tabIndex={-1}
+        aria-label="Объединённое заключение Opus по Gemini JSON и детекторам" className="ora-reviewer-note">
         <h4>Готовое описание и заключение · редактирование и сохранение TXT</h4>
         <p>Opus сопоставил независимый JSON Gemini, собственный просмотр выбранных кадров
           и выполненные детекторы. Охват ограничен выборкой, а не всей КТ/МРТ.

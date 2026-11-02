@@ -710,8 +710,10 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,resear
      plan.route==="wmh-flair"?"МРТ головного мозга":
      plan.route==="xrv-cxr"?"Рентгенография":"Исследование DICOM"}</strong>
      {plan.route?" · подходящие модели выбираются автоматически":""}</p>}
-  {researchMode&&plan.reason&&<p role="status">{visionOnlyAvailable?
-     "Локальный детектор не назначен: "+plan.reason+" Доступен независимый Gemini + Opus.":
+  {plan.reason&&<p role="status">{visionOnlyAvailable?
+     (series.members.some(m=>m.metadata.imageRole==="DERIVED")?
+       "Серия помечена DICOM как производная (DERIVED). Доступен визуальный анализ проверенных кадров; количественные детекторы для исходной серии не назначены.":
+       "Локальный детектор не назначен: "+plan.reason+" Доступен независимый Gemini + Opus."):
      "Не запущено: "+plan.reason}</p>}
   {(plan.route||visionOnlyAvailable)&&<>
    {researchMode&&plan.route&&<details>

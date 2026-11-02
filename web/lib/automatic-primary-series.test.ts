@@ -46,7 +46,8 @@ assert.equal(canAutoPrepareLocalVision(chest),true,
  "Original CT can prepare local PNG samples without cloud permission");
 assert.equal(canAutoPrepareLocalVision(series("brain","MR","HEAD",28,true)),true);
 assert.equal(canAutoPrepareLocalVision(scout),false);
-assert.equal(canAutoPrepareLocalVision(derived),false);
+assert.equal(canAutoPrepareLocalVision(derived),true,
+ "A geometry-verified derived reconstruction may prepare reviewed PNGs without enabling quantitative models");
 assert.equal(canAutoPrepareLocalVision(series("broken","MR","HEAD",30,false)),false);
 assert.equal(canAutoPrepareLocalVision(series("xray","DX","CHEST",1,false)),false);
 assert.equal(canAutoPrepareLocalVision({...chest,members:chest.members.map((m,i)=>i===0?
@@ -69,7 +70,9 @@ assert.equal(canUseVisionOnlyAsPrimary(knee,allIds(knee)),true,
  "Verified MRI of a joint must remain reviewable even without a native detector");
 assert.equal(canUseVisionOnlyAsPrimary(chest,allIds(chest)),false,
  "Original chest model route takes precedence over Vision-only fallback");
-assert.equal(canUseVisionOnlyAsPrimary(derived,allIds(derived)),false);
+assert.equal(canUseVisionOnlyAsPrimary(derived,allIds(derived)),true);
+assert.equal(select([derived]).runnable,false,"DERIVED never becomes native model eligibility");
+assert.equal(select([derived]).visionOnly,true,"Valid source-linked DERIVED frames retain independent Vision");
 assert.equal(canUseVisionOnlyAsPrimary(pelvis,new Set()),false,
  "Vision-only must reject missing source pixels");
 assert.equal(canUseVisionOnlyAsPrimary({...pelvis,spatiallySorted:false},allIds(pelvis)),false);

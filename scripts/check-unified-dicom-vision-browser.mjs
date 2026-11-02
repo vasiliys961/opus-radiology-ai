@@ -19,11 +19,12 @@ const port=await new Promise((resolve,reject)=>{
  const probe=createServer();probe.once("error",reject);
  probe.listen(0,"127.0.0.1",()=>{const addr=probe.address();probe.close(()=>resolve(addr.port));});
 });
-const baseUrl="http://127.0.0.1:"+port;
-const server=spawn(process.execPath,["node_modules/next/dist/bin/next","start",
+const baseUrl=process.env.OPUS_TEST_BASE_URL??"http://127.0.0.1:"+port;
+assert.match(baseUrl,/^http:\/\/(?:localhost|127\.0\.0\.1):[0-9]+$/);
+const server=process.env.OPUS_TEST_BASE_URL?null:spawn(process.execPath,["node_modules/next/dist/bin/next","start",
  "--hostname","127.0.0.1","--port",String(port)],{cwd:join(root,"web"),stdio:["ignore","pipe","pipe"]});
-let logs="";server.stdout.on("data",b=>logs+=String(b).slice(-3000));
-server.stderr.on("data",b=>logs+=String(b).slice(-3000));
+let logs="";server?.stdout.on("data",b=>logs+=String(b).slice(-3000));
+server?.stderr.on("data",b=>logs+=String(b).slice(-3000));
 let browser,page;
 try{
  for(let i=0;i<120;i++){
@@ -31,16 +32,20 @@ try{
   if(i===119)throw Error("Next server did not start: "+logs.slice(-1500));
   await new Promise(resolve=>setTimeout(resolve,250));
  }
- browser=await chromium.launch({headless:true,args:["--no-sandbox",
+ browser=await chromium.launch({headless:true,
+  ...(process.env.OPUS_BROWSER_EXECUTABLE?{executablePath:process.env.OPUS_BROWSER_EXECUTABLE}:{}),args:["--no-sandbox",
   "--use-gl=angle","--use-angle=swiftshader","--enable-unsafe-swiftshader"]});
  const context=await browser.newContext({viewport:{width:1600,height:1000},acceptDownloads:true});
  page=await context.newPage();const errors=[];const aiRequests=[];
  page.on("pageerror",e=>errors.push(e.message));
- page.on("request",r=>{if(new URL(r.url()).pathname==="/api/ai/deidentified-openrouter-review")
+ page.on("request",r=>{if(r.method()==="POST"&&new URL(r.url()).pathname==="/api/ai/deidentified-openrouter-review")
   aiRequests.push(r.method());});
  await page.goto(baseUrl+"/viewer?research=1",{waitUntil:"domcontentloaded",timeout:45000});
  const files=(await readdir(join(fixture,"dicom"))).sort().map(name=>join(fixture,"dicom",name));
  assert.equal(files.length,32);
+ await page.waitForFunction(()=>{
+  const input=document.querySelector('input[accept*=".dcm"]');return input&&!input.disabled;
+ },null,{timeout:45000});
  await page.locator('input[accept*=".dcm"]').setInputFiles(files);
  await page.getByText(/Проиндексировано 32 DICOM/).waitFor({timeout:45000});
  await page.locator(".cs-series-list button").first().click();
@@ -78,8 +83,16 @@ try{
   const privacy=page.locator('section[aria-label="Подготовка обезличенных кадров"]');
  await privacy.waitFor();
  await privacy.getByText(/Проверьте все 4 исходящих PNG/).waitFor({timeout:180000});
- await page.waitForFunction(()=>{const s=document.querySelector('section[aria-label="Подготовка обезличенных кадров"]');
-  return [...(s?.querySelectorAll("button")??[])].filter(b=>b.textContent?.includes("OCR 0 областей")).length===4;},null,{timeout:150000});
+ await page.waitForFunction(()=>{const s=document.querySelector('section[aria-label="Все исходящие обезличенные копии"]');
+  return [...(s?.querySelectorAll("button")??[])].filter(b=>/OCR [0-9]+ областей/.test(b.textContent??"")).length===4;},null,{timeout:150000});
+ // The generated phantom has no burned-in text. Reviewed OCR false positives
+ // must be acknowledged rather than erasing the synthetic anatomy by default.
+ const copies=page.getByRole("region",{name:"Все исходящие обезличенные копии",exact:true});
+ for(let i=0;i<4;i++){
+  await copies.getByRole("button").nth(i).click();
+  const retain=privacy.getByRole("button",{name:"Оставить надписи: не идентифицируют пациента",exact:true});
+  if(await retain.count()&&await retain.isEnabled())await retain.click();
+ }
  assert.equal(aiRequests.length,0,"OCR must finish locally without cloud access");
  const cloud=page.locator('section[aria-label="Отправка проверенных обезличенных CT/MR кадров в OpenRouter"]');
  const send=cloud.getByRole("button",{name:"Подтвердить передачу и создать предварительное заключение"});
@@ -98,7 +111,7 @@ try{
   const req=route.request();
   if(req.method()==="GET")return route.fulfill({status:200,contentType:"application/json",
    body:JSON.stringify({schema:"opus-deidentified-openrouter-pilot-readiness/v1",
-    enabled:true,provider:"openrouter",productionPatientCloudRelease:false})});
+    enabled:true,workstationConnected:false,provider:"openrouter",productionPatientCloudRelease:false})});
   assert.equal(req.method(),"POST");
   postCount++;posted=req.postDataJSON();const packet=posted.packet;
   assert.equal(posted.acknowledgeClinicianLawfulDisclosure,true);
@@ -134,6 +147,7 @@ try{
    }};
   await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify(response)});
  });
+ await cloud.getByText("Дополнительно · пароль оператора",{exact:true}).click();
  await cloud.getByRole("textbox",{name:"Локальный пароль оператора"}).fill("test-operator-token-0123456789");
  await cloud.getByRole("checkbox",{name:/Я проверил все исходящие PNG/}).check();
  assert.equal(await send.isDisabled(),false);
@@ -144,6 +158,10 @@ try{
  assert.match(responses,/Gemini Vision/);assert.match(responses,/Opus Vision/);
  const integrated=cloud.locator('section[aria-label="Объединённое заключение Opus по Gemini JSON и детекторам"]');
  await integrated.waitFor();
+ await page.waitForFunction(()=>document.activeElement?.getAttribute("aria-label")===
+  "Объединённое заключение Opus по Gemini JSON и детекторам");
+ assert.equal(await integrated.evaluate(el=>document.activeElement===el),true,
+   "Completed report receives focus so the physician can find it below the preparation tools");
  const reportField=integrated.getByRole("textbox",{name:"Редактируемое описание и заключение рентгенолога"});
  assert.equal(await reportField.inputValue(),mockedLongProtocol,
    "The entire >6000-character response must be visible in the physician editor");
@@ -202,6 +220,6 @@ try{
  process.exitCode=1;
 }finally{
  await browser?.close().catch(()=>{});
- server.kill("SIGTERM");
+ server?.kill("SIGTERM");
  await rm(fixture,{recursive:true,force:true}).catch(()=>{});
 }

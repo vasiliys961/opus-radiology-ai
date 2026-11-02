@@ -56,6 +56,8 @@ const CornerstoneStack = dynamic(() => import("../../components/CornerstoneStack
 type Indexed = { id: string; file: File; header: Awaited<ReturnType<typeof readDicomSeriesHeader>> };
 
 export default function ViewerPage() {
+  const [clientReady,setClientReady]=useState(false);
+  useEffect(()=>setClientReady(true),[]);
   const folderPicker = useRef<HTMLInputElement>(null);
   const [sourceMode,setSourceMode] = useState<"dicom"|"nifti"|"nodules"|"colon"|"coverage"|"morphometry">("dicom");
   const [indexed, setIndexed] = useState<Indexed[]>([]);
@@ -163,14 +165,14 @@ export default function ViewerPage() {
         <aside className="cs-sidebar">
           <h2>Загрузить DICOM</h2>
           <p>Учебные или разрешённые обезличенные снимки.</p>
-          <label className="cs-picker">Выбрать DICOM-файлы <input type="file" multiple accept=".dcm,.dicom,application/dicom" onChange={onPick} disabled={reading}/></label>
-          <button type="button" className="cs-outline" disabled={reading} onClick={() => {
+          <label className="cs-picker">Выбрать DICOM-файлы <input type="file" multiple accept=".dcm,.dicom,application/dicom" onChange={onPick} disabled={reading||!clientReady}/></label>
+          <button type="button" className="cs-outline" disabled={reading||!clientReady} onClick={() => {
             if (folderPicker.current) {
               (folderPicker.current as HTMLInputElement & { webkitdirectory: boolean }).webkitdirectory = true;
               folderPicker.current.click();
             }
           }}>Выбрать папку DICOM</button>
-          <input ref={folderPicker} type="file" className="cs-hidden" multiple onChange={onPick}/>
+          <input ref={folderPicker} type="file" className="cs-hidden" multiple onChange={onPick} disabled={reading||!clientReady}/>
           <div className="cs-message" role="status">{reading ? "Идёт индексация…" : message}</div>
           {series.length > 0 && <>
             <h3>Серии ({series.length})</h3>

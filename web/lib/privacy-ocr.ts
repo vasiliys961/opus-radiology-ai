@@ -1,4 +1,4 @@
-import { acquireBrowserCompute } from "./browser-compute-slot.ts";
+import { acquireBrowserComputeWhenAvailable } from "./browser-compute-slot.ts";
 import { createPrivacyFrame,pngFromBase64,type PrivacyFrame,type PrivacyRectangle } from "./vision-privacy.ts";
 import { OCR_ASSET_PREFIX } from "./privacy-ocr-assets.ts";
 export type PrivacyTextRegion={rectangle:PrivacyRectangle;confidence:number};
@@ -18,7 +18,8 @@ export function normalizePrivacyOcr(value:unknown,frame:PrivacyFrame):PrivacyOcr
   return {sha256:frame.sha256,regions};
 }
 export async function scanPrivacyText(frame:PrivacyFrame,signal:AbortSignal):Promise<PrivacyOcrResult> {
-  const release=acquireBrowserCompute("privacy-ocr");
+  const admission=acquireBrowserComputeWhenAvailable("privacy-ocr",signal);
+  const release=typeof admission==="function"?admission:await admission;
   let worker:Worker|undefined;
   try{
     const clean=createPrivacyFrame(pngFromBase64(frame.pngBase64),frame.frameId,frame.modality,frame.redactions);

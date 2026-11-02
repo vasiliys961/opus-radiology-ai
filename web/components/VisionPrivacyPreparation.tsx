@@ -59,17 +59,16 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
     const version=++generation.current;
     scan.current=controller;
     setBusy(true);setOcrBusy(true);setError("");
-    setOcrNotice("Автоматически очищаем PNG и проверяем OCR всех выбранных кадров локально…");
+    setOcrNotice("Подготавливаем PNG и проверяем OCR всех выбранных кадров локально, без закрашивания анатомии…");
     void autoPrepareVisionPrivacy(previews,modality as "CT"|"MR"|"CR"|"DX",controller.signal,notice=>{
       if(version===generation.current&&!controller.signal.aborted)setOcrNotice(notice);
-    }).then(result=>{
+    },{autoRedact:false}).then(result=>{
       if(version!==generation.current||controller.signal.aborted)return;
       journalRef.current=result.journal;setJournal(result.journal);
       setFrames(result.frames);setOcr(result.ocr);setSelected(0);
       setKeptText({});setRectangle({x:0,y:0,width:1,height:1});
-      setOcrNotice("Локальная обработка завершена: скрыто OCR-областей "+
-        result.redacted+". "+(result.unresolved>0?
-        "В части кадров остались надписи — необходимо ручное решение.":
+      setOcrNotice("Локальная проверка завершена. Пиксели автоматически не закрашивались. "+(result.unresolved>0?
+        "OCR отметил возможные надписи: проверьте их, скройте идентификаторы или подтвердите ложное срабатывание.":
         "Все кадры ожидают проверки врача перед передачей."));
     }).catch(e=>{
       if(version===generation.current&&!controller.signal.aborted)
@@ -219,9 +218,9 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
   };
   return <section className="ora-privacy-preparation" aria-label="Подготовка обезличенных кадров">
     <h3>Автоматическая подготовка обезличенных кадров</h3>
-    <p>После запуска детекторов PNG создаются автоматически: локальный OCR ищет текст,
-      обнаруженные области закрашиваются в копиях, затем OCR повторяется. Оригинальные
-      DICOM не изменяются. Проверка врачом всё равно обязательна.</p>
+    <p>PNG создаются автоматически: локальный OCR отмечает возможные надписи.
+      Анатомия не закрашивается автоматически. Проверьте отмеченные области:
+      скройте идентификаторы или оставьте ложные срабатывания. Оригинальные DICOM не изменяются.</p>
     <p>В копии остаются только PNG-пиксели выбранных срезов: без DICOM-тегов, исходных UID, имён файлов и клинического текста. Надписи внутри изображения нужно удалить отдельно.</p>
     <button type="button" disabled={busy||previews.some(p=>!p)} onClick={prepare}>{frames.length?"Создать копии заново":"Подготовить копии без метаданных"}</button>
     <label>Восстановить копии с журналом JSON <input type="file" accept=".json,application/json" disabled={busy||previews.some(p=>!p)}
@@ -246,6 +245,13 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
         дат, ID, лиц или иных идентифицирующих признаков. Разрешение на передачу
         провайдеру будет подтверждено отдельно.
       </label>
+      {!allOcrChecked&&<p role="status">Сначала проверьте кадры с отметками OCR.
+        <button type="button" disabled={busy} onClick={()=>{
+          const index=frames.findIndex(f=>ocr[f.frameId]?.sha256===f.sha256&&
+            !!ocr[f.frameId].regions.length&&keptText[f.frameId]!==f.sha256);
+          if(index>=0)setSelected(index);
+        }}>Перейти к кадру с отметками OCR</button>
+      </p>}
     </section>}
     {frame&&<>
       <label>Копия кадра <select value={selected} disabled={busy} onChange={e=>{setSelected(Number(e.target.value));setError("");setOcrNotice("");}}>
@@ -254,6 +260,11 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
       <p>Просмотр 1:1. Если кадр больше области просмотра, прокрутите его и проверьте все края.</p>
       <div className="ora-privacy-preview-scroll"><div className="ora-privacy-image-region"><img className="ora-privacy-preview" width={frame.width} height={frame.height}
         src={"data:image/png;base64,"+frame.pngBase64} alt="Точная подготовленная копия кадра"/>
+        {!!currentOcr?.regions.length&&<svg className="ora-privacy-selection" width={frame.width} height={frame.height}
+          style={{pointerEvents:"none"}} aria-label="Области, отмеченные OCR">
+          {currentOcr.regions.map((r,i)=><rect key={i} x={r.rectangle.x} y={r.rectangle.y}
+            width={r.rectangle.width} height={r.rectangle.height} fill="none" stroke="#f4aa36" strokeWidth={2}/>)}
+        </svg>}
         {validRectangle&&<svg className="ora-privacy-selection" width={frame.width} height={frame.height} aria-label="Выделенная область скрытия">
           <rect x={rectangle.x} y={rectangle.y} width={rectangle.width} height={rectangle.height} fill="none" stroke="#f4aa36" strokeWidth={2}/></svg>}
       </div></div>
