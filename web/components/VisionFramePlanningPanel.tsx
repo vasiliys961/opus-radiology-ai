@@ -473,7 +473,9 @@ export default function VisionFramePlanningPanel({
       сохраняя исходные SOPInstanceUID локально. Выборка не гарантирует обнаружения очагов между срезами.</p>
   </section>;
   const selected=series.find(s=>s.key===choice.seriesKey);
-  if(!fromPrimaryAnalysis||!selected||!fullVolumeCost)return extraView;
+  // Ordinary studies use exact-copy OCR/redaction, physician review and an
+  // explicit transfer decision. Never send them through public-only auto OCR.
+  if(!researchMode||!fromPrimaryAnalysis||!selected||!fullVolumeCost)return extraView;
   return <section className="ora-vision-plan" aria-label="Автоматический анализ исследования">
     <FullVolumeLocalPreparation key={"study-"+selected.key}
       series={selected} files={fileById}

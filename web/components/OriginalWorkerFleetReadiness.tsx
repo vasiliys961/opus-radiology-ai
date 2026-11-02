@@ -19,6 +19,7 @@ const STATES={
  not_configured:"Не подключён к серверной проверке (не означает отсутствие весов)",
  unreachable:"Нет ответа локального worker",
  original_model_unverified:"Worker отвечает, но оригинальная модель не подтверждена",
+ not_ready:"Исполнитель занят или не готов по ресурсам; задача не оценена",
 } as const;
 type State=keyof typeof STATES;
 type Entry={id:string;status:State;researchOnly:true;clinicalValidation:false};

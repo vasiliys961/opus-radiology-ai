@@ -33,7 +33,7 @@ class UploadHTTP(unittest.TestCase):
                 digest=digest,
                 original_nifti=lambda p:{"sourceSha256":digest(p)},
                 source_admission=lambda p,m:None)
-            with patch.object(worker,"original_runner",return_value=fake),patch.object(
+            with patch.object(worker.sys,"platform","linux"),patch.object(worker,"original_runner",return_value=fake),patch.object(
                 worker.psutil,"virtual_memory",return_value=SimpleNamespace(available=20*1024**3)):
                 app=worker.create_upload_app(bundle=bundle,token="z"*40,
                     origin="http://localhost:3000",scratch=root)
@@ -52,8 +52,14 @@ class UploadHTTP(unittest.TestCase):
                         headers={**headers,"x-opus-source-sha256":sha},content=payload)
                     self.assertEqual(good.status_code,201,good.text)
                     job=good.json()["jobId"]
+                    capability=client.get("/v1/nodule/capabilities",headers=headers).json()
+                    self.assertFalse(capability["ready"])
+                    self.assertEqual(capability["resourceStatus"],"busy")
+                    with patch.object(worker.psutil,"virtual_memory",return_value=SimpleNamespace(available=64*1024**2)):
+                        self.assertEqual(client.get(f"/v1/nodule/jobs/{job}",headers=headers).status_code,200)
                     self.assertEqual(client.post("/v1/nodule/upload",
                         headers={**headers,"x-opus-source-sha256":sha},content=payload).status_code,409)
                     self.assertEqual(client.delete(f"/v1/nodule/jobs/{job}",headers=headers).status_code,200)
+                    self.assertTrue(client.get("/v1/nodule/capabilities",headers=headers).json()["ready"])
 
 if __name__=="__main__":unittest.main()

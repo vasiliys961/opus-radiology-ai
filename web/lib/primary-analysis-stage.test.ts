@@ -28,7 +28,7 @@ test("single physician Analyze action propagates the original detector state to 
  assert.match(cloud,/canSubmitCombinedVisionReview\(primaryAnalysisStage\)/);
 });
 test("paid Gemini and Opus calls remain a direct clinician action after source-bound privacy checks",()=>{
- assert.match(cloud,/!enabledByLocalChecks\|\|!modelPathSettled\|\|token\.length<24\|\|!transferAuthorized/);
+ assert.match(cloud,/!enabledByLocalChecks\|\|!modelPathSettled\|\|\s*\(!server\?\.workstationConnected&&token\.length<24\)\|\|!transferAuthorized/);
  assert.match(cloud,/disabled=\{working\|\|lateWorking\|\|!enabledByLocalChecks\|\|!modelPathSettled/);
  assert.match(cloud,/onClick=\{\(\)=>void send\(\)\}/);
  assert.match(cloud,/if\(controller\.signal\.aborted\)return;/);

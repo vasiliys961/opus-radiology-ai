@@ -18,6 +18,8 @@ export async function GET(req:NextRequest){
  if(!allowedHost(req))return NextResponse.json({error:"Private research local-only"},
    {status:404,headers:HEAD});
  const secrets=Object.fromEntries(WORKERS.map(w=>[w.env,process.env[w.env]]));
+ for(const key of ["OPUS_NODULE_WORKER_TOKEN","OPUS_MONAI_PRIVATE_TUNNEL_URL","OPUS_MONAI_PRIVATE_WORKER_TOKEN"])
+  secrets[key]=process.env[key];
  const origin=process.env.OPUS_LOCAL_WORKER_ORIGIN??"http://127.0.0.1:3000";
  if(!/^http:\/\/(?:127\.0\.0\.1|localhost):[0-9]{1,5}$/.test(origin))
    return NextResponse.json({error:"Invalid local origin"},

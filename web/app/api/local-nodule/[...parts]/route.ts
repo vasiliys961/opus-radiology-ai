@@ -1,12 +1,13 @@
 /** Private same-origin MONAI RetinaNet bridge for permitted public chest CT research.
- * The browser never receives the Linux worker token. Fixed loopback target only.
+ * The browser never receives worker credentials. Local or private SSH tunnel,
+ * with every created job bound to exactly one authentic original executor.
  */
 import {NextRequest,NextResponse} from "next/server";
-import {readyOriginalNoduleWorker} from "../../../../lib/live-nodule-worker";
+import {selectMonaiExecutor,boundMonaiExecutor,monaiJobBinding,
+ monaiExecutorHeaders,boundedMonaiJson} from "../../../../lib/monai-executor-selection";
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
 export const maxDuration=800;
-const WORKER="http://127.0.0.1:8768";
 const HEAD={"Cache-Control":"no-store","X-Content-Type-Options":"nosniff"};
 const HOST=/^(127\.0\.0\.1|localhost):[0-9]{1,5}$/;
 const JOB=/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
@@ -22,13 +23,6 @@ function approved(req:NextRequest,method:string){
   (method==="GET"?(origin===null||origin==="http://"+host):origin==="http://"+host)&&
   (req.headers.get("sec-fetch-site")??"same-origin")==="same-origin";
 }
-function credentials(){
- const token=process.env.OPUS_MONAI_WORKER_TOKEN??"";
- const origin=process.env.OPUS_LOCAL_WORKER_ORIGIN??"http://127.0.0.1:3000";
- return /^[a-zA-Z0-9_-]{32,128}$/.test(token)&&
-  /^http:\/\/(127\.0\.0\.1|localhost):[0-9]{1,5}$/.test(origin)?
-  {token,origin}:null;
-}
 function path(parts:string[],method:string):string|null{
  if(parts.length===2&&parts[0]==="v1"&&parts[1]==="nodule" )return null;
  if(parts.length===3&&parts[0]==="v1"&&parts[1]==="nodule"&&parts[2]==="capabilities"&&method==="GET")
@@ -41,34 +35,10 @@ function path(parts:string[],method:string):string|null{
   return "/"+parts.join("/");
  return null;
 }
-async function bounded(resp:Response,max:number):Promise<Uint8Array>{
- const reader=resp.body?.getReader();if(!reader)throw Error("empty");
- const chunks:Uint8Array[]=[];let size=0;
- try{for(;;){const {value,done}=await reader.read();if(done)break;
-  size+=value.byteLength;if(size>max)throw Error("oversized");chunks.push(value);
- }}finally{await reader.cancel().catch(()=>{});reader.releaseLock();}
- const result=new Uint8Array(size);let off=0;
- for(const c of chunks){result.set(c,off);off+=c.byteLength;}
- return result;
-}
-async function capability(c:{token:string;origin:string},signal:AbortSignal){
- const res=await fetch(WORKER+"/v1/nodule/capabilities",{
-  method:"GET",cache:"no-store",redirect:"error",
-  signal:AbortSignal.any([signal,AbortSignal.timeout(3500)]),
-  headers:{Authorization:"Bearer "+c.token,Origin:c.origin},
- });
- if(!res.ok)throw Error("not-ready");
- const cap=JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(await bounded(res,16384)));
- // Arbitrary opened DICOM requires a worker supporting uploaded original HU NIfTI.
- if(!readyOriginalNoduleWorker(cap)||cap.imageUpload!==true)throw Error("upload-unavailable");
- return cap;
-}
 async function handle(req:NextRequest,ctx:{params:Promise<{parts:string[]}>},method:"GET"|"POST"|"DELETE"){
  const {parts}=await ctx.params;
  const target=path(parts,method);
  if(!target||!approved(req,method))return fail(404,"Local research only");
- const c=credentials();
- if(!c)return fail(503,"MONAI server credentials not configured");
  const isUpload=method==="POST";
  if(isUpload&&(req.headers.get("content-type")!=="application/octet-stream"||
   req.headers.get("x-opus-public-research-authorization")!=="approved-nonpatient-source"||
@@ -81,25 +51,43 @@ async function handle(req:NextRequest,ctx:{params:Promise<{parts:string[]}>},met
   if(!req.body)return fail(400,"Empty CT");
  }
  try{
-  const cap=await capability(c,req.signal);
-  if(target==="/v1/nodule/capabilities")return NextResponse.json(cap,{headers:HEAD});
+  // Only admission probes readiness. Poll/report/delete must remain available
+  // after the original job consumes RAM or another executor becomes ready.
+  const isJob=parts[2]==="jobs";
+  const selection=isJob?null:await selectMonaiExecutor(process.env,req.signal);
+  const executor=isJob?boundMonaiExecutor(process.env,
+    req.headers.get("x-opus-monai-job-binding"),parts[3]):selection?.executor;
+  if(target==="/v1/nodule/capabilities"){
+   const safe:Record<string,unknown>={};
+   for(const key of ["schema","modelId","modelVersion","checkpointSha256","modelRevision",
+     "originalWeightsVerified","mode","dataPolicy","sourceFormat","patientMode",
+     "imageUpload","ready","unvalidatedResearch"])
+     if(selection?.capability)safe[key]=selection.capability[key];
+   return NextResponse.json({...(selection?.capability?safe:{schema:"opus-monai-executor-selection/v1",ready:false}),
+    automaticExecution:{location:executor?.id??null,attempts:selection?.attempts??[]}}, {headers:HEAD});
+  }
+  if(!executor)return fail(isJob?401:503,isJob?"Original MONAI job binding required":"No compatible original MONAI executor ready");
   let size=0;
   const body=isUpload?req.body!.pipeThrough(new TransformStream<Uint8Array,Uint8Array>({
    transform(chunk,controller){size+=chunk.byteLength;if(size>LIMIT)throw Error("CT too large");controller.enqueue(chunk);}
   })):undefined;
   const init:RequestInit&{duplex?:"half"}={
-   method,headers:{Authorization:"Bearer "+c.token,Origin:c.origin,
+   method,headers:{...monaiExecutorHeaders(executor),
     ...(isUpload?{"Content-Type":"application/octet-stream",
      "X-Opus-Source-Sha256":req.headers.get("x-opus-source-sha256")!}: {})},
    redirect:"error",cache:"no-store",
    signal:AbortSignal.any([req.signal,AbortSignal.timeout(isUpload?750000:30000)]),
    ...(isUpload?{body,duplex:"half" as const}:{}),
   };
-  const res=await fetch(WORKER+target,init);
-  if(!res.ok)return fail(res.status===413?413:503,"Original MONAI worker did not complete operation");
-  const bytes=await bounded(res,1048576);
-  const parsed=JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(bytes));
-  if(!parsed||typeof parsed!=="object"||Array.isArray(parsed))return fail(422,"Invalid MONAI response");
+  const res=await fetch(executor.url+target,init);
+  if(!res.ok)return fail([404,409,413,507].includes(res.status)?res.status:503,"Original MONAI worker did not complete operation");
+  const parsed=await boundedMonaiJson(res,1048576);
+  if(isUpload){
+   if(parsed.schema!=="opus-monai-job/v1"||typeof parsed.jobId!=="string"||
+      !JOB.test(parsed.jobId)||parsed.state!=="running")return fail(422,"Original MONAI did not confirm a job");
+   return NextResponse.json({schema:parsed.schema,jobId:parsed.jobId,state:parsed.state,
+    executorLocation:executor.id,executorBinding:monaiJobBinding(executor,parsed.jobId)},{status:201,headers:HEAD});
+  }
   if(target.endsWith("/report")&&parsed.schema!=="opus-monai-bound-nodule-inference/v1")
    return fail(422,"Invalid MONAI original report");
   return NextResponse.json(parsed,{headers:HEAD});

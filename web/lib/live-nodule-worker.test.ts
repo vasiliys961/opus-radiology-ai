@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {originalNiftiSha256,readyOriginalNoduleWorker} from "./live-nodule-worker.ts";
+import {originalNiftiSha256,readyOriginalNoduleWorker,verifiedOriginalNoduleWorker} from "./live-nodule-worker.ts";
 import {sha256} from "@noble/hashes/sha2.js";
 
 const cap={
@@ -26,6 +26,8 @@ test("only pinned real pretrained MONAI worker is eligible",()=>{
  assert.equal(readyOriginalNoduleWorker({...cap,imageUpload:"true"}),false);
  assert.equal(readyOriginalNoduleWorker({...cap,dataPolicy:"patient"}),false);
  assert.equal(readyOriginalNoduleWorker(null),false);
+ assert.equal(verifiedOriginalNoduleWorker({...cap,ready:false}),true,
+  "Known original identity is distinct from admission for a new job");
 });
 test("streamed browser NIfTI digest equals actual original bytes (no pixel upload)",async()=>{
  const bytes=new Uint8Array(512);for(let i=0;i<bytes.length;i++)bytes[i]=(i*17)%256;

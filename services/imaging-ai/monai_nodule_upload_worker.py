@@ -76,11 +76,13 @@ def create_upload_app(*,bundle,token,origin,port=8768,scratch=None):
         result=await call_next(request);result.headers.update(headers);return result
     @app.get("/v1/nodule/capabilities")
     async def capabilities():
+        enough_memory=psutil.virtual_memory().available>=MIN_FREE
+        resource_status="busy" if state["job"] is not None else "ready" if enough_memory else "insufficient_memory"
         return {"schema":"opus-monai-live-worker/v1","modelId":MODEL,"modelVersion":MODEL_VERSION,
             "checkpointSha256":runner.MODEL_SHA,"modelRevision":runner.MODEL_REPO_REV,
             "originalWeightsVerified":True,"mode":"local","dataPolicy":"approved-public-reference-only",
             "sourceFormat":"original-nifti-uncompressed","patientMode":False,"imageUpload":True,
-            "ready":psutil.virtual_memory().available>=MIN_FREE,"unvalidatedResearch":True}
+            "ready":resource_status=="ready","resourceStatus":resource_status,"unvalidatedResearch":True}
     async def infer(job):
         try:
             args=[sys.executable,str(Path(__file__).with_name("monai_bound_nodule.py")),

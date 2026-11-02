@@ -4,6 +4,8 @@ import {callAiGateway} from "../../../../lib/ai-gateway";
 import {HttpBodyTooLarge} from "../../../../lib/limited-body";
 import {reviewSanitizedSamples} from "../../../../lib/sanitized-cloud-review";
 import {createSyntheticTrialLimiter} from "../../../../lib/synthetic-live-research";
+import {REVIEWED_FRAME_COOKIE,reviewedFrameSessionEnabled,createReviewedFrameSession,
+  validReviewedFrameSession} from "../../../../lib/reviewed-frame-session";
 
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
@@ -46,8 +48,8 @@ function allowedLocalBrowser(req:NextRequest,post=false):boolean {
 function configurationReady():boolean {
   return process.env.RADIOLOGY_ENABLE_DEIDENTIFIED_OPENROUTER_PILOT==="1" &&
     process.env.RADIOLOGY_OPENROUTER_HEALTH_DATA_APPROVED==="1" &&
-    typeof process.env.RADIOLOGY_LOCAL_RESEARCH_OPERATOR_TOKEN==="string" &&
-    process.env.RADIOLOGY_LOCAL_RESEARCH_OPERATOR_TOKEN!.length>=24 &&
+    (reviewedFrameSessionEnabled()||
+      (process.env.RADIOLOGY_LOCAL_RESEARCH_OPERATOR_TOKEN?.length??0)>=24) &&
     !!process.env.OPENROUTER_API_KEY?.trim();
 }
 function validOperator(received:string|null):boolean {
@@ -58,9 +60,11 @@ function validOperator(received:string|null):boolean {
 }
 export async function GET(req:NextRequest){
   if(!allowedLocalBrowser(req))return reply(404,"Local clinician pilot only");
-  return NextResponse.json({
+  const connected=reviewedFrameSessionEnabled();
+  const response=NextResponse.json({
     schema:"opus-deidentified-openrouter-pilot-readiness/v1",
     enabled:configurationReady(),
+    workstationConnected:connected,
     provider:"openrouter",
     models:["google/gemini-3.8-flash","anthropic/claude-opus-5.5"],
     framesMaximum:4,sourceMustBePixelReviewed:true,
@@ -68,11 +72,17 @@ export async function GET(req:NextRequest){
     independentDeidentificationCertification:false,
     productionPatientCloudRelease:false,
   },{headers:HEADERS});
+  if(connected)response.cookies.set(REVIEWED_FRAME_COOKIE,createReviewedFrameSession(),{
+    httpOnly:true,sameSite:"strict",secure:false,
+    path:"/api/ai/deidentified-openrouter-review",maxAge:4*60*60,
+  });
+  return response;
 }
 export async function POST(req:NextRequest){
   if(!allowedLocalBrowser(req,true))return reply(404,"Local clinician pilot only");
   if(!configurationReady())return reply(503,"Deidentified OpenRouter clinician research pilot not authorized on this server");
-  if(!validOperator(req.headers.get("x-opus-local-operator-token")))
+  if(!validOperator(req.headers.get("x-opus-local-operator-token"))&&
+     !validReviewedFrameSession(req.cookies.get(REVIEWED_FRAME_COOKIE)?.value))
     return reply(401,"Local operator authorization failed");
   if(!/^application\/json(?:\s*;.*)?$/i.test(req.headers.get("content-type")??""))
     return reply(415,"JSON only");

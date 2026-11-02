@@ -9,7 +9,7 @@ import {verifyRenalThreePhaseStudy,type RenalPhaseRole} from "../lib/renal-three
 import {runRenalMonaiThreePhase,type RenalMonaiResult} from "../lib/renal-monai-direct";
 import {prepareDicomMonaiFile,prepareDicomCtForPathology} from "../lib/dicom-monai-direct";
 import {runOriginalAbdominalModels,checkAutomaticAbdomenReady,type AbdominalStudyResults} from "../lib/real-abdominal-worker";
-import {executeRealNodule,checkAutomaticMonaiReady} from "../lib/live-nodule-worker";
+import {executeRealNodule,checkAutomaticMonaiExecutor,type AutomaticMonaiStatus} from "../lib/live-nodule-worker";
 import type {BoundNoduleReport} from "../lib/live-nodule-report";
 import {runOriginalEffusionTask315,checkAutomaticEffusionReady,type OriginalEffusionRun} from "../lib/real-effusion-worker";
 import {executeOriginalPeCtp,checkAutomaticPeReady,type PeCtpSourceReport} from "../lib/pe-ctpa-direct-worker";
@@ -78,6 +78,8 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,resear
  const [token,setToken]=useState("");
  const [autoMonaiReady,setAutoMonaiReady]=useState(false);
  const [autoMonaiChecking,setAutoMonaiChecking]=useState(false);
+ const [monaiExecutor,setMonaiExecutor]=useState<AutomaticMonaiStatus|null>(null);
+ const [monaiState,setMonaiState]=useState<"idle"|"running"|"completed"|"failed"|"cancelled">("idle");
  const [effusionEndpoint,setEffusionEndpoint]=useState("http://127.0.0.1:8774");
  const [effusionToken,setEffusionToken]=useState("");
  const [autoEffusionReady,setAutoEffusionReady]=useState(false);
@@ -165,7 +167,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,resear
    setXrvReport(null);setXrvChestConfirmed(false);
    setResearchAuthorized(false);setFlairConfirmed(false);
    setSourceUrl("");setSourceLicense("");setBusy(false);setError("");setStatus("");
-   setIch(null);setWmh(null);setBrainResult(null);setDecisions({});setDraftText("");setExporting(false);
+   setIch(null);setWmh(null);setBrainResult(null);setDecisions({});setDraftText("");setExporting(false);setMonaiState("idle");
    return ()=>{serial.current++;active.current?.abort();};
  },[series,files,preset]);
  const chestPlan=plan.route==="monai-nodules";
@@ -199,9 +201,9 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,resear
   void checkAutomaticClnReady(probeSignal).then(ok=>{if(!controller.signal.aborted)setClnReady(ok);})
    .catch(()=>{if(!controller.signal.aborted)setClnReady(false);})
    .finally(()=>{if(!controller.signal.aborted)setClnChecking(false);});
-  setAutoMonaiChecking(true);setAutoMonaiReady(false);
-  void checkAutomaticMonaiReady(probeSignal).then(ok=>{
-   if(!controller.signal.aborted)setAutoMonaiReady(ok);
+  setAutoMonaiChecking(true);setAutoMonaiReady(false);setMonaiExecutor(null);
+  void checkAutomaticMonaiExecutor(probeSignal).then(result=>{
+   if(!controller.signal.aborted){setAutoMonaiReady(result.ready);setMonaiExecutor(result);}
   }).catch(()=>{if(!controller.signal.aborted)setAutoMonaiReady(false);})
    .finally(()=>{if(!controller.signal.aborted)setAutoMonaiChecking(false);});
   setAutoNodesChecking(true);setAutoNodesReady(false);
@@ -305,7 +307,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,resear
    setBusy(true);onAnalysisStage?.(series.key,"running");
    setStatus("Проверяем совместимость и доступность настоящей модели...");
    onDetectorEvidence?.(series.key,null);
-   setError("");setIch(null);setWmh(null);setBrainResult(null);setChestSource(null);setChestNodules(null);setChestCln(null);setLungscapeResult(null);
+   setError("");setIch(null);setWmh(null);setBrainResult(null);setChestSource(null);setChestNodules(null);setChestCln(null);setLungscapeResult(null);setMonaiState("idle");
    setChestEffusion(null);setChestPe(null);setChestNodes(null);setChestIssues([]);setAbdomenResult(null);setRenalMonaiResult(null);setRenalMonaiIssue("");setXrvReport(null);setDecisions({});setDraftText("");
    // Start local source-bound Vision frame planning immediately, in parallel with
    // authenticated original detector inference. This does not authorize external
@@ -331,11 +333,16 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,resear
        return;
      }
      if(plan.route==="monai-nodules"){
+       // Recheck at the physician's primary action; a resource shortage during
+       // initial study loading must not permanently disable a now-ready worker.
+       const monaiNow=await checkAutomaticMonaiExecutor(controller.signal);
+       if(version!==serial.current||controller.signal.aborted)return;
+       setMonaiExecutor(monaiNow);setAutoMonaiReady(monaiNow.ready);
        // One native HU conversion, TWO truly trained pathology tasks.
        // Each worker runs sequentially: no heavy simultaneous RAM pressure.
        const original=series.members.map(m=>files.get(m.id));
        if(original.some(f=>!f))throw Error("Исходная DICOM-КТ больше недоступна.");
-       const chestWorkerAvailable=autoMonaiReady||!!token.trim()||clnReady||lungscapeReady||
+       const chestWorkerAvailable=monaiNow.ready||!!token.trim()||clnReady||lungscapeReady||
          autoEffusionReady||!!effusionToken.trim()||
          (ctpaConfirmed&&(autoPeReady||!!peToken.trim()))||
          (enhancedChestConfirmed&&(autoNodesReady||!!nodeToken.trim()));
@@ -360,13 +367,17 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,resear
        setChestSource(nifti);
        const problems:string[]=[];
        let completed=0;
-       if(autoMonaiReady||token.trim()){
+       if(monaiNow.ready||token.trim()){
          try{
-           const result=await executeRealNodule(autoMonaiReady?null:session,nifti,controller.signal,progress);
+           setMonaiState("running");
+           const result=await executeRealNodule(monaiNow.ready?null:session,nifti,controller.signal,progress,
+            location=>{if(version===serial.current&&!controller.signal.aborted)
+              setMonaiExecutor({ready:true,location,reason:"ready"});});
            if(version!==serial.current||controller.signal.aborted)return;
-           setChestNodules(result.report);completed++;
+           setChestNodules(result.report);setMonaiState("completed");completed++;
          }catch(e){
-           if(controller.signal.aborted)return;
+           if(version!==serial.current||controller.signal.aborted)return;
+           setMonaiState("failed");
            problems.push("MONAI узлы: "+(e instanceof Error?e.message:"исполнитель недоступен"));
          }
        }else problems.push("MONAI узлы: оригинальная модель не доступна на сервере и ручной worker не настроен; не исследовано.");
@@ -683,6 +694,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,resear
  function cancel(){
    serial.current++;active.current?.abort();active.current=null;
    setBusy(false);onAnalysisStage?.(series.key,"cancelled");
+   setMonaiState(old=>old==="running"?"cancelled":old);
    setStatus("Анализ отменён. Неинтерпретированные зоны остаются неоценёнными.");
  }
  return <section className="cs-geometry" aria-label="Единый анализ DICOM">
@@ -829,6 +841,21 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,resear
       checked={researchAuthorized} disabled={busy}
       onChange={e=>setResearchAuthorized(e.target.checked)}/>
       Подтверждаю правомерность исследовательской обработки.</label>}
+   {chestPlan&&<p role="status" aria-label="Автоматический исполнитель для узлов лёгких">
+     Узлы лёгких: {autoMonaiChecking?"проверяем доступных исполнителей…":
+       monaiState==="running"?(monaiExecutor?.location==="private"?
+         "выполняется на подключённом приватном сервере…":"выполняется через подключённый локальный канал…"):
+       monaiState==="failed"?"детектор завершился с ошибкой; задача не оценена. Другой детектор автоматически не запускался.":
+       monaiState==="cancelled"?"обработка отменена; задача не оценена.":
+       chestNodules?"обработка завершена; находки доступны на исходной КТ.":
+       monaiExecutor?.ready?(monaiExecutor.location==="private"?
+         "выбран подключённый приватный сервер; запуск одной кнопкой.":
+         "выбран проверенный исполнитель через локальный канал; запуск одной кнопкой."):
+       monaiExecutor?.reason==="not_ready"?"исполнитель занят или не готов по ресурсам; задача не оценена.":
+       monaiExecutor?.reason==="unverified"?"оригинальные веса исполнителя не подтверждены; задача не оценена.":
+       monaiExecutor?.reason==="unreachable"?"нет связи с настроенным исполнителем; задача не оценена.":
+       "совместимый исполнитель не подключён; задача не оценена. Остальные доступные инструменты продолжат работу."}
+   </p>}
    <button type="button" disabled={!ready} onClick={()=>void launch()}>
     {busy?"Выполняется реальный анализ...":"Анализировать исследование"}
    </button>

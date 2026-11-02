@@ -18,7 +18,7 @@ the live local HTTP worker, never on a code module merely existing in GitHub.
 
 | Server-side environment name | Fixed research worker | Capability |
 |---|---|---|
-| \`OPUS_NODULE_WORKER_TOKEN\` | 127.0.0.1:8768 | MONAI lung nodules |
+| \`OPUS_MONAI_WORKER_TOKEN\` (legacy \`OPUS_NODULE_WORKER_TOKEN\`) | 127.0.0.1:8768, or explicitly configured private tunnel | MONAI lung nodules |
 | \`OPUS_EFFUSION_WORKER_TOKEN\` | 127.0.0.1:8774 | Task315 chest fluid |
 | \`OPUS_PE_WORKER_TOKEN\` | 127.0.0.1:8776 | Original Mazurowski CTPA |
 | \`OPUS_NODES_WORKER_TOKEN\` | 127.0.0.1:8777 | Original Raidionics nodes |

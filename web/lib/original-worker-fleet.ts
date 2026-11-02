@@ -6,9 +6,10 @@ import {readyOriginalPeCtpWorker} from "./pe-ctpa-direct-worker.ts";
 import {raidionicsOriginalReady} from "./mediastinal-raidionics-worker.ts";
 import {readyOriginalBrainTask} from "./brain-multisequence-original-worker.ts";
 import {validatedPublicIchCapabilities} from "./public-ich-worker.ts";
+import {selectMonaiExecutor} from "./monai-executor-selection.ts";
 
 
-type Status="ready"|"not_configured"|"unreachable"|"original_model_unverified";
+type Status="ready"|"not_configured"|"unreachable"|"original_model_unverified"|"not_ready";
 type Entry={id:string;status:Status;researchOnly:true;clinicalValidation:false};
 type Worker={
  id:string;port:number;path:string;env:string;
@@ -38,7 +39,7 @@ const capWmh=(v:unknown)=>{
 };
 export const WORKERS:readonly Worker[]=[
  {id:"chest_nodules",port:8768,path:"/v1/nodule/capabilities",
-  env:"OPUS_NODULE_WORKER_TOKEN",ready:readyOriginalNoduleWorker},
+  env:"OPUS_MONAI_WORKER_TOKEN",ready:readyOriginalNoduleWorker},
  {id:"chest_effusion",port:8774,path:"/v1/effusion/capabilities",
   env:"OPUS_EFFUSION_WORKER_TOKEN",ready:readyEffusionTask315},
  {id:"chest_pe",port:8776,path:"/v1/pe/capabilities",
@@ -86,6 +87,14 @@ export async function probeOriginalFleet(
  const allowedOrigin:string=safeOrigin;
  const memo=new Map<string,Promise<{status:Status;body?:unknown}>>();
  async function one(w:Worker):Promise<Status>{
+  if(w.id==="chest_nodules"){
+   const result=await selectMonaiExecutor({...secrets,OPUS_LOCAL_WORKER_ORIGIN:allowedOrigin},
+    new AbortController().signal,call);
+   if(result.executor)return "ready";
+   const statuses=result.attempts.map(x=>x.status);
+   return statuses.includes("not_ready")?"not_ready":statuses.includes("unverified")?
+    "original_model_unverified":statuses.length?"unreachable":"not_configured";
+  }
   const token=secrets[w.env]??"";
   if(!/^[a-zA-Z0-9_\-]{32,128}$/.test(token))return "not_configured";
   const key=w.port+"|"+w.path+"|"+w.env;

@@ -13,7 +13,7 @@ const CHECKPOINT="b5e79231466adae93a6fe8e8594029e9add142914e223b879aa0343bb2402d
 const REVISION="7226a40a4c3713f7d5469559b7f2fc296fd54825";
 const JOBID=/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 
-export function readyOriginalNoduleWorker(cap:unknown):boolean {
+export function verifiedOriginalNoduleWorker(cap:unknown):boolean {
  if(!cap||typeof cap!=="object"||Array.isArray(cap))return false;
  const c=cap as Record<string,unknown>;
  return c.schema==="opus-monai-live-worker/v1"&&c.modelId===MODEL&&
@@ -21,8 +21,11 @@ export function readyOriginalNoduleWorker(cap:unknown):boolean {
   c.modelRevision===REVISION&&c.originalWeightsVerified===true&&
   c.mode==="local"&&c.sourceFormat==="original-nifti-uncompressed"&&
   c.dataPolicy==="approved-public-reference-only"&&
-  c.patientMode===false&&typeof c.imageUpload==="boolean"&&c.ready===true&&
+  c.patientMode===false&&typeof c.imageUpload==="boolean"&&typeof c.ready==="boolean"&&
   c.unvalidatedResearch===true;
+}
+export function readyOriginalNoduleWorker(cap:unknown):boolean {
+ return verifiedOriginalNoduleWorker(cap)&&(cap as Record<string,unknown>).ready===true;
 }
 
 export async function originalNiftiSha256(source:Blob,signal?:AbortSignal):Promise<string>{
@@ -77,12 +80,33 @@ export async function checkAutomaticMonaiReady(signal?:AbortSignal):Promise<bool
  }catch{return false;}
 }
 
+export type AutomaticMonaiStatus={ready:boolean;location:"local"|"private"|null;
+ reason:"ready"|"not_configured"|"unreachable"|"unverified"|"not_ready"};
+export async function checkAutomaticMonaiExecutor(signal?:AbortSignal):Promise<AutomaticMonaiStatus>{
+ try{
+  const cap=await smallJson(await autoMonaiRequest("/v1/nodule/capabilities",{signal}));
+  const execution=cap.automaticExecution as {location?:unknown;attempts?:{status?:unknown}[]}|undefined;
+  const location=execution?.location==="local"||execution?.location==="private"?execution.location:null;
+  if(readyOriginalNoduleWorker(cap)&&cap.imageUpload===true)return {ready:true,location,reason:"ready"};
+  const statuses=Array.isArray(execution?.attempts)?execution.attempts.map(x=>x.status):[];
+  return {ready:false,location:null,reason:statuses.includes("not_ready")?"not_ready":
+    statuses.includes("unverified")?"unverified":statuses.length?"unreachable":"not_configured"};
+ }catch{return {ready:false,location:null,reason:"unreachable"};}
+}
+
 export async function executeRealNodule(
  session:WorkerSession|null,source:File,signal:AbortSignal,
  onProgress?:(text:string)=>void,
+ onExecutorSelected?:(location:"local"|"private")=>void,
 ):Promise<{source:NoduleNativeSource;report:BoundNoduleReport}> {
  if(signal.aborted)throw Error("Задание отменено.");
- const invoke=(path:string,init:RequestInit={})=>session?call(session,path,init):autoMonaiRequest(path,init);
+ let executorBinding:string|null=null;
+ const invoke=(path:string,init:RequestInit={})=>{
+  if(session)return call(session,path,init);
+  const headers=new Headers(init.headers);
+  if(executorBinding)headers.set("X-Opus-Monai-Job-Binding",executorBinding);
+  return autoMonaiRequest(path,{...init,headers});
+ };
  const native=await readNoduleNiftiHeader(source);
  onProgress?.("Проверяем исходную КТ и подлинные MONAI-веса...");
  const cap=await smallJson(await invoke("/v1/nodule/capabilities",{signal}));
@@ -105,6 +129,16 @@ export async function executeRealNodule(
      !JOBID.test(answer.jobId)||answer.state!=="running")
     throw Error("MONAI worker не подтвердил запуск настоящей модели.");
   jobId=answer.jobId;
+  if(!session){
+   if(typeof answer.executorBinding!=="string"||answer.executorBinding.length>240||
+     (answer.executorLocation!=="local"&&answer.executorLocation!=="private"))
+    throw Error("Сервер не привязал задание MONAI к выбранному исполнителю.");
+   executorBinding=answer.executorBinding;
+   onExecutorSelected?.(answer.executorLocation);
+   onProgress?.(answer.executorLocation==="private"?
+    "Узлы лёгких: оригинальная MONAI запущена на подключённом приватном сервере.":
+    "Узлы лёгких: оригинальная MONAI запущена через локальный канал.");
+  }
   for(;;){
    if(signal.aborted)throw Error("Анализ MONAI отменён.");
    const state=await smallJson(await invoke(`/v1/nodule/jobs/${jobId}`,{signal}));

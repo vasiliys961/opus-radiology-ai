@@ -28,7 +28,7 @@ type Props={
   originalLocalFileIds:readonly string[];
   onOpenOriginalSlice:(localFileId:string)=>void;
 };
-type Ready={schema:string;enabled:boolean;productionPatientCloudRelease:false};
+type Ready={schema:string;enabled:boolean;workstationConnected?:boolean;productionPatientCloudRelease:false};
 export default function DeidentifiedOpenRouterPanel({
   enabledByLocalChecks,primaryAnalysisStage="idle",exactReviewedHashes,prepareReviewedPacket,
   originalLocalFileIds,onOpenOriginalSlice,specialistFacts,specialistLocalBinding,localLaa950,originalDetectorEvidence=null,frameRelativeClnEvidence=null,originalCxrEvidence=null,
@@ -81,7 +81,8 @@ export default function DeidentifiedOpenRouterPanel({
     }catch{setReadinessNote("Локальный облачный пилот недоступен.");}
   }
   async function send(){
-    if(working||lateWorking||!enabledByLocalChecks||!modelPathSettled||token.length<24||!transferAuthorized)return;
+    if(working||lateWorking||!enabledByLocalChecks||!modelPathSettled||
+      (!server?.workstationConnected&&token.length<24)||!transferAuthorized)return;
     setError("");setResult(null);setDecisions({});setClinicalSynthesis("");setIntegratedDraft("");setDraftError("");setWorking(true);
     setLateReview(null);setLateDraft("");setLateConsent(false);
     const controller=new AbortController();ctl.current=controller;
@@ -288,11 +289,13 @@ export default function DeidentifiedOpenRouterPanel({
     <p role="status"><strong>Режим исследования, не клиническая система.</strong> Даже
       обезличенные изображения остаются медицинскими данными; удаление метаданных
       и OCR не гарантируют анонимность. Ключ OpenRouter остаётся на сервере.</p>
-    <details><summary>Дополнительно · проверить серверный доступ</summary>
+    <div>
       <button type="button" disabled={working} onClick={()=>void checkReadiness()}>
-        Проверить локальный OpenRouter
+        Подключить Gemini и Opus
       </button>
-    </details>
+    </div>
+    {server?.workstationConnected&&<p role="status">Локальное рабочее место подключено.
+      Передача снимков начнётся только после проверки кадров и вашего разрешения ниже.</p>}
     {!server?.enabled&&<p>Серверный доступ по умолчанию выключен. Нужны
       <code> RADIOLOGY_ENABLE_DEIDENTIFIED_OPENROUTER_PILOT=1</code>,
       <code> RADIOLOGY_OPENROUTER_HEALTH_DATA_APPROVED=1</code>,
@@ -304,9 +307,11 @@ export default function DeidentifiedOpenRouterPanel({
     {!enabledByLocalChecks&&<p role="status">Прежде чем отправлять, проверьте
       OCR на каждом кадре и подтвердите надписи и узнаваемые признаки на
       каждой точной PNG-копии. Любое изменение изображения сбрасывает допуск.</p>}
+    <details><summary>Дополнительно · пароль оператора</summary>
     <label>Локальный пароль оператора <input type="password" value={token}
       autoComplete="off" maxLength={512} disabled={working}
       onChange={e=>setToken(e.target.value)} placeholder="Только локальный сервер"/></label>
+    </details>
     <label><input type="checkbox" disabled={working||!enabledByLocalChecks}
       checked={transferAuthorized} onChange={e=>setTransferAuthorized(e.target.checked)}/>
       Я проверил все исходящие PNG, имею законное право передать обезличенное
@@ -341,7 +346,7 @@ export default function DeidentifiedOpenRouterPanel({
       </label>}
     <div className="ora-evidence-actions">
       <button type="button" disabled={working||lateWorking||!enabledByLocalChecks||!modelPathSettled||
-        token.length<24||!transferAuthorized}
+        (!server?.workstationConnected&&token.length<24)||!transferAuthorized}
         onClick={()=>void send()}>{working?"Gemini → Opus анализируют кадры…":
         "Подтвердить передачу и создать предварительное заключение"}</button>
       {working&&<button type="button" onClick={()=>ctl.current?.abort()}>Отменить</button>}
