@@ -480,9 +480,9 @@ export default function VisionFramePlanningPanel({
       flaggedIndex={targetFrame.trim()?Number(targetFrame)-1:null}
       autoStart={true} showAdminControls={researchMode} detectorStage={primaryAnalysisStage}
       detectorEvidence={originalDetectorEvidence} onOpenSlice={onOpenSlice}/>
-    <details>
+    {researchMode&&<details>
       <summary onClick={()=>setExtraOpened(true)}>Дополнительно · анализ отдельных срезов</summary>
       {extraOpened&&extraView}
-    </details>
+    </details>}
   </section>;
 }
