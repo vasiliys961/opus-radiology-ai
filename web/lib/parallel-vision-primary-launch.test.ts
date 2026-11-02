@@ -14,7 +14,7 @@ test("one primary clinical DICOM action starts local Vision before original dete
  assert.ok(start>0&&nativeStart>start&&nativeVision>nativeStart&&firstHeavy>nativeVision,
   "Local Vision preparation must not wait for CLN/nnU-Net CPU inference");
  const fallback=source.slice(start,nativeStart);
- assert.match(fallback,/if\(!ready\|\|\(!plan\.route&&!visionOnlyAvailable\)\)return;/);
+ assert.match(fallback,/if\(!ready\|\|\(!plan\.route&&!visionOnlyAvailable&&!visionReady\)\)return;/);
  assert.match(fallback,/if\(!plan\.route\)\{[\s\S]*onReadyForVision\?\.\(series\.key\);[\s\S]*return;/,
   "Vision-only fallback must finish before any native model execution");
  assert.ok(!fallback.includes("OPUS_CLN_WORKER_TOKEN"));
