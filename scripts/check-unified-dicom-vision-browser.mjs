@@ -44,12 +44,15 @@ try{
  await page.locator('input[accept*=".dcm"]').setInputFiles(files);
  await page.getByText(/Проиндексировано 32 DICOM/).waitFor({timeout:45000});
  await page.locator(".cs-series-list button").first().click();
- const analysis=page.locator('section[aria-label="Единый анализ DICOM"]');
+  assert.equal(await page.getByRole("heading",{name:"Исследование КТ / МРТ"}).count(),1);
+  assert.equal(await page.getByRole("heading",{name:/Gemini Orchestra/}).count(),0,
+    "Advanced planning must be absent until the doctor starts analysis");
+  const analysis=page.locator('section[aria-label="Единый анализ DICOM"]');
  await analysis.waitFor();
  assert.match(await analysis.innerText(),/Грудная клетка/);
  assert.doesNotMatch(await analysis.innerText(),/Нет совместимого исполнительного пути/);
- await analysis.getByText("Настройки приватного исполнителя и разрешение",{exact:true}).click();
- await analysis.getByRole("checkbox",{name:/Подтверждаю, что исследование разрешено/}).check();
+ await analysis.getByText("Дополнительно · параметры моделей и уточнение протокола",{exact:true}).click();
+ await analysis.getByRole("checkbox",{name:/Разрешаю анализ этого обезличенного исследования/}).check();
  const launch=analysis.getByRole("button",{name:"Анализировать исследование"});
  await page.waitForFunction(()=>{const section=document.querySelector('section[aria-label="Единый анализ DICOM"]');
   const button=[...(section?.querySelectorAll("button")??[])].find(x=>x.textContent?.trim()==="Анализировать исследование");
@@ -60,7 +63,7 @@ try{
  // The heavy original worker path is independent and may still be running.
   await page.getByText("Дополнительно · анализ отдельных срезов",{exact:true}).click();
   await page.getByRole("heading",{name:/Gemini Orchestra · подготовка кадров/}).waitFor({timeout:30000});
- await page.getByText(/Основной анализ DICOM запущен/).waitFor({timeout:30000});
+ await page.getByRole("heading",{name:"Описание и заключение"}).waitFor({timeout:30000});
  assert.equal(await page.getByRole("button",{name:"Запустить единый анализ КТ/МРТ"}).count(),0,
   "Only one physician Analyze action; duplicate research launch must be hidden");
  assert.equal(await analysis.getByRole("button",{name:"Анализировать исследование"}).count(),1);
