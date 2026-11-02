@@ -29,7 +29,7 @@ try {
   browser=await chromium.launch({headless:true,args:['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
   page=await browser.newPage({viewport:{width:1600,height:1000}});
   page.on('pageerror',e=>errors.push(e.message));
-  await page.goto(baseUrl,{waitUntil:'networkidle'});
+  await page.goto(baseUrl+'/advanced',{waitUntil:'networkidle'});
   const computeModes=await page.locator('.ora-ai-compute-modes').innerText();
   assert.match(computeModes,/На Mac · ONNX CPU/);
   assert.match(computeModes,/Облако · OpenRouter/);
