@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useMemo, useRef, useState, type ChangeEvent } from "react";
 import { groupDicomSeries, readDicomSeriesHeader, type DicomSeries } from "../../lib/dicom-series";
-import {suggestPrimaryDicomSeries,canAutoPrepareLocalVision} from "../../lib/automatic-primary-series";
+import {suggestPrimaryDicomSeries} from "../../lib/automatic-primary-series";
 import { validateViewerFileSelection } from "../../lib/viewer-limits";
 import "./viewer.css";
 import "../radiology.css";
@@ -56,6 +56,7 @@ export default function ViewerPage() {
   const [currentSeriesKey, setCurrentSeriesKey] = useState("");
   const [wmhSlice,setWmhSlice]=useState<number|undefined>(undefined);
   const [visionOpen,setVisionOpen]=useState(false);
+  const [researchOpen,setResearchOpen]=useState(false);
   const [visionFromPrimary,setVisionFromPrimary]=useState(false);
   const [primaryStage,setPrimaryStage]=useState<{seriesKey:string;stage:"running"|"completed"|"vision-only"|"cancelled"}|null>(null);
   const [visionDetectorEvidence,setVisionDetectorEvidence]=useState<{seriesKey:string;bundle:SanitizedDetectorBundle}|null>(null);
@@ -181,7 +182,8 @@ export default function ViewerPage() {
                 return previous;
               return {seriesKey:key,bundle};
             })}/>}
-          <details className="cs-geometry"><summary>Дополнительные диагностические инструменты</summary>
+          <details className="cs-geometry" onToggle={event=>setResearchOpen(event.currentTarget.open)}><summary>Дополнительные диагностические инструменты</summary>
+          {researchOpen&&<>
           <LungNoduleResearchResults key={selected?.key ?? "empty"} isChestCT={!!selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="CHEST")}/>
           <ChestEffusionResearchResults key={"fluid-"+(selected?.key??"empty")} isChestCT={!!selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="CHEST")}/>
           <IldGgoExpertResearch key={"ild-"+(selected?.key??"empty")} isChestCT={!!selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="CHEST")}/>
@@ -197,13 +199,14 @@ export default function ViewerPage() {
           {selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="HEAD") && <DirectIchDicomDetector key={"ich-"+selected.key} series={selected} files={indexedById}/>}
           {selected && selected.modality==="MR" && <WmhSourceReview key={"wmh-"+selected.key} series={selected} files={indexedById} onNavigate={setWmhSlice}/>}
           {selected && <NativeCtResearchExport key={"native-export-"+selected.key} series={selected} files={selectedFiles} onPreparedSource={(file,session)=>{setPreparedMonaiSession(session??null);setPreparedMonaiSource(file);setPreparedMonaiResult(null);setSourceMode("nodules");}}/> }
+          </>}
           </details>
           <button type="button" className="cs-clear" disabled={reading || indexed.length === 0} onClick={() => { setIndexed([]); setPreparedMonaiSource(null);setPreparedMonaiSession(null);setPreparedMonaiResult(null); setCurrentSeriesKey(""); setVisionOpen(false); setVisionFromPrimary(false); setPrimaryStage(null); setVisionDetectorEvidence(null);setClnVerified(null); setMessage("Список очищен, файлы на диске не изменены."); }}>Очистить загруженное</button>
         </aside>
         <div className="cs-stage">
           {selectedFiles.length ? <CornerstoneStack key={selected?.key} files={selectedFiles} modality={selected?.modality} selectedIndex={wmhSlice}/> : <div className="cs-placeholder"><span>✚</span><strong>Область DICOM-изображений</strong><p>Выберите файлы или папку DICOM, чтобы проверить работу Cornerstone3D.</p></div>}
           {selected && (selected.modality==="CT"||selected.modality==="MR") && <section className="cs-geometry" aria-label="Подготовка Gemini и Opus по открытому DICOM">
-            {visionFromPrimary?<h3>Описание и заключение</h3>:<h3>Дополнительный анализ снимков</h3>}
+            {visionFromPrimary&&<h3>Описание и заключение</h3>}
             {!visionFromPrimary&&<button type="button" disabled={reading} onClick={()=>setVisionOpen(v=>!v)}>
               {visionOpen?"Закрыть дополнительные инструменты":"Анализировать отдельные срезы"}
             </button>}
@@ -222,7 +225,7 @@ export default function ViewerPage() {
                 }}/>
             </AnalysisSoundProvider>}
           </section>}
-          <div className="cs-bottom-note">Важное ограничение: 2D-просмотр не означает подтверждение точности измерений, реконструкции, правильной геометрии или отсутствия патологии. Сжатые кодеки проверяются отдельно на тестовых наборах.</div>
+          <div className="cs-bottom-note">Предварительный анализ проверяется врачом по исходным снимкам.</div>
         </div>
       </div>
       </>}
