@@ -27,6 +27,7 @@ export default function FullVolumeLocalPreparation({
  const [sessionReady,setSessionReady]=useState<boolean|null>(null);
  const [adminToken,setAdminToken]=useState("");
  const [adminIssue,setAdminIssue]=useState("");
+ const [checkingConnection,setCheckingConnection]=useState(false);
  const ctl=useRef<AbortController|null>(null);
  const started=useRef(false);
  const detectorStageRef=useRef(detectorStage);
@@ -48,6 +49,27 @@ export default function FullVolumeLocalPreparation({
     .catch(()=>{if(active)setSessionReady(false);});
    return()=>{active=false;};
  },[]);
+ async function retryConnection(){
+   // Doctor-initiated recovery after the workstation administrator configures
+   // this local research endpoint. Never start a paid call merely on a timer.
+   if(checkingConnection||stage!=="unavailable")return;
+   setCheckingConnection(true);
+   try{
+     const r=await fetch("/api/ai/volume-operator-session",{
+       cache:"no-store",credentials:"same-origin",
+     });
+     const data=r.ok?await r.json():null;
+     if(data?.workstationConnected===true){
+       started.current=false;
+       setSessionReady(true);
+       setNotice("Подключение установлено. Начинаем анализ исследования…");
+     }else{
+       setNotice("Анализ не выполнен: облачный сервис не настроен на этом компьютере. Настройку выполняют однократно при установке приложения.");
+     }
+   }catch{
+     setNotice("Анализ не выполнен: локальный сервис недоступен.");
+   }finally{setCheckingConnection(false);}
+ }
  async function connectAdmin(){
    setAdminIssue("");
    const r=await fetch("/api/ai/volume-operator-session",{
@@ -139,7 +161,7 @@ export default function FullVolumeLocalPreparation({
    const controller=new AbortController();ctl.current=controller;
    if(!sessionReady){
      setStage("unavailable");
-     setNotice("Облачный анализ на рабочем месте не подключён. Исходные DICOM доступны для самостоятельного просмотра.");
+     setNotice("Анализ не выполнен: Gemini и Opus не подключены на этом компьютере. Настройка нужна один раз, не для каждого исследования.");
      return;
    }
    void execute(controller.signal).catch(e=>{
@@ -182,6 +204,10 @@ export default function FullVolumeLocalPreparation({
      <button type="button" onClick={stop}>Остановить анализ</button>}
    {!autoStart&&<p>Для автоматической обработки нажмите общую кнопку
      «Анализировать исследование» над просмотром снимков.</p>}
+   {stage==="unavailable"&&!showAdminControls&&<button type="button"
+       disabled={checkingConnection} onClick={()=>void retryConnection()}>
+       {checkingConnection?"Проверяем подключение…":"Повторить анализ после подключения"}
+     </button>}
    {showAdminControls&&sessionReady===false&&<details>
      <summary>Администратору · подключение рабочего места</summary>
      <p>Однократно настройте разрешённую исследовательскую обработку
