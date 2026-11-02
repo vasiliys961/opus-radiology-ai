@@ -217,9 +217,10 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
   const voxels = selected?.voxels ?? summary?.labels.reduce((n,l)=>n+l.voxels,0) ?? 0;
   const volumeMl = selected?.volumeMl ?? summary?.labels.reduce((n,l)=>n+l.volumeMl,0) ?? 0;
 
-  return <section className="ora-mask-controls" aria-label="Готовая сегментационная маска">
-    <div className="ora-mask-heading"><strong>Сегментация · готовая маска</strong><span>Локальный импорт</span></div>
-    <p>Загрузите NIfTI-маску именно выбранной DICOM-серии. Проверяются размеры, положение и ориентация. Для открытой исследовательской КТ доступна опциональная локальная Lungmask R231 после отдельной установки.</p>
+  return <section className="ora-mask-controls" aria-label="Разметка органов и очагов на снимках">
+    <div className="ora-mask-heading"><strong>Цветовая разметка на снимках</strong><span>Дополнительный инструмент</span></div>
+    <p>Разметка, или «маска», — это цветное выделение органа или очага поверх исходных срезов. Она помогает проверить границы и рассчитать объём выделенной области. Сама разметка не является диагнозом.</p>
+    <p>Для обычного анализа загружайте DICOM в разделе «Исследование» и нажимайте «Анализировать исследование». Здесь можно создать разметку лёгких доступной локальной моделью или открыть уже готовую разметку именно этой серии. Если такого файла у вас нет, загружать сюда ничего не нужно.</p>
     {onFullCtLoad&&<button type="button" disabled={!ready||busy||exportBusy||workerBusy} onClick={()=>void loadFull()}>Показать маску полного задания для этого фрагмента</button>}
     <LocalLungmaskPanel ready={ready&&!busy&&!exportBusy&&!onFullCtLoad} onBusy={setWorkerBusy}
       onPrepare={signal=>callbacks.current.onPrepareStream(signal)} onResult={(mask,result,evidence)=>{
@@ -229,8 +230,8 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
         callbacks.current.onEvidenceChange?.(evidence);
       }}/>
     <div className="ora-mask-actions">
-      <button type="button" disabled={!ready||busy||exportBusy||workerBusy} onClick={()=>input.current?.click()}>{busy ? "Проверка маски…" : summary ? "Заменить маску .nii / .nii.gz" : "Загрузить маску .nii / .nii.gz"}</button>
-      <button type="button" disabled={!ready||busy||exportBusy||workerBusy} onClick={()=>researchInput.current?.click()}>Маска TotalSegmentator + паспорт исследования</button>
+      <button type="button" disabled={!ready||busy||exportBusy||workerBusy} onClick={()=>input.current?.click()}>{busy ? "Проверяем разметку…" : summary ? "Открыть другую готовую разметку" : "Открыть готовую разметку"}</button>
+      <button type="button" disabled={!ready||busy||exportBusy||workerBusy} onClick={()=>researchInput.current?.click()}>Открыть разметку TotalSegmentator с описанием</button>
       <input type="file" ref={researchInput} hidden multiple accept=".nii,.json" onChange={event=>{
         const files=Array.from(event.target.files??[]);
         event.target.value="";
@@ -239,13 +240,14 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
       {summary && <button type="button" disabled={exportBusy||workerBusy} onClick={()=>{
         version.current++; researchController.current?.abort();callbacks.current.onClear();setSummary(null);setBusy(false);setError("");
         callbacks.current.onEvidenceChange?.(null);
-      }}>Удалить маску</button>}
+      }}>Убрать разметку со снимков</button>}
       <input ref={input} type="file" accept=".nii,.nii.gz" hidden onChange={event=>{
         const file=event.target.files?.[0];event.target.value="";
         if(file&&ready)void load(file);
       }}/>
     </div>
-    {error && <p className="ora-mask-error" role="alert">{error} {summary ? "Предыдущая маска сохранена." : "Маска не подключена."}</p>}
+    <small>Готовая разметка — отдельный файл .nii или .nii.gz, полученный при обработке этой серии. Для TotalSegmentator выберите вместе .nii и сопровождающий .json с описанием результата. Исходные DICOM здесь выбирать не нужно.</small>
+    {error && <p className="ora-mask-error" role="alert">{error} {summary ? "Предыдущая разметка сохранена." : "Разметка не открыта."}</p>}
     {summary && <>
       <p className="ora-mask-success" role="status">Сетка совмещена · {summary.name} · меток: {summary.labels.length}</p>
       <small>Совпадение геометрии не подтверждает пациента или правильность сегментации. Проверьте принадлежность файла выбранной серии и границы на всех плоскостях.</small>
@@ -340,8 +342,8 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
         change({...display,visible:true,label:labelId});
       }}/>}
     <details className="ora-analysis-package">
-      <summary>Пакет полного объёма для AI Engine</summary>
-      <p>Подготовьте выбранную серию как NIfTI и паспорт. Оба файла скачиваются отдельно; приложение не отправляет их на сервер.</p>
+      <summary>Для специалиста: обработать серию во внешней программе</summary>
+      <p>Это дополнительный ручной способ обработки, а не обязательный шаг анализа. Скачайте изображение выбранной серии (.nii) и описание его геометрии (.json), передайте их специалисту, который запускает совместимую модель. Приложение само никуда эти файлы не отправляет.</p>
       <small>В пакет входит одна серия. Последовательность и полнота анатомического покрытия не подтверждены. Изображение может содержать идентифицирующую информацию; удаление DICOM-тегов не гарантирует обезличивания.</small>
       <div className="ora-mask-actions">
         <button type="button" disabled={!ready||busy||exportBusy||workerBusy} onClick={()=>void prepare()}>{exportBusy ? "Подготовка объёма…" : packet ? "Подготовить новый пакет" : "Подготовить пакет серии"}</button>
@@ -353,8 +355,8 @@ export default function SegmentationControls({ ready, onPrepare, onPrepareStream
       {packet && <>
         <p className="ora-package-ready" role="status">Пакет готов · {packet.request.frameCount} кадров · {packet.request.geometry.dimensions.join(" × ")} · {packet.request.modality}</p>
         <div className="ora-package-downloads">
-          <a href={packet.volumeUrl} download={`opus-${packet.request.requestId}_0000.nii`}>Скачать объём .nii</a>
-          <a href={packet.manifestUrl} download={`opus-${packet.request.requestId}.request.json`}>Скачать паспорт .json</a>
+          <a href={packet.volumeUrl} download={`opus-${packet.request.requestId}_0000.nii`}>Скачать изображение серии (.nii)</a>
+          <a href={packet.manifestUrl} download={`opus-${packet.request.requestId}.request.json`}>Скачать описание серии (.json)</a>
         </div>
         <details className="ora-offline-model-instructions">
           <summary>Настоящий локальный AI на Mac · ONNX · без облака</summary>

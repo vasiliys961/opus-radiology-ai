@@ -386,7 +386,7 @@ try {
   const mpr=page.getByRole('button',{name:'MPR · 3 плоскости',exact:true});
   await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='MPR · 3 плоскости'&&!b.disabled),undefined,{timeout:30000});
   await mpr.click();
-  await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='Загрузить маску .nii / .nii.gz'&&!b.disabled),undefined,{timeout:30000});
+  await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='Открыть готовую разметку'&&!b.disabled),undefined,{timeout:30000});
   console.log('MPR ready');
   // The loader packs all-zero slices into uint8 despite 16-bit DICOM storage.
   // Check decoded buffers, not the on-disk pixel byte count (0.25 MiB).
@@ -848,7 +848,7 @@ try {
   for(const o of evidence.observations.slice(0,2))assert.ok(targetedHtml.includes(`Наблюдение: ${o.observationId}`));
   assert.doesNotMatch(targetedHtml,/<script|<img|Заметку нужно перепроверить/);
   assert.equal(await page.locator('.ora-mpr-mask-overlay').count(),3);
-  await page.getByRole('button',{name:'Удалить маску',exact:true}).click();
+  await page.getByRole('button',{name:'Убрать разметку со снимков',exact:true}).click();
   assert.equal(await evidencePanel.count(),0);
   assert.equal(await comparisonPanel.count(),0);
   assert.equal(await historyPanel.count(),0);

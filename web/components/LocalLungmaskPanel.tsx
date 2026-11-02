@@ -37,7 +37,7 @@ export default function LocalLungmaskPanel({ready, onPrepare, onResult, onBusy}:
       const output=await runLocalR231(session,packet,controller.signal,setStatus);
       if(controller.signal.aborted)return;
       callbacks.current.onResult(output.mask,output.result,output.evidence);
-      setMetrics(output.metrics);setStatus("Маска возвращена в MPR. Проверьте границы на всех плоскостях.");
+      setMetrics(output.metrics);setStatus("Правое и левое лёгкое выделены цветом. Проверьте границы на аксиальных, корональных и сагиттальных срезах.");
     } catch(cause) {
       if(controller.signal.aborted)setStatus("Ожидание отменено; запрос удаления отправлен worker. При потере связи файлы удаляются по TTL.");
       else {setStatus("");setError(cause instanceof Error?cause.message:"Локальное задание не выполнено.");}
@@ -47,14 +47,14 @@ export default function LocalLungmaskPanel({ready, onPrepare, onResult, onBusy}:
     }
   };
   return <details className="ora-local-lungmask">
-    <summary>Lungmask R231 · локальный CPU · экспериментальный режим</summary>
-    <p>КТ грудной клетки → маска правого и левого лёгкого → MPR. Обрабатывает отдельный Python worker на этом компьютере. Gemini/Claude для этой задачи не требуются.</p>
-    <p>До 8 388 608 вокселей; только осевая сетка без наклона. Большие серии будут отклонены. Это сегментация, диагностическое заключение не формируется.</p>
-    <p>Safe Mode включён по умолчанию в обновлённом worker: CPU, один поток, batch 1; расчёт памяти по серии и остановка при нехватке ресурсов. Это экспериментальная оценка, не гарантия отсутствия swap.</p>
+    <summary>Выделить правое и левое лёгкое на КТ</summary>
+    <p>Модель Lungmask R231 выделяет лёгкие цветом на исходных срезах и позволяет оценить объём выделенной области. Она не ищет узлы или опухоли и не формирует заключение. Обработка выполняется на этом компьютере, без облачных моделей.</p>
+    <p>Обрабатывается только загруженная серия или выбранный фрагмент. При неподходящей геометрии или нехватке памяти обработка не начнётся. Границы лёгких необходимо проверить врачу.</p>
     {profile&&<p>Профиль текущего worker: {profile === "safe" ? "Safe Mode · 1 поток" : "Balanced · 2 потока"}.</p>}
-    <p><a href="https://github.com/vasiliys961/opus-radiology-ai/blob/main/docs/LOCAL_LUNGMASK_WORKER.md" target="_blank" rel="noreferrer">Установка и запуск worker</a></p>
-    <label>Адрес worker <input aria-label="Адрес локального worker" value={endpoint} disabled={busy} onChange={e=>setEndpoint(e.target.value)}/></label>
-    <label>Сессионный токен <input aria-label="Токен локального worker" type="password" autoComplete="off" value={token} disabled={busy} onChange={e=>setToken(e.target.value)}/></label>
+    <p>Если локальная обработка ещё не подключена, эти настройки заполняет специалист по установке.
+      <a href="https://github.com/vasiliys961/opus-radiology-ai/blob/main/docs/LOCAL_LUNGMASK_WORKER.md" target="_blank" rel="noreferrer"> Инструкция для специалиста</a></p>
+    <label>Адрес локальной службы обработки <input aria-label="Адрес локального worker" value={endpoint} disabled={busy} onChange={e=>setEndpoint(e.target.value)}/></label>
+    <label>Код доступа к локальной службе <input aria-label="Токен локального worker" type="password" autoComplete="off" value={token} disabled={busy} onChange={e=>setToken(e.target.value)}/></label>
     <label><input type="checkbox" checked={confirmed} disabled={busy} onChange={e=>setConfirmed(e.target.checked)}/> Это разрешённая открытая исследовательская КТ грудной клетки; полный поперечный срез и HU проверены. Не клиническое исследование пациента.</label>
     <div className="ora-mask-actions">
       <button type="button" disabled={!ready||busy||!confirmed||!token} onClick={()=>void run()}>Сегментировать лёгкие локально</button>

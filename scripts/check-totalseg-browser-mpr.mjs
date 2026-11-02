@@ -98,7 +98,7 @@ try{
   stage='open-mpr';
   await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='MPR · 3 плоскости'&&!b.disabled));
   await page.getByRole('button',{name:'MPR · 3 плоскости',exact:true}).click();
-  await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='Загрузить маску .nii / .nii.gz'&&!b.disabled));
+  await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='Открыть готовую разметку'&&!b.disabled));
   stage='load-real-mask';
   await page.locator('.ora-mask-controls input[accept*=".nii"]').setInputFiles(mask);
   await page.locator('.ora-mask-success').waitFor({timeout:120000});
