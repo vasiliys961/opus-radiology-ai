@@ -29,6 +29,8 @@ jobs:
           node-version: '24'
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
+      - name: Syntax check one-time local OpenRouter setup
+        run: node --check ../scripts/setup-local-public-analysis.mjs
       - name: DICOM module tests
         run: npm test
       - name: Test real offline ONNX CPU inference (synthetic weights only)
