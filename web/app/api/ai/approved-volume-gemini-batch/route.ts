@@ -3,7 +3,7 @@ import {timingSafeEqual} from "node:crypto";
 import {callAiGateway} from "../../../../lib/ai-gateway";
 import {createSyntheticTrialLimiter} from "../../../../lib/synthetic-live-research";
 import {reviewApprovedVolumeGeminiBatch} from "../../../../lib/approved-volume-batch-review";
-import {validateVolumeSession,VOLUME_SESSION_COOKIE} from "../../../../lib/volume-operator-session";
+import {localResearchEnabled,validateVolumeSession,VOLUME_SESSION_COOKIE} from "../../../../lib/volume-operator-session";
 
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
@@ -55,15 +55,17 @@ async function readBounded(req:NextRequest):Promise<unknown>{
 }
 export async function POST(req:NextRequest){
   if(!allowedLocal(req))return reply(404,"Local research endpoint only");
-  if(!ready())return reply(503,"Deidentified OpenRouter research permission is not configured");
   const autoPublic=req.headers.get("x-opus-auto-public-volume")==="1";
   if(autoPublic){
-    if(process.env.RADIOLOGY_ENABLE_AUTOMATIC_PUBLIC_VOLUME_RESEARCH!=="1"||
-       !validateVolumeSession(req.cookies.get(VOLUME_SESSION_COOKIE)?.value??null))
+    if(!localResearchEnabled())return reply(503,"Public research workstation is not approved or configured");
+    if(!validateVolumeSession(req.cookies.get(VOLUME_SESSION_COOKIE)?.value??null))
       return reply(401,"Research workstation session required");
-  }else if(!operator(process.env.RADIOLOGY_LOCAL_RESEARCH_OPERATOR_TOKEN,
-     req.headers.get("x-opus-local-operator-token")))
-    return reply(401,"Operator authorization failed");
+  }else{
+    if(!ready())return reply(503,"Deidentified OpenRouter research permission is not configured");
+    if(!operator(process.env.RADIOLOGY_LOCAL_RESEARCH_OPERATOR_TOKEN,
+      req.headers.get("x-opus-local-operator-token")))
+      return reply(401,"Operator authorization failed");
+  }
   if(!/^application\/json(?:\s*;.*)?$/i.test(req.headers.get("content-type")??""))
     return reply(415,"JSON required");
   const announced=Number(req.headers.get("content-length")??0);
