@@ -98,8 +98,9 @@ try{
  await page.locator(".cs-series-list button").first().click();
  const primary=page.locator('section[aria-label="Единый анализ DICOM"]');
  await primary.waitFor();
- const research=primary.getByRole("checkbox",{name:/Разрешаю анализ этого обезличенного исследования/});
- await research.check();
+ assert.equal(await primary.locator("input[type=checkbox]").count(),0,"No clinical workflow checkbox");
+ assert.equal(await page.getByRole("button",{name:"3D · вращение"}).count(),1);
+ assert.equal(await page.getByText("Дополнительные исследовательские инструменты").count(),0);
  const button=primary.getByRole("button",{name:"Анализировать исследование"});
  await page.waitForFunction(()=>{
   const area=document.querySelector('section[aria-label="Единый анализ DICOM"]');
