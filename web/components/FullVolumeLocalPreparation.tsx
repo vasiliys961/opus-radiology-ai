@@ -25,8 +25,6 @@ export default function FullVolumeLocalPreparation({
  const [report,setReport]=useState<FullVolumeOpusResult|null>(null);
  const [editable,setEditable]=useState("");
  const [sessionReady,setSessionReady]=useState<boolean|null>(null);
- const [adminToken,setAdminToken]=useState("");
- const [adminIssue,setAdminIssue]=useState("");
  const ctl=useRef<AbortController|null>(null);
  const started=useRef(false);
  const detectorStageRef=useRef(detectorStage);
@@ -48,16 +46,6 @@ export default function FullVolumeLocalPreparation({
     .catch(()=>{if(active)setSessionReady(false);});
    return()=>{active=false;};
  },[]);
- async function connectAdmin(){
-   setAdminIssue("");
-   const r=await fetch("/api/ai/volume-operator-session",{
-     method:"POST",cache:"no-store",credentials:"same-origin",
-     headers:{"X-Opus-Local-Operator-Token":adminToken},
-   }).catch(()=>null);
-   setAdminToken("");
-   if(!r?.ok){setAdminIssue("Рабочее место не подключено. Проверьте настройки сервера.");return;}
-   setSessionReady(true);setAdminIssue("Рабочее место готово к анализу.");
- }
  async function execute(signal:AbortSignal){
    if(!plan)throw Error("Геометрия томографического ряда не подтверждена");
    let receipts:LocalVolumeReceipt[]=[];
@@ -139,7 +127,7 @@ export default function FullVolumeLocalPreparation({
    const controller=new AbortController();ctl.current=controller;
    if(!sessionReady){
      setStage("unavailable");
-     setNotice("Облачный анализ на рабочем месте не подключён. Исходные DICOM доступны для самостоятельного просмотра.");
+     setNotice("Автоматическое заключение пока недоступно на этом рабочем месте. Просмотр снимков работает.");
      return;
    }
    void execute(controller.signal).catch(e=>{
@@ -182,15 +170,6 @@ export default function FullVolumeLocalPreparation({
      <button type="button" onClick={stop}>Остановить анализ</button>}
    {!autoStart&&<p>Для автоматической обработки нажмите общую кнопку
      «Анализировать исследование» над просмотром снимков.</p>}
-   {sessionReady===false&&<details>
-     <summary>Администратору · подключение рабочего места</summary>
-     <p>Однократно настройте разрешённую исследовательскую обработку
-       на локальном сервере. Врач не вводит ключи или адреса моделей.</p>
-     <label>Код администратора <input type="password" value={adminToken}
-       autoComplete="off" onChange={e=>setAdminToken(e.target.value)}/></label>
-     <button type="button" onClick={()=>void connectAdmin()}>Подключить</button>
-     {adminIssue&&<p role="status">{adminIssue}</p>}
-   </details>}
    <details><summary>Просмотреть отдельные срезы</summary>
      {plan.sourceFrames.length} изображений. Выберите срез в окне DICOM
      или используйте просмотр списка исследований.
