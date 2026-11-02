@@ -55,11 +55,11 @@ try{
  await page.locator(".cs-series-list button").first().click();
  const study=page.locator('section[aria-label="Единый анализ DICOM"]');
  await study.waitFor({timeout:45000});
- const sourceConfirmation=study.getByRole("checkbox",{name:/Подтверждаю, что это КТ грудной клетки/});
+ const sourceConfirmation=study.getByRole("checkbox",{name:/Проверил снимки: это КТ грудной клетки/});
  if(await sourceConfirmation.count())await sourceConfirmation.check();
  assert.match(await study.innerText(),/Грудная клетка/);
- await study.getByText("Настройки приватного исполнителя и разрешение",{exact:true}).click();
- await study.getByRole("checkbox",{name:/Подтверждаю, что исследование разрешено/}).check();
+ await study.getByText("Дополнительно · параметры моделей и уточнение протокола",{exact:true}).click();
+ await study.getByRole("checkbox",{name:/Разрешаю анализ этого обезличенного исследования/}).check();
  const run=study.getByRole("button",{name:"Анализировать исследование"});
  await page.waitForFunction(()=>{
   const section=document.querySelector('section[aria-label="Единый анализ DICOM"]');
@@ -71,7 +71,8 @@ try{
   await page.getByText("Дополнительно · анализ отдельных срезов",{exact:true}).click();
   await page.getByRole("heading",{name:/Gemini Orchestra · подготовка кадров/})
   .waitFor({timeout:45000});
- // This is ACTUAL 3-D original CLN model execution. Allow bounded CPU time.
+  await study.getByText("Результаты детекторов и проверка отдельных находок",{exact:true}).click();
+  // This is ACTUAL 3-D original CLN model execution. Allow bounded CPU time.
  const cln=page.locator('section[aria-label="CLN original lung-tumor physician review"]');
  await cln.waitFor({timeout:3_300_000});
  await cln.getByText(/Сверяем исходное исследование/).waitFor({state:"hidden",timeout:90000});
