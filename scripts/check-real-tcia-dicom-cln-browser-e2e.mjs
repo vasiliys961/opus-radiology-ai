@@ -49,7 +49,7 @@ page.on("response",async r=>{
  }
 });
 try{
- await page.goto("http://127.0.0.1:3000/viewer",{waitUntil:"domcontentloaded",timeout:70000});
+ await page.goto("http://127.0.0.1:3000/viewer?research=1",{waitUntil:"domcontentloaded",timeout:70000});
  await page.locator('input[accept*=".dcm"]').setInputFiles(files);
  await page.getByText(/Проиндексировано 103 DICOM/).waitFor({timeout:120000});
  await page.locator(".cs-series-list button").first().click();
@@ -59,7 +59,7 @@ try{
  if(await sourceConfirmation.count())await sourceConfirmation.check();
  assert.match(await study.innerText(),/КТ грудной клетки/);
  await study.getByText("Дополнительно · параметры моделей и уточнение протокола",{exact:true}).click();
- await study.getByRole("checkbox",{name:/Разрешаю анализ этого обезличенного исследования/}).check();
+ await study.getByRole("checkbox",{name:/Подтверждаю правомерность исследовательской обработки/}).check();
  const run=study.getByRole("button",{name:"Анализировать исследование"});
  await page.waitForFunction(()=>{
   const section=document.querySelector('section[aria-label="Единый анализ DICOM"]');
