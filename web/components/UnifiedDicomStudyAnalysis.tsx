@@ -263,7 +263,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,resear
    plan.route==="totalseg-abdomen"?autoAbdomenChecking:
    plan.route==="ianpan-ich"?autoIchChecking:
    plan.route==="wmh-flair"?(brainTask==="wmh"?autoWmhChecking:autoBrainChecking):false;
- const ready=(!!plan.route||visionOnlyAvailable)&&authorized&&!busy&&(!researchMode||!readinessChecksPending)&&
+ const ready=(!!plan.route||visionOnlyAvailable)&&authorized&&!busy&&!readinessChecksPending&&
    ((visionOnlyAvailable||brainVisionOnly)?true:xrvPlan?(researchMode&&xrvStatus==="ready"&&xrvChestConfirmed&&sourceUrl.startsWith("https://")):plan.route==="totalseg-abdomen"?true:chestPlan?true:
      (plan.route==="ianpan-ich"?true:
       plan.route==="wmh-flair"?true:
