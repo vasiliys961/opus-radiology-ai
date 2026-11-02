@@ -27,7 +27,7 @@ test("One-time explicitly approved local research works without a second manual 
    process.env.RADIOLOGY_OPENROUTER_HEALTH_DATA_APPROVED="0";
    assert.equal(localResearchEnabled(),false,"No patient/health-data consent bypass");
    process.env.RADIOLOGY_OPENROUTER_HEALTH_DATA_APPROVED="1";
-   process.env.NODE_ENV="production";
+   (process.env as Record<string,string|undefined>).NODE_ENV="production";
    assert.equal(localResearchEnabled(),false,"No localhost research mode in production");
  }finally{
    for(const [key,value] of previous){
