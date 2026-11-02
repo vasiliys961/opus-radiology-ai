@@ -77,7 +77,7 @@ try{
     }
     return route.continue();
   });
-  await page.goto(url+"/viewer",{waitUntil:"networkidle"});
+  await page.goto(url+"/viewer?research=1",{waitUntil:"networkidle"});
    await page.getByText("Дополнительные исследовательские инструменты",{exact:true}).click();
   // The trained-model source/result importer MUST be reachable in the visible
   // navigation, not merely present as a lazy component in source code.

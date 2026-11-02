@@ -85,6 +85,14 @@ const detectKind = (file: File): Kind | null => {
 const kindLabel: Record<Kind, string> = { image: "Изображение", dicom: "DICOM", nifti: "NIfTI", archive: "ZIP" };
 
 export default function Home() {
+  const [researchMode,setResearchMode]=useState(false);
+  useEffect(()=>{
+    if(new URLSearchParams(window.location.search).get("research")==="1"){
+      setResearchMode(true);
+    }else{
+      window.location.replace("/viewer");
+    }
+  },[]);
   const inputRef = useRef<HTMLInputElement>(null);
   const folderRef = useRef<HTMLInputElement>(null);
   const [files, setFiles] = useState<StudyFile[]>([]);
@@ -264,6 +272,7 @@ export default function Home() {
   };
   const totalSize = files.reduce((sum, f) => sum + f.file.size, 0);
 
+  if(!researchMode)return null; // Normal entry always opens the single radiologist viewer.
   return <AnalysisSoundProvider><div className="ora-app">
     <aside className="ora-sidebar">
       <div className="ora-brand"><div className="ora-logo"><Icon name="scan" size={25}/></div><div><strong>OPUS<span>RADIOLOGY</span></strong><small>AI DIAGNOSTIC WORKSPACE</small></div></div>

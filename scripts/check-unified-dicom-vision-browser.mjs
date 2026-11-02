@@ -27,7 +27,7 @@ server.stderr.on("data",b=>logs+=String(b).slice(-3000));
 let browser,page;
 try{
  for(let i=0;i<120;i++){
-  try{const r=await fetch(baseUrl+"/viewer");if(r.ok)break;}catch{}
+  try{const r=await fetch(baseUrl+"/viewer?research=1");if(r.ok)break;}catch{}
   if(i===119)throw Error("Next server did not start: "+logs.slice(-1500));
   await new Promise(resolve=>setTimeout(resolve,250));
  }
@@ -38,7 +38,7 @@ try{
  page.on("pageerror",e=>errors.push(e.message));
  page.on("request",r=>{if(new URL(r.url()).pathname==="/api/ai/deidentified-openrouter-review")
   aiRequests.push(r.method());});
- await page.goto(baseUrl+"/viewer",{waitUntil:"domcontentloaded",timeout:45000});
+ await page.goto(baseUrl+"/viewer?research=1",{waitUntil:"domcontentloaded",timeout:45000});
  const files=(await readdir(join(fixture,"dicom"))).sort().map(name=>join(fixture,"dicom",name));
  assert.equal(files.length,32);
  await page.locator('input[accept*=".dcm"]').setInputFiles(files);
@@ -52,7 +52,7 @@ try{
  assert.match(await analysis.innerText(),/КТ грудной клетки/);
  assert.doesNotMatch(await analysis.innerText(),/Нет совместимого исполнительного пути/);
  await analysis.getByText("Дополнительно · параметры моделей и уточнение протокола",{exact:true}).click();
- await analysis.getByRole("checkbox",{name:/Разрешаю анализ этого обезличенного исследования/}).check();
+ await analysis.getByRole("checkbox",{name:/Подтверждаю правомерность исследовательской обработки/}).check();
  const launch=analysis.getByRole("button",{name:"Анализировать исследование"});
  await page.waitForFunction(()=>{const section=document.querySelector('section[aria-label="Единый анализ DICOM"]');
   const button=[...(section?.querySelectorAll("button")??[])].find(x=>x.textContent?.trim()==="Анализировать исследование");
