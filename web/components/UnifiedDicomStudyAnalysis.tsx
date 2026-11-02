@@ -22,7 +22,7 @@ import {createNativePhysicianDraft,type NativeDicomDigest} from "../lib/native-p
 import {prepareNativeBrainMr} from "../lib/brain-native-mr-dicom";
 import {executeOriginalBrain,checkAutomaticBrainReady,BRAIN_ROLES,type BrainTask,type BrainModelReport} from "../lib/brain-multisequence-original-worker";
 import DetectorGeminiOpusConsilium from "./DetectorGeminiOpusConsilium";
-import type {SanitizedDetectorBundle} from "../lib/detector-consilium-evidence";
+import {assembleSanitizedDetectorBundle,type SanitizedDetectorBundle} from "../lib/detector-consilium-evidence";
 import {checkOriginalXrvReady,runCxrXrvFromDicom,XRV_CXR_LABELS,type OriginalXrvCxrResult} from "../lib/xrv-original-cxr";
 import CxrIndependentVisionReview from "./CxrIndependentVisionReview";
 import OriginalWorkerFleetReadiness from "./OriginalWorkerFleetReadiness";
@@ -111,7 +111,6 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  const [xrvReport,setXrvReport]=useState<OriginalXrvCxrResult|null>(null);
  const [xrvStatus,setXrvStatus]=useState<"checking"|"ready"|"unavailable">("checking");
  const [xrvChestConfirmed,setXrvChestConfirmed]=useState(false);
- const [authorized,setAuthorized]=useState(false);
  const [flairConfirmed,setFlairConfirmed]=useState(false);
  const [autoWmhReady,setAutoWmhReady]=useState(false);
  const [autoWmhChecking,setAutoWmhChecking]=useState(false);
@@ -161,7 +160,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
    setNodeEndpoint("http://127.0.0.1:8777");setNodeToken("");setEnhancedChestConfirmed(false);setChestNodes(null);
    setChestSource(null);setChestNodules(null);setChestCln(null);setLungscapeResult(null);setChestEffusion(null);setChestPe(null);setChestNodes(null);setChestIssues([]);setAbdomenResult(null);setNcctVerified(false);
    setXrvReport(null);setXrvChestConfirmed(false);
-   setAuthorized(false);setFlairConfirmed(false);
+   setFlairConfirmed(false);
    setSourceUrl("");setSourceLicense("");setBusy(false);setError("");setStatus("");
    setIch(null);setWmh(null);setBrainResult(null);setDecisions({});setDraftText("");setExporting(false);
    return ()=>{serial.current++;active.current?.abort();};
@@ -260,19 +259,13 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
    plan.route==="totalseg-abdomen"?autoAbdomenChecking:
    plan.route==="ianpan-ich"?autoIchChecking:
    plan.route==="wmh-flair"?(brainTask==="wmh"?autoWmhChecking:autoBrainChecking):false;
- const ready=(!!plan.route||visionOnlyAvailable)&&authorized&&!busy&&!readinessChecksPending&&
-   ((visionOnlyAvailable||brainVisionOnly)?true:xrvPlan?(xrvStatus==="ready"&&xrvChestConfirmed&&sourceUrl.startsWith("https://")):plan.route==="totalseg-abdomen"?true:chestPlan?true:
-     (plan.route==="ianpan-ich"?true:
-      plan.route==="wmh-flair"?true:
-      (!!token&&!!endpoint.trim())))&&
-   (!plan.needsExplicitFlair||brainVisionOnly||(
-     brainTask==="wmh"?
-       ((flairConfirmed||autoFlair.eligible)&&sourceUrl.startsWith("https://")&&!!sourceLicense.trim()):
-       (brainSequenceApproved&&brainAssignedReady&&sourceUrl.startsWith("https://")&&!!sourceLicense.trim())
-   ));
+ // Physician presses once; unavailable models are skipped.
+ // Image providers are independently restricted by localhost admin session.
+ const visionReady=canAutoPrepareLocalVision(series);
+ const ready=(!!plan.route||visionOnlyAvailable||visionReady)&&!busy&&!readinessChecksPending;
 
  async function launch(){
-   if(!ready||(!plan.route&&!visionOnlyAvailable))return;
+   if(!ready||(!plan.route&&!visionOnlyAvailable&&!visionReady))return;
    if(!plan.route){
      // No original detector is available for this anatomy. Open the same
      // source-bound Vision/OCR/privacy workflow from the primary action.
@@ -281,7 +274,15 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
      onDetectorEvidence?.(series.key,null);
      onAnalysisStage?.(series.key,"vision-only");
      setError("");
-     setStatus("Для этой КТ/МРТ оригинальный патологический детектор не назначен. Локальная подготовка кадров Gemini + Opus открыта; передача в облако требует отдельного разрешения.");
+     setStatus("Подготавливаем изображения для анализа.");
+     onReadyForVision?.(series.key);
+     return;
+   }
+   // MRI with missing trusted study provenance must not be sent to a worker.
+   if(plan.route==="wmh-flair"&&!sourceUrl.trim()){
+     onDetectorEvidence?.(series.key,null);
+     onAnalysisStage?.(series.key,"vision-only");
+     setStatus("Выполняем анализ изображений.");
      onReadyForVision?.(series.key);
      return;
    }
@@ -317,7 +318,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
        const original=files.get(series.members[0].id);
        if(!original)throw Error("Исходный рентгеновский DICOM отсутствует.");
        const result=await runCxrXrvFromDicom(original,sourceUrl,
-         authorized&&xrvChestConfirmed,controller.signal,progress);
+         xrvChestConfirmed,controller.signal,progress);
        if(version!==serial.current||controller.signal.aborted)return;
        setXrvReport(result);
        setDraftText("Исследовательская рентгенография: оригинальная NIH DenseNet121 "+
@@ -684,157 +685,16 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  }
  return <section className="cs-geometry" aria-label="Единый анализ DICOM">
   <h2>Анализ исследования</h2>
-  <p>Одна кнопка для доступных моделей и формирования предварительного заключения.</p>
-   {confirmableChest&&<label><input type="checkbox" checked={clinicianConfirmedChest}
-     disabled={busy} onChange={e=>setClinicianConfirmedChest(e.target.checked)}/>
-     Проверил снимки: это КТ грудной клетки, не локализатор.
-   </label>}
-  <p><strong>{plan.route==="monai-nodules"?"КТ грудной клетки":
-     plan.route==="totalseg-abdomen"?"КТ брюшной полости":
-     plan.route==="ianpan-ich"?"КТ головного мозга":
-     plan.route==="wmh-flair"?"МРТ головного мозга":
-     plan.route==="xrv-cxr"?"Рентгенография":"Исследование DICOM"}</strong>
-     {plan.route?" · подходящие модели выбираются автоматически":""}</p>
-  {plan.reason&&<p role="status">{visionOnlyAvailable?
-     "Локальный детектор не назначен: "+plan.reason+" Доступен независимый Gemini + Opus.":
-     "Не запущено: "+plan.reason}</p>}
+   <p>Модели выбираются автоматически по типу исследования.</p>
   {(plan.route||visionOnlyAvailable)&&<>
-   {plan.route&&<details>
-    <summary>Дополнительно · параметры моделей и уточнение протокола</summary>
-    <details><summary>Состояние серверов моделей</summary><OriginalWorkerFleetReadiness/></details>
-    {!xrvPlan&&!(plan.route==="totalseg-abdomen"&&autoAbdomenReady)&&!(chestPlan&&autoMonaiReady)&&!(plan.route==="wmh-flair"&&(brainTask==="wmh"?autoWmhReady:autoBrainReady))&&!(plan.route==="ianpan-ich"&&autoIchReady)&&<label>Адрес локального worker <input type="text" value={endpoint} disabled={busy} onChange={e=>setEndpoint(e.target.value)}/></label>}
-    {!xrvPlan&&!(plan.route==="totalseg-abdomen"&&autoAbdomenReady)&&!(chestPlan&&autoMonaiReady)&&!(plan.route==="wmh-flair"&&(brainTask==="wmh"?autoWmhReady:autoBrainReady))&&!(plan.route==="ianpan-ich"&&autoIchReady)&&<label>Токен worker <input type="password" autoComplete="off" value={token} disabled={busy} onChange={e=>setToken(e.target.value)}/></label>}
-    {plan.route==="totalseg-abdomen"&&<label><input type="checkbox" checked={ncctVerified} disabled={busy} onChange={e=>setNcctVerified(e.target.checked)}/> По исходному протоколу подтверждаю нативную КТ без контрастирования (иначе HU-поиск камней не выполняется)</label>}
-    {plan.route==="totalseg-abdomen"&&<p role="status">
-       КТ живота · автоматическое подключение оригинальных моделей: {
-        autoAbdomenChecking?"проверяем…":autoAbdomenReady?
-        "готовы к запуску через приватный сервер; врачу не нужен токен":
-        "не настроено; доступен резервный ручной режим для исследователя"
-       }. Если часть моделей отсутствует, они будут отмечены неоценёнными.
-      </p>}
-     {xrvPlan&&<div className="cs-geometry">
-      <strong>Одна оригинальная NIH DenseNet121 · шесть рентгенологических признаков</strong>
-      <p role="status">Проверка весов и Linux worker: {xrvStatus==="checking"?
-        "проверяем":xrvStatus==="ready"?"оригинальные веса проверены SHA-256 и worker доступен":
-        "пока недоступен; обратитесь к администратору сервера"}.</p>
-      <label><input type="checkbox" checked={xrvChestConfirmed} disabled={busy}
-        onChange={e=>setXrvChestConfirmed(e.target.checked)}/>
-        Подтверждаю: это исходная рентгенограмма грудной клетки CR/DX,
-        используемая в разрешённом публичном непациентском исследовании.</label>
-      <label>URL оригинального публичного изображения
-        <input type="url" value={sourceUrl} disabled={busy}
-         onChange={e=>setSourceUrl(e.target.value)}/></label>
-      <p>Модели не нужно передавать DICOM: локально создаётся только растровая копия PNG.
-        Токен и путь к весам хранятся на сервере, не у врача.</p>
-     </div>}
-     {chestPlan&&<div className="cs-geometry">
-      <strong>Второй детектор той же КТ: плевральный и перикардиальный выпот</strong>
-      <p role="status">{autoEffusionChecking?
-       "Проверяем оригинальную TotalSegmentator task315…":
-       autoEffusionReady?
-       "Оригинальная TotalSegmentator task315 доступна на приватном сервере. Токен врачу не нужен.":
-       "Серверная task315 недоступна; предусмотрен резервный ручной исследовательский режим."}</p>
-      {!autoEffusionReady&&<label>Адрес TotalSegmentator task315 worker <input type="text" value={effusionEndpoint} disabled={busy} onChange={e=>setEffusionEndpoint(e.target.value)}/></label>}
-      {!autoEffusionReady&&<label>Токен task315 <input type="password" autoComplete="off" value={effusionToken} disabled={busy} onChange={e=>setEffusionToken(e.target.value)}/></label>}
-      <p>Плевральный и перикардиальный классы выполняет ОДНА оригинальная модель; другая модель на те же классы не запускается.</p>
-    </div>}
-    {chestPlan&&<div className="cs-geometry">
-      <strong>Четвёртая отдельная задача: лимфоузлы средостения · оригинальный Raidionics</strong>
-      <label><input type="checkbox" checked={enhancedChestConfirmed} disabled={busy}
-        onChange={e=>setEnhancedChestConfirmed(e.target.checked)}/>
-        Врач подтвердил: исследование — контрастная КТ грудной клетки с оценкой средостения.</label>
-      {enhancedChestConfirmed&&<><p role="status">{autoNodesChecking?"Проверяем оригинальный Raidionics…":autoNodesReady?"Raidionics готов автоматически: токен врачу не требуется.":"Raidionics недоступен автоматически; возможен ручной исследовательский запуск."}</p>
-        <label>Адрес Raidionics worker <input type="text" value={nodeEndpoint}
-          disabled={busy} onChange={e=>setNodeEndpoint(e.target.value)}/></label>
-        <label>Токен Raidionics <input type="password" autoComplete="off"
-          value={nodeToken} disabled={busy} onChange={e=>setNodeToken(e.target.value)}/></label>
-      </>}
-      <p>Маска лёгких R231 строится автоматически на той же КТ как анатомическое условие Raidionics.
-        Это НЕ второй патологический детектор. Лимфоузлы не классифицируются как метастазы.</p>
-    </div>}
-    {chestPlan&&<div className="cs-geometry">
-      <strong>Третья отдельная задача: ТЭЛА · только подтверждённая CTPA</strong>
-      <label><input type="checkbox" checked={ctpaConfirmed} disabled={busy}
-        onChange={e=>setCtpaConfirmed(e.target.checked)}/>
-        Врач проверил протокол: эта выбранная серия является КТ-ангиографией лёгочных артерий с пригодной контрастной фазой.</label>
-      {ctpaConfirmed&&<><p role="status">{autoPeChecking?"Проверяем оригинальный PE worker…":autoPeReady?"PE nnU-Net готов к автоматическому запуску через приватный сервер; токен врачу не нужен.":"PE worker не готов автоматически; доступен ручной исследовательский запуск."}</p>
-        <label>Адрес PE nnU-Net worker <input type="text" value={peEndpoint} disabled={busy}
-          onChange={e=>setPeEndpoint(e.target.value)}/></label>
-        <label>Токен PE worker <input type="password" autoComplete="off" value={peToken} disabled={busy}
-          onChange={e=>setPeToken(e.target.value)}/></label>
-      </>}
-      <p>Не применять на произвольной КТ грудной клетки. Исследовательская модель показала Dice 0,038 на одном FUMPE; решение требует ручной проверки, отрицательная ТЭЛА не исключается.</p>
-    </div>}
-    {plan.needsExplicitFlair&&<div className="cs-geometry">
-      <label>Задача оригинальной модели МРТ головного мозга
-       <select value={brainTask} disabled={busy} onChange={e=>{
-         setBrainTask(e.target.value as "wmh"|BrainTask);
-         setBrainSequenceApproved(false);setBrainResult(null);setBrainSeriesByRole({});
-       }}>
-        <option value="wmh">FLAIR · гиперинтенсивности WMH (одна модель)</option>
-        <option value="stroke">DWI + ADC + FLAIR · ишемия ISLES22</option>
-        <option value="glioma">T1CE + T1 + T2 + FLAIR · глиома BraTS</option>
-       </select>
-      </label>
-      {brainTask==="wmh"?<>
-        {autoFlair.eligible?<p role="status">
-          Автоматически распознана последовательность, совместимая с T2-FLAIR:
-          TR {autoFlair.parameters!.trMs} мс, TE {autoFlair.parameters!.teMs} мс,
-          TI {autoFlair.parameters!.tiMs} мс. При наличии оригинальной WMH-модели
-          отдельный выбор типа последовательности не требуется.
-        </p>:<>
-          <p role="status">{autoFlair.reason} По умолчанию доступен независимый
-            анализ кадров Gemini + Opus; WMH не запускается без подтверждения.</p>
-          <label><input type="checkbox" checked={flairConfirmed} disabled={busy}
-            onChange={e=>setFlairConfirmed(e.target.checked)}/>
-            Проверил исходную серию: это действительно FLAIR. Разрешаю оригинальную WMH-модель.</label>
-        </>}
-      </>:<>
-        <p>Для модели {brainTask==="stroke"?"ISLES22":"BraTS"} выберите различные
-         исходные серии одного StudyUID и FrameOfReferenceUID. Названия последовательностей
-         не угадываются по DICOM: их подтверждает врач.</p>
-        {assignedBrainRoles.map(role=><label key={role}>Исходная серия для {role.toUpperCase()}
-         <select value={brainSeriesByRole[role]??""} disabled={busy}
-          onChange={e=>{
-            setBrainSeriesByRole(old=>({...old,[role]:e.target.value}));
-            setBrainSequenceApproved(false);setBrainResult(null);
-          }}>
-          <option value="">Выберите исходную МР-серию</option>
-          {compatibleBrainSeries.map(item=><option key={item.key} value={item.key}>
-             {item.label} · {item.members.length} срезов
-          </option>)}
-         </select>
-        </label>)}
-        <label><input type="checkbox" checked={brainSequenceApproved} disabled={busy||!brainAssignedReady}
-         onChange={e=>setBrainSequenceApproved(e.target.checked)}/>
-          Я проверил назначение всех последовательностей, их принадлежность одному исследованию,
-          корректную регистрацию и правомерность обработки.</label>
-        {brainTask==="glioma"&&<p>BraTS требует четыре уже зарегистрированные
-           МР-серии размером 240×240×155. Несовместимое исследование не запускается.</p>}
-      </>}
-      {!brainVisionOnly&&<>
-        <label>URL разрешённого публичного исследования <input type="url" value={sourceUrl}
-          disabled={busy} onChange={e=>setSourceUrl(e.target.value)}/></label>
-        <label>Лицензия исходного исследования <input type="text" value={sourceLicense}
-          disabled={busy} onChange={e=>setSourceLicense(e.target.value)}/></label>
-      </>}
-    </div>}
-    <p>MONAI, task315, оригинальный Raidionics, исследовательский PE, TotalSegmentator живота и WMH используют разрешённые изображения в loopback worker; ianpan передаёт только SHA-256 и анализирует заранее установленную идентичную публичную КТ. Облачная передача не выполняется.</p>
-   </details>}
-   {/* Authorization is a primary clinical action, not a hidden developer setting. */}
-    <label className="cs-clinician-consent"><input type="checkbox" checked={authorized} disabled={busy}
-      onChange={e=>setAuthorized(e.target.checked)}/>
-      Разрешаю анализ этого обезличенного исследования и передачу очищенных изображений в Gemini.</label>
    <button type="button" disabled={!ready} onClick={()=>void launch()}>
     {busy?"Выполняется реальный анализ...":"Анализировать исследование"}
    </button>
    {busy&&<button type="button" onClick={cancel}>Отменить</button>}
-   {!ready&&!busy&&<p role="status">{readinessChecksPending?
-      "Проверяем доступность оригинальных патологических моделей перед запуском.":plan.route==="totalseg-abdomen"?
-      "Серверные оригинальные веса КТ живота пока не готовы либо источник не подтверждён. Токены в автоматическом режиме врачу не нужны.":
-      visionOnlyAvailable?
-      "Подтвердите разрешённый источник для локальной подготовки Gemini + Opus. Облачный вызов разрешается отдельно.":
-      "Разрешите анализ исследования. Недоступные модели будут пропущены."}</p>}
+   {!ready&&!busy&&<p role="status">{
+     readinessChecksPending?"Проверяем доступные средства анализа…":
+     !visionReady&&plan.route===null?"Для этой серии автоматический анализ недоступен.":
+     "Проверяем готовность исследования."}</p>}
   </>}
   {status&&<p role="status">{status}</p>}
   {error&&<p role="alert">Не выполнено: {error}</p>}
