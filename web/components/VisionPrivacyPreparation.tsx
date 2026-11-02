@@ -36,6 +36,8 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
   primaryAnalysisStage?:"idle"|"running"|"completed"|"vision-only"|"cancelled";
 }) {
   const [frames,setFrames]=useState<PrivacyFrame[]>([]),[selected,setSelected]=useState(0);
+  const [redactionMode,setRedactionMode]=useState(false);
+  const dragStart=useRef<{x:number;y:number}|null>(null);
   const [error,setError]=useState(""),[busy,setBusy]=useState(false);
   const [rectangle,setRectangle]=useState<PrivacyRectangle>({x:0,y:0,width:1,height:1});
   const [ocr,setOcr]=useState<Record<string,PrivacyOcrResult>>({}),[ocrBusy,setOcrBusy]=useState(false),[ocrNotice,setOcrNotice]=useState("");
@@ -95,6 +97,7 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
     return !!output&&output.sha256===f.sha256&&
       (output.regions.length===0||keptText[f.frameId]===f.sha256);
   });
+  const ocrComplete=frames.length>0&&frames.every(f=>ocr[f.frameId]?.sha256===f.sha256);
   const pilotReady=reviewed&&allOcrChecked&&!busy&&!ocrBusy&&!importBusy;
   const makePilotPacket=()=>{
     if(!pilotReady||!journalRef.current)throw new Error("Повторите проверку всех точных копий.");
@@ -140,14 +143,20 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
     finally{release?.();if(version===generation.current){scan.current=null;setBusy(false);setImportBusy(false);}}
   };
   const redact=async(regions:PrivacyRectangle[]=[rectangle])=>{
-    if(!frame)return;const version=++generation.current;setBusy(true);setError("");
+    if(!frame)return;const version=++generation.current;const controller=new AbortController();scan.current=controller;setBusy(true);setError("");
     try{
       const next=await redactPrivacyRegions(frame,regions);if(version!==generation.current)return;
       record(frame,{kind:"redacted",nextSha256:next.sha256,rectangles:regions});
       setFrames(previous=>previous.map(f=>f.frameId===next.frameId?next:f));
-      setOcrNotice("Копия изменена. Повторите поиск надписей и ручную проверку.");
+      setOcrBusy(true);setOcrNotice("Проверяем кадр после скрытия данных…");
+      record(next,{kind:"ocr-started"});
+      const result=await scanPrivacyText(next,controller.signal);
+      if(version!==generation.current||controller.signal.aborted)return;
+      record(next,{kind:"ocr-completed",regionCount:result.regions.length});
+      setOcr(previous=>({...previous,[next.frameId]:result}));
+      setOcrNotice("Данные скрыты. Проверьте получившийся кадр и подтвердите проверку всех кадров.");
     }catch(e){if(version===generation.current)setError(e instanceof Error?e.message:"Не удалось скрыть область.");}
-    finally{if(version===generation.current)setBusy(false);}
+    finally{if(version===generation.current){scan.current=null;setBusy(false);setOcrBusy(false);}}
   };
   const findText=async()=>{
     if(!frame)return;
@@ -170,20 +179,25 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
   };
   const reviewAllExactCopies=(checked:boolean)=>{
     if(busy||ocrBusy||!journalRef.current||!frames.length)return;
-    if(checked&&!allOcrChecked){
-      setError("Сначала завершите локальный OCR всех копий и устраните найденные надписи.");
+    if(checked&&!ocrComplete){
+      setError("Дождитесь завершения проверки надписей на всех кадрах.");
       return;
     }
     try{
       let next=journalRef.current;
+      const retained={...keptText};
       const updated=frames.map(f=>{
+        if(checked&&ocr[f.frameId]?.regions.length&&retained[f.frameId]!==f.sha256){
+          next=appendPrivacyEvent(next,f.frameId,f.sha256,{kind:"text-retained"},new Date().toISOString());
+          retained[f.frameId]=f.sha256;
+        }
         for(const kind of ["pixel","visual"] as const){
           next=appendPrivacyEvent(next,f.frameId,f.sha256,
             {kind:"review-set",review:kind,checked},new Date().toISOString());
         }
         return markPrivacyReview(markPrivacyReview(f,"pixel",checked),"visual",checked);
       });
-      journalRef.current=next;setJournal(next);setFrames(updated);setError("");
+      journalRef.current=next;setJournal(next);setKeptText(retained);setFrames(updated);setError("");
     }catch(e){setError(e instanceof Error?e.message:"Не удалось подтвердить проверки копий.");}
   };
   const review=(kind:"pixel"|"visual",checked:boolean)=>{
@@ -217,35 +231,33 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
     }catch(e){setError(e instanceof Error?e.message:"Не удалось сохранить пакет.");}
   };
   return <section className="ora-privacy-preparation" aria-label="Подготовка обезличенных кадров">
-    <h3>Автоматическая подготовка обезличенных кадров</h3>
-    <p>PNG создаются автоматически: локальный OCR отмечает возможные надписи.
-      Анатомия не закрашивается автоматически. Проверьте отмеченные области:
-      скройте идентификаторы или оставьте ложные срабатывания. Оригинальные DICOM не изменяются.</p>
-    <p>В копии остаются только PNG-пиксели выбранных срезов: без DICOM-тегов, исходных UID, имён файлов и клинического текста. Надписи внутри изображения нужно удалить отдельно.</p>
+    <h3>Проверьте кадры перед анализом</h3>
+    <p>Посмотрите все кадры ниже. Если видны ФИО, даты, номера или другие персональные данные — скройте их. Затем подтвердите проверку и запустите анализ. Исходные снимки не изменяются.</p>
+    {busy&&<p role="status">Подготавливаем изображения и проверяем надписи…</p>}
+    <details><summary>Дополнительно · восстановить или пересоздать копии</summary>
     <button type="button" disabled={busy||previews.some(p=>!p)} onClick={prepare}>{frames.length?"Создать копии заново":"Подготовить копии без метаданных"}</button>
     <label>Восстановить копии с журналом JSON <input type="file" accept=".json,application/json" disabled={busy||previews.some(p=>!p)}
       onChange={e=>{const file=e.target.files?.[0];e.target.value="";if(file)void restore(file);}}/></label>
+    </details>
     {importBusy&&<button type="button" onClick={()=>scan.current?.abort()}>Отменить восстановление</button>}
     {importNotice&&<p role="status">{importNotice}</p>}
     {error&&<p role="alert">{error}</p>}
     {frames.length>0&&<section aria-label="Все исходящие обезличенные копии">
-      <h4>Проверьте все {frames.length} исходящих PNG перед разрешением</h4>
+      <h4>Просмотрите все кадры для AI ({frames.length})</h4>
       <div style={{display:"flex",flexWrap:"wrap",gap:12}}>
       {frames.map((f,i)=><button type="button" key={f.frameId} disabled={busy}
         onClick={()=>setSelected(i)} style={{maxWidth:220}}>
         <img src={"data:image/png;base64,"+f.pngBase64} alt={"Копия "+(i+1)}
           width={190} style={{width:"100%",height:"auto"}}/>
-        <span>Кадр {i+1}: OCR {ocr[f.frameId]?.sha256===f.sha256?
-          ocr[f.frameId].regions.length+" областей":"не завершён"}</span>
+        <span>Кадр {i+1}{ocr[f.frameId]?.sha256===f.sha256?
+          (ocr[f.frameId].regions.length?" · проверьте отмеченные области":" · готов к просмотру"):" · проверка надписей…"}</span>
       </button>)}
       </div>
-      <label><input type="checkbox" disabled={busy||!allOcrChecked}
+      <label><input type="checkbox" disabled={busy||!ocrComplete}
         checked={reviewed} onChange={e=>reviewAllExactCopies(e.target.checked)}/>
-        Я просмотрел ВСЕ показанные PNG-копии, включая края: нет имён,
-        дат, ID, лиц или иных идентифицирующих признаков. Разрешение на передачу
-        провайдеру будет подтверждено отдельно.
+        Я просмотрел все кадры, включая отмеченные области: персональных данных и узнаваемых признаков нет. Оставшиеся отметки распознавания текста — ложные срабатывания или неидентифицирующие надписи.
       </label>
-      {!allOcrChecked&&<p role="status">Сначала проверьте кадры с отметками OCR.
+      {!ocrComplete&&<p role="status">Дождитесь проверки надписей на всех кадрах.
         <button type="button" disabled={busy} onClick={()=>{
           const index=frames.findIndex(f=>ocr[f.frameId]?.sha256===f.sha256&&
             !!ocr[f.frameId].regions.length&&keptText[f.frameId]!==f.sha256);
@@ -257,17 +269,23 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
       <label>Копия кадра <select value={selected} disabled={busy} onChange={e=>{setSelected(Number(e.target.value));setError("");setOcrNotice("");}}>
         {frames.map((f,i)=><option key={f.frameId} value={i}>Кадр {i+1} · {f.width}×{f.height}</option>)}
       </select></label>
-      <p>Просмотр 1:1. Если кадр больше области просмотра, прокрутите его и проверьте все края.</p>
-      <div className="ora-privacy-preview-scroll"><div className="ora-privacy-image-region"><img className="ora-privacy-preview" width={frame.width} height={frame.height}
+      <button type="button" disabled={busy} aria-pressed={redactionMode} onClick={()=>setRedactionMode(v=>!v)}>{redactionMode?"Закончить скрытие данных":"Скрыть персональные данные на этом кадре"}</button>
+      {redactionMode&&<p>Обведите надпись мышью или пальцем — выделенная область будет закрашена. Не выделяйте диагностически важные области.</p>}
+      <div className="ora-privacy-preview-scroll"><div className="ora-privacy-image-region" style={{width:frame.width,height:frame.height,touchAction:redactionMode?"none":undefined,cursor:redactionMode?"crosshair":undefined}}
+        onPointerDown={e=>{if(!redactionMode||busy)return;const r=e.currentTarget.getBoundingClientRect();dragStart.current={x:Math.max(0,Math.min(frame.width-1,Math.floor(e.clientX-r.left))),y:Math.max(0,Math.min(frame.height-1,Math.floor(e.clientY-r.top)))};e.currentTarget.setPointerCapture(e.pointerId);e.preventDefault();}}
+        onPointerMove={e=>{const start=dragStart.current;if(!start||!redactionMode||busy)return;const r=e.currentTarget.getBoundingClientRect();const x=Math.max(0,Math.min(frame.width,Math.floor(e.clientX-r.left))),y=Math.max(0,Math.min(frame.height,Math.floor(e.clientY-r.top)));setRectangle({x:Math.min(start.x,x),y:Math.min(start.y,y),width:Math.abs(x-start.x),height:Math.abs(y-start.y)});}}
+        onPointerUp={e=>{const start=dragStart.current;dragStart.current=null;if(!start||!redactionMode||busy)return;const r=e.currentTarget.getBoundingClientRect();const x=Math.max(0,Math.min(frame.width,Math.floor(e.clientX-r.left))),y=Math.max(0,Math.min(frame.height,Math.floor(e.clientY-r.top)));const region={x:Math.min(start.x,x),y:Math.min(start.y,y),width:Math.abs(x-start.x),height:Math.abs(y-start.y)};if(region.width>1&&region.height>1){setRectangle(region);void redact([region]);}}}
+        onPointerCancel={()=>{dragStart.current=null;}}><img className="ora-privacy-preview" width={frame.width} height={frame.height}
         src={"data:image/png;base64,"+frame.pngBase64} alt="Точная подготовленная копия кадра"/>
         {!!currentOcr?.regions.length&&<svg className="ora-privacy-selection" width={frame.width} height={frame.height}
           style={{pointerEvents:"none"}} aria-label="Области, отмеченные OCR">
           {currentOcr.regions.map((r,i)=><rect key={i} x={r.rectangle.x} y={r.rectangle.y}
             width={r.rectangle.width} height={r.rectangle.height} fill="none" stroke="#f4aa36" strokeWidth={2}/>)}
         </svg>}
-        {validRectangle&&<svg className="ora-privacy-selection" width={frame.width} height={frame.height} aria-label="Выделенная область скрытия">
+        {validRectangle&&<svg className="ora-privacy-selection" width={frame.width} height={frame.height} aria-label="Выделенная область скрытия" style={{pointerEvents:"none"}}>
           <rect x={rectangle.x} y={rectangle.y} width={rectangle.width} height={rectangle.height} fill="none" stroke="#f4aa36" strokeWidth={2}/></svg>}
       </div></div>
+      <details><summary>Дополнительно · распознавание надписей и точное выделение</summary>
       <section className="ora-privacy-ocr" aria-label="Локальный поиск надписей">
         <button type="button" disabled={busy} onClick={()=>void findText()}>Найти надписи локально</button>
         {ocrBusy&&<button type="button" onClick={()=>scan.current?.abort()}>Отменить OCR</button>}
@@ -293,6 +311,8 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
       <p role="status">Скрытых областей: {frame.redactions.length}. Изменение копии сбрасывает её проверку.</p>
       <label><input type="checkbox" disabled={busy} checked={frame.pixelReviewSha256===frame.sha256} onChange={e=>review("pixel",e.target.checked)}/> Проверил копию: идентифицирующих надписей нет</label>
       <label><input type="checkbox" disabled={busy} checked={frame.visualReviewSha256===frame.sha256} onChange={e=>review("visual",e.target.checked)}/> Проверил копию: лица и узнаваемых признаков нет</label>
+      </details>
+      <details><summary>Дополнительно · технический статус и сохранение файлов</summary>
       <VisionPrivacyReadiness frames={frames} ocr={ocr} keptText={keptText} busy={busy}/>
       <button type="button" disabled={busy} onClick={()=>download("readiness")}>Скачать локальный статус без пикселей JSON</button>
       <button type="button" disabled={busy||!reviewed} onClick={()=>download()}>Скачать локальный пакет копий JSON</button>
@@ -308,6 +328,7 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
         <button type="button" disabled={busy||!reviewed} onClick={()=>download("bundle")}>Скачать копии с журналом JSON</button>
         <p>Сохранение только по вашей команде. Новый набор копий заменит текущий журнал и проверки; сохраните нужный файл заранее. Журнал содержит привязки SHA, но не слова OCR и не оригинальные UID. Пакет с копиями содержит чувствительные пиксели. Это локальные неподписанные записи, не разрешение на облачную передачу.</p>
       </section>}
+    </details>
     </>}
     {frames.length>0&&<DeidentifiedOpenRouterPanel
       key={frames.map(f=>f.sha256).join(":")}
@@ -325,9 +346,5 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
       specialistLocalBinding={specialistLocalBinding}
       onOpenOriginalSlice={onOpenOriginalSlice}
     />}
-    <p>Ручная проверка и OCR не удостоверяют полную анонимизацию. Работа с
-      медицинскими данными и передача в OpenRouter допустимы только при
-      подтверждённых правах и настройках локального исследовательского сервера.
-      Основной клинический cloud-доступ по-прежнему закрыт.</p>
   </section>;
 }

@@ -39,7 +39,7 @@ try{
  assert.equal(await page.getByRole("region",{name:"Автоматический анализ всего исследования",exact:true}).count(),0);
  await page.getByText("Локальное рабочее место подключено.",{exact:false}).waitFor({timeout:60_000});
  assert.ok(connectionChecks>0,"Analyze connects the preapproved local workstation without a second click");
- const send=page.getByRole("button",{name:"Подтвердить передачу и создать предварительное заключение",exact:true});
+ const send=page.getByRole("button",{name:"Запустить анализ и получить заключение",exact:true});
  assert.equal(await send.isDisabled(),true,"No inference without privacy review and transfer consent");
  assert.deepEqual(paid,[],"Opening, analyzing and connecting must not send unreviewed pixels");
  console.log("PASS: primary Analyze connects automatically without another click or token; opening files does not connect; unreviewed upload blocked (synthetic only)");

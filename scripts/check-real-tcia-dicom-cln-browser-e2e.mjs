@@ -69,7 +69,7 @@ try{
  },null,{timeout:90000});
  await run.click();
   await page.getByText("Дополнительно · анализ отдельных срезов",{exact:true}).click();
-  await page.getByRole("heading",{name:/Gemini Orchestra · подготовка кадров/})
+  await page.getByRole("heading",{name:/Анализ выбранных кадров/})
   .waitFor({timeout:45000});
   await study.getByText("Результаты детекторов и проверка отдельных находок",{exact:true}).click();
   // This is ACTUAL 3-D original CLN model execution. Allow bounded CPU time.
@@ -86,16 +86,17 @@ try{
   document.querySelectorAll("img.ora-vision-plan-thumbnail").length===4,
   null,{timeout:120000});
   const privacy=page.locator('section[aria-label="Подготовка обезличенных кадров"]');
- await privacy.getByText(/Проверьте все 4 исходящих PNG/).waitFor({timeout:240000});
- await privacy.getByRole("checkbox",{name:/Я просмотрел ВСЕ показанные PNG/}).check();
+ await privacy.getByRole("heading",{name:"Просмотрите все кадры для AI (4)"}).waitFor({timeout:240000});
+ await privacy.getByRole("checkbox",{name:/Я просмотрел все кадры/}).check();
  await page.waitForFunction(()=>{
   const root=document.querySelector('section[aria-label="Отправка проверенных обезличенных CT/MR кадров в OpenRouter"]');
   return !!root&&[...root.querySelectorAll("input")].some(x=>x.type==="password");
  },null,{timeout:45000});
  const cloud=page.locator('section[aria-label="Отправка проверенных обезличенных CT/MR кадров в OpenRouter"]');
+ await cloud.getByText("Дополнительно · пароль оператора",{exact:true}).click();
  await cloud.getByRole("textbox",{name:"Локальный пароль оператора"}).fill(operatorToken);
- await cloud.getByRole("checkbox",{name:/Я проверил все исходящие PNG/}).check();
- const paid=cloud.getByRole("button",{name:"Подтвердить передачу и создать предварительное заключение"});
+ await cloud.getByRole("checkbox",{name:/Разрешаю передать проверенные обезличенные кадры/}).check();
+ const paid=cloud.getByRole("button",{name:"Запустить анализ и получить заключение"});
  assert.equal(await paid.isDisabled(),false);
  await paid.click();
  await cloud.getByText(/Ответ моделей получен/).waitFor({timeout:590000});

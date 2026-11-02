@@ -50,7 +50,7 @@ try{
  await page.getByText(/Проиндексировано 32 DICOM/).waitFor({timeout:45000});
  await page.locator(".cs-series-list button").first().click();
   assert.equal(await page.getByRole("heading",{name:"Исследование КТ / МРТ"}).count(),1);
-  assert.equal(await page.getByRole("heading",{name:/Gemini Orchestra/}).count(),0,
+  assert.equal(await page.getByRole("heading",{name:/Анализ выбранных кадров/}).count(),0,
     "Advanced planning must be absent until the doctor starts analysis");
   const analysis=page.locator('section[aria-label="Единый анализ DICOM"]');
  await analysis.waitFor();
@@ -67,7 +67,7 @@ try{
  // The SAME primary action must open offline Vision planning immediately.
  // The heavy original worker path is independent and may still be running.
   await page.getByText("Дополнительно · анализ отдельных срезов",{exact:true}).click();
-  await page.getByRole("heading",{name:/Gemini Orchestra · подготовка кадров/}).waitFor({timeout:30000});
+  await page.getByRole("heading",{name:/Анализ выбранных кадров/}).waitFor({timeout:30000});
  await page.getByRole("heading",{name:"Описание и заключение"}).waitFor({timeout:30000});
  assert.equal(await page.getByRole("button",{name:"Запустить единый анализ КТ/МРТ"}).count(),0,
   "Only one physician Analyze action; duplicate research launch must be hidden");
@@ -82,24 +82,34 @@ try{
  console.log("PASS browser: synthetic CT DICOM -> automatic worker absence -> independent four PNG Vision frames");
   const privacy=page.locator('section[aria-label="Подготовка обезличенных кадров"]');
  await privacy.waitFor();
- await privacy.getByText(/Проверьте все 4 исходящих PNG/).waitFor({timeout:180000});
- await page.waitForFunction(()=>{const s=document.querySelector('section[aria-label="Все исходящие обезличенные копии"]');
-  return [...(s?.querySelectorAll("button")??[])].filter(b=>/OCR [0-9]+ областей/.test(b.textContent??"")).length===4;},null,{timeout:150000});
- // The generated phantom has no burned-in text. Reviewed OCR false positives
- // must be acknowledged rather than erasing the synthetic anatomy by default.
- const copies=page.getByRole("region",{name:"Все исходящие обезличенные копии",exact:true});
- for(let i=0;i<4;i++){
-  await copies.getByRole("button").nth(i).click();
-  const retain=privacy.getByRole("button",{name:"Оставить надписи: не идентифицируют пациента",exact:true});
-  if(await retain.count()&&await retain.isEnabled())await retain.click();
- }
+ await privacy.getByRole("heading",{name:"Просмотрите все кадры для AI (4)"}).waitFor({timeout:180000});
+ await page.waitForFunction(()=>{
+  const section=document.querySelector('section[aria-label="Все исходящие обезличенные копии"]');
+  const label=[...(section?.querySelectorAll("label")??[])].find(x=>x.textContent?.includes("Я просмотрел все кадры"));
+  const input=label?.querySelector("input");return !!input&&!input.disabled;
+ },null,{timeout:150000});
+ // One explicit all-frame visual review records each OCR false positive and
+ // each exact image SHA, without requiring a separate technical button per frame.
+ assert.equal(await privacy.getByRole("button",{name:"Скачать локальный статус без пикселей JSON"}).isVisible(),false);
  assert.equal(aiRequests.length,0,"OCR must finish locally without cloud access");
  const cloud=page.locator('section[aria-label="Отправка проверенных обезличенных CT/MR кадров в OpenRouter"]');
- const send=cloud.getByRole("button",{name:"Подтвердить передачу и создать предварительное заключение"});
+ const send=cloud.getByRole("button",{name:"Запустить анализ и получить заключение"});
  assert.equal(await send.isDisabled(),true);
- const bulk=privacy.getByRole("checkbox",{name:/Я просмотрел ВСЕ показанные PNG/});
+ const bulk=privacy.getByRole("checkbox",{name:/Я просмотрел все кадры/});
  await bulk.check();
  assert.equal(await bulk.isChecked(),true);
+ // A physician hides data by drawing, without entering pixel coordinates.
+ await privacy.getByRole('button',{name:'Скрыть персональные данные на этом кадре',exact:true}).click();
+ const area=await privacy.locator('.ora-privacy-image-region').boundingBox();
+ assert.ok(area);
+ await page.mouse.move(area.x+5,area.y+5);await page.mouse.down();
+ await page.mouse.move(area.x+16,area.y+16,{steps:4});await page.mouse.up();
+ await privacy.getByText(/Скрытых областей: 1/).waitFor({state:'attached',timeout:30000});
+ assert.equal(await bulk.isChecked(),false,'Changed pixels revoke previous physician review');
+ await bulk.check({timeout:60000});
+ assert.equal(aiRequests.length,0,'Drawing and repeated OCR remain local');
+ console.log('PASS privacy: one review accepts inspected OCR false positives; drawing hides pixels, reruns OCR and revokes prior review');
+
  const mockedLongProtocol="ИССЛЕДОВАНИЕ:\nСинтетическая учебная КТ, отдельные кадры.\n"+
   "МЕТОДИКА:\nОценены выборочные кадры, полный ряд недоступен.\n"+
   "ОПИСАНИЕ:\n"+("Учебное описание синтетического изображения, без клинической интерпретации.\n").repeat(90)+
@@ -149,7 +159,7 @@ try{
  });
  await cloud.getByText("Дополнительно · пароль оператора",{exact:true}).click();
  await cloud.getByRole("textbox",{name:"Локальный пароль оператора"}).fill("test-operator-token-0123456789");
- await cloud.getByRole("checkbox",{name:/Я проверил все исходящие PNG/}).check();
+ await cloud.getByRole("checkbox",{name:/Разрешаю передать проверенные обезличенные кадры/}).check();
  assert.equal(await send.isDisabled(),false);
  await send.click();
  await cloud.getByText(/Ответ моделей получен/).waitFor({timeout:30000});

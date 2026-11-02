@@ -40,7 +40,7 @@ try{
  console.log(JSON.stringify({stage:"analysis-started",sourceFrames:files.length}));
  const copies=page.getByRole("region",{name:"Все исходящие обезличенные копии",exact:true});
  await copies.waitFor({timeout:180_000});
- const review=copies.getByRole("checkbox",{name:/Я просмотрел ВСЕ показанные PNG/});
+ const review=copies.getByRole("checkbox",{name:/Я просмотрел все кадры/});
  const images=await copies.locator("img").evaluateAll(nodes=>nodes.map(n=>n.src));
  const previews=await page.locator("img.ora-vision-plan-thumbnail").evaluateAll(nodes=>nodes.map(n=>n.src));
  assert.equal(images.length,4);
@@ -57,18 +57,12 @@ try{
  let confirmed=false;
  for await(const line of rl){if(line.trim()==="REVIEWED_FOUR_PUBLIC_PNGS"){confirmed=true;break;}throw Error("Exact visual review not confirmed");}
  rl.close();assert.equal(confirmed,true);
- // The exact four pinned public copies were inspected above. Only AFTER that
- // explicit review may OCR false positives be acknowledged individually.
- for(let i=0;i<images.length;i++){
-  await copies.getByRole("button").nth(i).click();
-  const retain=page.getByRole("button",{name:"Оставить надписи: не идентифицируют пациента",exact:true});
-  if(await retain.count()&&await retain.isEnabled())await retain.click();
- }
+ // All exact copies and their marked areas were visually inspected above.
  await review.check();
  const cloud=page.getByRole("region",{name:"Отправка проверенных обезличенных CT/MR кадров в OpenRouter",exact:true});
  await cloud.getByText("Локальное рабочее место подключено.",{exact:false}).waitFor({timeout:15_000});
- await cloud.getByRole("checkbox",{name:/Я проверил все исходящие PNG/}).check();
- const send=cloud.getByRole("button",{name:"Подтвердить передачу и создать предварительное заключение",exact:true});
+ await cloud.getByRole("checkbox",{name:/Разрешаю передать проверенные обезличенные кадры/}).check();
+ const send=cloud.getByRole("button",{name:"Запустить анализ и получить заключение",exact:true});
  assert.equal(await send.isDisabled(),false);
  const began=Date.now();await send.click();
  await Promise.race([

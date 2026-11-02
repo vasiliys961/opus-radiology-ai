@@ -294,14 +294,13 @@ export default function VisionFramePlanningPanel({
   const stablePrivacyPreviews=useMemo(()=>report?.frames.map(f=>thumbnails[f.fileId]?.url)??[],[report,thumbnails]);
   const extraView=<section className="ora-vision-plan" aria-label="Дополнительный анализ отдельных кадров">
     <div className="ora-vision-plan-head">
-      <div><h2>Gemini Orchestra · подготовка кадров</h2>
-        <p>v1.8 · локальный предварительный этап</p></div>
-      <span>ЛОКАЛЬНАЯ ПОДГОТОВКА</span>
+      <div><h2>Анализ выбранных кадров</h2>
+        <p>Проверка изображений → Gemini → Opus → заключение</p></div>
     </div>
     <p className="ora-vision-plan-lead">
-      Сформируем технический список отдельных DICOM-срезов для Vision-анализа.
-      На этом этапе DICOM остаётся в браузере. Отправка обезличенных копий через OpenRouter
-      возможна только после локальных проверок и отдельного разрешения исследовательского сервера.
+      Приложение готовит выбранные срезы для анализа. Проверьте изображения ниже,
+      при необходимости скройте персональные данные и разрешите запуск.
+      До вашего разрешения снимки остаются на компьютере.
     </p>
     {!primaryActionAvailable&&<div className="ora-vision-plan-controls">
       <label htmlFor="ora-frame-count">Кадров в выборке
@@ -444,10 +443,7 @@ export default function VisionFramePlanningPanel({
       </div>
       <p>Охват: только отдельные кадры. Количественные измерения, диагнозы и
         отсутствие патологий этим планом не устанавливаются.</p>
-      <p>Загрузка изображений в AI: <strong>заблокирована по умолчанию</strong>.
-        Исходные DICOM в облако не отправляются. Платная передача отдельных
-        проверенных PNG возможна только после обезличивания, OCR, подтверждения
-        врача и допуска локального OpenRouter-пилота.</p>
+      <p>Перед запуском проверьте кадры ниже и разрешите их передачу Gemini и Opus. Исходные DICOM остаются на компьютере.</p>
       {specialistFacts&&<p role="status">Локальный R231: правая маска {specialistFacts.rightLungMaskMl.toFixed(1)} мл,
         левая {specialistFacts.leftLungMaskMl.toFixed(1)} мл. Это сегментация анатомии,
         не детекция заболевания. Числа можно передать в дополнительный анализ

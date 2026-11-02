@@ -311,14 +311,12 @@ export default function DeidentifiedOpenRouterPanel({
   };
   return <section className="ora-evidence-draft" aria-label="Отправка проверенных обезличенных CT/MR кадров в OpenRouter">
     <h4>Проверка кадров и создание заключения · Gemini Vision → Claude Opus</h4>
-    <p>Оригинальные детекторы и подготовка кадров выполняются автоматически. Врач проверяет подготовленные обезличенные копии и разрешает облачную передачу; по окончании появляется единый редактируемый протокол.</p>
-    <p>Браузер оставляет исходные DICOM локально. Отправляются только точные
-      PNG-копии, прошедшие локальные OCR, закрашивание идентифицирующих надписей
-      и два ручных просмотра. Модели получат лишь выборку до четырёх кадров,
-      без UID, имён файлов или истории пациента.</p>
-    <p role="status"><strong>Режим исследования, не клиническая система.</strong> Даже
-      обезличенные изображения остаются медицинскими данными; удаление метаданных
-      и OCR не гарантируют анонимность. Ключ OpenRouter остаётся на сервере.</p>
+    <p role="status"><strong>{originalDetectorEvidence?.facts.some(f=>f.status==="completed")?
+      "Режим: детекторы + AI.":"Режим: AI по кадрам без результатов детекторов."}</strong>
+      {originalDetectorEvidence?.facts.some(f=>f.status==="completed")?
+        " Выполненные результаты детекторов будут учтены в заключении.":
+        " Gemini и Opus могут анализировать кадры самостоятельно. Невыполненные задачи детекторов не считаются отрицательными результатами."}</p>
+    <p>После запуска Gemini рассмотрит проверенные кадры, а Opus подготовит редактируемое предварительное заключение. Охват — только показанные кадры.</p>
     {checkingServer&&<p role="status">Проверяем подключение Gemini и Opus…</p>}
     {!server?.workstationConnected&&<div>
       <button type="button" disabled={working||checkingServer} onClick={()=>void checkReadiness()}>
@@ -336,9 +334,7 @@ export default function DeidentifiedOpenRouterPanel({
       Включать только после проверки прав передачи медицинских данных провайдеру.</p></details>}
     {primaryAnalysisStage==="running"&&<p role="status">Ожидаем завершения оригинальных детекторов. Независимые PNG готовятся параллельно, но запрос Gemini → Opus откроется только после локального этапа, чтобы сохранить все модельные результаты.</p>}
     {primaryAnalysisStage==="cancelled"&&<p role="alert">Анализ детекторов отменён. Перезапустите исследование для согласованного заключения.</p>}
-    {!enabledByLocalChecks&&<p role="status">Прежде чем отправлять, проверьте
-      OCR на каждом кадре и подтвердите надписи и узнаваемые признаки на
-      каждой точной PNG-копии. Любое изменение изображения сбрасывает допуск.</p>}
+    {!enabledByLocalChecks&&<p role="status">Сначала подтвердите выше, что вы просмотрели все кадры и персональных данных на них нет. Если идёт подготовка, дождитесь её завершения.</p>}
     <details><summary>Дополнительно · пароль оператора</summary>
     <label>Локальный пароль оператора <input type="password" value={token}
       autoComplete="off" maxLength={512} disabled={working}
@@ -346,9 +342,7 @@ export default function DeidentifiedOpenRouterPanel({
     </details>
     <label><input type="checkbox" disabled={working||!enabledByLocalChecks}
       checked={transferAuthorized} onChange={e=>setTransferAuthorized(e.target.checked)}/>
-      Я проверил все исходящие PNG, имею законное право передать обезличенное
-      исследование OpenRouter и выбранным моделям, проверил условия обработки
-      медицинских данных и разрешаю ровно два платных запроса: Gemini Vision → Opus.
+      Разрешаю передать проверенные обезличенные кадры в OpenRouter для Gemini и Opus. Имею право на передачу и проверил условия обработки. Разрешаю два платных запроса.
     </label>
     {specialistFacts&&<label><input type="checkbox" disabled={working}
       checked={includeSpecialist} onChange={e=>{setIncludeSpecialist(e.target.checked);setResult(null);}}/>
@@ -380,7 +374,7 @@ export default function DeidentifiedOpenRouterPanel({
       <button type="button" disabled={working||lateWorking||!enabledByLocalChecks||!modelPathSettled||
         (!server?.workstationConnected&&token.length<24)||!transferAuthorized}
         onClick={()=>void send()}>{working?"Gemini → Opus анализируют кадры…":
-        "Подтвердить передачу и создать предварительное заключение"}</button>
+        "Запустить анализ и получить заключение"}</button>
       {working&&<button type="button" onClick={()=>ctl.current?.abort()}>Отменить</button>}
     </div>
     {readinessNote&&<p role="status">{readinessNote}</p>}
