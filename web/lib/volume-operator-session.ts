@@ -10,7 +10,7 @@ const MAX_AGE_MS=4*60*60*1000;
  * The browser never sets these permissions.
  */
 export type LocalResearchStatus="ready"|"not-development"|"missing-provider"|"not-approved";
-export function localResearchStatus(env:NodeJS.ProcessEnv=process.env):LocalResearchStatus{
+export function localResearchStatus(env:Readonly<Record<string,string|undefined>>=process.env):LocalResearchStatus{
  if(env.NODE_ENV!=="development")return "not-development";
  if(!env.OPENROUTER_API_KEY?.trim())return "missing-provider";
  if(env.RADIOLOGY_ENABLE_AUTOMATIC_PUBLIC_VOLUME_RESEARCH!=="1"||
