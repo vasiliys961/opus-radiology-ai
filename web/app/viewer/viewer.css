@@ -264,3 +264,9 @@
 .cs-page .cs-container>details:first-child>summary{font-size:11px;color:#798b96}
 .cs-page .cs-sidebar .cs-geometry>summary{font-weight:600}
 .cs-page .cs-stage>.cs-geometry{background:#fff;border:1px solid #e2ebed;border-radius:10px;padding:14px;margin-top:14px}
+
+/* Radiologist-facing 2D/MPR/3D modes: single control row, no model jargon. */
+.cs-view-modes{display:flex;gap:7px;flex-wrap:wrap;margin:0 0 10px}
+.cs-view-modes button{border:1px solid #aabdc7;border-radius:7px;background:#fff;color:#234452;padding:9px 15px;font-weight:650;cursor:pointer}
+.cs-view-modes button[aria-pressed="true"]{background:#146e69;border-color:#146e69;color:#fff}
+.cs-view-modes button:disabled{opacity:.4;cursor:not-allowed}
