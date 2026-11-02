@@ -93,7 +93,7 @@ try{
     return route.continue();
   });
   stage='load-original-dicom';
-  await page.goto(origin,{waitUntil:'networkidle'});
+  await page.goto(origin+'/advanced',{waitUntil:'networkidle'});
   await page.locator('input[accept*=".dcm"]').setInputFiles(files);
   stage='open-mpr';
   await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='MPR · 3 плоскости'&&!b.disabled));
