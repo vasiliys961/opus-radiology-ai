@@ -55,11 +55,7 @@ try{
  await page.locator(".cs-series-list button").first().click();
  const study=page.locator('section[aria-label="Единый анализ DICOM"]');
  await study.waitFor({timeout:45000});
- const sourceConfirmation=study.getByRole("checkbox",{name:/Проверил снимки: это КТ грудной клетки/});
- if(await sourceConfirmation.count())await sourceConfirmation.check();
  assert.match(await study.innerText(),/Модели выбираются автоматически/);
- await study.getByText("Дополнительно · параметры моделей и уточнение протокола",{exact:true}).click();
- await study.getByRole("checkbox",{name:/Разрешаю анализ этого обезличенного исследования/}).check();
  const run=study.getByRole("button",{name:"Анализировать исследование"});
  await page.waitForFunction(()=>{
   const section=document.querySelector('section[aria-label="Единый анализ DICOM"]');
