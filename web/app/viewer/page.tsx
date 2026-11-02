@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { groupDicomSeries, readDicomSeriesHeader, type DicomSeries } from "../../lib/dicom-series";
 import {suggestPrimaryDicomSeries} from "../../lib/automatic-primary-series";
 import { validateViewerFileSelection } from "../../lib/viewer-limits";
@@ -57,6 +57,8 @@ export default function ViewerPage() {
   const [wmhSlice,setWmhSlice]=useState<number|undefined>(undefined);
   const [visionOpen,setVisionOpen]=useState(false);
   const [researchOpen,setResearchOpen]=useState(false);
+  const [researchMode,setResearchMode]=useState(false);
+  useEffect(()=>{setResearchMode(new URLSearchParams(window.location.search).get("research")==="1");},[]);
   const [visionFromPrimary,setVisionFromPrimary]=useState(false);
   const [primaryStage,setPrimaryStage]=useState<{seriesKey:string;stage:"running"|"completed"|"vision-only"|"cancelled"}|null>(null);
   const [visionDetectorEvidence,setVisionDetectorEvidence]=useState<{seriesKey:string;bundle:SanitizedDetectorBundle}|null>(null);
@@ -124,7 +126,7 @@ export default function ViewerPage() {
   return <main className="cs-page">
     <header className="cs-top"><a href="/" aria-label="Вернуться в рабочую станцию">← OPUS RADIOLOGY</a><span>Просмотр КТ / МРТ</span><span>Локальный режим</span></header>
     <div className="cs-container">
-      <details className="cs-geometry" aria-label="Исследовательские модули"><summary>Дополнительные исследовательские инструменты</summary>
+      {researchMode&&<details className="cs-geometry" aria-label="Исследовательские модули"><summary>Дополнительные исследовательские инструменты</summary>
       <div className="cs-source-mode" aria-label="Формат исходной серии">
         <button type="button" className={sourceMode==="dicom"?"active":""}
           onClick={()=>setSourceMode("dicom")}>DICOM · исходные серии</button>
@@ -139,7 +141,7 @@ export default function ViewerPage() {
         <button type="button" className={sourceMode==="morphometry"?"active":""}
           onClick={()=>setSourceMode("morphometry")}>Морфометрия · 8 модулей</button>
       </div>
-      </details>
+      </details>}
       {sourceMode==="nodules" ? <NoduleBoundResearchView initialSource={preparedMonaiSource} initialAutoSession={preparedMonaiSession} initialCompletedReport={preparedMonaiResult}/> : sourceMode==="nifti" ? <NiftiCtResearchView/> : sourceMode==="colon" ? <ColonCancerResearchResults/> : sourceMode==="coverage" ? <PathologyCoverageResearch/> : sourceMode==="morphometry" ? <MorphometryEvidenceReview/> : <>
       <div className="cs-intro"><div><h1>Исследование КТ / МРТ</h1><p>Загрузите DICOM, просмотрите изображения или нажмите «Анализировать исследование».</p></div></div>
       {visionFromPrimary&&<p role="status" className="cs-message">
@@ -165,8 +167,8 @@ export default function ViewerPage() {
             
             <div className="cs-series-list">{series.map((s) => <button type="button" className={selected?.key === s.key ? "cs-series active" : "cs-series"} key={s.key} onClick={() => {setWmhSlice(undefined);setVisionOpen(false);setVisionFromPrimary(false);setPrimaryStage(null);setVisionDetectorEvidence(null);setClnVerified(null);setCurrentSeriesKey(s.key);}}>{s.label}</button>)}</div>
           </>}
-          {selected && <details className="cs-geometry"><summary>Сведения об исследовании</summary><h3>Контроль геометрии</h3><p>{selected.spatiallySorted ? "✓ Пространственный порядок подтверждён" : "⚠ Порядок условный"}</p><p>{selected.volumeReady ? `✓ Предварительная геометрия для будущего 3D · ${selected.sliceSpacingMm?.toFixed(2)} мм` : "3D/MPR НЕ РАЗРЕШЕНЫ"}</p>{selected.warning && <p>{selected.warning}</p>}</details>}
-          {selected && <UnifiedDicomStudyAnalysis key={"unified-"+selected.key} series={selected} allSeries={series} files={indexedById}
+          {researchMode&&selected && <details className="cs-geometry"><summary>Сведения об исследовании</summary><h3>Контроль геометрии</h3><p>{selected.spatiallySorted ? "✓ Пространственный порядок подтверждён" : "⚠ Порядок условный"}</p><p>{selected.volumeReady ? `✓ Предварительная геометрия для будущего 3D · ${selected.sliceSpacingMm?.toFixed(2)} мм` : "3D/MPR НЕ РАЗРЕШЕНЫ"}</p>{selected.warning && <p>{selected.warning}</p>}</details>}
+          {selected && <UnifiedDicomStudyAnalysis researchMode={researchMode} key={"unified-"+selected.key} series={selected} allSeries={series} files={indexedById}
             onMonaiReady={(file,session,report)=>{setPreparedMonaiSource(file);setPreparedMonaiSession(session);setPreparedMonaiResult(report??null);setSourceMode("nodules");}}
             onNavigate={setWmhSlice}
             onReadyForVision={key=>{if(selected?.key===key){setVisionFromPrimary(true);setVisionOpen(true);}}}
@@ -182,7 +184,7 @@ export default function ViewerPage() {
                 return previous;
               return {seriesKey:key,bundle};
             })}/>}
-          <details className="cs-geometry" onToggle={event=>setResearchOpen(event.currentTarget.open)}><summary>Дополнительные диагностические инструменты</summary>
+          {researchMode&&<details className="cs-geometry" onToggle={event=>setResearchOpen(event.currentTarget.open)}><summary>Дополнительные диагностические инструменты</summary>
           {researchOpen&&<>
           <LungNoduleResearchResults key={selected?.key ?? "empty"} isChestCT={!!selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="CHEST")}/>
           <ChestEffusionResearchResults key={"fluid-"+(selected?.key??"empty")} isChestCT={!!selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="CHEST")}/>
@@ -200,14 +202,14 @@ export default function ViewerPage() {
           {selected && selected.modality==="MR" && <WmhSourceReview key={"wmh-"+selected.key} series={selected} files={indexedById} onNavigate={setWmhSlice}/>}
           {selected && <NativeCtResearchExport key={"native-export-"+selected.key} series={selected} files={selectedFiles} onPreparedSource={(file,session)=>{setPreparedMonaiSession(session??null);setPreparedMonaiSource(file);setPreparedMonaiResult(null);setSourceMode("nodules");}}/> }
           </>}
-          </details>
+          </details>}
           <button type="button" className="cs-clear" disabled={reading || indexed.length === 0} onClick={() => { setIndexed([]); setPreparedMonaiSource(null);setPreparedMonaiSession(null);setPreparedMonaiResult(null); setCurrentSeriesKey(""); setVisionOpen(false); setVisionFromPrimary(false); setPrimaryStage(null); setVisionDetectorEvidence(null);setClnVerified(null); setMessage("Список очищен, файлы на диске не изменены."); }}>Очистить загруженное</button>
         </aside>
         <div className="cs-stage">
           {selectedFiles.length ? <CornerstoneStack key={selected?.key} files={selectedFiles} modality={selected?.modality} selectedIndex={wmhSlice}/> : <div className="cs-placeholder"><span>✚</span><strong>Область DICOM-изображений</strong><p>Выберите файлы или папку DICOM, чтобы проверить работу Cornerstone3D.</p></div>}
           {selected && (selected.modality==="CT"||selected.modality==="MR") && <section className="cs-geometry" aria-label="Подготовка Gemini и Opus по открытому DICOM">
             {visionFromPrimary&&<h3>Описание и заключение</h3>}
-            {!visionFromPrimary&&<button type="button" disabled={reading} onClick={()=>setVisionOpen(v=>!v)}>
+            {researchMode&&!visionFromPrimary&&<button type="button" disabled={reading} onClick={()=>setVisionOpen(v=>!v)}>
               {visionOpen?"Закрыть дополнительные инструменты":"Анализировать отдельные срезы"}
             </button>}
 
@@ -225,7 +227,7 @@ export default function ViewerPage() {
                 }}/>
             </AnalysisSoundProvider>}
           </section>}
-          <div className="cs-bottom-note">Предварительный анализ проверяется врачом по исходным снимкам.</div>
+          {visionFromPrimary&&<div className="cs-bottom-note">Предварительное заключение. Врач проверяет его по исходным снимкам.</div>}
         </div>
       </div>
       </>}
