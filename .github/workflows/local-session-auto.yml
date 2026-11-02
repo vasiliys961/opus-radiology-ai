@@ -1,0 +1,28 @@
+name: Local approved research workstation auto-connect
+
+on:
+  pull_request:
+    paths:
+      - "web/**"
+      - "scripts/check-local-auto-session-dev.mjs"
+      - ".github/workflows/local-session-auto.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  session:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Install web dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Verify approved localhost session auto-starts without a separate token
+        run: node ../scripts/check-local-auto-session-dev.mjs
