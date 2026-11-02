@@ -272,4 +272,3 @@
 .cs-view-modes button[aria-pressed="true"]{background:#107e78;border-color:#107e78;color:white}
 .cs-view-modes button:disabled{opacity:.4;cursor:not-allowed}
 .cs-page section[aria-label="Единый анализ DICOM"]>h2{margin:0 0 10px}
-.cs-page section[aria-label="Единый анализ DICOM"]>p{display:none}
