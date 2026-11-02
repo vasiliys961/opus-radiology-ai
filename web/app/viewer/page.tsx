@@ -108,8 +108,7 @@ export default function ViewerPage() {
       })));
       const primary=suggestPrimaryDicomSeries(loadedSeries,
         new Set(parsed.map(item=>item.id)));
-      setVisionOpen(canAutoPrepareLocalVision(
-        loadedSeries.find(item=>item.key===primary.key)));
+      setVisionOpen(false); // No AI workbench until the physician requests analysis.
       setVisionFromPrimary(false);setPrimaryStage(null);setVisionDetectorEvidence(null);setClnVerified(null);
       const mostCommon = [...reasons.entries()].sort((a, b) => b[1] - a[1])[0];
       setMessage(`Проиндексировано ${parsed.length} DICOM; пропущено ${rejected}.${mostCommon ? ` Основная причина (${mostCommon[1]}): ${mostCommon[0]}.` : ""} Изображения остаются на вашем Mac.`);
@@ -122,8 +121,9 @@ export default function ViewerPage() {
   }
 
   return <main className="cs-page">
-    <header className="cs-top"><a href="/" aria-label="Вернуться в рабочую станцию">← OPUS RADIOLOGY</a><span>Cornerstone3D · экспериментальный просмотр</span><span>LOCAL / M1</span></header>
+    <header className="cs-top"><a href="/" aria-label="Вернуться в рабочую станцию">← OPUS RADIOLOGY</a><span>Просмотр КТ / МРТ</span><span>Локальный режим</span></header>
     <div className="cs-container">
+      <details className="cs-geometry" aria-label="Исследовательские модули"><summary>Дополнительные исследовательские инструменты</summary>
       <div className="cs-source-mode" aria-label="Формат исходной серии">
         <button type="button" className={sourceMode==="dicom"?"active":""}
           onClick={()=>setSourceMode("dicom")}>DICOM · исходные серии</button>
@@ -138,18 +138,18 @@ export default function ViewerPage() {
         <button type="button" className={sourceMode==="morphometry"?"active":""}
           onClick={()=>setSourceMode("morphometry")}>Морфометрия · 8 модулей</button>
       </div>
+      </details>
       {sourceMode==="nodules" ? <NoduleBoundResearchView initialSource={preparedMonaiSource} initialAutoSession={preparedMonaiSession} initialCompletedReport={preparedMonaiResult}/> : sourceMode==="nifti" ? <NiftiCtResearchView/> : sourceMode==="colon" ? <ColonCancerResearchResults/> : sourceMode==="coverage" ? <PathologyCoverageResearch/> : sourceMode==="morphometry" ? <MorphometryEvidenceReview/> : <>
-      <div className="cs-intro"><div><div className="cs-kicker">IMAGING LAB / 2D STACK</div><h1>DICOM Viewer <em>β</em></h1><p>Просмотр исходных DICOM-серий и исследовательский анализ на проверенных локальных исполнителях. Без автоматической передачи в облако.</p></div><span className="cs-watermark">ИССЛЕДОВАТЕЛЬСКИЙ ПРОТОТИП · НЕ ДЛЯ ДИАГНОСТИКИ</span></div>
-      <div className="cs-geometry" role="status" aria-label="Этапы обработки исследования">
-        <strong>DICOM → оригинальные детекторы + независимый Gemini → Claude Opus → заключение</strong>
-        <p>{reading?"1. Индексируем DICOM…":selected?`1. DICOM готовы: ${selected.members.length} срезов, модальность ${selected.modality}.`:"1. Загрузите файлы или папку DICOM."}</p>
-        <p>{visionFromPrimary?primaryStage?.stage==="running"?"2. Оригинальные детекторы работают, кадры Gemini подготавливаются локально.":primaryStage?.stage==="cancelled"?"2. Анализ отменён; повторите запуск.":"2. Доступные оригинальные детекторы завершили работу; необработанные зоны указаны отдельно.":"2. Нажмите «Анализировать исследование» — приложение само выберет доступные оригинальные модели."}</p>
-        <p>{visionFromPrimary?"3. Проверьте обезличенные PNG и разрешите Gemini/Opus. Затем получите редактируемое заключение и TXT.":"3. После проверки врачом Gemini и Opus сформируют предварительный протокол."}</p>
-      </div>
+      <div className="cs-intro"><div><h1>Исследование КТ / МРТ</h1><p>Загрузите DICOM, просмотрите изображения или нажмите «Анализировать исследование».</p></div></div>
+      {visionFromPrimary&&<p role="status" className="cs-message">
+        {primaryStage?.stage==="running"?"Идёт анализ исследования…":
+          primaryStage?.stage==="cancelled"?"Анализ остановлен.":
+          "Результаты анализа появятся под изображениями."}
+      </p>}
       <div className="cs-layout">
         <aside className="cs-sidebar">
-          <h2>Загрузка серии</h2>
-          <p>Откройте учебные или корректно обезличенные исследования.</p>
+          <h2>Загрузить DICOM</h2>
+          <p>Учебные или разрешённые обезличенные снимки.</p>
           <label className="cs-picker">Выбрать DICOM-файлы <input type="file" multiple accept=".dcm,.dicom,application/dicom" onChange={onPick} disabled={reading}/></label>
           <button type="button" className="cs-outline" disabled={reading} onClick={() => {
             if (folderPicker.current) {
@@ -161,10 +161,10 @@ export default function ViewerPage() {
           <div className="cs-message" role="status">{reading ? "Идёт индексация…" : message}</div>
           {series.length > 0 && <>
             <h3>Серии ({series.length})</h3>
-            {!currentSeriesKey&&<p className="cs-message" role="status">{suggestion.reason}</p>}
-            <div className="cs-series-list">{series.map((s) => <button type="button" className={selected?.key === s.key ? "cs-series active" : "cs-series"} key={s.key} onClick={() => {setWmhSlice(undefined);setVisionOpen(canAutoPrepareLocalVision(s));setVisionFromPrimary(false);setPrimaryStage(null);setVisionDetectorEvidence(null);setClnVerified(null);setCurrentSeriesKey(s.key);}}>{s.label}</button>)}</div>
+            
+            <div className="cs-series-list">{series.map((s) => <button type="button" className={selected?.key === s.key ? "cs-series active" : "cs-series"} key={s.key} onClick={() => {setWmhSlice(undefined);setVisionOpen(false);setVisionFromPrimary(false);setPrimaryStage(null);setVisionDetectorEvidence(null);setClnVerified(null);setCurrentSeriesKey(s.key);}}>{s.label}</button>)}</div>
           </>}
-          {selected && <div className="cs-geometry"><h3>Контроль геометрии</h3><p>{selected.spatiallySorted ? "✓ Пространственный порядок подтверждён" : "⚠ Порядок условный"}</p><p>{selected.volumeReady ? `✓ Предварительная геометрия для будущего 3D · ${selected.sliceSpacingMm?.toFixed(2)} мм` : "3D/MPR НЕ РАЗРЕШЕНЫ"}</p>{selected.warning && <p>{selected.warning}</p>}</div>}
+          {selected && <details className="cs-geometry"><summary>Сведения об исследовании</summary><h3>Контроль геометрии</h3><p>{selected.spatiallySorted ? "✓ Пространственный порядок подтверждён" : "⚠ Порядок условный"}</p><p>{selected.volumeReady ? `✓ Предварительная геометрия для будущего 3D · ${selected.sliceSpacingMm?.toFixed(2)} мм` : "3D/MPR НЕ РАЗРЕШЕНЫ"}</p>{selected.warning && <p>{selected.warning}</p>}</details>}
           {selected && <UnifiedDicomStudyAnalysis key={"unified-"+selected.key} series={selected} allSeries={series} files={indexedById}
             onMonaiReady={(file,session,report)=>{setPreparedMonaiSource(file);setPreparedMonaiSession(session);setPreparedMonaiResult(report??null);setSourceMode("nodules");}}
             onNavigate={setWmhSlice}
@@ -181,7 +181,7 @@ export default function ViewerPage() {
                 return previous;
               return {seriesKey:key,bundle};
             })}/>}
-          <details className="cs-geometry"><summary>Дополнительно · ручные исследовательские инструменты</summary>
+          <details className="cs-geometry"><summary>Дополнительные диагностические инструменты</summary>
           <LungNoduleResearchResults key={selected?.key ?? "empty"} isChestCT={!!selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="CHEST")}/>
           <ChestEffusionResearchResults key={"fluid-"+(selected?.key??"empty")} isChestCT={!!selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="CHEST")}/>
           <IldGgoExpertResearch key={"ild-"+(selected?.key??"empty")} isChestCT={!!selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="CHEST")}/>
@@ -203,12 +203,11 @@ export default function ViewerPage() {
         <div className="cs-stage">
           {selectedFiles.length ? <CornerstoneStack key={selected?.key} files={selectedFiles} modality={selected?.modality} selectedIndex={wmhSlice}/> : <div className="cs-placeholder"><span>✚</span><strong>Область DICOM-изображений</strong><p>Выберите файлы или папку DICOM, чтобы проверить работу Cornerstone3D.</p></div>}
           {selected && (selected.modality==="CT"||selected.modality==="MR") && <section className="cs-geometry" aria-label="Подготовка Gemini и Opus по открытому DICOM">
-            <h3>Gemini Vision + Claude Opus · просмотр отдельных кадров</h3>
-            <p>Используется именно выбранная исходная серия. Сначала локальный план и проверка обезличенных PNG-копий; платный вызов только после отдельного разрешения. Без доступа к модели исходная КТ/МРТ остаётся доступной.</p>
+            {visionFromPrimary?<h3>Описание и заключение</h3>:<h3>Дополнительный анализ снимков</h3>}
             {!visionFromPrimary&&<button type="button" disabled={reading} onClick={()=>setVisionOpen(v=>!v)}>
-              {visionOpen?"Закрыть подготовку кадров":"Подготовить кадры для Gemini + Opus"}
+              {visionOpen?"Закрыть дополнительные инструменты":"Анализировать отдельные срезы"}
             </button>}
-            {visionFromPrimary&&<p role="status">Основной анализ DICOM запущен из кнопки врача: кадры и OCR подготавливаются автоматически. Рабочая область останется открытой до заключения.</p>}
+
             {visionOpen && <AnalysisSoundProvider>
               <VisionFramePlanningPanel key={"vision-"+selected.key} series={visionSeries}
                 activeSeriesKey={selected.key} fileById={indexedById}
