@@ -24,7 +24,7 @@ import {sameSeriesR231Facts,type CapturedLocalSpecialist} from "../lib/same-seri
 import {sameSeriesLaa950ForReview,type CapturedLocalLaa950} from "../lib/same-series-laa950-review";
 
 export default function VisionFramePlanningPanel({
-  series, activeSeriesKey, fileById, onOpenSlice,capturedSpecialist,capturedLaa950,ichRuntime,publicResearchAuthorized=false,originalDetectorEvidence=null,clnVerifiedLocal=null,fromPrimaryAnalysis=false,primaryActionAvailable=false,primaryAnalysisStage="idle",
+  series, activeSeriesKey, fileById, onOpenSlice,capturedSpecialist,capturedLaa950,ichRuntime,publicResearchAuthorized=false,originalDetectorEvidence=null,clnVerifiedLocal=null,fromPrimaryAnalysis=false,primaryActionAvailable=false,primaryAnalysisStage="idle",researchMode=false,
 }: {
   series: readonly DicomSeries[];
   activeSeriesKey: string | null;
@@ -39,6 +39,7 @@ export default function VisionFramePlanningPanel({
   clnVerifiedLocal?:ClnVerifiedLocalEvidence|null;
   fromPrimaryAnalysis?:boolean;
   primaryActionAvailable?:boolean;
+  researchMode?:boolean;
   primaryAnalysisStage?:"idle"|"running"|"completed"|"vision-only"|"cancelled";
 }) {
   const [requested, setRequested] = useState(4);
@@ -477,7 +478,7 @@ export default function VisionFramePlanningPanel({
     <FullVolumeLocalPreparation key={"study-"+selected.key}
       series={selected} files={fileById}
       flaggedIndex={targetFrame.trim()?Number(targetFrame)-1:null}
-      autoStart={true} detectorStage={primaryAnalysisStage}
+      autoStart={true} showAdminControls={researchMode} detectorStage={primaryAnalysisStage}
       detectorEvidence={originalDetectorEvidence} onOpenSlice={onOpenSlice}/>
     <details>
       <summary onClick={()=>setExtraOpened(true)}>Дополнительно · анализ отдельных срезов</summary>
