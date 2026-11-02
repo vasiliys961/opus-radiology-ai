@@ -51,8 +51,6 @@ try{
  await analysis.waitFor();
  assert.match(await analysis.innerText(),/Модели выбираются автоматически/);
  assert.doesNotMatch(await analysis.innerText(),/Нет совместимого исполнительного пути/);
- await analysis.getByText("Дополнительно · параметры моделей и уточнение протокола",{exact:true}).click();
- await analysis.getByRole("checkbox",{name:/Разрешаю анализ этого обезличенного исследования/}).check();
  const launch=analysis.getByRole("button",{name:"Анализировать исследование"});
  await page.waitForFunction(()=>{const section=document.querySelector('section[aria-label="Единый анализ DICOM"]');
   const button=[...(section?.querySelectorAll("button")??[])].find(x=>x.textContent?.trim()==="Анализировать исследование");
