@@ -25,6 +25,13 @@ export default function FullVolumeLocalPreparation({
  const [report,setReport]=useState<FullVolumeOpusResult|null>(null);
  const [editable,setEditable]=useState("");
  const [sessionReady,setSessionReady]=useState<boolean|null>(null);
+ const [connectionReason,setConnectionReason]=useState("");
+ function connectionMessage(status:unknown):string{
+   if(status==="missing-provider")return "Анализ не выполнен: сервер не нашёл ключ OpenRouter.";
+   if(status==="not-approved")return "Облачный анализ публичных исследований не разрешён в настройках сервера.";
+   if(status==="not-development")return "Облачный анализ доступен только на локальном исследовательском сервере.";
+   return "Нет подключения к Gemini и Opus. Проверьте состояние на странице «Техническая панель».";
+ }
  const [adminToken,setAdminToken]=useState("");
  const [adminIssue,setAdminIssue]=useState("");
  const [checkingConnection,setCheckingConnection]=useState(false);
@@ -45,8 +52,12 @@ export default function FullVolumeLocalPreparation({
    let active=true;
    void fetch("/api/ai/volume-operator-session",{cache:"no-store",credentials:"same-origin"})
     .then(async r=>r.ok?await r.json():null)
-    .then(d=>{if(active)setSessionReady(d?.workstationConnected===true);})
-    .catch(()=>{if(active)setSessionReady(false);});
+    .then(d=>{if(active){
+      setSessionReady(d?.workstationConnected===true);
+      setConnectionReason(connectionMessage(d?.status));
+    }})
+    .catch(()=>{if(active){setSessionReady(false);
+      setConnectionReason("Сервер проверки подключения не отвечает.");}});
    return()=>{active=false;};
  },[]);
  async function retryConnection(){
@@ -64,7 +75,8 @@ export default function FullVolumeLocalPreparation({
        setSessionReady(true);
        setNotice("Подключение установлено. Начинаем анализ исследования…");
      }else{
-       setNotice("Анализ не выполнен: облачный сервис не настроен на этом компьютере. Настройку выполняют однократно при установке приложения.");
+       setConnectionReason(connectionMessage(data?.status));
+       setNotice(connectionMessage(data?.status));
      }
    }catch{
      setNotice("Анализ не выполнен: локальный сервис недоступен.");
@@ -161,7 +173,7 @@ export default function FullVolumeLocalPreparation({
    const controller=new AbortController();ctl.current=controller;
    if(!sessionReady){
      setStage("unavailable");
-     setNotice("Анализ не выполнен: Gemini и Opus не подключены на этом компьютере. Настройка нужна один раз, не для каждого исследования.");
+     setNotice(connectionReason||"Анализ не выполнен: облачный сервис недоступен.");
      return;
    }
    void execute(controller.signal).catch(e=>{
