@@ -35,8 +35,8 @@ import {checkAutomaticLungscapeReady,executeOriginalLungscape,type LungscapeRepo
  * Never advertises a checkpoint as installed until its private worker proves it.
  * No automatic cloud image transfer; Gemini/Opus require a separate privacy gate.
  */
-export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMonaiReady,onNavigate,onDetectorEvidence,onReadyForVision,onClnBoundReady,onAnalysisStage}:{
- series:DicomSeries;allSeries:ReadonlyArray<DicomSeries>;files:ReadonlyMap<string,File>;
+export default function UnifiedDicomStudyAnalysis({series,allSeries,files,researchMode=false,onMonaiReady,onNavigate,onDetectorEvidence,onReadyForVision,onClnBoundReady,onAnalysisStage}:{
+ series:DicomSeries;allSeries:ReadonlyArray<DicomSeries>;files:ReadonlyMap<string,File>;researchMode?:boolean;
  onMonaiReady:(source:File,session:WorkerSession,completedReport?:BoundNoduleReport)=>void;
  onNavigate:(slice:number)=>void;
  onDetectorEvidence?:(seriesKey:string,bundle:SanitizedDetectorBundle|null)=>void;
@@ -111,7 +111,9 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  const [xrvReport,setXrvReport]=useState<OriginalXrvCxrResult|null>(null);
  const [xrvStatus,setXrvStatus]=useState<"checking"|"ready"|"unavailable">("checking");
  const [xrvChestConfirmed,setXrvChestConfirmed]=useState(false);
- const [authorized,setAuthorized]=useState(false);
+ const [researchAuthorized,setResearchAuthorized]=useState(false);
+ const authorized=!researchMode||researchAuthorized; // Local analysis begins on the doctor's single action.
+ // Cloud images remain gated by the signed localhost operator session.
  const [flairConfirmed,setFlairConfirmed]=useState(false);
  const [autoWmhReady,setAutoWmhReady]=useState(false);
  const [autoWmhChecking,setAutoWmhChecking]=useState(false);
@@ -161,7 +163,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
    setNodeEndpoint("http://127.0.0.1:8777");setNodeToken("");setEnhancedChestConfirmed(false);setChestNodes(null);
    setChestSource(null);setChestNodules(null);setChestCln(null);setLungscapeResult(null);setChestEffusion(null);setChestPe(null);setChestNodes(null);setChestIssues([]);setAbdomenResult(null);setNcctVerified(false);
    setXrvReport(null);setXrvChestConfirmed(false);
-   setAuthorized(false);setFlairConfirmed(false);
+   setResearchAuthorized(false);setFlairConfirmed(false);
    setSourceUrl("");setSourceLicense("");setBusy(false);setError("");setStatus("");
    setIch(null);setWmh(null);setBrainResult(null);setDecisions({});setDraftText("");setExporting(false);
    return ()=>{serial.current++;active.current?.abort();};
@@ -260,12 +262,12 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
    plan.route==="totalseg-abdomen"?autoAbdomenChecking:
    plan.route==="ianpan-ich"?autoIchChecking:
    plan.route==="wmh-flair"?(brainTask==="wmh"?autoWmhChecking:autoBrainChecking):false;
- const ready=(!!plan.route||visionOnlyAvailable)&&authorized&&!busy&&!readinessChecksPending&&
-   ((visionOnlyAvailable||brainVisionOnly)?true:xrvPlan?(xrvStatus==="ready"&&xrvChestConfirmed&&sourceUrl.startsWith("https://")):plan.route==="totalseg-abdomen"?true:chestPlan?true:
+ const ready=(!!plan.route||visionOnlyAvailable)&&authorized&&!busy&&(!researchMode||!readinessChecksPending)&&
+   ((visionOnlyAvailable||brainVisionOnly)?true:xrvPlan?(researchMode&&xrvStatus==="ready"&&xrvChestConfirmed&&sourceUrl.startsWith("https://")):plan.route==="totalseg-abdomen"?true:chestPlan?true:
      (plan.route==="ianpan-ich"?true:
       plan.route==="wmh-flair"?true:
       (!!token&&!!endpoint.trim())))&&
-   (!plan.needsExplicitFlair||brainVisionOnly||(
+   (!plan.needsExplicitFlair||brainVisionOnly||(!researchMode&&canAutoPrepareLocalVision(series))||(
      brainTask==="wmh"?
        ((flairConfirmed||autoFlair.eligible)&&sourceUrl.startsWith("https://")&&!!sourceLicense.trim()):
        (brainSequenceApproved&&brainAssignedReady&&sourceUrl.startsWith("https://")&&!!sourceLicense.trim())
@@ -684,22 +686,22 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
  }
  return <section className="cs-geometry" aria-label="Единый анализ DICOM">
   <h2>Анализ исследования</h2>
-  <p>Одна кнопка для доступных моделей и формирования предварительного заключения.</p>
-   {confirmableChest&&<label><input type="checkbox" checked={clinicianConfirmedChest}
+  
+   {researchMode&&confirmableChest&&<label><input type="checkbox" checked={clinicianConfirmedChest}
      disabled={busy} onChange={e=>setClinicianConfirmedChest(e.target.checked)}/>
      Проверил снимки: это КТ грудной клетки, не локализатор.
    </label>}
-  <p><strong>{plan.route==="monai-nodules"?"КТ грудной клетки":
+  {researchMode&&<p><strong>{plan.route==="monai-nodules"?"КТ грудной клетки":
      plan.route==="totalseg-abdomen"?"КТ брюшной полости":
      plan.route==="ianpan-ich"?"КТ головного мозга":
      plan.route==="wmh-flair"?"МРТ головного мозга":
      plan.route==="xrv-cxr"?"Рентгенография":"Исследование DICOM"}</strong>
-     {plan.route?" · подходящие модели выбираются автоматически":""}</p>
-  {plan.reason&&<p role="status">{visionOnlyAvailable?
+     {plan.route?" · подходящие модели выбираются автоматически":""}</p>}
+  {researchMode&&plan.reason&&<p role="status">{visionOnlyAvailable?
      "Локальный детектор не назначен: "+plan.reason+" Доступен независимый Gemini + Opus.":
      "Не запущено: "+plan.reason}</p>}
   {(plan.route||visionOnlyAvailable)&&<>
-   {plan.route&&<details>
+   {researchMode&&plan.route&&<details>
     <summary>Дополнительно · параметры моделей и уточнение протокола</summary>
     <details><summary>Состояние серверов моделей</summary><OriginalWorkerFleetReadiness/></details>
     {!xrvPlan&&!(plan.route==="totalseg-abdomen"&&autoAbdomenReady)&&!(chestPlan&&autoMonaiReady)&&!(plan.route==="wmh-flair"&&(brainTask==="wmh"?autoWmhReady:autoBrainReady))&&!(plan.route==="ianpan-ich"&&autoIchReady)&&<label>Адрес локального worker <input type="text" value={endpoint} disabled={busy} onChange={e=>setEndpoint(e.target.value)}/></label>}
@@ -822,23 +824,26 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,onMona
     <p>MONAI, task315, оригинальный Raidionics, исследовательский PE, TotalSegmentator живота и WMH используют разрешённые изображения в loopback worker; ianpan передаёт только SHA-256 и анализирует заранее установленную идентичную публичную КТ. Облачная передача не выполняется.</p>
    </details>}
    {/* Authorization is a primary clinical action, not a hidden developer setting. */}
-    <label className="cs-clinician-consent"><input type="checkbox" checked={authorized} disabled={busy}
-      onChange={e=>setAuthorized(e.target.checked)}/>
-      Разрешаю анализ этого обезличенного исследования и передачу очищенных изображений в Gemini.</label>
+    {researchMode&&<label className="cs-clinician-consent"><input type="checkbox"
+      checked={researchAuthorized} disabled={busy}
+      onChange={e=>setResearchAuthorized(e.target.checked)}/>
+      Подтверждаю правомерность исследовательской обработки.</label>}
    <button type="button" disabled={!ready} onClick={()=>void launch()}>
     {busy?"Выполняется реальный анализ...":"Анализировать исследование"}
    </button>
    {busy&&<button type="button" onClick={cancel}>Отменить</button>}
-   {!ready&&!busy&&<p role="status">{readinessChecksPending?
+   {researchMode&&!ready&&!busy&&<p role="status">{readinessChecksPending?
       "Проверяем доступность оригинальных патологических моделей перед запуском.":plan.route==="totalseg-abdomen"?
       "Серверные оригинальные веса КТ живота пока не готовы либо источник не подтверждён. Токены в автоматическом режиме врачу не нужны.":
       visionOnlyAvailable?
       "Подтвердите разрешённый источник для локальной подготовки Gemini + Opus. Облачный вызов разрешается отдельно.":
       "Разрешите анализ исследования. Недоступные модели будут пропущены."}</p>}
   </>}
-  {status&&<p role="status">{status}</p>}
+  {researchMode&&status&&<p role="status">{status}</p>}
+   {!researchMode&&busy&&<p role="status">Анализ снимков выполняется…</p>}
+   {!researchMode&&!busy&&status&&<p role="status">Анализ моделей завершён. Результаты будут учтены в заключении.</p>}
   {error&&<p role="alert">Не выполнено: {error}</p>}
-  <details className="cs-geometry" aria-label="Детальные результаты моделей">
+  <details className="cs-geometry" style={researchMode?undefined:{display:"none"}} aria-label="Детальные результаты моделей">
     <summary>Результаты детекторов и проверка отдельных находок</summary>
   {xrvReport&&<section className="cs-geometry" aria-label="Шесть настоящих модельных показателей TorchXRayVision">
     <h3>TorchXRayVision NIH DenseNet121 · исследовательская рентгенография</h3>
