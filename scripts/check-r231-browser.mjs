@@ -165,7 +165,7 @@ try {
     } catch(e) {observerError=e;}
   });
   stage='import-original-public-slices';
-  await page.goto(appOrigin,{waitUntil:'networkidle'});
+  await page.goto(appOrigin+'/advanced',{waitUntil:'networkidle'});
   await page.locator('input[accept*=".dcm"]').setInputFiles(files);
   if(full) {
     const observed=()=>({request,outputStatus,deleted,jobId,fullMaskGets,slabReply,inputHeader});
