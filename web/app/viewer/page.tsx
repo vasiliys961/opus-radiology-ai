@@ -5,6 +5,8 @@ import { useMemo, useRef, useState, type ChangeEvent } from "react";
 import { groupDicomSeries, readDicomSeriesHeader, type DicomSeries } from "../../lib/dicom-series";
 import {suggestPrimaryDicomSeries} from "../../lib/automatic-primary-series";
 import { validateViewerFileSelection } from "../../lib/viewer-limits";
+import {checkMprEligibility} from "../../lib/mpr-eligibility";
+import {assessMprQuality} from "../../lib/mpr-quality";
 import "./viewer.css";
 import "../radiology.css";
 import {AnalysisSoundProvider} from "../../components/AnalysisSoundProvider";
@@ -42,6 +44,10 @@ const RenalCystResearchEvidence = dynamic(() => import("../../components/RenalCy
 const FumpePeResearchEvidence = dynamic(() => import("../../components/FumpePeResearchEvidence"), {ssr:false});
 const LungscapePhysicianEvidencePanel = dynamic(() => import("../../components/LungscapePhysicianEvidencePanel"), {ssr:false});
 
+const CornerstoneMPR = dynamic(() => import("../../components/CornerstoneMPR"), {
+  ssr:false,
+  loading: () => <div className="cs-placeholder">Подготовка реконструкции…</div>,
+});
 const CornerstoneStack = dynamic(() => import("../../components/CornerstoneStack"), {
   ssr: false,
   loading: () => <div className="cs-placeholder">Загрузка Cornerstone3D…</div>,
@@ -57,6 +63,7 @@ export default function ViewerPage() {
   const [wmhSlice,setWmhSlice]=useState<number|undefined>(undefined);
   const [visionOpen,setVisionOpen]=useState(false);
   const [researchOpen,setResearchOpen]=useState(false);
+  const [viewMode,setViewMode]=useState<"2d"|"mpr"|"3d">("2d");
   const [visionFromPrimary,setVisionFromPrimary]=useState(false);
   const [primaryStage,setPrimaryStage]=useState<{seriesKey:string;stage:"running"|"completed"|"vision-only"|"cancelled"}|null>(null);
   const [visionDetectorEvidence,setVisionDetectorEvidence]=useState<{seriesKey:string;bundle:SanitizedDetectorBundle}|null>(null);
@@ -75,6 +82,9 @@ export default function ViewerPage() {
   const visionSeries = useMemo(()=>selected?[selected]:[],[selected]);
   const indexedById = useMemo(() => new Map(indexed.map((item) => [item.id, item.file])), [indexed]);
   const selectedFiles = useMemo(() => selected?.members.map((item) => indexedById.get(item.id)).filter((file): file is File => !!file) ?? [], [selected, indexedById]);
+  const mprEligibility=useMemo(()=>selected?checkMprEligibility(selected,selectedFiles.map(f=>f.size)):null,[selected,selectedFiles]);
+  const mprQuality=useMemo(()=>selected?assessMprQuality(selected):null,[selected]);
+  const showMpr=viewMode!=="2d"&&!!mprEligibility?.eligible&&!!mprQuality;
 
   async function loadFiles(input: FileList | null) {
     if (!input || reading) return;
@@ -100,7 +110,7 @@ export default function ViewerPage() {
       // Replace, rather than merge, series so stale patient data cannot persist.
       setIndexed(parsed);
       setPreparedMonaiSource(null);setPreparedMonaiSession(null);setPreparedMonaiResult(null);
-      setWmhSlice(undefined);setCurrentSeriesKey("");
+      setWmhSlice(undefined);setCurrentSeriesKey("");setViewMode("2d");
       // Pick and validate the newly loaded source before opening local Vision.
       // A scout, mixed study or incomplete geometry must not auto-open a
       // misleading panel; this does not authorize any provider transfer.
@@ -163,7 +173,7 @@ export default function ViewerPage() {
           {series.length > 0 && <>
             <h3>Серии ({series.length})</h3>
             
-            <div className="cs-series-list">{series.map((s) => <button type="button" className={selected?.key === s.key ? "cs-series active" : "cs-series"} key={s.key} onClick={() => {setWmhSlice(undefined);setVisionOpen(false);setVisionFromPrimary(false);setPrimaryStage(null);setVisionDetectorEvidence(null);setClnVerified(null);setCurrentSeriesKey(s.key);}}>{s.label}</button>)}</div>
+            <div className="cs-series-list">{series.map((s) => <button type="button" className={selected?.key === s.key ? "cs-series active" : "cs-series"} key={s.key} onClick={() => {setWmhSlice(undefined);setViewMode("2d");setVisionOpen(false);setVisionFromPrimary(false);setPrimaryStage(null);setVisionDetectorEvidence(null);setClnVerified(null);setCurrentSeriesKey(s.key);}}>{s.label}</button>)}</div>
           </>}
           {selected && <details className="cs-geometry"><summary>Сведения об исследовании</summary><h3>Контроль геометрии</h3><p>{selected.spatiallySorted ? "✓ Пространственный порядок подтверждён" : "⚠ Порядок условный"}</p><p>{selected.volumeReady ? `✓ Предварительная геометрия для будущего 3D · ${selected.sliceSpacingMm?.toFixed(2)} мм` : "3D/MPR НЕ РАЗРЕШЕНЫ"}</p>{selected.warning && <p>{selected.warning}</p>}</details>}
           {selected && <UnifiedDicomStudyAnalysis key={"unified-"+selected.key} series={selected} allSeries={series} files={indexedById}
@@ -182,7 +192,7 @@ export default function ViewerPage() {
                 return previous;
               return {seriesKey:key,bundle};
             })}/>}
-          <details className="cs-geometry" onToggle={event=>setResearchOpen(event.currentTarget.open)}><summary>Дополнительные диагностические инструменты</summary>
+          <details className="cs-geometry" onToggle={event=>setResearchOpen(event.currentTarget.open)}><summary>Дополнительно</summary>
           {researchOpen&&<>
           <LungNoduleResearchResults key={selected?.key ?? "empty"} isChestCT={!!selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="CHEST")}/>
           <ChestEffusionResearchResults key={"fluid-"+(selected?.key??"empty")} isChestCT={!!selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="CHEST")}/>
@@ -204,8 +214,22 @@ export default function ViewerPage() {
           <button type="button" className="cs-clear" disabled={reading || indexed.length === 0} onClick={() => { setIndexed([]); setPreparedMonaiSource(null);setPreparedMonaiSession(null);setPreparedMonaiResult(null); setCurrentSeriesKey(""); setVisionOpen(false); setVisionFromPrimary(false); setPrimaryStage(null); setVisionDetectorEvidence(null);setClnVerified(null); setMessage("Список очищен, файлы на диске не изменены."); }}>Очистить загруженное</button>
         </aside>
         <div className="cs-stage">
-          {selectedFiles.length ? <CornerstoneStack key={selected?.key} files={selectedFiles} modality={selected?.modality} selectedIndex={wmhSlice}/> : <div className="cs-placeholder"><span>✚</span><strong>Область DICOM-изображений</strong><p>Выберите файлы или папку DICOM, чтобы проверить работу Cornerstone3D.</p></div>}
-          {selected && (selected.modality==="CT"||selected.modality==="MR") && <section className="cs-geometry" aria-label="Подготовка Gemini и Opus по открытому DICOM">
+          {selectedFiles.length>0&&<div className="cs-view-modes" role="group" aria-label="Режим просмотра">
+            <button type="button" aria-pressed={viewMode==="2d"} onClick={()=>setViewMode("2d")}>2D</button>
+            <button type="button" aria-pressed={viewMode==="mpr"} disabled={!mprEligibility?.eligible}
+              title={mprEligibility?.reason??""} onClick={()=>setViewMode("mpr")}>MPR</button>
+            <button type="button" aria-pressed={viewMode==="3d"} disabled={!mprEligibility?.eligible}
+              title={mprEligibility?.reason??""} onClick={()=>setViewMode("3d")}>3D</button>
+          </div>}
+          {selectedFiles.length ? (showMpr?
+            <CornerstoneMPR key={selected?.key+"-mpr"} files={selectedFiles}
+              sourceSeries={selected!} quality={mprQuality!}
+              show3D={viewMode==="3d"} onShow3DChange={on=>setViewMode(on?"3d":"mpr")}/>:
+            <CornerstoneStack key={selected?.key} files={selectedFiles}
+              modality={selected?.modality} selectedIndex={wmhSlice}/>)
+          : <div className="cs-placeholder"><span>✚</span><strong>Область DICOM-изображений</strong>
+              <p>Выберите папку или файлы DICOM.</p></div>}
+          {selected && (selected.modality==="CT"||selected.modality==="MR") && (visionFromPrimary||visionOpen)&& <section className="cs-geometry" aria-label="Подготовка Gemini и Opus по открытому DICOM">
             {visionFromPrimary&&<h3>Описание и заключение</h3>}
             {!visionFromPrimary&&<button type="button" disabled={reading} onClick={()=>setVisionOpen(v=>!v)}>
               {visionOpen?"Закрыть дополнительные инструменты":"Анализировать отдельные срезы"}
@@ -225,7 +249,7 @@ export default function ViewerPage() {
                 }}/>
             </AnalysisSoundProvider>}
           </section>}
-          <div className="cs-bottom-note">Предварительный анализ проверяется врачом по исходным снимкам.</div>
+
         </div>
       </div>
       </>}
