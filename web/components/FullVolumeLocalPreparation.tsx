@@ -11,12 +11,12 @@ import type {AutoVolumePacket} from "../lib/auto-volume-research-packet";
 type Stage="idle"|"preparing"|"gemini"|"detectors"|"opus"|"completed"|"unavailable"|"interrupted";
 type DetectorStage="idle"|"running"|"completed"|"vision-only"|"cancelled";
 export default function FullVolumeLocalPreparation({
-  series,files,flaggedIndex,onOpenSlice,autoStart=false,
+  series,files,flaggedIndex,onOpenSlice,autoStart=false,showAdminControls=false,
   detectorStage="idle",detectorEvidence=null,
 }:{
   series:DicomSeries;files:ReadonlyMap<string,File>;
   flaggedIndex:number|null;onOpenSlice:(fileId:string)=>void;
-  autoStart?:boolean;detectorStage?:DetectorStage;
+  autoStart?:boolean;showAdminControls?:boolean;detectorStage?:DetectorStage;
   detectorEvidence?:SanitizedDetectorBundle|null;
 }){
  const [stage,setStage]=useState<Stage>("idle");
@@ -182,7 +182,7 @@ export default function FullVolumeLocalPreparation({
      <button type="button" onClick={stop}>Остановить анализ</button>}
    {!autoStart&&<p>Для автоматической обработки нажмите общую кнопку
      «Анализировать исследование» над просмотром снимков.</p>}
-   {sessionReady===false&&<details>
+   {showAdminControls&&sessionReady===false&&<details>
      <summary>Администратору · подключение рабочего места</summary>
      <p>Однократно настройте разрешённую исследовательскую обработку
        на локальном сервере. Врач не вводит ключи или адреса моделей.</p>
@@ -191,12 +191,12 @@ export default function FullVolumeLocalPreparation({
      <button type="button" onClick={()=>void connectAdmin()}>Подключить</button>
      {adminIssue&&<p role="status">{adminIssue}</p>}
    </details>}
-   <details><summary>Просмотреть отдельные срезы</summary>
+   {showAdminControls&&<details><summary>Просмотреть отдельные срезы</summary>
      {plan.sourceFrames.length} изображений. Выберите срез в окне DICOM
      или используйте просмотр списка исследований.
      <button type="button" onClick={()=>onOpenSlice(plan.sourceFrames[Math.floor(plan.sourceFrames.length/2)].fileId)}>
        Открыть средний срез
      </button>
-   </details>
+   </details>}
  </section>;
 }
