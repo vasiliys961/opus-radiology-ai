@@ -17,6 +17,7 @@ import { decodeDicomPreview } from "../lib/dicom-lite";
 import { MAX_PRIVACY_PIXELS } from "../lib/vision-privacy";
 import VisionPrivacyPreparation from "./VisionPrivacyPreparation";
 import FullVolumeLocalPreparation from "./FullVolumeLocalPreparation";
+import ReviewedSeriesAnalysis from "./ReviewedSeriesAnalysis";
 import type {SanitizedDetectorBundle} from "../lib/detector-consilium-evidence";
 import type {ClnVerifiedLocalEvidence} from "../lib/cln-physician-local-review";
 import {createClnFrameRelativeEvidence,type ClnFrameRelativeEvidence} from "../lib/cln-frame-relative-evidence";
@@ -168,6 +169,7 @@ export default function VisionFramePlanningPanel({
   }, [series, activeSeriesKey, requested, universal, choice]);
   useEffect(() => {
     if (!report) return;
+    if(!researchMode&&fromPrimaryAnalysis)return; // Full-series UI owns its one bounded group.
     let cancelled = false;
     const previewController=new AbortController();
     setThumbnails({});
@@ -199,7 +201,7 @@ export default function VisionFramePlanningPanel({
     };
     void render();
     return () => { cancelled = true;previewController.abort(); };
-  }, [report, fileById]);
+  }, [report, fileById,researchMode,fromPrimaryAnalysis]);
   const startUnified = () => {
     const selected=series.find(s=>s.key===activeSeriesKey)??null;
     if(!selected||universal.status!=="eligible_for_authorization")return;
@@ -479,6 +481,10 @@ export default function VisionFramePlanningPanel({
       сохраняя исходные SOPInstanceUID локально. Выборка не гарантирует обнаружения очагов между срезами.</p>
   </section>;
   const selected=series.find(s=>s.key===choice.seriesKey);
+  if(!researchMode&&fromPrimaryAnalysis&&selected&&["CT","MR"].includes(selected.modality))
+    return <ReviewedSeriesAnalysis key={"reviewed-series-"+selected.key}
+      series={selected} files={fileById} onOpenSlice={onOpenSlice}
+      detectorStage={primaryAnalysisStage} detectorEvidence={originalDetectorEvidence}/>;
   // Ordinary studies use exact-copy OCR/redaction, physician review and an
   // explicit transfer decision. Never send them through public-only auto OCR.
   if(!researchMode||!fromPrimaryAnalysis||!selected||!fullVolumeCost)return extraView;

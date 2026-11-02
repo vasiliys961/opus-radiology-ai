@@ -30,6 +30,7 @@ try{
   return route.continue();
  });
  await page.goto(base+"/viewer");
+ await page.waitForFunction(()=>{const input=document.querySelector('input[accept*=".dcm"]');return input&&!input.disabled;});
  await page.locator('input[accept*=".dcm"]').setInputFiles(
   (await readdir(join(fixture,"dicom"))).sort().map(n=>join(fixture,"dicom",n)));
  const analyze=page.getByRole("button",{name:"Анализировать исследование",exact:true});
@@ -39,7 +40,7 @@ try{
  assert.equal(await page.getByRole("region",{name:"Автоматический анализ всего исследования",exact:true}).count(),0);
  await page.getByText("Локальное рабочее место подключено.",{exact:false}).waitFor({timeout:60_000});
  assert.ok(connectionChecks>0,"Analyze connects the preapproved local workstation without a second click");
- const send=page.getByRole("button",{name:"Запустить анализ и получить заключение",exact:true});
+ const send=page.getByRole("button",{name:"Подготовить всю серию к последовательному анализу",exact:true});
  assert.equal(await send.isDisabled(),true,"No inference without privacy review and transfer consent");
  assert.deepEqual(paid,[],"Opening, analyzing and connecting must not send unreviewed pixels");
  console.log("PASS: primary Analyze connects automatically without another click or token; opening files does not connect; unreviewed upload blocked (synthetic only)");
@@ -62,13 +63,14 @@ try{
  });
  connectionOffline=true;
  await page.reload();
+ await page.waitForFunction(()=>{const input=document.querySelector('input[accept*=".dcm"]');return input&&!input.disabled;});
  await page.locator('input[accept*=".dcm"]').setInputFiles(
   (await readdir(join(fixture,"dicom"))).sort().map(n=>join(fixture,"dicom",n)));
  const task=page.getByRole("status",{name:"Автоматический исполнитель для узлов лёгких"});
  await task.filter({hasText:"выбран подключённый приватный сервер"}).waitFor({timeout:45_000});
  await analyze.click({timeout:45_000});
  await task.filter({hasText:"детектор завершился с ошибкой"}).waitFor({timeout:60_000});
- await page.getByText("Не удалось проверить подключение Gemini и Opus.",{exact:false}).waitFor({timeout:60_000});
+ await page.getByText("Рабочее место не подключено к Gemini/Opus.",{exact:false}).waitFor({timeout:60_000});
  connectionOffline=false;
  await page.getByRole("button",{name:"Повторить проверку подключения",exact:true}).click();
  await page.getByText("Локальное рабочее место подключено.",{exact:false}).waitFor();

@@ -1,3 +1,28 @@
+## OWNER OVERRIDE — 2026-11-02: REAL STUDIES AFTER DE-IDENTIFICATION
+
+Real studies are permitted inputs; there is no blanket public/synthetic-only
+product requirement. Preserve originals locally for viewing and detectors. For
+authorized external AI processing, prepare separate de-identified copies: exclude
+DICOM identifiers, private tags, filenames and original UIDs from outbound data,
+and address identifiers burned into pixels and recognizable facial features.
+The presence of an API key alone does not authorize transmission. Keep clinician
+access, authorized processing, source binding and actual provider controls.
+
+Automatically perform privacy preparation locally. Aim for ONE study-level review
+and release, with exceptions shown for suspicious frames, rather than repeated
+confirmations for every four-frame inference group. OCR alone is not proof of
+de-identification: uncertain regions must remain unresolved, not silently approved
+or blindly blacked out over anatomy. Do not mark uninspected copies as reviewed.
+Do not claim that this desired workflow is implemented until verified end to end.
+
+Older public/synthetic-only and blanket patient/cloud-OFF passages below record
+historical implementation boundaries; they do not prohibit developing this
+authorized de-identified real-study workflow. Existing technical gates must be
+updated with corresponding working privacy controls, not simply deleted. No
+patient files or secrets in git, logs or CI. Model licensing, resource limits,
+truthful coverage and physician review remain required; clinical validation is
+separate from functional operation.
+
 ## OWNER OVERRIDE — 2026-10-29: CONNECT VERIFIED DETECTORS, NO NEW CANDIDATES
 
 **Current single development task: sequentially integrate the ALREADY existing real

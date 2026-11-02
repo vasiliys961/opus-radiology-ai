@@ -1,0 +1,51 @@
+{
+  "date": "2026-11-03",
+  "scope": "local development code, no remote deployment or CI trigger",
+  "source": "generated synthetic DICOM, no patient images",
+  "browser": {
+    "actualDicomDecodingAndLocalOcr": true,
+    "selectedSourceFrames": 9,
+    "reviewedGroups": [
+      4,
+      4,
+      1
+    ],
+    "exactOrderedCoverageVerified": true,
+    "modelCallsMocked": true,
+    "geminiRequests": 3,
+    "finalOpusRequests": 1,
+    "paidProviderCalls": 0,
+    "reviewControlsExercisedBy": "automated test, no clinician identity claim",
+    "wholeSeriesRelease": true,
+    "providerPostsBeforeWholeSeriesRelease": 0,
+    "exceptionReviewRemainsLocal": true
+  },
+  "partialStop": {
+    "reviewedFrames": 4,
+    "unassessedFrames": 5,
+    "finalOpusRequests": 0,
+    "partialTxtActionAvailable": true
+  },
+  "actualNextHandlerChecks": {
+    "signedReviewedSessionAcceptedBeforePayloadValidation": true,
+    "missingSessionDenied": true,
+    "foreignOriginDenied": true,
+    "publicAutomaticOcrModeStillDisabled": true,
+    "paidProviderCalls": 0
+  },
+  "planningTestOnly": {
+    "frames": 267,
+    "groups": 67,
+    "lastGroupFrames": 3
+  },
+  "unitTestsPassed": 667,
+  "actual267FramePaidStudyAcceptance": false,
+  "independentDiagnosticAccuracyMeasured": false,
+  "fullClinicalRelease": false,
+  "privacyPreparation": {
+    "compressedCopyMemoryLimitMiB": 96,
+    "persistentStorage": false,
+    "ocrNotHumanReview": true,
+    "automaticFaceRemoval": false
+  }
+}

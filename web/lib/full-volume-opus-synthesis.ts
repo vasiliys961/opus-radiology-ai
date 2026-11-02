@@ -79,6 +79,12 @@ export async function synthesizeSafeFullVolumeOpus(
         "from a frame-by-frame overview of the complete selected CT/MR DICOM series. "+
         "You did NOT directly see all original pixels, only Gemini observations. "+
         "Detector candidate data are separate and can be incomplete or discordant. "+
+        "Reconcile repeated descriptions on neighboring slices as potentially the same finding; "+
+        "never sum slice observations into a lesion count without explicit spatial evidence. "+
+        "Keep contradictory morphology, laterality or detector evidence visible as unresolved. "+
+        "For each material positive finding cite supplied slice numbers; distinguish observed signs "+
+        "from differential hypotheses and say which additional sequence/window is needed when relevant. "+
+        "Do not invent measurements, staging, urgency or a diagnosis unsupported by source observations. "+
         "Compare positive findings, note which detectors did not run, and never "+
         "infer a negative diagnosis from missing or empty detector output. "+
         "Do not claim a direct independent image review, completed MRI sequences, "+

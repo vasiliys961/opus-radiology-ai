@@ -71,7 +71,7 @@ export async function GET(req:NextRequest){
   },{headers:HEADERS});
   if(connected)response.cookies.set(REVIEWED_FRAME_COOKIE,createReviewedFrameSession(),{
     httpOnly:true,sameSite:"strict",secure:false,
-    path:"/api/ai/deidentified-openrouter-review",maxAge:4*60*60,
+    path:"/api/ai",maxAge:4*60*60,
   });
   return response;
 }

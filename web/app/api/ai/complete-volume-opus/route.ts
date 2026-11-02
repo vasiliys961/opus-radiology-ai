@@ -4,6 +4,7 @@ import {callAiGateway} from "../../../../lib/ai-gateway";
 import {createSyntheticTrialLimiter} from "../../../../lib/synthetic-live-research";
 import {synthesizeSafeFullVolumeOpus} from "../../../../lib/full-volume-opus-synthesis";
 import {localResearchEnabled,validateVolumeSession,VOLUME_SESSION_COOKIE} from "../../../../lib/volume-operator-session";
+import {validReviewedFrameSession,REVIEWED_FRAME_COOKIE} from "../../../../lib/reviewed-frame-session";
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
 export const maxDuration=180;
@@ -26,6 +27,8 @@ function authorized(req:NextRequest):boolean{
     process.env.RADIOLOGY_OPENROUTER_HEALTH_DATA_APPROVED!=="1"||
     !process.env.OPENROUTER_API_KEY)return false;
  if(autoSession)return true;
+ if(req.headers.get("x-opus-reviewed-volume")==="1"&&
+    validReviewedFrameSession(req.cookies.get(REVIEWED_FRAME_COOKIE)?.value))return true;
  if(!expected||expected.length<24)return false;
  if(!token||token.length>512)return false;
  const a=Buffer.from(token),b=Buffer.from(expected);

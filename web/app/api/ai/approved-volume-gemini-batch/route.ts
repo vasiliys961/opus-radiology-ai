@@ -5,6 +5,8 @@ import {createSyntheticTrialLimiter} from "../../../../lib/synthetic-live-resear
 import {reviewApprovedVolumeGeminiBatch} from "../../../../lib/approved-volume-batch-review";
 import {localResearchEnabled,validateVolumeSession,VOLUME_SESSION_COOKIE} from "../../../../lib/volume-operator-session";
 
+import {validReviewedFrameSession,REVIEWED_FRAME_COOKIE} from "../../../../lib/reviewed-frame-session";
+
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
 export const maxDuration=120;
@@ -14,6 +16,9 @@ const BODY_LIMIT=2_350_000;
 // Per-process guard, NOT an aggregate cloud budget. Each batch needs a fresh
 // physician-checked packet and explicit paid-call authorization.
 const limiter=createSyntheticTrialLimiter(32,60*60_000);
+// Individually physician-reviewed series: at most 128 four-frame calls/hour.
+// Separate from the old public auto-OCR gate; one request at a time.
+const reviewedLimiter=createSyntheticTrialLimiter(128,60*60_000);
 const reply=(status:number,error:string)=>NextResponse.json({error},{status,headers:HEADERS});
 function allowedLocal(req:NextRequest):boolean{
   const host=req.headers.get("host")??"";
@@ -60,6 +65,9 @@ export async function POST(req:NextRequest){
     if(!localResearchEnabled())return reply(503,"Public research workstation is not approved or configured");
     if(!validateVolumeSession(req.cookies.get(VOLUME_SESSION_COOKIE)?.value??null))
       return reply(401,"Research workstation session required");
+  }else if(req.headers.get("x-opus-reviewed-volume")==="1"){
+    if(!validReviewedFrameSession(req.cookies.get(REVIEWED_FRAME_COOKIE)?.value))
+      return reply(401,"Reviewed-frame workstation session required");
   }else{
     if(!ready())return reply(503,"Deidentified OpenRouter research permission is not configured");
     if(!operator(process.env.RADIOLOGY_LOCAL_RESEARCH_OPERATOR_TOKEN,
@@ -81,6 +89,7 @@ export async function POST(req:NextRequest){
       "acknowledgeAutomaticOCRAndNoPerFramePhysicianReview","acknowledgeOnePaidGeminiBatch"]:
     ["packet","acknowledgeClinicianLawfulDisclosure","acknowledgeProviderHealthDataTerms",
       "acknowledgePixelIdentityReviewed","acknowledgeOnePaidGeminiBatch"];
+  if("frameContext" in v&&!autoPublic)expected.push("frameContext");
   if(Object.keys(v).sort().join(",")!==expected.sort().join(",")||
      v.acknowledgeClinicianLawfulDisclosure!==true||
      v.acknowledgeProviderHealthDataTerms!==true||
@@ -88,12 +97,12 @@ export async function POST(req:NextRequest){
        v.acknowledgePixelIdentityReviewed!==true)||
      v.acknowledgeOnePaidGeminiBatch!==true)
     return reply(400,"Study-wide research cloud authorization required");
-  const release=limiter.acquire();
+  const release=(req.headers.get("x-opus-reviewed-volume")==="1"&&!autoPublic?reviewedLimiter:limiter).acquire();
   if(!release)return reply(429,"Another batch active or hourly research limit reached");
   try{
     const result=await reviewApprovedVolumeGeminiBatch(v.packet,callAiGateway,
       AbortSignal.any([req.signal,AbortSignal.timeout(90_000)]),
-      autoPublic?"auto-ocr-public-study":"clinician-reviewed");
+      autoPublic?"auto-ocr-public-study":"clinician-reviewed",v.frameContext);
     return NextResponse.json(result,{headers:HEADERS});
   }catch{
     // Do not expose model output, uploaded pixels, sensitive errors or headers.

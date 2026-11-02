@@ -22,7 +22,7 @@ const actionLabels:Record<PrivacyAction["kind"],string>={redacted:"Скрыти�
   "text-retained":"Надписи оставлены по ручной отметке","review-set":"Ручная проверка","copy-restored":"Копия восстановлена · проверки сняты"};
 
 /** OCR reads same-origin fixed assets only. No image upload or recognized-text export. */
-export default function VisionPrivacyPreparation({previews,modality,originalLocalFileIds,onOpenOriginalSlice,specialistFacts,specialistLocalBinding,localLaa950,originalDetectorEvidence=null,originalCxrEvidence=null,frameRelativeClnEvidence=null,autoStartAfterDetectors=false,primaryAnalysisStage="idle"}:{
+export default function VisionPrivacyPreparation({previews,modality,originalLocalFileIds,onOpenOriginalSlice,specialistFacts,specialistLocalBinding,localLaa950,originalDetectorEvidence=null,originalCxrEvidence=null,frameRelativeClnEvidence=null,autoStartAfterDetectors=false,primaryAnalysisStage="idle",onReviewedBatch,batchSubmitting=false,initialPreparation,reviewedBatchLabel="Кадры проверены — продолжить анализ серии"}:{
   previews:readonly (string|undefined)[];modality:string;
   originalLocalFileIds:readonly string[];
   onOpenOriginalSlice:(localFileId:string)=>void;
@@ -34,6 +34,10 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
   frameRelativeClnEvidence?:ClnFrameRelativeEvidence|null;
   autoStartAfterDetectors?:boolean;
   primaryAnalysisStage?:"idle"|"running"|"completed"|"vision-only"|"cancelled";
+  onReviewedBatch?:(packet:ReturnType<typeof buildVisionPrivacyPacket>)=>Promise<void>;
+  batchSubmitting?:boolean;
+  reviewedBatchLabel?:string;
+  initialPreparation?:import("../lib/auto-privacy-preparation").AutomaticPrivacyPreparation;
 }) {
   const [frames,setFrames]=useState<PrivacyFrame[]>([]),[selected,setSelected]=useState(0);
   const [redactionMode,setRedactionMode]=useState(false);
@@ -52,8 +56,16 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
   // OCR + actual black-pixel masking + second OCR never grants clinical/cloud clearance.
   // Lease the exact preview snapshot, not a permanent one-shot flag: React Strict
   // Mode replays effect cleanup, and that abort must allow the second setup.
+  const restoredPreparation=useRef<typeof initialPreparation>(undefined);
   const autoAttempt=useRef<readonly (string|undefined)[]|null>(null);
   useEffect(()=>{
+    if(initialPreparation){
+      if(restoredPreparation.current===initialPreparation)return;
+      restoredPreparation.current=initialPreparation;
+      journalRef.current=initialPreparation.journal;setJournal(initialPreparation.journal);
+      setFrames(initialPreparation.frames);setOcr(initialPreparation.ocr);setSelected(0);
+      setKeptText({});return;
+    }
     if(!autoStartAfterDetectors||autoAttempt.current===previews||!previews.length||previews.some(p=>!p?.startsWith("data:image/png;base64,")))return;
     if(!["CT","MR","CR","DX"].includes(modality))return;
     autoAttempt.current=previews;
@@ -86,7 +98,7 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
       // Release only this snapshot's lease; never invalidate a newer attempt.
       if(autoAttempt.current===previews)autoAttempt.current=null;
     };
-  },[previews,modality,autoStartAfterDetectors]);
+  },[previews,modality,autoStartAfterDetectors,initialPreparation]);
   const frame=frames[selected];
   const currentOcr=frame&&ocr[frame.frameId]?.sha256===frame.sha256?ocr[frame.frameId]:undefined;
   const unresolvedText=!!currentOcr?.regions.length&&keptText[frame.frameId]!==frame.sha256;
@@ -330,7 +342,11 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
       </section>}
     </details>
     </>}
-    {frames.length>0&&<DeidentifiedOpenRouterPanel
+    {frames.length>0&&onReviewedBatch&&<button type="button" disabled={!pilotReady||batchSubmitting}
+      onClick={()=>void onReviewedBatch(makePilotPacket()).catch(e=>setError(e instanceof Error?e.message:"Пакет не обработан."))}>
+      {batchSubmitting?"Gemini анализирует проверенные кадры…":reviewedBatchLabel}
+    </button>}
+    {frames.length>0&&!onReviewedBatch&&<DeidentifiedOpenRouterPanel
       key={frames.map(f=>f.sha256).join(":")}
       enabledByLocalChecks={pilotReady}
       autoConnect={autoStartAfterDetectors}

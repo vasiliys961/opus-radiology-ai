@@ -1,3 +1,4 @@
+import {validVolumeTechnicalContext,type VolumeTechnicalContext} from './volume-technical-context.ts';
 /** Single approved, metadata-free, 1-4 PNG Gemini batch.
  * The native SOP UID -> outgoing frame slot mapping MUST remain on the
  * clinician's browser; this module must never receive source DICOM headers.
@@ -24,25 +25,48 @@ export type VolumeGeminiBatchCaller=
     choices?:unknown;
     usage?:{prompt_tokens?:number;completion_tokens?:number}|null;
   }>;
+export type VolumeFrameContext={totalFrames:number;sliceNumbers:number[];technical?:VolumeTechnicalContext};
+export function validateVolumeFrameContext(value:unknown,count:number):value is VolumeFrameContext{
+ if(!value||typeof value!=="object"||Array.isArray(value))return false;
+ const v=value as VolumeFrameContext;
+ return ["sliceNumbers,totalFrames","sliceNumbers,technical,totalFrames"].includes(Object.keys(v).sort().join(","))&&
+  (v.technical===undefined||validVolumeTechnicalContext(v.technical))&&
+  Number.isSafeInteger(v.totalFrames)&&v.totalFrames>=count&&v.totalFrames<=2000&&
+  Array.isArray(v.sliceNumbers)&&v.sliceNumbers.length===count&&
+  v.sliceNumbers.every((n,i)=>Number.isSafeInteger(n)&&n>=1&&n<=v.totalFrames&&
+   (i===0||n===v.sliceNumbers[i-1]+1));
+}
 export async function reviewApprovedVolumeGeminiBatch(
   packet:unknown,call:VolumeGeminiBatchCaller,signal?:AbortSignal,
   mode:"clinician-reviewed"|"auto-ocr-public-study"="clinician-reviewed",
+  frameContext?:unknown,
 ):Promise<VolumeGeminiBatchResult>{
   const checked=mode==="auto-ocr-public-study"?
     normalizeAutoPublicVolumePacket(packet):normalizeReviewedCloudPilot(packet);
   if(checked.modality!=="CT"&&checked.modality!=="MR")
     throw Error("Only CT/MR volume frames are allowed");
   const ids=checked.frames.map(x=>x.imageId);
+  if(frameContext!==undefined&&!validateVolumeFrameContext(frameContext,ids.length))
+    throw Error("Invalid ordered slice context");
+  const context=frameContext as VolumeFrameContext|undefined;
   const messages:AiGatewayRequest["messages"]=[
     {role:"system",content:
       "Independent radiology visual observations on approved sampled CT/MR PNG pixels only. "+
       "Do NOT infer normality, pathology absence, volumes, anatomy outside these frames, "+
-      "clinical history, names, identifiers or DICOM metadata. "+
+      "clinical history, names or identifiers. Only the supplied allowlisted technical context may supplement pixels. "+
       "For every supplied frame include its exact image ID in reviewedImageIds. "+
+      "Assess image quality, visible anatomy, morphology, laterality when visible, and uncertainty. "+
+      "When ordered neighboring slices are supplied, track continuous structures and a possible lesion across them; "+
+      "do not describe the same continuous lesion as multiple tumors. "+
+      "Do not invent MRI sequences, contrast phases or physical measurements from PNG appearance. "+
+      "DICOM sequence codes do not prove T1/T2/FLAIR weighting. Declared contrast does not prove phase. "+
+      "Pixel spacing is source metadata, not permission to invent lesion measurements from resized images. "+
       'Return ONLY schema-compliant JSON with role "observations", source-bound signs and uncertainties.'},
     {role:"user",content:checked.frames.flatMap((f,i)=>[
       {type:"text",text:"Visible CT/MR slice "+(i+1)+" image ID "+f.imageId+
-        ". This is one batch of a larger volume; do not assess unseen slices."},
+        (context?". Original ordered series slice "+context.sliceNumbers[i]+" of "+context.totalFrames:"")+
+        ". This is one batch of a larger volume; do not assess unseen slices."+
+        (context?.technical?" Technical context (unknown fields remain unknown): "+JSON.stringify(context.technical):"")},
       {type:"image_url",image_url:{url:"data:image/png;base64,"+f.base64}},
     ])},
   ];

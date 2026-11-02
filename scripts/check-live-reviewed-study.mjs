@@ -30,14 +30,16 @@ try{
  let posts=0;const apiStatuses=[];
  page.on("request",r=>{if(r.method()==="POST"&&r.url().includes("/api/ai/"))posts++;});
  page.on("response",r=>{if(r.request().method()==="POST"&&r.url().includes("/api/ai/"))apiStatuses.push(r.status());});
- await page.goto("http://localhost:3000/viewer");
+ await page.goto("http://localhost:3000/viewer?research=1");
  await page.waitForFunction(()=>{
   const input=document.querySelector('input[accept*=".dcm"]');return input&&!input.disabled;
  });
  await page.locator('input[accept*=".dcm"]').setInputFiles(files);
  console.log(JSON.stringify({stage:"source-files-selected",sourceFrames:files.length}));
+ await page.getByRole('checkbox',{name:/Подтверждаю правомерность исследовательской обработки/}).check();
  await page.getByRole("button",{name:"Анализировать исследование",exact:true}).click({timeout:90_000});
  console.log(JSON.stringify({stage:"analysis-started",sourceFrames:files.length}));
+ await page.getByText('Дополнительно · анализ отдельных срезов',{exact:true}).click();
  const copies=page.getByRole("region",{name:"Все исходящие обезличенные копии",exact:true});
  await copies.waitFor({timeout:180_000});
  const review=copies.getByRole("checkbox",{name:/Я просмотрел все кадры/});
