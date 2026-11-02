@@ -39,10 +39,19 @@ for(const digest of manifest.selectedFileSha256) {
   assert.match(digest,/^[a-f0-9]{64}$/);selectedChain.update(Buffer.from(digest,'hex'));
 }
 assert.equal(selectedChain.digest('hex'),full?manifest.sourceContentChainSha256:'886f229ed355f669e4f5798f50b305c4823aaee949c04253660075c4e75afe30');
-if(!full)assert.deepEqual(manifest.niftiCandidates,[
+const legacyCandidates=[
   {affineLps:[0.976562,0,0,-250,0,0.976562,0,-156,0,0,3,145],inputSha256:'23d0065256550d22ccbe62a1ef4029ddf57bb0ef6334874875c244fc791a35d3'},
   {affineLps:[0.976562,0,0,-250,0,0.976562,0,-156,0,0,-3,238],inputSha256:'f81b3edb3c591afa699b7c6e081a90c57cb2b7a1e8d8e1e7025c3992c45487a6'},
-]);
+];
+// Independently rehashed from pinned native DICOM HU after the exporter fixed
+// NIfTI dim[4..7] to 1. Geometry and every scalar remain unchanged.
+const currentCandidates=legacyCandidates.map((c,i)=>({...c,inputSha256:[
+  'e32accf8da5dfb892dba64c97ff94ba9f29d018a37ccefdce49b2cacb4337db3',
+  'aec453c2a053b5fc89b8d72c03a5f5fdd7c0eff753cbf89b998ab1d1a6e31666',
+][i]}));
+if(!full)assert.deepEqual(manifest.niftiCandidates,
+  manifest.niftiCandidates[0]?.inputSha256===legacyCandidates[0].inputSha256?
+    legacyCandidates:currentCandidates);
 const files=[];
 for(let i=0;i<names.length;i++) {
   assert.equal(names[i],`reference-${String(i).padStart(3,'0')}.dcm`);
@@ -54,8 +63,10 @@ const freePort=()=>new Promise((resolve,reject)=>{
   const socket=net.createServer();socket.once('error',reject);
   socket.listen(0,'127.0.0.1',()=>{const port=socket.address().port;socket.close(()=>resolve(port));});
 });
-const appPort=await freePort(),workerPort=await freePort();
-const appOrigin=`http://127.0.0.1:${appPort}`, workerOrigin=`http://127.0.0.1:${workerPort}`;
+const existingApp=process.env.OPUS_TEST_BASE_URL;
+if(existingApp)assert.match(existingApp,/^http:\/\/(?:127\.0\.0\.1|localhost):[0-9]{1,5}$/);
+const appPort=existingApp?null:await freePort(),workerPort=await freePort();
+const appOrigin=existingApp??`http://127.0.0.1:${appPort}`, workerOrigin=`http://127.0.0.1:${workerPort}`;
 const require=createRequire(new URL('../web/package.json',import.meta.url));
 const {chromium}=require('playwright');
 let worker,server,browser,page,token,stage='start',jobId,request,outputStatus,maskPromise;
@@ -75,7 +86,7 @@ const ready=async url=>{
   throw Error('Local app startup timeout');
 };
 const stop=async child=>{
-  if(!child||child.exitCode!==null)return;
+  if(!child||child.exitCode!==null||child.signalCode!==null)return;
   const exited=once(child,'exit');child.kill('SIGTERM');
   if(await Promise.race([exited.then(()=>true),delay(10000).then(()=>false)]))return;
   child.kill('SIGKILL');await exited;
@@ -97,10 +108,12 @@ try {
   });
   token=await Promise.race([issued,delay(30000).then(()=>{throw Error('Worker startup timeout');})]);
   assert.match(token,/^[A-Za-z0-9_-]{43}$/);
-  server=spawn(process.execPath,['node_modules/next/dist/bin/next','start','--hostname','127.0.0.1','--port',String(appPort)],
+  if(!existingApp)server=spawn(process.execPath,['node_modules/next/dist/bin/next','start','--hostname','127.0.0.1','--port',String(appPort)],
     {cwd:join(root,'web'),stdio:'ignore'});
   await ready(appOrigin);
-  browser=await chromium.launch({headless:true,args:['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
+  browser=await chromium.launch({headless:true,
+    ...(process.env.OPUS_BROWSER_EXECUTABLE?{executablePath:process.env.OPUS_BROWSER_EXECUTABLE}:{}),
+    args:['--no-sandbox','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
   page=await browser.newPage({viewport:{width:1600,height:1000}});
   page.setDefaultTimeout(120000);
   page.on('pageerror',()=>errors.push('browser-error'));
@@ -165,8 +178,15 @@ try {
     } catch(e) {observerError=e;}
   });
   stage='import-original-public-slices';
-  await page.goto(appOrigin,{waitUntil:'networkidle'});
-  await page.locator('input[accept*=".dcm"]').setInputFiles(files);
+  // The original Cornerstone/MPR workspace lives at /. The physician /viewer
+  // has a separate layout and must not be mistaken for this acceptance path.
+  await page.goto(appOrigin+'/?research=1',{waitUntil:'networkidle'});
+  const sourceInput=page.locator('input[accept*=".dcm"]').first();
+  // File input is intentionally hidden behind the visible picker button.
+  await sourceInput.waitFor({state:'attached',timeout:30000});
+  await page.waitForFunction(()=>{const input=document.querySelector('input[accept*=".dcm"]');return input&&!input.disabled;});
+  await sourceInput.setInputFiles(files);
+  console.log('Public reference selected; waiting for original MPR controls.');
   if(full) {
     const observed=()=>({request,outputStatus,deleted,jobId,fullMaskGets,slabReply,inputHeader});
     const {counts,slabs}=await verifyFullBrowser({page,workerOrigin,token,manifest,observed,setStage:s=>{stage=s;}});
@@ -193,9 +213,12 @@ try {
     console.log(JSON.stringify({status:'passed',selectedFrames:103,actualTrainedInference:true,completeMaskShaVerified:true,peakRssMiB:record.peakRssMiB}));
     return;
   }
-  await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='MPR · 3 плоскости'&&!b.disabled));
+  stage='mpr-eligibility';
+  await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='MPR · 3 плоскости'&&!b.disabled),null,{timeout:60000});
   await page.getByRole('button',{name:'MPR · 3 плоскости',exact:true}).click();
-  await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='Подготовить пакет серии'&&!b.disabled));
+  stage='mpr-volume-ready';
+  console.log('Original MPR opened; waiting for source volume.');
+  await page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='Подготовить пакет серии'&&!b.disabled),null,{timeout:60000});
   timings.importMprSeconds=(performance.now()-started)/1000;
   stage='r231-open-panel';
   const panel=page.locator('.ora-local-lungmask');
@@ -227,7 +250,7 @@ try {
   assert.ok(deleted&&outputStatus&&maskPromise);
   stage="verify-source-geometry";
   assert.deepEqual(request.geometry.dimensions,[512,512,32]);
-  const expected=manifest.niftiCandidates.find(c=>c.inputSha256===request.inputSha256);
+  const expected=currentCandidates.find(c=>c.inputSha256===request.inputSha256);
   assert.ok(expected);
   request.geometry.affineLps.forEach((v,i)=>assert.ok(Math.abs(v-expected.affineLps[i])<0.00001));
   stage="verify-mask-bytes";

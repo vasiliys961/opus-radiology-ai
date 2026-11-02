@@ -1,0 +1,52 @@
+{
+  "schema": "opus-r231-browser-verification/v1",
+  "status": "failed",
+  "actualTrainedInference": false,
+  "stage": "r231-await-result",
+  "uploaded": 0,
+  "chunkCount": 0,
+  "deleted": false,
+  "statusReceived": false,
+  "maskReceived": false,
+  "inputSha256": "e32accf8da5dfb892dba64c97ff94ba9f29d018a37ccefdce49b2cacb4337db3",
+  "geometry": {
+    "dimensions": [
+      512,
+      512,
+      32
+    ],
+    "affineLps": [
+      0.9765620000000013,
+      0,
+      0,
+      -250,
+      0,
+      0.9765620000000013,
+      0,
+      -156,
+      0,
+      0,
+      3,
+      145
+    ]
+  },
+  "observerFailed": false,
+  "errorCount": 0,
+  "errorType": "Error",
+  "uiAlert": true,
+  "workerHttp": {
+    "capabilities": 200,
+    "modelReady": true,
+    "createJob": 507,
+    "firstChunk": null
+  },
+  "workerRequestFailed": false,
+  "preflight": {
+    "availableRamBytes": 1240449024,
+    "requiredRamBytes": 1278214144,
+    "availableDiskBytes": 27988770816,
+    "requiredDiskBytes": 176161472
+  },
+  "guardDecision": "reject-memory",
+  "peakRssMiB": null
+}

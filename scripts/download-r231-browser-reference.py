@@ -28,6 +28,8 @@ def nifti_header(affine, count=COUNT):
     h = bytearray(352)
     struct.pack_into("<i", h, 0, 348)
     struct.pack_into("<4h", h, 40, 3, 512, 512, count)
+    # Match the conformant exporter: unused NIfTI dimensions are singleton.
+    struct.pack_into("<4h", h, 48, 1, 1, 1, 1)
     struct.pack_into("<hh", h, 70, 16, 32)
     struct.pack_into("<4f", h, 76, 1, abs(affine[0]), abs(affine[5]), abs(affine[10]))
     struct.pack_into("<ff", h, 108, 352, 1)
