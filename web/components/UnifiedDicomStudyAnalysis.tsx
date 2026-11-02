@@ -842,7 +842,8 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,resear
   </>}
   {researchMode&&status&&<p role="status">{status}</p>}
    {!researchMode&&busy&&<p role="status">Анализ снимков выполняется…</p>}
-   {!researchMode&&!busy&&status&&<p role="status">Анализ моделей завершён. Результаты будут учтены в заключении.</p>}
+   {/* The cloud report panel owns the final result. Original worker completion
+        alone never implies that Gemini/Opus ran or that a report exists. */}
   {error&&<p role="alert">Не выполнено: {error}</p>}
   <details className="cs-geometry" style={researchMode?undefined:{display:"none"}} aria-label="Детальные результаты моделей">
     <summary>Результаты детекторов и проверка отдельных находок</summary>
