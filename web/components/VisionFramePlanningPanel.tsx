@@ -169,6 +169,7 @@ export default function VisionFramePlanningPanel({
   useEffect(() => {
     if (!report) return;
     let cancelled = false;
+    const previewController=new AbortController();
     setThumbnails({});
     const render = async () => {
       // Serial bounded decoding: never hold four full DICOM pixel arrays on M1.
@@ -184,7 +185,12 @@ export default function VisionFramePlanningPanel({
             const result = await decodeDicomPreview(file,{maxPixels:MAX_PRIVACY_PIXELS});
             preview = { url: result.url };
           } catch {
-            preview = { error: "Локальный декодер не поддерживает этот DICOM. Просмотр возможен в Cornerstone." };
+            try{
+              const {decodeCornerstoneVisionPreview}=await import('../lib/cornerstone-vision-preview');
+              preview={url:await decodeCornerstoneVisionPreview(file,MAX_PRIVACY_PIXELS,previewController.signal)};
+            }catch{
+              preview = { error: "Не удалось подготовить этот срез для анализа. Просмотр снимков доступен, но заключение по этому кадру не сформировано." };
+            }
           }
         }
         if (cancelled) return;
@@ -192,7 +198,7 @@ export default function VisionFramePlanningPanel({
       }
     };
     void render();
-    return () => { cancelled = true; };
+    return () => { cancelled = true;previewController.abort(); };
   }, [report, fileById]);
   const startUnified = () => {
     const selected=series.find(s=>s.key===activeSeriesKey)??null;
@@ -454,6 +460,10 @@ export default function VisionFramePlanningPanel({
         Только локальный исследовательский контекст: эти цифры не отправляются в OpenRouter
         и не подтверждают диагноз эмфиземы.</p>}
       {laaWarning&&<p role="status">{laaWarning}</p>}
+      {report.frames.some(f=>thumbnails[f.fileId]?.error)&&<p role="alert">
+        Анализ ещё не выполнен: не удалось подготовить один или несколько выбранных срезов.
+        Подготовка копий недоступна, пока эти кадры не декодированы. Исходные снимки можно просматривать выше.
+      </p>}
       <VisionPrivacyPreparation autoStartAfterDetectors={fromPrimaryAnalysis}
         primaryAnalysisStage={primaryAnalysisStage}
         originalDetectorEvidence={originalDetectorEvidence}
