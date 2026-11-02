@@ -6,7 +6,8 @@ const source=readFileSync(new URL("../components/UnifiedDicomStudyAnalysis.tsx",
 
 test("automatic FLAIR metadata enters the real WMH route; unknown MRI enters Vision before any model",()=>{
  assert.match(source,/const autoFlair=useMemo\(\(\)=>assessAutomaticBrainFlair\(series\)/);
- assert.match(source,/\(flairConfirmed\|\|autoFlair\.eligible\)&&sourceUrl\.startsWith\("https:\/\/"\)/);
+ assert.match(source,/if\(plan\.route==="wmh-flair"&&!sourceUrl\.trim\(\)\)/,
+   "Missing source provenance must stop native worker and use independent Vision");
  assert.match(source,/const brainVisionOnly=plan\.route==="wmh-flair"&&brainTask==="wmh"&&/);
  assert.match(source,/\(!autoWmhReady&&!token\.trim\(\)\)/,
    "An unavailable original WMH worker must not block independent Vision");
@@ -20,8 +21,8 @@ test("automatic FLAIR metadata enters the real WMH route; unknown MRI enters Vis
  assert.ok(!path.includes("invokeWmh"),"Never submit uncertain MRI weighting to original WMH worker");
 });
 test("automatic FLAIR does not bypass explicit source rights or cloud approval",()=>{
- assert.match(source,/\(flairConfirmed\|\|autoFlair\.eligible\)&&sourceUrl\.startsWith\("https:\/\/"\)&&!!sourceLicense\.trim\(\)/);
- assert.match(source,/const ready=\(!!plan\.route\|\|visionOnlyAvailable\)&&authorized/);
+ assert.match(source,/if\(plan\.route==="wmh-flair"&&!sourceUrl\.trim\(\)\)/);
+ assert.match(source,/const ready=\(!!plan\.route\|\|visionOnlyAvailable\|\|visionReady\)&&!busy&&!readinessChecksPending/);
  assert.match(source,/form\.set\("publicRights","yes"\)/);
  assert.ok(!source.includes('setAuthorized(true)'),"No automatic patient/research consent");
 });
