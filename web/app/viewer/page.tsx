@@ -10,6 +10,7 @@ import { validateViewerFileSelection } from "../../lib/viewer-limits";
 import "./viewer.css";
 import "../radiology.css";
 import {AnalysisSoundProvider} from "../../components/AnalysisSoundProvider";
+import WorkspaceNavigation from "../../components/WorkspaceNavigation";
 import type {WorkerSession} from "../../lib/local-worker";
 import type {BoundNoduleReport} from "../../lib/live-nodule-report";
 import type {SanitizedDetectorBundle} from "../../lib/detector-consilium-evidence";
@@ -133,7 +134,7 @@ export default function ViewerPage() {
   }
 
   return <main className="cs-page">
-    <header className="cs-top"><a href="/" aria-label="Вернуться в рабочую станцию">← OPUS RADIOLOGY</a><span>Просмотр КТ / МРТ</span><span>Локальный режим</span></header>
+    <header className="cs-top"><a href="/viewer" aria-label="Opus Radiology AI — исследование">OPUS RADIOLOGY</a><WorkspaceNavigation active={researchMode?"technical":"viewer"}/><span>Локальный режим</span></header>
     <div className="cs-container">
       {researchMode&&<details className="cs-geometry" aria-label="Исследовательские модули"><summary>Дополнительные исследовательские инструменты</summary>
       <div className="cs-source-mode" aria-label="Формат исходной серии">

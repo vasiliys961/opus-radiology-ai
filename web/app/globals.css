@@ -1,3 +1,11 @@
 :root { color-scheme: light; }
 html { -webkit-text-size-adjust: 100%; }
 body { margin: 0; }
+
+/* Shared navigation on clinician, technical, and guide screens. */
+.workspace-nav{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:0}
+.workspace-nav a,.cs-top .workspace-nav a{display:inline-block;color:#c8d8dd;text-decoration:none;border-radius:8px;padding:9px 13px;font-size:13px;font-weight:650;letter-spacing:0;white-space:nowrap}
+.workspace-nav a[aria-current="page"],.cs-top .workspace-nav a[aria-current="page"]{background:#176f68;color:#fff}
+.workspace-nav a:hover,.cs-top .workspace-nav a:hover{color:#fff;background:#274653}
+.workspace-nav a:focus-visible{outline:2px solid #81e7cf;outline-offset:2px}
+@media(max-width:700px){.cs-top{height:auto!important;min-height:67px;flex-wrap:wrap;padding-top:10px;padding-bottom:10px}.workspace-nav a,.cs-top .workspace-nav a{font-size:12px;padding:7px 9px}}

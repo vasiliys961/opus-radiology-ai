@@ -176,6 +176,23 @@ try{
  assert.equal(exported.integratedOpusReport.clinicallyValidated,false);
  assert.doesNotMatch(sanitized,/2\.25\.1043521000002|SOPInstanceUID|StudyInstanceUID/);
  assert.equal(errors.length,0,"Browser console errors: "+errors.join(" / "));
+ // Three separate views: physician, technical diagnostics, and help.
+ await page.goto(baseUrl+"/guide",{waitUntil:"domcontentloaded",timeout:45000});
+ await page.getByRole("heading",{name:"Как пользоваться Opus Radiology AI"}).waitFor();
+ await page.getByRole("heading",{name:"Запуск на Mac и однократная настройка"}).waitFor();
+ await page.goto(baseUrl+"/technical",{waitUntil:"domcontentloaded",timeout:45000});
+ await page.getByRole("heading",{name:"Техническая панель"}).waitFor();
+ await page.locator('section[aria-label="Подключение Gemini и Opus"]').waitFor();
+ await page.locator('section[aria-label="Готовность оригинальных моделей для КТ МРТ и рентгенографии"]').waitFor();
+ assert.equal(await page.locator('a[href="/viewer?research=1"]').count(),1);
+ await page.getByRole("link",{name:"Исследование",exact:true}).click();
+ await page.getByRole("heading",{name:"Исследование КТ / МРТ"}).waitFor();
+ assert.equal(await page.getByRole("link",{name:"Руководство",exact:true}).count(),1);
+ assert.equal(await page.getByText("Токен worker").count(),0);
+ await page.goto(baseUrl+"/viewer?research=1",{waitUntil:"domcontentloaded",timeout:45000});
+ await page.getByText("Дополнительные исследовательские инструменты",{exact:true}).waitFor();
+ assert.equal(errors.length,0,"Browser console errors: "+errors.join(" / "));
+ console.log("PASS navigation: doctor /viewer, technical /technical, guide /guide, preserved research tools");
  console.log("PASS UI: local OCR -> physician review -> authorized mock Gemini/Opus -> source slice -> physician JSON");
  console.log("MOCKED REMOTE API: no paid/provider calls or real detector checkpoint inference performed");
 }catch(e){

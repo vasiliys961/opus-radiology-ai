@@ -276,6 +276,10 @@ export default function Home() {
   return <AnalysisSoundProvider><div className="ora-app">
     <aside className="ora-sidebar">
       <div className="ora-brand"><div className="ora-logo"><Icon name="scan" size={25}/></div><div><strong>OPUS<span>RADIOLOGY</span></strong><small>AI DIAGNOSTIC WORKSPACE</small></div></div>
+      <div className="ora-nav-heading">РАЗДЕЛЫ</div>
+      <a className="ora-nav-muted" href="/viewer">Исследование · врачу</a>
+      <a className="ora-nav-muted" href="/technical">Техническая панель</a>
+      <a className="ora-nav-muted" href="/guide">Руководство</a>
       <div className="ora-nav-heading">РАБОЧЕЕ ПРОСТРАНСТВО</div>
       <div className="ora-nav-current"><Icon name="grid" size={19}/> Обзор исследования <span className="ora-nav-dot" /></div>
       <div className="ora-nav-muted"><Icon name="folder" size={19}/> Архив исследований <span>Скоро</span></div>

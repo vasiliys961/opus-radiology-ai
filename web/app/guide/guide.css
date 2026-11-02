@@ -1,0 +1,28 @@
+.guide-page{min-height:100vh;background:#edf3f6;color:#243d4c;font:14px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.guide-page *{box-sizing:border-box}
+.guide-top{background:#142733;min-height:68px;color:white;padding:13px max(20px,4vw);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:18px}
+.guide-brand{color:#76dfc8;text-decoration:none;font-weight:800}
+.guide-wrap{max-width:1050px;margin:auto;padding:36px 23px 75px}
+.guide-hero h1{font-size:clamp(29px,4vw,40px);line-height:1.2;letter-spacing:-.02em;margin:4px 0 12px}
+.guide-hero p:last-child{font-size:16px;max-width:760px;color:#536b78;margin-bottom:25px}
+.guide-eyebrow,.guide-section-number{color:#0c8f7d;font-weight:750;text-transform:uppercase;font-size:11px;letter-spacing:.1em}
+.guide-index{display:flex;flex-wrap:wrap;gap:9px;margin-bottom:24px}
+.guide-index a{color:#176e68;background:white;padding:10px 13px;border:1px solid #d4e5e4;text-decoration:none;border-radius:8px;font-weight:650}
+.guide-section{scroll-margin-top:20px;background:white;border:1px solid #dbe6ea;padding:clamp(18px,3vw,32px);border-radius:12px;margin-bottom:19px}
+.guide-section h2{font-size:23px;margin:3px 0 14px;line-height:1.3}
+.guide-section h3{font-size:16px;margin:22px 0 5px}
+.guide-section a,.guide-footer a{color:#087e70;font-weight:650}
+.guide-section ol{padding-left:24px}
+.guide-steps li{padding:3px 0 12px}
+.guide-note{background:#f0f8f7;border-left:3px solid #0c9986;padding:12px 16px}
+.guide-section pre{background:#152c39;color:#e7fff5;border-radius:8px;padding:18px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+.guide-section code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px}
+.guide-section p{margin:9px 0 16px}
+.guide-flow{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,195px),1fr));gap:9px;margin:16px 0}
+.guide-flow div{border:1px solid #d6e6e3;border-radius:8px;background:#f4faf8;padding:14px}
+.guide-flow strong,.guide-flow span{display:block}
+.guide-flow span{font-size:12px;color:#536c79;margin-top:8px}
+.guide-diagnostics dt{font-weight:750;font-size:15px;margin-top:18px}
+.guide-diagnostics dd{margin:5px 0 14px;color:#4d6674}
+.guide-footer{display:flex;gap:22px;flex-wrap:wrap;justify-content:center;padding:20px}
+@media(max-width:600px){.guide-wrap{padding:20px 13px 50px}.guide-top{padding:11px 15px}}
