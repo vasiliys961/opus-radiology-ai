@@ -1,0 +1,162 @@
+{
+  "date": "2026-11-03",
+  "scope": "Two independent 2D CT images; no complete CT/MR study validation",
+  "dataset": {
+    "dataset": "LongCIU",
+    "doi": "10.25820/data.007301",
+    "license": "ODC-By 1.0",
+    "revision": "c4b975090c16fabe59079a528dd920d956e16c66",
+    "selection": "fixed test indices 0 and 40, before mask inspection; each image independent, not contiguous CT",
+    "cases": [
+      {
+        "caseId": "case-01",
+        "sourceSliceIndex": 0,
+        "sourceSplit": "author-test",
+        "valuesFile": "case-01.f32",
+        "valuesSha256": "74c93c72d9183756c947fef2e6bf81d75a35bebb2ac8bff2882f848b11d539f3",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "caseId": "case-02",
+        "sourceSliceIndex": 40,
+        "sourceSplit": "author-test",
+        "valuesFile": "case-02.f32",
+        "valuesSha256": "9a4824f39a4360e85e1aa11c6133d3c5a81a62c26f443a124ec2aa5750b2e8f0",
+        "width": 512,
+        "height": 512
+      }
+    ]
+  },
+  "sourceSha256": {
+    "longciu_img.nii.gz": "af54aff713e7054d204b5e5e2aa0598c856006229901eea791ece8ae2efe8ab8",
+    "longciu_STAPLE_tgt.nii.gz": "6f0d64315c5010b296285f81a54adec0c6eae5fc643c4e21f4546129d743ea13",
+    "longciu_splits.json": "7f4d62f33f68a16cd2df10cc320e087d43802970de63e6e459885f5c7e5604bf",
+    "README.txt": "55792b2e3a995c3bfc2c82ed88af0cc587b96dc07e4d993ae9acf4316ed1f67a"
+  },
+  "pngs": [
+    {
+      "caseId": "case-01",
+      "pngSha256": "4eca865b61cb7bdb8758427898def17f34fae733e6e5c4b262a6523c7edb1ec7",
+      "width": 1024,
+      "height": 512
+    },
+    {
+      "caseId": "case-02",
+      "pngSha256": "4b5ef6a6ba34d8921165715143806196d1faf188fcc3cecd977ce5f4f1aa23cb",
+      "width": 1024,
+      "height": 512
+    }
+  ],
+  "execution": {
+    "completedCases": 2,
+    "actualLocalApiPostAttempts": 4,
+    "masksSent": false,
+    "referenceReadByRunner": false,
+    "providerResponsesMocked": false,
+    "requestedModels": [
+      "google/gemini-3.8-flash",
+      "anthropic/claude-opus-5.5"
+    ]
+  },
+  "referenceOpenedAfterBothReports": true,
+  "actualProviderCalls": 6,
+  "totalUsage": {
+    "inputTokens": 15384,
+    "outputTokens": 8076
+  },
+  "billedUsd": null,
+  "cases": [
+    {
+      "caseId": "case-01",
+      "sourceIndex": 0,
+      "referenceLabelPixels": {
+        "0": 255261,
+        "1": 5998,
+        "2": 885
+      },
+      "geminiExplicitMorphologies": [
+        "ground_glass",
+        "consolidation"
+      ],
+      "finalExplicitMorphologies": [
+        "ground_glass",
+        "consolidation"
+      ],
+      "semanticAssessment": "assistant manual descriptive review, not expert adjudication or spatial overlap",
+      "visualStatus": "completed",
+      "reviewedSlices": [
+        1
+      ],
+      "receipts": {
+        "gemini": {
+          "inputTokens": 1453,
+          "outputTokens": 755
+        },
+        "independentVisualOpus": {
+          "inputTokens": 1646,
+          "outputTokens": 932
+        },
+        "finalOpus": {
+          "inputTokens": 4649,
+          "outputTokens": 2451
+        }
+      },
+      "responseFileSha256": {
+        "case-01-gemini.json": "c62c1e293bcfd3bc8f4fdd1f8195ad9a680a1fcaad846a7297cd89ff23ceafda",
+        "case-01-opus.json": "a83a160e81cbdc1388145076896d527ad7afb7e63640382015e16bedbe569457",
+        "case-01-report.txt": "405e04bbb8c50a2242b2a162743e5a77c31cd2e85d785ed16dbfb9d9b61bc4e8"
+      }
+    },
+    {
+      "caseId": "case-02",
+      "sourceIndex": 40,
+      "referenceLabelPixels": {
+        "0": 238347,
+        "1": 21535,
+        "2": 2262
+      },
+      "geminiExplicitMorphologies": [
+        "ground_glass"
+      ],
+      "finalExplicitMorphologies": [
+        "ground_glass",
+        "consolidation"
+      ],
+      "semanticAssessment": "assistant manual descriptive review, not expert adjudication or spatial overlap",
+      "visualStatus": "completed",
+      "reviewedSlices": [
+        1
+      ],
+      "receipts": {
+        "gemini": {
+          "inputTokens": 1453,
+          "outputTokens": 860
+        },
+        "independentVisualOpus": {
+          "inputTokens": 1646,
+          "outputTokens": 813
+        },
+        "finalOpus": {
+          "inputTokens": 4537,
+          "outputTokens": 2265
+        }
+      },
+      "responseFileSha256": {
+        "case-02-gemini.json": "7c714f13ca326c0b255448908affabda4d126c20b24ea736db3d0adce5223127",
+        "case-02-opus.json": "c80e3b10ffdc28b99564c5dd4b3becb38790c739f61b433d90cc440579a8c417",
+        "case-02-report.txt": "6e476afe229f7bcf593f8771fbb817b9c7c84f5b1170ac535172e64b774f321e"
+      }
+    }
+  ],
+  "limitations": [
+    "No normal whole-study controls",
+    "Not sensitivity, specificity, FROC or segmentation Dice",
+    "No spatial localization scored",
+    "Unannotated effusion/hilar/cardiac findings are outside reference labels and require expert adjudication",
+    "Unknown patient orientation was nevertheless assumed by models",
+    "Independent visual Opus hypothesized contrast on case-02 despite unknown metadata; dataset describes noncontrast CT",
+    "No MRI cases evaluated",
+    "Requested model IDs from configured route, not independently attested backend versions"
+  ]
+}
