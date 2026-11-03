@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {ctReviewWindow,validCtReviewWindow,requireCtReviewCalibration} from './ct-review-window.ts';
+import {ctReviewWindow,validCtReviewWindow,requireCtReviewCalibration,suggestCtReviewWindows} from './ct-review-window.ts';
 import {windowDecodedPlane} from './decoded-vision-preview.ts';
 test('CT presets change display of the same source samples, not source values',()=>{
  const source=new Int16Array([-900,-600,0,40,1000]);const before=[...source];
@@ -17,4 +17,13 @@ test('HU presets refuse an uncalibrated CT or MR instead of guessing quantitativ
  assert.throws(()=>requireCtReviewCalibration({modality:'CT'},'LUNG'));
  assert.throws(()=>requireCtReviewCalibration({modality:'MR',rescaleUnit:'HU',rescaleSlope:1,rescaleIntercept:0},'BRAIN'));
  assert.doesNotThrow(()=>requireCtReviewCalibration({modality:'CT',rescaleUnit:'HU',rescaleSlope:1,rescaleIntercept:-1000},'LUNG','SOFT'));
+});
+
+test('Mac defaults select useful paired windows only with confirmed region, HU and bounded copy size',()=>{
+ const metadata={bodyRegion:'CHEST',rows:512,columns:512,rescaleUnit:'HU',rescaleSlope:1,rescaleIntercept:-1000};
+ assert.deepEqual(suggestCtReviewWindows({modality:'CT',members:[{metadata}]}),{primary:'LUNG',additional:'SOFT'});
+ assert.deepEqual(suggestCtReviewWindows({modality:'CT',members:[{metadata:{...metadata,rows:1024,columns:1024}}]}),{primary:'LUNG',additional:'NONE'});
+ assert.deepEqual(suggestCtReviewWindows({modality:'CT',members:[{metadata:{...metadata,rescaleUnit:'UNSPECIFIED'}}]}),{primary:'SOURCE',additional:'NONE'});
+ assert.deepEqual(suggestCtReviewWindows({modality:'MR',members:[{metadata}]}),{primary:'SOURCE',additional:'NONE'});
+ assert.deepEqual(suggestCtReviewWindows({modality:'CT',members:[{metadata},{metadata:{...metadata,bodyRegion:'HEAD'}}]}),{primary:'SOURCE',additional:'NONE'});
 });

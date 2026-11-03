@@ -1,3 +1,4 @@
+import type {BoundDetectorRecheck} from './cln-detector-recheck.ts';
 import {validCtReviewWindow,type CtReviewWindow} from './ct-review-window.ts';
 /** A separate blind Opus read of at most SIXTEEN exact, physician-approved copies.
  * Selection is evidence-guided, not proof these are the most diagnostic frames.
@@ -7,15 +8,15 @@ import {parseRoleResponse,parseStrictObject,readCompletionText,type RoleResponse
 import {buildVisionPrivacyPacket,createPrivacyFrame,pngFromBase64,markPrivacyReview,type VisionPrivacyPacket} from './vision-privacy.ts';
 import type {LocalVolumeReceipt} from './full-volume-receipts.ts';
 import type {VolumeGeminiBatchCaller} from './approved-volume-batch-review.ts';
-export type TargetedVisualInput={packets:VisionPrivacyPacket[];sliceNumbers:number[];windows?:{primary:CtReviewWindow;additional?:CtReviewWindow}};
+export type TargetedVisualInput={packets:VisionPrivacyPacket[];sliceNumbers:number[];candidateAnchors?:Array<{candidateId:number;sliceNumber:number;xFraction:number;yFraction:number}>;windows?:{primary:CtReviewWindow;additional?:CtReviewWindow}};
 export type TargetedVisualResult={
  status:'completed';sliceNumbers:number[];observations:Array<RoleResponse['observations'][number]&{sliceNumber:number}>;
  limitations:string[];receipt:{inputTokens:number;outputTokens:number};
 };
-export function selectTargetedVisualInput(packets:readonly VisionPrivacyPacket[],receipts:readonly LocalVolumeReceipt[]):TargetedVisualInput|null{
+export function selectTargetedVisualInput(packets:readonly VisionPrivacyPacket[],receipts:readonly LocalVolumeReceipt[],detectorAnchors:readonly BoundDetectorRecheck[]=[]):TargetedVisualInput|null{
  const total=packets.reduce((n,p)=>n+p.frames.length,0);
  if(!total)return null;
- const candidates=[...new Set(receipts.flatMap(r=>r.recheckIndices??[]))].filter(n=>Number.isSafeInteger(n)&&n>=0&&n<total);
+ const candidates=[...new Set([...detectorAnchors.map(a=>a.sourceIndex),...receipts.flatMap(r=>r.recheckIndices??[])])].filter(n=>Number.isSafeInteger(n)&&n>=0&&n<total);
  if(!candidates.length)return null;
  // Never replace focal frames by arbitrary distributed normal samples.
  const indices=candidates.slice(0,16);
@@ -32,10 +33,10 @@ export function selectTargetedVisualInput(packets:readonly VisionPrivacyPacket[]
  });
  const selectedPackets:VisionPrivacyPacket[]=[];
  for(let i=0;i<frames.length;i+=4)selectedPackets.push(buildVisionPrivacyPacket(frames.slice(i,i+4),crypto.randomUUID()));
- return {packets:selectedPackets,sliceNumbers:indices.map(n=>n+1)};
+ return {packets:selectedPackets,sliceNumbers:indices.map(n=>n+1),...(detectorAnchors.length?{candidateAnchors:detectorAnchors.filter(a=>indices.includes(a.sourceIndex)).map(a=>({candidateId:a.candidateId,sliceNumber:a.sourceIndex+1,xFraction:a.xFraction,yFraction:a.yFraction}))}:{})};
 }
 export function normalizeTargetedVisualInput(raw:unknown,modality:'CT'|'MR',total:number){
- if(!raw||typeof raw!=='object'||Array.isArray(raw)||!['packets,sliceNumbers','packets,sliceNumbers,windows'].includes(Object.keys(raw).sort().join(',')))throw Error('Invalid targeted visual input');
+ if(!raw||typeof raw!=='object'||Array.isArray(raw)||!Object.keys(raw).every(k=>['packets','sliceNumbers','windows','candidateAnchors'].includes(k))||!Object.hasOwn(raw,'packets')||!Object.hasOwn(raw,'sliceNumbers'))throw Error('Invalid targeted visual input');
  const input=raw as TargetedVisualInput;
  if(input.windows){
   const w=input.windows;
@@ -48,7 +49,13 @@ export function normalizeTargetedVisualInput(raw:unknown,modality:'CT'|'MR',tota
  if(normalized.some(p=>p.modality!==modality)||checked.frames.length>16)throw Error('Mixed or excessive visual images');
  if(checked.modality!==modality||!Array.isArray(numbers)||numbers.length!==checked.frames.length||
  new Set(numbers).size!==numbers.length||numbers.some(n=>!Number.isSafeInteger(n)||n<1||n>total))throw Error('Wrong visual source coverage');
- return {checked,numbers,windows:input.windows};
+ if(input.candidateAnchors!==undefined){
+  const anchors=input.candidateAnchors;
+  if(!Array.isArray(anchors)||anchors.length>250||new Set(anchors.map(a=>a?.candidateId)).size!==anchors.length||anchors.some(a=>!a||
+   Object.keys(a).sort().join(',')!=='candidateId,sliceNumber,xFraction,yFraction'||!Number.isSafeInteger(a.candidateId)||a.candidateId<1||!numbers.includes(a.sliceNumber)||
+   !Number.isFinite(a.xFraction)||a.xFraction<=0||a.xFraction>=1||!Number.isFinite(a.yFraction)||a.yFraction<=0||a.yFraction>=1))throw Error('Invalid detector source anchors');
+ }
+ return {checked,numbers,windows:input.windows,candidateAnchors:input.candidateAnchors};
 }
 export async function reviewTargetedOpus(raw:unknown,modality:'CT'|'MR',total:number,call:VolumeGeminiBatchCaller,signal?:AbortSignal):Promise<TargetedVisualResult>{
  const {checked,numbers,windows}=normalizeTargetedVisualInput(raw,modality,total);

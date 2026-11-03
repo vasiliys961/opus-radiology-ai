@@ -68,8 +68,10 @@ export async function synthesizeSafeFullVolumeOpus(
   if(!validateSafeFullVolumeOpusInput(summary))throw Error("Invalid complete volume input");
   const study=summary;
   let visualReview:FullVolumeOpusResult['visualReview'];
+  let detectorSourceAnchors:ReturnType<typeof normalizeTargetedVisualInput>['candidateAnchors'];
   if(visual!==undefined){
-   const {numbers}=normalizeTargetedVisualInput(visual,study.modality,study.plannedFrames);
+   const {numbers,candidateAnchors}=normalizeTargetedVisualInput(visual,study.modality,study.plannedFrames);
+   detectorSourceAnchors=candidateAnchors;
    signal?.throwIfAborted();
    try{visualReview=await reviewTargetedOpus(visual,study.modality,study.plannedFrames,call,signal);}
    catch{signal?.throwIfAborted();visualReview={status:'unavailable',sliceNumbers:[...numbers]};}
@@ -93,9 +95,9 @@ export async function synthesizeSafeFullVolumeOpus(
         "You did NOT directly see all original pixels. You receive Gemini observations and, when available, "+
         "a separately produced blind Opus visual read of explicitly numbered selected copies. "+
         "That read was made without Gemini diagnoses; it covers ONLY its supplied slice numbers. "+
-        "Compare signs from both reads and detector facts, explicitly preserve disagreement. "+
+        "Compare signs from both reads and detector facts, explicitly preserve disagreement. Blind observations without pixel localization cannot establish exact spatial agreement with a detector centroid; mark that comparison uncertain. "+
         "If blind visual review was unavailable, state that it did not run successfully. "+
-        "Detector candidate data are separate and can be incomplete or discordant. These aggregate facts contain no lesion coordinates; never claim lesion-by-lesion spatial reconciliation from aggregate counts alone. "+
+        "Detector candidate data are separate and can be incomplete or discordant. Only separately supplied sourceBoundClnCandidateAnchors locate CLN candidates. Aggregate facts contain no lesion coordinates; never claim lesion-by-lesion spatial reconciliation from aggregate counts alone. "+
         "Reconcile repeated descriptions on neighboring slices as potentially the same finding; "+
         "never sum slice observations into a lesion count without explicit spatial evidence. "+
         "Keep contradictory morphology, laterality or detector evidence visible as unresolved. "+
@@ -120,6 +122,8 @@ export async function synthesizeSafeFullVolumeOpus(
         limitations:study.limitations,
         sourceImagesGivenToThisSynthesis:false,
         independentOpusVisualReview:visualReview??null,
+        sourceBoundClnCandidateAnchors:detectorSourceAnchors??[],
+        candidateAnchorCoordinateSystem:'unit fractions of ORIGINAL source slice, not the side-by-side composite; centroid is not a lesion outline',
         originalDetectorEvidenceGivenToOpus:study.detectorEvidence!==null,
         detectorState:study.detectorState,
         verifiedDetectorFacts:study.detectorEvidence?.facts??[],

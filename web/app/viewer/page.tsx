@@ -251,6 +251,10 @@ export default function ViewerPage() {
                 onOpenSlice={id=>{
                   const index=selected.members.findIndex(m=>m.id===id);
                   if(index>=0)setWmhSlice(index);
+                  else{
+                    const owner=series.find(s=>s.members.some(m=>m.id===id));
+                    if(owner){setCurrentSeriesKey(owner.key);setWmhSlice(owner.members.findIndex(m=>m.id===id));setViewMode('2d');setVisionOpen(false);setVisionFromPrimary(false);setPrimaryStage(null);setVisionDetectorEvidence(null);setClnVerified(null);}
+                  }
                 }}/>
             </AnalysisSoundProvider>}
           </section>}

@@ -484,7 +484,7 @@ export default function VisionFramePlanningPanel({
   const selected=series.find(s=>s.key===choice.seriesKey);
   if(!researchMode&&fromPrimaryAnalysis&&selected&&["CT","MR"].includes(selected.modality))
     return <ReviewedSeriesAnalysis key={"reviewed-series-"+selected.key}
-      series={selected} allSeries={comparisonSeries} files={fileById} onOpenSlice={onOpenSlice}
+      series={selected} allSeries={comparisonSeries} clnVerifiedLocal={clnVerifiedLocal} files={fileById} onOpenSlice={onOpenSlice}
       detectorStage={primaryAnalysisStage} detectorEvidence={originalDetectorEvidence}/>;
   // Ordinary studies use exact-copy OCR/redaction, physician review and an
   // explicit transfer decision. Never send them through public-only auto OCR.

@@ -1,0 +1,35 @@
+{
+  "date": "2026-11-03",
+  "source": "synthetic CT DICOM only",
+  "scope": "local application integration, no trained model run",
+  "unitTestsPassed": 684,
+  "typeScript": "passed",
+  "browser": {
+    "actualNativeDicomToNifti": true,
+    "actualSourceShaAffineSopChecks": true,
+    "detectorResponseMocked": true,
+    "candidateId": 42,
+    "sourceVoxelCentroidIJK": [20, 30, 6],
+    "selectedSourceSliceNumbers": [7, 6, 8, 5],
+    "geminiFocalFlags": 0,
+    "detectorTriggersTargetedReview": true,
+    "absoluteSourceCoordinatesSent": false,
+    "sourceUidOrNiftiShaSent": false,
+    "modelsMocked": true,
+    "paidProviderCalls": 0
+  },
+  "mrNavigation": {
+    "syntheticSource": true,
+    "parallelComparisonRenders": true,
+    "companionOriginalSliceActuallyOpens": true,
+    "cloudPosts": 0
+  },
+  "macPolicy": {
+    "heavyWeightsInstalled": false,
+    "voxelPixelMemoryGuardsRaised": false,
+    "mandatoryDetector": false,
+    "geminiOpusInferenceLocation": "authorized cloud, not local Mac"
+  },
+  "diagnosticAccuracyMeasuredByTheseTests": false,
+  "deployment": false
+}

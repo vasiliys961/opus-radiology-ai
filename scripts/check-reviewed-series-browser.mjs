@@ -1,3 +1,4 @@
+import {createHash} from 'node:crypto';
 /** Actual DICOM/UI/PNG/OCR; synthetic source and mocked providers. Zero paid calls. */
 import assert from 'node:assert/strict';
 import {mkdtemp,readdir,rm} from 'node:fs/promises';
@@ -8,6 +9,7 @@ import {chromium} from '../web/node_modules/playwright/index.mjs';
 const temp=await mkdtemp(join(tmpdir(),'opus-reviewed-series-'));
 execFileSync(process.execPath,['scripts/generate-segmentation-phantom.mjs',temp,'CT','rescale-hu','CHEST'],{stdio:'pipe'});
 const browser=await chromium.launch({headless:true,...(process.env.OPUS_BROWSER_EXECUTABLE?{executablePath:process.env.OPUS_BROWSER_EXECUTABLE}:{}),args:['--no-sandbox']});
+const coordinateTest=process.env.OPUS_TEST_DETECTOR_COORDINATES==='1';
 const noFocal=process.env.OPUS_TEST_NO_FOCAL==='1';
 const base=process.env.OPUS_TEST_BASE_URL??'http://localhost:3000';
 assert.match(base,/^http:\/\/(localhost|127\.0\.0\.1):\d+$/);
@@ -16,6 +18,22 @@ try{
  page=await browser.newPage();page.setDefaultTimeout(120000);
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  let gemini=0,opus=0;const reviewed=[];
+ let syntheticClnSha='',clnUploads=0;
+ if(coordinateTest){
+  await page.route('**/api/local-cln/**',async route=>{
+   const path=new URL(route.request().url()).pathname;
+   if(path.endsWith('/capabilities'))return route.fulfill({json:{schema:'opus-original-cln-upload-worker/v1',modelId:'Lab-Rasool/CLN-Segmenter-MSD-fold0',originalWeightsVerified:true,imageUpload:true,researchOnly:true,patientMode:false,checkpointSha256:'8c08ec796fa2b786fe99ddfad4fe6314e98fdd8820c59527be3c4105f7955d87'}});
+   if(path.endsWith('/upload')){
+    const bytes=route.request().postDataBuffer();syntheticClnSha=createHash('sha256').update(bytes).digest('hex');clnUploads++;
+    return route.fulfill({json:{schema:'opus-cln-job/v1',jobId:'12345678-1234-4234-8234-123456789012'}});
+   }
+   if(path.endsWith('/report'))return route.fulfill({json:{schema:'opus-original-cln-upload-result/v1',sourceNiftiSha256:syntheticClnSha,
+    realOriginalModelForwardCompleted:true,checkpointSha256:'8c08ec796fa2b786fe99ddfad4fe6314e98fdd8820c59527be3c4105f7955d87',
+    candidateCount:1,nativeCandidates:[{modelComponentId:42,sourceVoxelCentroidIJK:[20,30,6],candidateVolumeMl:1}],researchOnly:true,clinicalValidation:false,negativeDiagnosisPermitted:false}});
+   return route.fulfill({json:{state:route.request().method()==='DELETE'?'deleted':'succeeded'}});
+  });
+ }
+
  await page.route('**/api/ai/**',async route=>{
   const path=new URL(route.request().url()).pathname;
   if(route.request().method()==='GET')return route.fulfill({json:{enabled:true,workstationConnected:true,productionPatientCloudRelease:false}});
@@ -30,7 +48,7 @@ try{
    assert.deepEqual(body.frameContext.sliceNumbers,gemini===0?[1,2,3,4]:gemini===1?[5,6,7,8]:[9]);
    reviewed.push(...body.frameContext.sliceNumbers);gemini++;
    return route.fulfill({json:{schema:'opus-gemini-volume-batch/v1',model:'google/gemini-3.8-flash',modality:'CT',
-    imagesReviewed:body.packet.frames.length,visualRecheck:noFocal?[]:[{imageId:'frame-1',reason:'focal'}],observations:[{id:'test',imageId:'frame-1',anatomy:'synthetic phantom',sign:'Synthetic test observation',uncertainty:'Not patient data'}],
+    imagesReviewed:body.packet.frames.length,visualRecheck:noFocal||coordinateTest?[]:[{imageId:'frame-1',reason:'focal'}],observations:[{id:'test',imageId:'frame-1',anatomy:'synthetic phantom',sign:'Synthetic test observation',uncertainty:'Not patient data'}],
     limitations:['Synthetic source; no medical inference'],reviewedImageIds:body.packet.frames.map(f=>f.frameId),
     receipt:{inputTokens:600,outputTokens:100},clinicalValidation:false,sourceBindingsLocalOnly:true}});
   }
@@ -38,10 +56,11 @@ try{
    let visualReview;
    if(noFocal){assert.equal(body.visualReview,undefined,'No focal frames: no second paid Opus request');}else{
    assert.ok(body.visualReview,'Independent visual reread enabled by default');
-   assert.deepEqual(body.visualReview.sliceNumbers,[1,5,9,2]);
+   assert.deepEqual(body.visualReview.sliceNumbers,coordinateTest?[7,6,8,5]:[1,5,9,2]);
+   if(coordinateTest){assert.ok(!JSON.stringify(body).includes('sopInstanceUid'));assert.ok(!JSON.stringify(body).includes('sourceNiftiSha256'));assert.equal(body.visualReview.candidateAnchors[0].candidateId,42);assert.equal(body.visualReview.candidateAnchors[0].sliceNumber,7);assert.equal(body.visualReview.candidateAnchors[0].xFraction,20.5/64);assert.equal(body.visualReview.candidateAnchors[0].yFraction,30.5/64);assert.equal(clnUploads,1);}
    assert.equal(body.visualReview.packets.flatMap(p=>p.frames).length,4);
    assert.ok(body.visualReview.packets.flatMap(p=>p.frames).every(f=>f.pixelReviewSha256===f.sha256));
-   visualReview={status:'completed',sliceNumbers:body.visualReview.sliceNumbers,observations:[{id:'blind',imageId:'frame-1',sliceNumber:1,anatomy:'synthetic phantom',sign:'Independent synthetic visual observation',uncertainty:'Not medical evidence'}],limitations:['Selected images only'],receipt:{inputTokens:500,outputTokens:100}};
+   visualReview={status:'completed',sliceNumbers:body.visualReview.sliceNumbers,observations:[{id:'blind',imageId:'frame-1',sliceNumber:body.visualReview.sliceNumbers[0],anatomy:'synthetic phantom',sign:'Independent synthetic visual observation',uncertainty:'Not medical evidence'}],limitations:['Selected images only'],receipt:{inputTokens:500,outputTokens:100}};
    body=body.synthesis;
    }
    assert.equal(gemini,3);assert.equal(body.overviewReviewed,9);assert.equal(body.plannedFrames,9);
@@ -55,12 +74,20 @@ try{
  await page.goto(base+'/viewer');
  await page.waitForFunction(()=>!document.querySelector('input[accept*=".dcm"]')?.disabled);
  const files=(await readdir(join(temp,'dicom'))).sort().slice(0,9).map(f=>join(temp,'dicom',f));
+ const cap=coordinateTest?page.waitForResponse(r=>new URL(r.url()).pathname==='/api/local-cln/v1/cln/capabilities'):null;
  await page.locator('input[accept*=".dcm"]').setInputFiles(files);
+ if(cap){await cap;await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));}
  await page.getByRole('button',{name:'Анализировать исследование',exact:true}).click();
+ if(coordinateTest)await page.getByRole('region',{name:'Координаты детекторных находок для перепроверки',exact:true}).waitFor();
  const full=page.getByRole('region',{name:'Последовательный анализ выбранной серии',exact:true});await full.waitFor();
  assert.equal(gemini,0);assert.equal(opus,0);
+ if(coordinateTest){
+  assert.equal(await full.getByRole('combobox',{name:'Окно для анализа КТ',exact:true}).inputValue(),'LUNG');
+  assert.equal(await full.getByRole('combobox',{name:'Дополнительное окно рядом с основным',exact:true}).inputValue(),'SOFT');
+ }else{
  await full.getByRole('combobox',{name:'Окно для анализа КТ',exact:true}).selectOption('LUNG');
  await full.getByRole('combobox',{name:'Дополнительное окно рядом с основным',exact:true}).selectOption('SOFT');
+ }
  await full.getByRole('button',{name:'Подготовить всю серию к последовательному анализу'}).click();
  const partial=process.env.OPUS_TEST_PARTIAL==='1';
  const whole=full.getByRole('region',{name:'Проверка всей серии перед отправкой',exact:true});
@@ -114,6 +141,7 @@ try{
  await accepted.getByRole('button',{name:'Добавить измерения в текст заключения'}).click();
  assert.match(await full.getByRole('textbox',{name:/Предварительное заключение/}).inputValue(),/16.00 мм/);
  assert.deepEqual(errors,[]);
+ if(coordinateTest)console.log('PASS coordinate integration: synthetic CLN -> exact NIfTI SHA/affine/SOP -> source slice 7 + neighbours -> independent Opus. No real model inference.');
  console.log('PASS: 9 native synthetic DICOM frames, one series release, automatic 4+4+1, three mocked Gemini calls, one final mocked Opus, exact coverage/source links. No paid calls or clinical validation.');
  }
 }catch(e){console.error(e);process.exitCode=1;}finally{await browser.close();await rm(temp,{recursive:true,force:true});}

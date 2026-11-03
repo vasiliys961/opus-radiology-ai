@@ -112,3 +112,16 @@ test('whole-study attestation resolves explicit OCR false positives with SHA-bou
  const stale=[{...groups[0],ocr:{'frame-1':{sha256:'0'.repeat(64),regions:[]}}}];
  assert.throws(()=>reviewPreparedStudy(stale,true));
 });
+test('detector-localized source triggers blind review even when Gemini marks no focal frames; anchors excluded from blind prompt',async()=>{
+ const packets=[packet(10),packet(20),packet(30),packet(40),packet(50)];
+ const input=selectTargetedVisualInput(packets,[{findings:[],recheckIndices:[]} as unknown as LocalVolumeReceipt],
+  [{candidateId:42,sourceIndex:3,xFraction:.4,yFraction:.6}])!;
+ assert.equal(input.sliceNumbers[0],4);assert.equal(input.candidateAnchors?.[0].sliceNumber,4);
+ assert.equal(input.packets[0].frames[0].sha256,packets[3].frames[0].sha256);
+ const result=await reviewTargetedOpus(input,'CT',5,async req=>{
+  const text=JSON.stringify(req.messages);assert.ok(!text.includes('candidateId'));assert.ok(!text.includes('lung_tumor'));
+  const ids=input.sliceNumbers.map((_,i)=>'frame-'+(i+1));
+  return response({role:'observations',reviewedImageIds:ids,observations:[],limitations:['sample only']});
+ });
+ assert.equal(result.status,'completed');
+});

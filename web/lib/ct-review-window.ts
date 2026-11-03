@@ -20,3 +20,18 @@ export function requireCtReviewCalibration(header:{modality:string;rescaleUnit?:
  if(header.modality!=='CT'||header.rescaleUnit!=='HU'||typeof header.rescaleSlope!=='number'||!Number.isFinite(header.rescaleSlope)||header.rescaleSlope<=0||
  typeof header.rescaleIntercept!=='number'||!Number.isFinite(header.rescaleIntercept))throw Error('Для окон КТ нужна подтверждённая шкала HU исходного DICOM. Выберите исходное окно или корректную КТ-серию.');
 }
+/** Lightweight defaults from consistent allowlisted headers, never from free text.
+ * They configure display copies only and do not assert a diagnosis or phase. */
+export function suggestCtReviewWindows(series:{modality:string;members:readonly {metadata:{bodyRegion?:string|null;rows:number|null;columns:number|null;rescaleUnit?:string;rescaleSlope?:number|null;rescaleIntercept?:number|null}}[]}):{primary:CtReviewWindow;additional:CtReviewWindow|'NONE'}{
+ const fallback={primary:'SOURCE',additional:'NONE'} as const;
+ if(series.modality!=='CT'||!series.members.length)return fallback;
+ if(series.members.some(({metadata:m})=>m.rescaleUnit!=='HU'||typeof m.rescaleSlope!=='number'||!Number.isFinite(m.rescaleSlope)||m.rescaleSlope<=0||typeof m.rescaleIntercept!=='number'||!Number.isFinite(m.rescaleIntercept)))return fallback;
+ const region=series.members[0].metadata.bodyRegion;
+ if(!region||series.members.some(x=>x.metadata.bodyRegion!==region))return fallback;
+ const pair=series.members.every(({metadata:m})=>typeof m.rows==='number'&&typeof m.columns==='number'&&m.rows>0&&m.columns>0&&m.rows*m.columns*2<=1048576);
+ if(region==='CHEST')return {primary:'LUNG',additional:pair?'SOFT':'NONE'};
+ if(region==='HEAD')return {primary:'BRAIN',additional:pair?'BONE':'NONE'};
+ if(region==='SPINE')return {primary:'BONE',additional:pair?'SOFT':'NONE'};
+ if(['ABDOMEN','PELVIS','NECK'].includes(region))return {primary:'SOFT',additional:'NONE'};
+ return fallback;
+}

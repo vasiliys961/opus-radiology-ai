@@ -34,6 +34,10 @@ try{
  assert.match(await comparison.innerText(),/Сравнение с предыдущим исследованием не выполнено/);
  await comparison.getByRole('slider',{name:/Срез основной серии/}).fill('2');
  await comparison.getByRole('button',{name:'Открыть оригинал · срез 3',exact:true}).first().waitFor();
+ const activeBefore=await page.locator('.cs-series.active').innerText();
+ await comparison.getByRole('button',{name:'Открыть оригинал · срез 3',exact:true}).last().click();
+ await comparison.waitFor({state:'detached'});
+ assert.notEqual(await page.locator('.cs-series.active').innerText(),activeBefore);
  assert.equal(cloudPosts,0);assert.deepEqual(errors,[]);
  console.log('PASS: two synthetic MR series, nearest parallel source planes, explicit unknown weighting/no prior study, zero cloud POSTs.');
 }finally{await browser.close();await rm(temp,{recursive:true,force:true});}

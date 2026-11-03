@@ -1,3 +1,16 @@
+## OWNER OVERRIDE — 2026-11-03: CURRENT MAC AND LLM QUALITY FIRST
+
+Current development is local on the owner's limited Mac. Prioritize a physician-
+usable source DICOM → bounded local privacy preparation/measurements → authorized
+Gemini Vision → selective Opus visual review and report workflow. Gemini/Opus
+inference is remote; do not imply those models run locally on the Mac. Specialty
+detectors are optional and only run when already installed, authentic, compatible
+and within resources. Do not install heavy models or require a new Linux server
+for this primary workflow. Preserve coordinate connections as optional evidence.
+Do not increase existing voxel/pixel/memory guards to force a run. No deployment
+or new paid tests merely to demonstrate progress. Quality claims require actual
+expert comparison, not agreement between LLMs or successful UI tests.
+
 ## OWNER OVERRIDE — 2026-11-02: REAL STUDIES AFTER DE-IDENTIFICATION
 
 Real studies are permitted inputs; there is no blanket public/synthetic-only
