@@ -167,3 +167,18 @@ test('physician concern supplements automatic selection, takes priority and pres
  assert.equal(selectTargetedVisualInput(packets,[],[],source,false),null);
  assert.throws(()=>selectTargetedVisualInput(packets,[],[],source,false,source));
 });
+
+test('failed final report preserves successful blind review; explicit retry calls only text synthesis',async()=>{
+ let saved:import('./full-volume-opus-synthesis.ts').FullVolumeOpusResult['visualReview'];let calls=0;
+ const payload={synthesis:safe,visualReview:{packets:[packet()],sliceNumbers:[1]}};
+ await assert.rejects(()=>synthesizeSafeFullVolumeOpus(payload,async()=>{
+  calls++;if(calls===1)return response(blind);
+  return {choices:[{finish_reason:'length',message:{content:'{"summary":"unfinished'}}],usage:{prompt_tokens:100,completion_tokens:3500}};
+ },undefined,{onVisual:v=>{saved=v;}}),/incomplete or refused/);
+ assert.equal(saved?.status,'completed');
+ const result=await synthesizeSafeFullVolumeOpus(payload,async req=>{
+  calls++;assert.ok(!JSON.stringify(req.messages).includes('data:image/png'));
+  return response({summary:report,limitations:['sample only']});
+ },undefined,{visual:saved});
+ assert.equal(calls,3);assert.equal(result.visualReview?.status,'completed');
+});

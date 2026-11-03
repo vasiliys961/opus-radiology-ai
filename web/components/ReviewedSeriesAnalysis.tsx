@@ -48,6 +48,8 @@ export default function ReviewedSeriesAnalysis({series,files,onOpenSlice,detecto
  const [opusUsage,setOpusUsage]=useState<FullVolumeOpusResult['receipt']>();
  const [visualResult,setVisualResult]=useState<FullVolumeOpusResult['visualReview']>();
  const [stage,setStage]=useState<Stage>('idle'),[notice,setNotice]=useState('');
+ const noticeElement=useRef<HTMLParagraphElement|null>(null);
+ useEffect(()=>{if(stage==='interrupted')noticeElement.current?.scrollIntoView({block:'center',behavior:'smooth'});},[stage,notice]);
  const [budget,setBudget]=useState(2),[connected,setConnected]=useState(false);
  const [connectionAttempt,setConnectionAttempt]=useState(0);
 
@@ -107,7 +109,10 @@ export default function ReviewedSeriesAnalysis({series,files,onOpenSlice,detecto
   }
   signal.throwIfAborted();const d=detector.current;
   attemptedDetectorKeys.current=new Set(locationsRef.current.anchors.map(detectorKey));
+  const previousVisual=targetedVisual.current;
   targetedVisual.current=visualEnabled?selectTargetedVisualInput(approvedPackets.current.slice(0,done.length),done,locationsRef.current.anchors,completedIndices,visualMode==='selected'&&plan.budget.overviewIndices.length<=16,physicianSelection.indices):null;
+  // Keep identical reviewed packets stable so explicit retries reuse the server checkpoint.
+  targetedVisual.current?.packets.forEach((packet,i)=>{const previous=previousVisual?.packets[i];if(previous&&JSON.stringify(previous.frames)===JSON.stringify(packet.frames))packet.packetId=previous.packetId;});
   if(targetedVisual.current)targetedVisual.current.windows={primary:reviewWindow,...(additionalWindow==='NONE'?{}:{additional:additionalWindow})};
   const input=makeSafeVolumeOpusInput(series.modality as 'CT'|'MR',completedBudget,completedBatches,done,d.evidence,
    d.stage==='running'?'timeout':d.evidence?.facts.some(f=>f.status==='completed')?'completed':'unavailable');
@@ -126,7 +131,7 @@ export default function ReviewedSeriesAnalysis({series,files,onOpenSlice,detecto
   const payload=targetedVisual.current?{synthesis:input,visualReview:targetedVisual.current}:input;
   const response=await fetch('/api/ai/complete-volume-opus',{method:'POST',credentials:'same-origin',signal,
    headers:{'Content-Type':'application/json','X-Opus-Reviewed-Volume':'1'},body:JSON.stringify(payload)});
-  if(!response.ok)throw Error((response.status===429?'Opus занят или достигнут лимит итоговых запросов (2 за 20 минут). Повторите позже.':'Итоговое заключение не получено ('+response.status+').')+' Наблюдения Gemini сохранены; повторного запуска Gemini не требуется.');
+  if(!response.ok){const detail=await response.json().catch(()=>null);throw Error((response.status===429?'Opus занят или достигнут лимит итоговых запросов (2 за 20 минут). Повторите позже.':detail?.message??('Итоговое заключение не получено ('+response.status+').'))+' Наблюдения Gemini сохранены; повторного запуска Gemini не требуется.'+(detail?.visualReviewPreserved?' Визуальная перепроверка Opus сохранена на сервере на 10 минут: при повторе того же запроса она не оплачивается заново.':''));}
   const output=await response.json() as FullVolumeOpusResult;
   signal.throwIfAborted();
   if(output.schema!=='opus-full-volume-radiologist/v1'||output.modality!==series.modality||
@@ -216,7 +221,10 @@ export default function ReviewedSeriesAnalysis({series,files,onOpenSlice,detecto
   <p>Примерная стоимость выбранного анализа с заключением: около ${estimate.total.toFixed(2)}. {opusCost!==null?'По полученным квитанциям Gemini + Opus: около $'+((ledger?.totalUSD??0)+opusCost).toFixed(2)+'.':'Gemini по полученным квитанциям: около $'+(ledger?.totalUSD??0).toFixed(2)+'.'}</p>
   <details><summary>Как рассчитана стоимость</summary><p>Расчёт по тарифам OpenRouter от 03.11.2026 и квитанциям полученных ответов. Начальный ориентир использует предполагаемый объём токенов; по мере обработки уточняется. Не включает перевод, вопросы и запросы без квитанции. Точный счёт — у провайдера.</p></details>
   {stopReason&&<p role="status">{stopReason} Opus получает только обработанные срезы; остальные остаются неоценёнными.</p>}
-  {notice&&<p role="status">{notice}</p>}
+  {notice&&<p ref={noticeElement} role={stage==='interrupted'?'alert':'status'}>{notice}</p>}
+  {stage==='interrupted'&&receipts.length>0&&<button type="button" onClick={()=>{
+   const c=new AbortController();ctl.current=c;void finalize(receipts,c.signal).catch(interrupted);
+  }}>Получить заключение</button>}
   {!connected&&!busy&&<button type="button" onClick={()=>setConnectionAttempt(n=>n+1)}>Восстановить подключение</button>}
   {stage==='idle'&&<>
    <label>Какие срезы анализировать <select value={selection} onChange={e=>setSelection(e.target.value)}><option value="all">Вся серия</option><option value="custom">Отдельные срезы или диапазон</option></select></label>
@@ -259,11 +267,7 @@ export default function ReviewedSeriesAnalysis({series,files,onOpenSlice,detecto
   {stage==='review'&&<button type="button" onClick={()=>{ctl.current?.abort();setStage('idle');setNotice('Подготовка отменена. Выберите срезы заново; отправка не выполнялась.');}}>Вернуться к выбору срезов</button>}
   {(stage==='interrupted'||stage==='completed')&&receipts.length<plan.batches.length&&approvedPackets.current.length===plan.batches.length&&<button type="button" disabled={!connected} onClick={()=>{const c=new AbortController();ctl.current=c;void submitAll(approvedPackets.current,true);}}>Продолжить обработку оставшихся срезов</button>}
   {stage==='interrupted'&&!canPayForNextBatch(plan.budget,plan.batches,receipts)&&receipts.length<plan.batches.length&&<details><summary>Настройки расходов</summary><label>Лимит Gemini для продолжения <select value={budget} onChange={e=>setBudget(Number(e.target.value))}>{[0.5,1,2,3,5].map(v=><option key={v} value={v}>${v.toFixed(2)}</option>)}</select></label></details>}
-  {stage==='interrupted'&&receipts.length>0&&receipts.length<plan.batches.length&&<button type="button" onClick={()=>{const c=new AbortController();ctl.current=c;void finalize(receipts,c.signal).catch(interrupted);}}>Получить заключение по обработанным срезам</button>}
   {stage==='interrupted'&&!receipts.length&&<button type="button" onClick={()=>{setExecutionBatches(null);setStage('idle');}}>Вернуться к выбору срезов</button>}
-  {stage==='interrupted'&&receipts.length===plan.batches.length&&<button type="button" onClick={()=>{
-   const c=new AbortController();ctl.current=c;void finalize(receipts,c.signal).catch(interrupted);
-  }}>Получить заключение</button>}
   {stage==='completed'&&<button type="button" onClick={()=>{ctl.current?.abort();approvedPackets.current=[];setExecutionBatches(null);setReceipts([]);setReport('');setOpusSpent(0);setVisualResult(undefined);setOpusUsage(undefined);setAcceptedMeasurements([]);setMeasureSource(null);setStage('idle');setNotice('Можно выбрать другие срезы. Сохраните предыдущий результат заранее: новый анализ оплачивается отдельно.');}}>Новый анализ — выбрать другие срезы</button>}
   {stage==='completed'&&visualEnabled&&(visualResult?.status==='unavailable'||detectorLocations.anchors.some(a=>!attemptedDetectorKeys.current.has(detectorKey(a))))&&<button type="button" onClick={()=>{
    const c=new AbortController();ctl.current=c;void finalize(receipts,c.signal).catch(interrupted);
