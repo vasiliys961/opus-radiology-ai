@@ -221,10 +221,11 @@ export default function ViewerPage() {
           {selectedFiles.length>0&&<div className="cs-view-modes" role="group" aria-label="Просмотр изображений">
             <button type="button" aria-pressed={viewMode==="2d"} onClick={()=>setViewMode("2d")}>Срезы · 2D</button>
             <button type="button" aria-pressed={viewMode==="mpr"} disabled={!mprCheck.eligible}
-              title={mprCheck.eligible?undefined:"Недоступно для этого исследования"} onClick={()=>setViewMode("mpr")}>Три плоскости</button>
+              title={mprCheck.eligible?undefined:mprCheck.reason} onClick={()=>setViewMode("mpr")}>Три плоскости</button>
             <button type="button" aria-pressed={viewMode==="3d"} disabled={!mprCheck.eligible}
-              title={mprCheck.eligible?undefined:"Недоступно для этого исследования"} onClick={()=>setViewMode("3d")}>3D · вращение</button>
+              title={mprCheck.eligible?undefined:mprCheck.reason} onClick={()=>setViewMode("3d")}>3D · вращение</button>
           </div>}
+          {selectedFiles.length>0&&!mprCheck.eligible&&<p role="status">Три плоскости и 3D недоступны: {mprCheck.reason} Это ограничение объёмного просмотра; последовательный анализ выбранных 2D-срезов доступен отдельно.</p>}
           {selectedFiles.length>0&&selected&&viewMode!=="2d"&&mprCheck.eligible?
             <CornerstoneMPR key={"mpr-"+selected.key} files={selectedFiles} sourceSeries={selected}
               quality={mprQuality} show3D={viewMode==="3d"}
