@@ -52,6 +52,7 @@ test("Four approved PNGs perform exactly one real provider-interface Gemini call
   assert.equal(result.sourceBindingsLocalOnly,true);
   const payload=JSON.stringify(calls[0].messages);
   assert.match(payload,/Unknown contrast stays unknown/);
+  assert.match(payload,/OBSERVATION FIRST/);
   assert.match(payload,/Evaluate ALL visible anatomical structures using ALL supplied display windows/);
   assert.match(payload,/actively evaluate visible mediastinum, nodes, heart, vessels/);
   assert.match(payload,/Patient orientation is not provided/);

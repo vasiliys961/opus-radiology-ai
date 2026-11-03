@@ -1,3 +1,4 @@
+import {RADIOLOGY_OBSERVATION_METHOD} from './radiology-evidence-prompt.ts';
 import {parseStructuredRadiologyReview,structuredRadiologyFormat,type StructuredRadiologyReview} from './structured-radiology-review.ts';
 import {validVolumeTechnicalContext,type VolumeTechnicalContext} from './volume-technical-context.ts';
 import {SOURCE_REVIEW_BOUNDARIES,AVAILABLE_ANATOMY_REVIEW} from './source-review-boundaries.ts';
@@ -70,7 +71,7 @@ export async function reviewApprovedVolumeGeminiBatch(
       "DICOM sequence codes do not prove T1/T2/FLAIR weighting. Declared contrast does not prove phase. "+
       "Pixel spacing is source metadata, not permission to invent lesion measurements from resized images. "+
       "A negative is a bounded visual observation, not disease exclusion: name the exact visible area/window and never extrapolate to the whole organ/study. Do not invent mm, HU, stages, MRI sequences or confidence probabilities. No diagnoses, differential or treatment in this observational JSON. "+
-      SOURCE_REVIEW_BOUNDARIES+'\n'+AVAILABLE_ANATOMY_REVIEW+'\n'+
+      SOURCE_REVIEW_BOUNDARIES+'\n'+AVAILABLE_ANATOMY_REVIEW+'\n'+RADIOLOGY_OBSERVATION_METHOD+'\n'+
       'Return ONLY schema-compliant JSON with role "observations", source-bound signs and uncertainties.'},
     {role:"user",content:checked.frames.flatMap((f,i)=>[
       {type:"text",text:"Visible CT/MR slice "+(i+1)+" image ID "+f.imageId+

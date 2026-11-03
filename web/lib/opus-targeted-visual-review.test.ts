@@ -61,7 +61,7 @@ test('blind visual Opus sees reviewed pixels and ordinals, no Gemini claims; syn
   assert.match(text,/Patient orientation is not provided/);
   assert.match(text,/separate physician-review paragraph/);
   if(n===2)assert.match(text,/a reader's claim about patient side or contrast is NOT verified technical metadata/);
-  if(n===1){assert.ok(text.includes('data:image/png;base64,'));assert.ok(!text.includes('GEMINI_ONLY_MARKER'));return response(blind);}
+  if(n===1){assert.match(text,/OBSERVATION FIRST/);assert.ok(text.includes('data:image/png;base64,'));assert.ok(!text.includes('GEMINI_ONLY_MARKER'));return response(blind);}
   assert.ok(text.includes('GEMINI_ONLY_MARKER'));assert.ok(text.includes('OPUS_BLIND_MARKER'));
   assert.ok(!text.includes('data:image/png;base64,'));return response({summary:report,limitations:['sample only']});
  });
