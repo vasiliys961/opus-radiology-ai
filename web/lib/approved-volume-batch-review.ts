@@ -1,4 +1,5 @@
 import {validVolumeTechnicalContext,type VolumeTechnicalContext} from './volume-technical-context.ts';
+import {SOURCE_REVIEW_BOUNDARIES} from './source-review-boundaries.ts';
 /** Single approved, metadata-free, 1-4 PNG Gemini batch.
  * The native SOP UID -> outgoing frame slot mapping MUST remain on the
  * clinician's browser; this module must never receive source DICOM headers.
@@ -65,6 +66,7 @@ export async function reviewApprovedVolumeGeminiBatch(
       "Do not invent MRI sequences, contrast phases or physical measurements from PNG appearance. "+
       "DICOM sequence codes do not prove T1/T2/FLAIR weighting. Declared contrast does not prove phase. "+
       "Pixel spacing is source metadata, not permission to invent lesion measurements from resized images. "+
+      SOURCE_REVIEW_BOUNDARIES+'\n'+
       'Return ONLY schema-compliant JSON with role "observations", source-bound signs and uncertainties.'},
     {role:"user",content:checked.frames.flatMap((f,i)=>[
       {type:"text",text:"Visible CT/MR slice "+(i+1)+" image ID "+f.imageId+

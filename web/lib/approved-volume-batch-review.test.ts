@@ -50,6 +50,9 @@ test("Four approved PNGs perform exactly one real provider-interface Gemini call
   assert.deepEqual(result.receipt,{inputTokens:830,outputTokens:106});
   assert.equal(result.sourceBindingsLocalOnly,true);
   const payload=JSON.stringify(calls[0].messages);
+  assert.match(payload,/Unknown contrast stays unknown/);
+  assert.match(payload,/Patient orientation is not provided/);
+  assert.match(payload,/Describe ground-glass opacity and consolidation separately/);
   assert.match(payload,/data:image\/png;base64,/);
   for(const forbidden of ["SOPInstanceUID","StudyInstanceUID","PatientName",UUID])
     assert.ok(!payload.includes(forbidden));

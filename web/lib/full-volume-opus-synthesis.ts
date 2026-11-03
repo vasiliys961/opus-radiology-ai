@@ -1,4 +1,5 @@
 import {reviewTargetedOpus,normalizeTargetedVisualInput,type TargetedVisualResult} from './opus-targeted-visual-review.ts';
+import {SOURCE_REVIEW_BOUNDARIES} from './source-review-boundaries.ts';
 /** Final text-only synthesis, optionally preceded by a separate bounded blind
  * visual read. Native DICOM identifiers, filenames and patient metadata stay local.
  */
@@ -110,6 +111,9 @@ export async function synthesizeSafeFullVolumeOpus(
         "other anatomical series, multi-window CT, contrast phases or absent findings. "+
         "Avoid the old sampled-only closing sentence if all planned frames were reviewed. "+
         "Use the five exact Russian section headings. Do not output names or private identifiers. "+
+        SOURCE_REVIEW_BOUNDARIES+"\n"+
+        "For this text-only synthesis, a reader's claim about patient side or contrast is NOT verified technical metadata. "+
+        "If the provided evidence does not establish a fact, retain it as unknown even when both readers guessed the same thing. "+
         'Return ONLY JSON {"summary":"radiology protocol","limitations":["limitations"]}.'},
       {role:"user",content:JSON.stringify({
         modality:study.modality,

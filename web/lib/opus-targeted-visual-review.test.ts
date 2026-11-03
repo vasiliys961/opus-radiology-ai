@@ -42,6 +42,12 @@ test('blind visual Opus sees reviewed pixels and ordinals, no Gemini claims; syn
  const visual={packets:[packet()],sliceNumbers:[1]};
  const result=await synthesizeSafeFullVolumeOpus({synthesis:safe,visualReview:visual},async req=>{
   n++;const text=JSON.stringify(req.messages);
+  // Both independent reading and reconciliation must preserve missing facts;
+  // these assertions check request wiring, not clinical compliance of a model.
+  assert.match(text,/Unknown contrast stays unknown/);
+  assert.match(text,/Patient orientation is not provided/);
+  assert.match(text,/separate physician-review paragraph/);
+  if(n===2)assert.match(text,/a reader's claim about patient side or contrast is NOT verified technical metadata/);
   if(n===1){assert.ok(text.includes('data:image/png;base64,'));assert.ok(!text.includes('GEMINI_ONLY_MARKER'));return response(blind);}
   assert.ok(text.includes('GEMINI_ONLY_MARKER'));assert.ok(text.includes('OPUS_BLIND_MARKER'));
   assert.ok(!text.includes('data:image/png;base64,'));return response({summary:report,limitations:['sample only']});
