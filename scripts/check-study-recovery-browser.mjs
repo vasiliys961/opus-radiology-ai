@@ -32,7 +32,7 @@ try{
    questions++;assert.equal(b.question,'Что уточнить?');return route.fulfill({json:{text:'Синтетический ответ: нужен просмотр исходных срезов.',physicianReviewRequired:true,receipt:{inputTokens:50,outputTokens:20}}});
   }
   finals++;const s=b.synthesis??b;
-  assert.deepEqual(s.sourceSliceNumbers,accepted);assert.equal(s.sourceTotalFrames,9);assert.equal(s.plannedFrames,partial?4:7);
+  assert.deepEqual(s.sourceSliceNumbers,accepted);assert.equal(s.sourceTotalFrames,9);assert.equal(s.plannedFrames,accepted.length);
   assert.equal(s.clinicalContext,'Кашель без идентификаторов');
   assert.ok(b.visualReview.sliceNumbers.every(n=>accepted.includes(n)));
   assert.ok(s.observations.every(o=>accepted.includes(o.sliceNumber)));
@@ -56,19 +56,21 @@ try{
  await review.getByRole('checkbox',{name:/Я просмотрел выбранные подготовленные копии/}).check();
  await review.getByRole('button',{name:'Отправить всю проверенную серию в анализ',exact:true}).click();
  await full.getByText(/Анализ остановлен на срезах 7, 8, 9/).waitFor();
- assert.equal(attempts,2);assert.equal(finals,0);assert.deepEqual(accepted,[2,4,5,6]);
- if(partial)await full.getByRole('button',{name:/Составить заключение только по полученным 4 срезам/}).click();
- else await full.getByRole('button',{name:'Продолжить с неподтверждённой группы (платный запрос)',exact:true}).click();
  await full.getByRole('textbox',{name:/Предварительное заключение/}).waitFor();
- assert.equal(attempts,partial?2:3);assert.equal(finals,1);assert.deepEqual(accepted,partial?[2,4,5,6]:[2,4,5,6,7,8,9]);
+ assert.equal(attempts,2);assert.equal(finals,1);assert.deepEqual(accepted,[2,4,5,6]);
+ if(!partial){await full.getByRole('button',{name:'Продолжить обработку оставшихся срезов',exact:true}).click();await page.waitForFunction(()=>document.querySelector('textarea')?.value===undefined||document.body.textContent.includes('Оценено 7 из 9'));}
+ await full.getByRole('textbox',{name:/Предварительное заключение/}).waitFor();
+ assert.equal(attempts,partial?2:3);assert.equal(finals,partial?1:2);assert.deepEqual(accepted,partial?[2,4,5,6]:[2,4,5,6,7,8,9]);
+ if(!partial)assert.match(await full.innerText(),/Gemini \+ Opus: около \$0\.01/,'Both partial and final Opus receipts must be included');
  const discussion=full.getByRole('region',{name:'Перевод и обсуждение заключения',exact:true});
  await discussion.getByRole('textbox',{name:'Клинические данные без идентификации пациента',exact:true}).fill('Кашель 3 недели');
  await discussion.getByRole('checkbox').check();
- await discussion.getByRole('button',{name:'Перевести заключение на английский (платный Opus)',exact:true}).click();
+ await discussion.getByRole('button',{name:'Перевести заключение на английский',exact:true}).click();
  await discussion.getByRole('textbox',{name:/English provisional report/}).waitFor();
  await discussion.getByRole('textbox',{name:'Вопрос по результату',exact:true}).fill('Что уточнить?');
- await discussion.getByRole('button',{name:'Обсудить с Opus (платный запрос)',exact:true}).click();
+ await discussion.getByRole('button',{name:'Обсудить с Opus',exact:true}).click();
  await discussion.getByText(/Синтетический ответ: нужен просмотр/).waitFor();assert.equal(translations,1);assert.equal(questions,1);
+ await page.screenshot({path:'/tmp/opus-study-'+(partial?'auto-partial':'auto-resume')+'.png',fullPage:true});
  await full.getByRole('textbox',{name:/Предварительное заключение/}).fill('Изменённый черновик');
  assert.equal(await discussion.getByRole('textbox',{name:/English provisional report/}).count(),0);
  assert.deepEqual(errors,[]);

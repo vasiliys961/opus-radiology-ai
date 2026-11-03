@@ -9,6 +9,7 @@ import {chromium} from '../web/node_modules/playwright/index.mjs';
 const temp=await mkdtemp(join(tmpdir(),'opus-reviewed-series-'));
 execFileSync(process.execPath,['scripts/generate-segmentation-phantom.mjs',temp,'CT','rescale-hu','CHEST'],{stdio:'pipe'});
 const browser=await chromium.launch({headless:true,...(process.env.OPUS_BROWSER_EXECUTABLE?{executablePath:process.env.OPUS_BROWSER_EXECUTABLE}:{}),args:['--no-sandbox']});
+const partial=process.env.OPUS_TEST_PARTIAL==='1';
 const coordinateTest=process.env.OPUS_TEST_DETECTOR_COORDINATES==='1';
 const noFocal=process.env.OPUS_TEST_NO_FOCAL==='1';
 const base=process.env.OPUS_TEST_BASE_URL??'http://localhost:3000';
@@ -53,6 +54,10 @@ try{
     receipt:{inputTokens:600,outputTokens:100},clinicalValidation:false,sourceBindingsLocalOnly:true}});
   }
   if(path==='/api/ai/complete-volume-opus'){
+   if(partial){
+    const s=body.synthesis??body;assert.equal(s.overviewReviewed,4);assert.deepEqual(s.sourceSliceNumbers,[1,2,3,4]);opus++;
+    return route.fulfill({json:{schema:'opus-full-volume-radiologist/v1',modality:'CT',overviewReviewed:4,plannedFrames:4,finalReport:'Частичное предварительное заключение: 4 из 9 срезов. Не медицинский результат.',physicianSignatureRequired:true,receipt:{inputTokens:500,outputTokens:100}}});
+   }
    let visualReview;
    if(noFocal){assert.equal(body.visualReview,undefined,'No focal frames: no second paid Opus request');}else{
    assert.ok(body.visualReview,'Independent visual reread enabled by default');
@@ -90,7 +95,6 @@ try{
  await full.getByRole('combobox',{name:'Второй вид того же среза',exact:true}).selectOption('SOFT');
  }
  await full.getByRole('button',{name:'Подготовить выбранные срезы к анализу'}).click();
- const partial=process.env.OPUS_TEST_PARTIAL==='1';
  const whole=full.getByRole('region',{name:'Проверка всей серии перед отправкой',exact:true});
  await whole.getByRole('button',{name:'Скрыть данные или проверить надписи на этих кадрах'}).waitFor({timeout:180000});
  // No provider POST while ALL groups are decoded and OCR checked locally.
@@ -114,17 +118,17 @@ try{
  await whole.getByRole('button',{name:'Отправить всю проверенную серию в анализ'}).click();
  if(partial){
   await full.getByText(/Анализ остановлен на срезах/).waitFor();
-  assert.deepEqual(reviewed,[1,2,3,4]);assert.equal(opus,0);
-  assert.equal(await full.getByRole('textbox',{name:/Предварительное заключение/}).count(),0);
-  await full.getByRole('button',{name:'Сохранить полученные наблюдения TXT'}).waitFor();
+  assert.deepEqual(reviewed,[1,2,3,4]);assert.equal(opus,1);
+  await full.getByRole('textbox',{name:/Предварительное заключение/}).waitFor();
+  await full.getByRole('button',{name:'Сохранить заключение TXT'}).waitFor();
   assert.match(await full.innerText(),/Не оценено: 5/);
-  console.log('PASS partial: 4/9 reviewed, 5 not assessed, no final Opus, partial TXT available, no automatic repeat billing.');
+  console.log('PASS partial: 4/9 reviewed, 5 not assessed, automatic partial Opus, partial report TXT available, no automatic repeat billing.');
  }else{
  await full.getByRole('textbox',{name:/Предварительное заключение/}).waitFor();
  if(!noFocal)await full.getByRole('region',{name:'Независимая визуальная перепроверка Opus',exact:true}).getByText(/Независимо просмотрены срезы/).waitFor();
  assert.deepEqual(reviewed,[1,2,3,4,5,6,7,8,9]);assert.equal(opus,1);assert.deepEqual(errors,[]);
  // Physician measurements use ORIGINAL 64x64 DICOM, not the paired outgoing PNG.
- await full.getByText('Наблюдения ИИ и исходные срезы — не все описания являются патологией',{exact:true}).click();
+ await full.getByText('Все наблюдения Gemini',{exact:true}).click();
  await full.getByRole('button',{name:'Проверить на снимке / измерить при необходимости',exact:true}).first().click();
  const measuring=full.getByRole('region',{name:'Проверка и измерение находки врачом',exact:true});
  const accept=measuring.getByRole('button',{name:'Принять находку с измерениями врача'});

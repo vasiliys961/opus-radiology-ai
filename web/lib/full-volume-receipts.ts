@@ -19,7 +19,7 @@ export type LocalVolumeReceipt={
 export const GEMINI_INPUT_RATE_USD_PER_M=0.75;
 export const GEMINI_OUTPUT_RATE_USD_PER_M=3.75;
 export const GEMINI_RESERVE_INPUT_PER_FRAME=2500;
-export const GEMINI_RESERVE_OUTPUT_PER_BATCH=1800;
+export const GEMINI_RESERVE_OUTPUT_PER_BATCH=2000;
 function safeText(x:unknown,max:number):x is string{
   return typeof x==="string"&&x.trim().length>0&&x.length<=max;
 }

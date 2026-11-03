@@ -9,3 +9,18 @@ body { margin: 0; }
 .workspace-nav a:hover,.cs-top .workspace-nav a:hover{color:#fff;background:#274653}
 .workspace-nav a:focus-visible{outline:2px solid #81e7cf;outline-offset:2px}
 @media(max-width:700px){.cs-top{height:auto!important;min-height:67px;flex-wrap:wrap;padding-top:10px;padding-bottom:10px}.workspace-nav a,.cs-top .workspace-nav a{font-size:12px;padding:7px 9px}}
+
+/* Physician study workflow: controls must not run together as inline text. */
+.reviewed-study{font-size:15px;line-height:1.55;overflow-wrap:anywhere}
+.reviewed-study label{display:block;margin:14px 0;font-weight:600}
+.reviewed-study label:has(input[type="checkbox"]){display:flex;align-items:flex-start;gap:9px;font-weight:400}
+.reviewed-study input[type="checkbox"]{flex:none;margin-top:5px}
+.reviewed-study textarea,.reviewed-study select,.reviewed-study input:not([type]){display:block;box-sizing:border-box;max-width:100%;margin-top:6px;padding:10px;border:1px solid #afc5ce;border-radius:7px;background:#fff;color:#243e4d;font:inherit}
+.reviewed-study textarea{width:100%;font-weight:400;line-height:1.55}
+.reviewed-study button{margin:5px 8px 5px 0;padding:9px 13px;border:1px solid #92b9b7;border-radius:7px;background:#f2faf8;color:#155d57;font:inherit;font-weight:600;cursor:pointer}
+.reviewed-study button:disabled{opacity:.5;cursor:default}
+.reviewed-study button:focus-visible,.reviewed-study summary:focus-visible{outline:2px solid #127d70;outline-offset:3px}
+.reviewed-study details{margin:14px 0;padding:12px 0;border-top:1px solid #dce7eb}
+.reviewed-study summary{cursor:pointer;font-weight:600}
+.reviewed-study small{display:block;font-weight:400}
+.reviewed-study [aria-label="Срезы для проверки"]{padding:12px 16px;margin:14px 0;background:#f3f8fa;border-radius:9px}
