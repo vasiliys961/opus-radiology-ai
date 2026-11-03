@@ -39,7 +39,7 @@ type PrepareOptions={
 };
 /** Reject missing/ambiguous source geometry before any pixel decoding. */
 export function planOriginalVolumeSource(
-  series:DicomSeries, options:Pick<PrepareOptions,"flaggedIndices"|"maxGeminiUSD">={},
+  series:DicomSeries, options:Pick<PrepareOptions,"flaggedIndices"|"maxGeminiUSD"> & {selectedIndices?:readonly number[]}={},
 ):VolumeSourcePlan{
   const verify=planVisionFrameSamples([series],series.key,4);
   if(verify.status!=="ready-for-local-preview")throw Error(
@@ -51,6 +51,13 @@ export function planOriginalVolumeSource(
     flaggedIndices:options.flaggedIndices,
     maxGeminiUSD:options.maxGeminiUSD,
   });
+  if(options.selectedIndices){
+    const indices=[...options.selectedIndices];
+    if(!indices.length||indices.some((n,i)=>!Number.isSafeInteger(n)||n<0||n>=series.members.length||(i>0&&n<=indices[i-1])))throw Error('Invalid source selection');
+    budget.overviewIndices=indices;budget.targetedIndices=[];
+    budget.unreviewedIndices=Array.from({length:series.members.length},(_,i)=>i).filter(i=>!indices.includes(i));
+    budget.overviewCoversAllFrames=indices.length===series.members.length;
+  }
   const sourceFrames=series.members.map((member,index)=>({
     index,fileId:member.id,
     seriesUid:member.metadata.seriesUid!,

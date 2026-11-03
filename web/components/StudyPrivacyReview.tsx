@@ -7,10 +7,11 @@ import VisionPrivacyPreparation from './VisionPrivacyPreparation';
 
 // Compressed copies only, ephemeral tab memory. No IndexedDB, disk or source DICOM copy.
 const MAX_REVIEW_MEMORY=96*1024*1024;
-export default function StudyPrivacyReview({count,modality,load,onReady,onOpenSlice,sourceIds,canRelease=false,releaseNotice}:{
- canRelease?:boolean;releaseNotice?:string;count:number;modality:'CT'|'MR';load:(index:number,signal:AbortSignal)=>Promise<string[]>;
+export default function StudyPrivacyReview({count,modality,load,onReady,onOpenSlice,sourceIds,sourceNumbers,clinicalContext,canRelease=false,releaseNotice}:{
+ clinicalContext?:string;sourceNumbers?:number[][];canRelease?:boolean;releaseNotice?:string;count:number;modality:'CT'|'MR';load:(index:number,signal:AbortSignal)=>Promise<string[]>;
  onReady:(packets:VisionPrivacyPacket[])=>Promise<void>;onOpenSlice:(id:string)=>void;sourceIds:string[][];
 }){
+ const [expanded,setExpanded]=useState<number|null>(null);
  const [groups,setGroups]=useState<AutomaticPrivacyPreparation[]>([]),[index,setIndex]=useState(0);
  const [notice,setNotice]=useState(''),[preparing,setPreparing]=useState(true),[error,setError]=useState('');
  const [resolved,setResolved]=useState<Set<number>>(new Set()),[editing,setEditing]=useState(false);
@@ -57,16 +58,18 @@ export default function StudyPrivacyReview({count,modality,load,onReady,onOpenSl
   {error&&!preparing&&!started.current&&<button type="button" onClick={()=>setAttempt(n=>n+1)}>Повторить локальную подготовку</button>}
   {preparing&&<button type="button" onClick={()=>{cancel.current?.abort();setPreparing(false);setError('Подготовка остановлена. Изображения не отправлялись.');}}>Отменить подготовку</button>}
   {!preparing&&group&&!sending&&<>
+   <p>Нажмите на изображение, чтобы проверить его в полном размере. Миниатюра с двумя окнами может выглядеть слишком мелкой. Жёлтые рамки — предполагаемые надписи, они не меняют контраст снимка.</p>
    <p>Наборов с отметками OCR для проверки: {suspects.length}. OCR может пропустить текст и не проверяет узнаваемое лицо. Изображения автоматически не закрашиваются.</p>
    <label>Просмотр срезов <input aria-label="Группа срезов для просмотра" type="range" min={0} max={groups.length-1} value={index}
-    onChange={e=>{setIndex(Number(e.target.value));setEditing(false);setApproved(false);}}/> {index*4+1}–{index*4+group.frames.length}</label>
+    onChange={e=>{setIndex(Number(e.target.value));setExpanded(null);setEditing(false);setApproved(false);}}/> {sourceNumbers?.[index]?.join(', ')??(index*4+1)+'–'+(index*4+group.frames.length)}</label>
    <div style={{display:'flex',flexWrap:'wrap',gap:8}}>{group.frames.map((f,i)=><figure key={f.frameId} style={{margin:0}}>
-    <div style={{position:'relative',width:256,height:256*f.height/f.width}}>
-     <img src={'data:image/png;base64,'+f.pngBase64} width={256} height={256*f.height/f.width} alt={'Копия среза '+(index*4+i+1)}/>
+    <button type="button" onClick={()=>setExpanded(i)} aria-label="Открыть копию в полном размере" style={{display:'block',padding:0}}><div style={{position:'relative',width:256,height:256*f.height/f.width}}>
+     <img src={'data:image/png;base64,'+f.pngBase64} width={256} height={256*f.height/f.width} alt={'Копия среза '+(sourceNumbers?.[index]?.[i]??index*4+i+1)}/>
      {group.ocr[f.frameId]?.sha256===f.sha256&&group.ocr[f.frameId].regions.map((r,n)=><span key={n} aria-hidden="true" style={{position:'absolute',pointerEvents:'none',border:'1px solid #f59e0b',left:100*r.rectangle.x/f.width+'%',top:100*r.rectangle.y/f.height+'%',width:100*r.rectangle.width/f.width+'%',height:100*r.rectangle.height/f.height+'%'}}/>)}
-    </div>
-    <figcaption><button type="button" onClick={()=>onOpenSlice(sourceIds[index][i])}>Исходный срез {index*4+i+1}</button></figcaption>
+    </div></button>
+    <figcaption><button type="button" onClick={()=>onOpenSlice(sourceIds[index][i])}>Исходный срез {sourceNumbers?.[index]?.[i]??index*4+i+1}</button></figcaption>
    </figure>)}</div>
+   {expanded!==null&&group.frames[expanded]&&<section aria-label="Копия для ИИ в полном размере"><button type="button" onClick={()=>setExpanded(null)}>Закрыть полный размер</button><div style={{overflow:'auto',maxHeight:'75vh'}}><img style={{maxWidth:'none'}} src={'data:image/png;base64,'+group.frames[expanded].pngBase64} width={group.frames[expanded].width} height={group.frames[expanded].height} alt="Точная подготовленная копия для ИИ, без изменения яркости при просмотре"/></div></section>}
    {suspects.length>0&&<button type="button" onClick={()=>{setIndex(suspects[0]);setEditing(true);setApproved(false);}}>Разобрать кадры с возможными надписями</button>}
    <button type="button" onClick={()=>{setEditing(v=>!v);setApproved(false);}}>Скрыть данные или проверить надписи на этих кадрах</button>
    {editing&&<VisionPrivacyPreparation key={index} previews={group.frames.map(f=>'data:image/png;base64,'+f.pngBase64)} modality={modality}
@@ -76,10 +79,11 @@ export default function StudyPrivacyReview({count,modality,load,onReady,onOpenSl
      setGroups(previous=>previous.map((g,i)=>i===index?{...preparation,frames:packet.frames}:g));
      setResolved(previous=>new Set([...previous,index]));setApproved(false);setEditing(false);
     }}/> }
+   {clinicalContext&&<p style={{whiteSpace:'pre-wrap'}}>Клинические данные для передачи: {clinicalContext}</p>}
    {releaseNotice&&<p>{releaseNotice}</p>}
    {!canRelease&&<p role="status">Передача недоступна: подключите разрешённое рабочее место. Копии остаются локально.</p>}
    <label><input type="checkbox" checked={approved} onChange={e=>setApproved(e.target.checked)}/>
-    Я просмотрел подготовленные копии всей серии, включая все отметки OCR: идентифицирующих надписей и узнаваемых признаков нет; оставшиеся отметки — ложные срабатывания или неидентифицирующий текст. Имею право передачи и проверил условия обработки медицинских данных. Разрешаю отправить эту серию для анализа.</label>
+    Я просмотрел выбранные подготовленные копии и клинический текст, включая все отметки OCR: идентифицирующих надписей и узнаваемых признаков нет; оставшиеся отметки — ложные срабатывания или неидентифицирующий текст. Имею право передачи и проверил условия обработки медицинских данных. Разрешаю отправить эту серию для анализа.</label>
    <button type="button" disabled={!canRelease||!approved||!!error} onClick={()=>void release()}>Отправить всю проверенную серию в анализ</button>
   </>}
  </section>;

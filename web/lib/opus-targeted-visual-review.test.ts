@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import {deflateSync} from 'node:zlib';
 import {createPrivacyFrame,markPrivacyReview,buildVisionPrivacyPacket} from './vision-privacy.ts';
 import {selectTargetedVisualInput,reviewTargetedOpus} from './opus-targeted-visual-review.ts';
-import {synthesizeSafeFullVolumeOpus} from './full-volume-opus-synthesis.ts';
+import {synthesizeSafeFullVolumeOpus,validateSafeFullVolumeOpusInput} from './full-volume-opus-synthesis.ts';
 import type {LocalVolumeReceipt,SafeVolumeOpusInput} from './full-volume-receipts.ts';
 function chunk(type:string,payload:Buffer){
  const tag=Buffer.from(type),len=Buffer.alloc(4),crc=Buffer.alloc(4);
@@ -37,6 +37,19 @@ const report=[
 ].join("\n");
 const response=(content:unknown)=>({choices:[{message:{content:JSON.stringify(content)}}],usage:{prompt_tokens:100,completion_tokens:20}});
 const blind={role:'observations',reviewedImageIds:['frame-1'],observations:[{id:'o1',imageId:'frame-1',anatomy:'chest',sign:'OPUS_BLIND_MARKER',uncertainty:'not diagnostic'}],limitations:['sample only']};
+test('partial/noncontiguous selection keeps true original numbers; unreviewed slice cannot enter Opus',async()=>{
+ const partial={...safe,sourceTotalFrames:150,sourceSliceNumbers:[150],observations:safe.observations.map(o=>({...o,sliceNumber:150}))};
+ assert.equal(validateSafeFullVolumeOpusInput(partial),true);
+ assert.equal(validateSafeFullVolumeOpusInput({...partial,sourceSliceNumbers:[151]}),false);
+ assert.equal(validateSafeFullVolumeOpusInput({...partial,observations:partial.observations.map(o=>({...o,sliceNumber:1}))}),false);
+ const selected=selectTargetedVisualInput([packet()],[{recheckIndices:[149]} as LocalVolumeReceipt],[],[149])!;
+ assert.deepEqual(selected.sliceNumbers,[150]);
+ let calls=0;
+ await assert.rejects(()=>synthesizeSafeFullVolumeOpus({synthesis:partial,visualReview:{...selected,sliceNumbers:[1]}},async()=>{calls++;return response(blind);}));
+ assert.equal(calls,0);
+ const result=await synthesizeSafeFullVolumeOpus(partial,async()=>response({summary:report,limitations:['partial']}));
+ assert.match(result.finalReport,/1 из 150/);assert.match(result.finalReport,/Оценены: 150/);
+});
 test('blind visual Opus sees reviewed pixels and ordinals, no Gemini claims; synthesis sees both separately',async()=>{
  let n=0;
  const visual={packets:[packet()],sliceNumbers:[1]};

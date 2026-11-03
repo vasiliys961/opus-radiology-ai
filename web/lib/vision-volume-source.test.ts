@@ -30,6 +30,13 @@ test("103 original source SOPs produce 26 actual four-frame preparation batches"
   assert.equal(p.sourceFrames[102].sopInstanceUid,s.members[102].metadata.sopInstanceUid);
   assert.equal(p.transmissionPermitted,false);
 });
+test('selected slices retain original SOP/index and explicitly incomplete coverage',()=>{
+ const s=originalSeries(150),p=planOriginalVolumeSource(s,{selectedIndices:[4,19,20,149]});
+ assert.deepEqual(p.batches[0].indices,[4,19,20,149]);assert.equal(p.batches.length,1);
+ assert.equal(p.budget.overviewCoversAllFrames,false);assert.equal(p.budget.unreviewedIndices.length,146);
+ assert.equal(p.sourceFrames[149].fileId,s.members[149].id);
+ for(const selectedIndices of [[],[1,1],[4,2],[-1],[150]])assert.throws(()=>planOriginalVolumeSource(s,{selectedIndices}));
+});
 test("Targeted neighboring originals follow the complete overview, still source-bound",()=>{
   const p=planOriginalVolumeSource(originalSeries(9),{flaggedIndices:[6]});
   assert.deepEqual(p.batches.map(x=>x.pass),["overview","overview","overview","targeted","targeted"]);

@@ -99,13 +99,21 @@ export async function POST(req:NextRequest){
     return reply(400,"Study-wide research cloud authorization required");
   const release=(req.headers.get("x-opus-reviewed-volume")==="1"&&!autoPublic?reviewedLimiter:limiter).acquire();
   if(!release)return reply(429,"Another batch active or hourly research limit reached");
+  let failure='INPUT_INVALID';
   try{
-    const result=await reviewApprovedVolumeGeminiBatch(v.packet,callAiGateway,
+    const result=await reviewApprovedVolumeGeminiBatch(v.packet,async(request,signal)=>{
+        failure='PROVIDER_UNAVAILABLE';
+        const result=await callAiGateway(request,signal);
+        failure='RESPONSE_INVALID';
+        if((result.choices as Array<{finish_reason?:string}>)?.some(c=>c.finish_reason==='length')){failure='RESPONSE_TRUNCATED';throw Error('Output ceiling');}
+        return result;
+      },
       AbortSignal.any([req.signal,AbortSignal.timeout(90_000)]),
       autoPublic?"auto-ocr-public-study":"clinician-reviewed",v.frameContext);
     return NextResponse.json(result,{headers:HEADERS});
   }catch{
     // Do not expose model output, uploaded pixels, sensitive errors or headers.
-    return reply(502,"Approved batch validation, provider inference, or usage receipt failed");
+    const message=failure==='RESPONSE_TRUNCATED'?'Gemini не завершил ответ в допустимом объёме':failure==='RESPONSE_INVALID'?'Ответ Gemini получен, но не прошёл проверку формата, охвата или квитанции':failure==='INPUT_INVALID'?'Проверенные копии или их параметры не прошли проверку':'Провайдер Gemini недоступен или истекло время ожидания';
+    return NextResponse.json({error:failure,message},{status:502,headers:HEADERS});
   }finally{release();}
 }

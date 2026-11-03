@@ -1,3 +1,4 @@
+import {followupStudyReport,validStudyFollowup} from '../../../../lib/study-report-followup';
 import {NextRequest,NextResponse} from "next/server";
 import {timingSafeEqual} from "node:crypto";
 import {callAiGateway} from "../../../../lib/ai-gateway";
@@ -12,6 +13,7 @@ const BODY_LIMIT=9_600_000;
 const HEADERS={"Cache-Control":"no-store","X-Content-Type-Options":"nosniff","Referrer-Policy":"no-referrer"};
 const HOST=/^(?:localhost|127\.0\.0\.1)(?::[0-9]{1,5})?$/;
 const limiter=createSyntheticTrialLimiter(2,20*60_000);
+const followupLimiter=createSyntheticTrialLimiter(8,20*60_000);
 const reply=(status:number,error:string)=>NextResponse.json({error},{status,headers:HEADERS});
 function authorized(req:NextRequest):boolean{
  const host=req.headers.get("host")??"";
@@ -56,10 +58,12 @@ export async function POST(req:NextRequest){
    for(const part of bytes){all.set(part,offset);offset+=part.byteLength;}
    raw=JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(all));
  }catch{return reply(400,"Invalid bounded summary");}
- const release=limiter.acquire();
+ const followup=!!raw&&typeof raw==='object'&&'mode' in raw;
+ if(followup&&!validStudyFollowup(raw))return reply(400,'Invalid reviewed report/question');
+ const release=(followup?followupLimiter:limiter).acquire();
  if(!release)return reply(429,"Opus request already running or limited");
  try{
-   const result=await synthesizeSafeFullVolumeOpus(raw,callAiGateway,
+   const result=await (followup?followupStudyReport:synthesizeSafeFullVolumeOpus)(raw,callAiGateway,
       AbortSignal.any([req.signal,AbortSignal.timeout(270000)]));
    return NextResponse.json(result,{headers:HEADERS});
  }catch{

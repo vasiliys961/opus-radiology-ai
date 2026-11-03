@@ -82,6 +82,8 @@ export type SafeVolumeOpusInput={
   schema:"opus-volume-synthesis-request/v1";
   modality:"CT"|"MR";
   plannedFrames:number;
+  clinicalContext?:string;
+  sourceTotalFrames?:number;sourceSliceNumbers?:number[];
   overviewReviewed:number;
   targetedReviewed:number;
   completedBatches:number;

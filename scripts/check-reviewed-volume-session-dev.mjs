@@ -20,4 +20,6 @@ for(const path of ['approved-volume-gemini-batch','complete-volume-opus']){
 const publicAuto=await fetch(base+'/api/ai/approved-volume-gemini-batch',{method:'POST',
  headers:{cookie,origin:base,'x-opus-auto-public-volume':'1','content-type':'text/plain'},body:'invalid'});
 assert.equal(publicAuto.status,503,'Reviewed-frame session must not activate public auto-OCR mode');
+const unreviewedText=await fetch(base+'/api/ai/complete-volume-opus',{method:'POST',headers:{cookie,origin:base,'x-opus-reviewed-volume':'1','content-type':'application/json'},body:JSON.stringify({mode:'discuss',report:'Synthetic',coverage:'1/9',clinicalContext:'',question:'Test?',history:[],acknowledgeReviewedText:false})});
+assert.equal(unreviewedText.status,400,'New discussion must reject unreviewed text before any paid call');
 console.log('PASS actual local signed-session batch/final routes: malformed payload 415, missing session denied, cross-origin denied, public auto mode remains disabled. Zero model calls.');

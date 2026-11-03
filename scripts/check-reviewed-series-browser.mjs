@@ -81,14 +81,15 @@ try{
  if(coordinateTest)await page.getByRole('region',{name:'Координаты детекторных находок для перепроверки',exact:true}).waitFor();
  const full=page.getByRole('region',{name:'Последовательный анализ выбранной серии',exact:true});await full.waitFor();
  assert.equal(gemini,0);assert.equal(opus,0);
+ await full.getByText('Настройки изображения, перепроверки и расходов',{exact:true}).click();
  if(coordinateTest){
-  assert.equal(await full.getByRole('combobox',{name:'Окно для анализа КТ',exact:true}).inputValue(),'LUNG');
-  assert.equal(await full.getByRole('combobox',{name:'Дополнительное окно рядом с основным',exact:true}).inputValue(),'SOFT');
+  assert.equal(await full.getByRole('combobox',{name:'Как показывать ткани на копиях для ИИ',exact:true}).inputValue(),'LUNG');
+  assert.equal(await full.getByRole('combobox',{name:'Второй вид того же среза',exact:true}).inputValue(),'SOFT');
  }else{
- await full.getByRole('combobox',{name:'Окно для анализа КТ',exact:true}).selectOption('LUNG');
- await full.getByRole('combobox',{name:'Дополнительное окно рядом с основным',exact:true}).selectOption('SOFT');
+ await full.getByRole('combobox',{name:'Как показывать ткани на копиях для ИИ',exact:true}).selectOption('LUNG');
+ await full.getByRole('combobox',{name:'Второй вид того же среза',exact:true}).selectOption('SOFT');
  }
- await full.getByRole('button',{name:'Подготовить всю серию к последовательному анализу'}).click();
+ await full.getByRole('button',{name:'Подготовить выбранные срезы к анализу'}).click();
  const partial=process.env.OPUS_TEST_PARTIAL==='1';
  const whole=full.getByRole('region',{name:'Проверка всей серии перед отправкой',exact:true});
  await whole.getByRole('button',{name:'Скрыть данные или проверить надписи на этих кадрах'}).waitFor({timeout:180000});
@@ -109,10 +110,10 @@ try{
   await privacy.waitFor({state:'detached'});
   assert.equal(gemini,0,'Exception resolution must remain entirely local');
  }
- await whole.getByRole('checkbox',{name:/Я просмотрел подготовленные копии всей серии/}).check();
+ await whole.getByRole('checkbox',{name:/Я просмотрел выбранные подготовленные копии/}).check();
  await whole.getByRole('button',{name:'Отправить всю проверенную серию в анализ'}).click();
  if(partial){
-  await full.getByText(/Группа срезов не подтверждена сервером/).waitFor();
+  await full.getByText(/Анализ остановлен на срезах/).waitFor();
   assert.deepEqual(reviewed,[1,2,3,4]);assert.equal(opus,0);
   assert.equal(await full.getByRole('textbox',{name:/Предварительное заключение/}).count(),0);
   await full.getByRole('button',{name:'Сохранить полученные наблюдения TXT'}).waitFor();
@@ -123,8 +124,8 @@ try{
  if(!noFocal)await full.getByRole('region',{name:'Независимая визуальная перепроверка Opus',exact:true}).getByText(/Независимо просмотрены срезы/).waitFor();
  assert.deepEqual(reviewed,[1,2,3,4,5,6,7,8,9]);assert.equal(opus,1);assert.deepEqual(errors,[]);
  // Physician measurements use ORIGINAL 64x64 DICOM, not the paired outgoing PNG.
- await full.getByText('Находки и переход к исходным срезам',{exact:true}).click();
- await full.getByRole('button',{name:'Проверить и измерить находку',exact:true}).first().click();
+ await full.getByText('Наблюдения ИИ и исходные срезы — не все описания являются патологией',{exact:true}).click();
+ await full.getByRole('button',{name:'Проверить на снимке / измерить при необходимости',exact:true}).first().click();
  const measuring=full.getByRole('region',{name:'Проверка и измерение находки врачом',exact:true});
  const accept=measuring.getByRole('button',{name:'Принять находку с измерениями врача'});
  assert.equal(await accept.isDisabled(),true);
