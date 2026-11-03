@@ -1,6 +1,6 @@
 import {parseStructuredRadiologyReview,structuredRadiologyFormat,type StructuredRadiologyReview} from './structured-radiology-review.ts';
 import {validVolumeTechnicalContext,type VolumeTechnicalContext} from './volume-technical-context.ts';
-import {SOURCE_REVIEW_BOUNDARIES} from './source-review-boundaries.ts';
+import {SOURCE_REVIEW_BOUNDARIES,AVAILABLE_ANATOMY_REVIEW} from './source-review-boundaries.ts';
 /** Single approved, metadata-free, 1-4 PNG Gemini batch.
  * The native SOP UID -> outgoing frame slot mapping MUST remain on the
  * clinician's browser; this module must never receive source DICOM headers.
@@ -57,7 +57,7 @@ export async function reviewApprovedVolumeGeminiBatch(
   const messages:AiGatewayRequest["messages"]=[
     {role:"system",content:
       "Independent radiology visual observations on approved sampled CT/MR PNG pixels only. "+
-      "Do NOT infer normality, pathology absence, volumes, anatomy outside these frames, "+
+      "Do NOT infer whole-study normality, disease exclusion, volumes, anatomy outside these frames, "+
       "clinical history, names or identifiers. Only the supplied allowlisted technical context may supplement pixels. "+
       "Return visualRecheck with focal or diagnostically uncertain image IDs only; use an empty array when no such sign is visible. Normal descriptive observations alone do not require another paid review. Do not fabricate findings to fill the list. "+
       "For every supplied frame include its exact image ID in reviewedImageIds. "+
@@ -70,7 +70,7 @@ export async function reviewApprovedVolumeGeminiBatch(
       "DICOM sequence codes do not prove T1/T2/FLAIR weighting. Declared contrast does not prove phase. "+
       "Pixel spacing is source metadata, not permission to invent lesion measurements from resized images. "+
       "A negative is a bounded visual observation, not disease exclusion: name the exact visible area/window and never extrapolate to the whole organ/study. Do not invent mm, HU, stages, MRI sequences or confidence probabilities. No diagnoses, differential or treatment in this observational JSON. "+
-      SOURCE_REVIEW_BOUNDARIES+'\n'+
+      SOURCE_REVIEW_BOUNDARIES+'\n'+AVAILABLE_ANATOMY_REVIEW+'\n'+
       'Return ONLY schema-compliant JSON with role "observations", source-bound signs and uncertainties.'},
     {role:"user",content:checked.frames.flatMap((f,i)=>[
       {type:"text",text:"Visible CT/MR slice "+(i+1)+" image ID "+f.imageId+

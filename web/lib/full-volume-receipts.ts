@@ -1,3 +1,4 @@
+import type {CtReviewWindow} from './ct-review-window.ts';
 import {bindStructuredRadiologyReview,type SourceRadiologyReview} from './structured-radiology-review.ts';
 /** Locally binds each paid Gemini batch to original ordered DICOM frame indices.
  * Native UID, paths, patient metadata and source pixels never enter Opus input.
@@ -86,6 +87,7 @@ export type SafeVolumeOpusInput={
   modality:"CT"|"MR";
   plannedFrames:number;
   clinicalContext?:string;
+  reviewWindows?:{primary:CtReviewWindow;additional?:CtReviewWindow};
   structuredReviews?:SourceRadiologyReview[];
   sourceTotalFrames?:number;sourceSliceNumbers?:number[];
   overviewReviewed:number;

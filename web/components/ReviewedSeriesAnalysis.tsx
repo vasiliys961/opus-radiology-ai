@@ -116,6 +116,7 @@ export default function ReviewedSeriesAnalysis({series,files,onOpenSlice,detecto
   if(targetedVisual.current)targetedVisual.current.windows={primary:reviewWindow,...(additionalWindow==='NONE'?{}:{additional:additionalWindow})};
   const input=makeSafeVolumeOpusInput(series.modality as 'CT'|'MR',completedBudget,completedBatches,done,d.evidence,
    d.stage==='running'?'timeout':d.evidence?.facts.some(f=>f.status==='completed')?'completed':'unavailable');
+  input.reviewWindows={primary:reviewWindow,...(additionalWindow==='NONE'?{}:{additional:additionalWindow})};
   if(clinicalContext.trim())input.clinicalContext=clinicalContext.trim();
   input.sourceTotalFrames=series.members.length;input.sourceSliceNumbers=completedIndices.map(n=>n+1);
   input.limitations=[...input.limitations.slice(0,28),'Оценены только '+completedIndices.length+' из '+series.members.length+' исходных срезов. Остальные не оценены; это не исключает патологию вне выборки.'];

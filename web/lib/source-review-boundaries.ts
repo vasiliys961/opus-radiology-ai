@@ -27,3 +27,22 @@ missing evidence. Do not produce an exhaustive disease list or invent history.
 No mm/HU/volume measurement without a supplied source-bound measurement. No
 whole-study normality or disease exclusion from an incomplete set of images.
 `.trim();
+
+/** Available anatomy must be described; task-specific limits must not erase visible findings. */
+export const AVAILABLE_ANATOMY_REVIEW = `
+Evaluate ALL visible anatomical structures using ALL supplied display windows,
+including the additional panel. A limited slice range does not make anatomy
+visible on those slices unassessed. Describe the visible part, then state what
+cannot be assessed beyond that part. Do not use a blanket list of unassessed organs.
+For chest CT systematically cover lung parenchyma, visible airways, pleura,
+mediastinum and visible lymph nodes, heart and great vessels, bones and chest wall.
+If a structure is outside these levels, obscured or not diagnostically visible,
+name that specific reason. Do not mark it not_assessed merely because a full
+series, another window or contrast phase is missing. With soft-tissue panels,
+actively evaluate visible mediastinum, nodes, heart, vessels and chest-wall tissues.
+Without angiographic contrast, describe visible vessel morphology but do not
+exclude embolism or characterize enhancement. Without a dedicated bone window,
+describe visible gross osseous changes and state limits for subtle lesions; do
+not claim a complete bone assessment. Bounded supported negative observations
+are permitted ONLY for the actual visible structures, levels and windows.
+`.trim();

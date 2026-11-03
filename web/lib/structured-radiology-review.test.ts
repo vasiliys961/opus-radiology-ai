@@ -18,13 +18,15 @@ test('rich morphology, visible structures and negative scope survive receipts an
  const plan=planBudgetedVisionReview({frameCount:150,maxGeminiUSD:2});plan.overviewIndices=[59,68];
  const batches=createVisionBatches(plan,4);
  const receipts=appendGeminiVolumeReceipt([],batches,0,{schema:'opus-gemini-volume-batch/v1',model:'google/gemini-3.8-flash',modality:'CT',imagesReviewed:2,reviewedImageIds:['frame-1','frame-2'],observations:[{id:'f1',imageId:'frame-1',anatomy:'Лёгочная паренхима',sign:'Участок уплотнения',uncertainty:'Природа не установлена',localization:'На изображении слева, сзади',morphology:'Линейное субплевральное уплотнение'}],structuredReview:review,visualRecheck:[],limitations:['Не весь объём'],receipt:{inputTokens:1000,outputTokens:500},clinicalValidation:false,sourceBindingsLocalOnly:true});
- const input=makeSafeVolumeOpusInput('CT',plan,batches,receipts);input.sourceTotalFrames=150;input.sourceSliceNumbers=[60,69];
+ const input=makeSafeVolumeOpusInput('CT',plan,batches,receipts);input.sourceTotalFrames=150;input.sourceSliceNumbers=[60,69];input.reviewWindows={primary:'LUNG',additional:'SOFT'};
  assert.equal(validateSafeFullVolumeOpusInput(input),true);
+ assert.equal(validateSafeFullVolumeOpusInput({...input,reviewWindows:{primary:'INVALID'}}),false);
+ assert.equal(validateSafeFullVolumeOpusInput({...input,modality:'MR',reviewWindows:{primary:'LUNG',additional:'SOFT'}}),false);
  assert.equal(input.observations[0].morphology,'Линейное субплевральное уплотнение');
  assert.deepEqual(input.structuredReviews![0].structures[0].sliceNumbers,[60,69]);
  assert.equal(validateSafeFullVolumeOpusInput({...input,structuredReviews:[{...input.structuredReviews![0],imageQuality:[{sliceNumber:61,quality:'diagnostic',limitations:'Wrong slice'}]}]}),false);
  await synthesizeSafeFullVolumeOpus(input,async req=>{
-  const payload=JSON.stringify(req.messages);assert.match(payload,/Линейное субплевральное/);assert.match(payload,/крупного скопления жидкости/);assert.match(payload,/sourceBoundStructuredGeminiReviews/);assert.ok(!payload.includes('image_url'));
+  const payload=JSON.stringify(req.messages);assert.match(payload,/Линейное субплевральное/);assert.match(payload,/крупного скопления жидкости/);assert.match(payload,/sourceBoundStructuredGeminiReviews/);const user=JSON.parse(req.messages[1].content as string);assert.deepEqual(user.suppliedDisplayWindows,{primary:'LUNG',additional:'SOFT'});assert.match(payload,/Missing organ text means the reader did not document assessment/);assert.ok(!payload.includes('image_url'));
   return {choices:[{message:{content:JSON.stringify({summary:'ИССЛЕДОВАНИЕ: Тестовая КТ.\nМЕТОДИКА: Два представленных уровня.\nОПИСАНИЕ: Структурированные наблюдения требуют проверки врачом.\nЗАКЛЮЧЕНИЕ: Предварительный тестовый протокол, не клинический результат.\nРЕКОМЕНДАЦИИ: Проверка исходных изображений врачом.',limitations:['Partial']})}}],usage:{prompt_tokens:1200,completion_tokens:200}};
  });
 });
