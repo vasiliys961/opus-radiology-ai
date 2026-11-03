@@ -15,12 +15,14 @@ export type TargetedVisualResult={
  status:'completed';sliceNumbers:number[];observations:Array<RoleResponse['observations'][number]&{sliceNumber:number}>;
  limitations:string[];receipt:{inputTokens:number;outputTokens:number};
 };
-export function selectTargetedVisualInput(packets:readonly VisionPrivacyPacket[],receipts:readonly LocalVolumeReceipt[],detectorAnchors:readonly BoundDetectorRecheck[]=[],sourceIndices?:readonly number[],reviewAllSelected=false):TargetedVisualInput|null{
+export function selectTargetedVisualInput(packets:readonly VisionPrivacyPacket[],receipts:readonly LocalVolumeReceipt[],detectorAnchors:readonly BoundDetectorRecheck[]=[],sourceIndices?:readonly number[],reviewAllSelected=false,physicianIndices:readonly number[]=[]):TargetedVisualInput|null{
  const total=packets.reduce((n,p)=>n+p.frames.length,0);
  if(!total)return null;
  const source=sourceIndices??Array.from({length:total},(_,i)=>i);
  if(source.length!==total||new Set(source).size!==source.length||source.some(n=>!Number.isSafeInteger(n)||n<0))throw Error('Invalid selected source mapping');
- const candidates=reviewAllSelected?Array.from({length:total},(_,i)=>i):[...new Set([...detectorAnchors.map(a=>a.sourceIndex),...receipts.flatMap(r=>r.recheckIndices??[])])].map(n=>source.indexOf(n)).filter(n=>n>=0);
+ if(physicianIndices.length>16||new Set(physicianIndices).size!==physicianIndices.length||physicianIndices.some(n=>!Number.isSafeInteger(n)||n<0))throw Error('Invalid physician recheck selection');
+ const automatic=reviewAllSelected?Array.from({length:total},(_,i)=>i):[...new Set([...detectorAnchors.map(a=>a.sourceIndex),...receipts.flatMap(r=>r.recheckIndices??[])])].map(n=>source.indexOf(n)).filter(n=>n>=0);
+ const candidates=[...new Set([...physicianIndices.map(n=>source.indexOf(n)).filter(n=>n>=0),...automatic])];
  if(!candidates.length)return null;
  // Never replace focal frames by arbitrary distributed normal samples.
  const indices=candidates.slice(0,16);

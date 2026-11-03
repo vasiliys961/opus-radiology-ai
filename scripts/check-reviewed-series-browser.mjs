@@ -11,6 +11,7 @@ execFileSync(process.execPath,['scripts/generate-segmentation-phantom.mjs',temp,
 const browser=await chromium.launch({headless:true,...(process.env.OPUS_BROWSER_EXECUTABLE?{executablePath:process.env.OPUS_BROWSER_EXECUTABLE}:{}),args:['--no-sandbox']});
 const partial=process.env.OPUS_TEST_PARTIAL==='1';
 const coordinateTest=process.env.OPUS_TEST_DETECTOR_COORDINATES==='1';
+const physicianRecheck=process.env.OPUS_TEST_PHYSICIAN_RECHECK==='1';
 const noFocal=process.env.OPUS_TEST_NO_FOCAL==='1';
 const base=process.env.OPUS_TEST_BASE_URL??'http://localhost:3000';
 assert.match(base,/^http:\/\/(localhost|127\.0\.0\.1):\d+$/);
@@ -61,9 +62,9 @@ try{
    let visualReview;
    {
    assert.ok(body.visualReview,'Independent visual reread enabled by default');
-   assert.deepEqual(body.visualReview.sliceNumbers,Array.from({length:9},(_,i)=>i+1));
+   assert.deepEqual(body.visualReview.sliceNumbers,physicianRecheck?[9,8,7,6]:Array.from({length:9},(_,i)=>i+1));
    if(coordinateTest){assert.ok(!JSON.stringify(body).includes('sopInstanceUid'));assert.ok(!JSON.stringify(body).includes('sourceNiftiSha256'));assert.equal(body.visualReview.candidateAnchors[0].candidateId,42);assert.equal(body.visualReview.candidateAnchors[0].sliceNumber,7);assert.equal(body.visualReview.candidateAnchors[0].xFraction,20.5/64);assert.equal(body.visualReview.candidateAnchors[0].yFraction,30.5/64);assert.equal(clnUploads,1);}
-   assert.equal(body.visualReview.packets.flatMap(p=>p.frames).length,9);
+   assert.equal(body.visualReview.packets.flatMap(p=>p.frames).length,physicianRecheck?4:9);
    assert.ok(body.visualReview.packets.flatMap(p=>p.frames).every(f=>f.pixelReviewSha256===f.sha256));
    visualReview={status:'completed',sliceNumbers:body.visualReview.sliceNumbers,observations:[{id:'blind',imageId:'frame-1',sliceNumber:body.visualReview.sliceNumbers[0],anatomy:'synthetic phantom',sign:'Independent synthetic visual observation',uncertainty:'Not medical evidence'}],limitations:['Selected images only'],receipt:{inputTokens:500,outputTokens:100}};
    body=body.synthesis;
@@ -94,6 +95,7 @@ try{
  await full.getByRole('combobox',{name:'Как показывать ткани на копиях для ИИ',exact:true}).selectOption('LUNG');
  await full.getByRole('combobox',{name:'Второй вид того же среза',exact:true}).selectOption('SOFT');
  }
+ if(physicianRecheck){await full.getByLabel('Какие изображения показать Opus').selectOption('automatic');await full.getByLabel('Дополнительные срезы для Opus').fill('9');}
  await full.getByRole('button',{name:'Подготовить выбранные срезы к анализу'}).click();
  const whole=full.getByRole('region',{name:'Проверка всей серии перед отправкой',exact:true});
  await whole.getByRole('button',{name:'Скрыть данные или проверить надписи на этих кадрах'}).waitFor({timeout:180000});

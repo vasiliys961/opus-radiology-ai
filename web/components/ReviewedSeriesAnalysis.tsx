@@ -32,6 +32,7 @@ export default function ReviewedSeriesAnalysis({series,files,onOpenSlice,detecto
  const [opusSpent,setOpusSpent]=useState(0);
  const [stopReason,setStopReason]=useState('');
  const [clinicalContext,setClinicalContext]=useState('');
+ const [visualMode,setVisualMode]=useState('selected'),[physicianSlices,setPhysicianSlices]=useState('');
  const [selection,setSelection]=useState('all'),[selectionText,setSelectionText]=useState('1');
  const [measureSource,setMeasureSource]=useState<{sourceIndex:number;findingKey:string}|null>(null);
  const [acceptedMeasurements,setAcceptedMeasurements]=useState<AcceptedFindingMeasurement[]>([]);
@@ -55,12 +56,13 @@ export default function ReviewedSeriesAnalysis({series,files,onOpenSlice,detecto
  const detector=useRef({stage:detectorStage,evidence:detectorEvidence});
  useEffect(()=>{detector.current={stage:detectorStage,evidence:detectorEvidence};},[detectorStage,detectorEvidence]);
  const selectionResult=useMemo(()=>{try{return {indices:selection==='all'?series.members.map((_,i)=>i):parseStudySliceSelection(selectionText,series.members.length),error:''};}catch(e){return {indices:[] as number[],error:e instanceof Error?e.message:'Ошибка выбора срезов'};}},[selection,selectionText,series]);
+ const physicianSelection=useMemo(()=>{try{const indices=physicianSlices.trim()?parseStudySliceSelection(physicianSlices,series.members.length):[];if(indices.length>16)throw Error('Для дополнительной проверки выберите не более 16 срезов.');if(indices.some(n=>!selectionResult.indices.includes(n)))throw Error('Добавьте указанные для Opus срезы в основной выбор анализа.');return {indices,error:''};}catch(e){return {indices:[] as number[],error:e instanceof Error?e.message:'Ошибка выбора для Opus'};}},[physicianSlices,selectionResult,series]);
  const basePlan=useMemo(()=>{try{return planOriginalVolumeSource(series,{maxGeminiUSD:budget,selectedIndices:selectionResult.error?undefined:selectionResult.indices});}catch{return null;}},[series,budget,selectionResult]);
  const plan=useMemo(()=>basePlan?(executionBatches?{...basePlan,batches:executionBatches}:basePlan):null,[basePlan,executionBatches]);
  useEffect(()=>{setExecutionBatches(null);},[selection,selectionText]);
  useEffect(()=>{
   ctl.current?.abort();ctl.current=null;sending.current=false;targetedVisual.current=null;approvedPackets.current=[];attemptedDetectorKeys.current=new Set();setVisualResult(undefined);setOpusUsage(undefined);setReviewWindow(suggestCtReviewWindows(series).primary);setAdditionalWindow(suggestCtReviewWindows(series).additional);
-  setExecutionBatches(null);setOpusSpent(0);setStopReason('');setClinicalContext('');setSelection('all');setSelectionText('1');setMeasureSource(null);setAcceptedMeasurements([]);setStage('idle');setReceipts([]);setReport('');
+  setExecutionBatches(null);setOpusSpent(0);setStopReason('');setClinicalContext('');setSelection('all');setSelectionText('1');setVisualMode('selected');setPhysicianSlices('');setMeasureSource(null);setAcceptedMeasurements([]);setStage('idle');setReceipts([]);setReport('');
  },[series,files]);
  useEffect(()=>{const c=new AbortController();void fetch('/api/ai/deidentified-openrouter-review',{
   cache:'no-store',credentials:'same-origin',signal:c.signal}).then(async r=>r.ok?r.json():null)
@@ -88,7 +90,7 @@ export default function ReviewedSeriesAnalysis({series,files,onOpenSlice,detecto
  function interrupted(e:unknown){setStage('interrupted');setNotice(ctl.current?.signal.aborted?
   'Анализ остановлен. Уже полученные наблюдения сохранены в этой вкладке.':e instanceof Error?e.message:'Анализ не завершён.');}
  async function start(){
-  if(!plan||selectionResult.error||sending.current||stage!=='idle')return;
+  if(!plan||selectionResult.error||(visualEnabled&&physicianSelection.error)||sending.current||stage!=='idle')return;
   const c=new AbortController();ctl.current=c;
   setStage('review');
  }
@@ -105,7 +107,7 @@ export default function ReviewedSeriesAnalysis({series,files,onOpenSlice,detecto
   }
   signal.throwIfAborted();const d=detector.current;
   attemptedDetectorKeys.current=new Set(locationsRef.current.anchors.map(detectorKey));
-  targetedVisual.current=visualEnabled?selectTargetedVisualInput(approvedPackets.current.slice(0,done.length),done,locationsRef.current.anchors,completedIndices,plan.budget.overviewIndices.length<=16):null;
+  targetedVisual.current=visualEnabled?selectTargetedVisualInput(approvedPackets.current.slice(0,done.length),done,locationsRef.current.anchors,completedIndices,visualMode==='selected'&&plan.budget.overviewIndices.length<=16,physicianSelection.indices):null;
   if(targetedVisual.current)targetedVisual.current.windows={primary:reviewWindow,...(additionalWindow==='NONE'?{}:{additional:additionalWindow})};
   const input=makeSafeVolumeOpusInput(series.modality as 'CT'|'MR',completedBudget,completedBatches,done,d.evidence,
    d.stage==='running'?'timeout':d.evidence?.facts.some(f=>f.status==='completed')?'completed':'unavailable');
@@ -113,7 +115,9 @@ export default function ReviewedSeriesAnalysis({series,files,onOpenSlice,detecto
   input.sourceTotalFrames=series.members.length;input.sourceSliceNumbers=completedIndices.map(n=>n+1);
   input.limitations=[...input.limitations.slice(0,28),'Оценены только '+completedIndices.length+' из '+series.members.length+' исходных срезов. Остальные не оценены; это не исключает патологию вне выборки.'];
   if(series.modality==='CT')input.limitations=[...input.limitations.slice(0,29),'Окна обзора: '+CT_REVIEW_WINDOWS[reviewWindow].label+(additionalWindow==='NONE'?'':'; справа '+CT_REVIEW_WINDOWS[additionalWindow].label)+'. Остальные окна не оценены.'];
-  const excludedBySize=plan.budget.overviewIndices.length<=16?completedIndices.filter(n=>!targetedVisual.current?.sliceNumbers.includes(n+1)):[];
+  const excludedBySize=visualMode==='selected'&&plan.budget.overviewIndices.length<=16?completedIndices.filter(n=>!targetedVisual.current?.sliceNumbers.includes(n+1)):[];
+  const physicianNotReviewed=physicianSelection.indices.filter(n=>!targetedVisual.current?.sliceNumbers.includes(n+1));
+  if(visualEnabled&&physicianNotReviewed.length)input.limitations=[...input.limitations.slice(0,28),'Указанные врачом срезы не просмотрены Opus: '+physicianNotReviewed.map(n=>n+1).join(', ')+'. Они могли не пройти обзор Gemini или не поместиться в передачу.'];
   if(visualEnabled&&excludedBySize.length)input.limitations=[...input.limitations.slice(0,29),'В независимый просмотр Opus не поместились срезы '+excludedBySize.map(n=>n+1).join(', ')+'. Они требуют проверки врачом; ограничение размера передачи сохранено.'];
   if(done.some(r=>r.recheckIndices===undefined))input.limitations=[...input.limitations.slice(0,29),'Для части групп Gemini не вернул структурированный список спорных/очаговых кадров. Отсутствие списка не является отсутствием патологии.'];
   if(visualEnabled){const eligible=new Set([...done.flatMap(r=>r.recheckIndices??[]),...locationsRef.current.anchors.map(a=>a.sourceIndex)]).size;
@@ -228,7 +232,15 @@ export default function ReviewedSeriesAnalysis({series,files,onOpenSlice,detecto
    {series.modality==='CT'&&<label>Второй вид того же среза <select value={additionalWindow} onChange={e=>setAdditionalWindow(e.target.value as CtReviewWindow|'NONE')}>
     <option value="NONE">Без дополнительного окна</option>{Object.entries(CT_REVIEW_WINDOWS).filter(([id])=>id!==reviewWindow).map(([id,w])=><option key={id} value={id}>{w.label}</option>)}
    </select></label>}
-   <label><input type="checkbox" checked={visualEnabled} onChange={e=>setVisualEnabled(e.target.checked)}/>Независимый просмотр Opus: небольшой выбор целиком, длинная серия — отмеченные кадры (до 16)</label>
+   <label><input type="checkbox" checked={visualEnabled} onChange={e=>setVisualEnabled(e.target.checked)}/>Независимый просмотр изображений Opus (до 16 кадров)</label>
+   {visualEnabled&&<>
+    <label>Какие изображения показать Opus <select value={visualMode} onChange={e=>setVisualMode(e.target.value)}>
+     <option value="selected">Небольшой выбор целиком; для длинной серии — подозрительные</option>
+     <option value="automatic">Автоматически: подозрительные, неясные срезы и соседние</option>
+    </select></label>
+    <label>Дополнительно проверить по мнению врача <input aria-label="Дополнительные срезы для Opus" value={physicianSlices} onChange={e=>setPhysicianSlices(e.target.value)} placeholder="Например: 64, 70–73"/><small>Необязательно. Эти срезы идут первыми, затем автоматически отмеченные; общий предел — 16 кадров и размер передачи. Номера должны входить в выбранный для анализа набор.</small></label>
+    {physicianSelection.error&&<p role="alert">{physicianSelection.error}</p>}
+   </>}
    <label>Лимит расходов на обзор Gemini, USD <select value={budget} onChange={e=>setBudget(Number(e.target.value))}>
     {[0.5,1,2,3,5].map(v=><option key={v} value={v}>${v.toFixed(2)}</option>)}
    </select></label>
@@ -236,9 +248,9 @@ export default function ReviewedSeriesAnalysis({series,files,onOpenSlice,detecto
    <p>«Окно» — настройка яркости и контраста, не введение контрастного препарата. Лёгочное окно показывает лёгкие; мягкие ткани в нём выглядят почти белыми — это ожидаемо. Второй вид справа показывает тот же срез в другом окне. ИИ получает именно подготовленные копии, исходный DICOM не изменяется.</p>
    <p>Если обзор прервётся, Opus автоматически составит заключение по уже обработанной части. Стоимость — расчётный ориентир по тарифам OpenRouter от 03.11.2026, не точный счёт; объём ответа и маршрутизация могут его изменить. Неудачные запросы могут отсутствовать в квитанциях. Повтор Gemini — только по команде продолжения.</p>
    </details>
-   <p>{plan.budget.overviewIndices.length<=16?'Opus независимо просмотрит выбранные кадры в пределах размера передачи, даже если Gemini не отметил изменений.':'Для длинной серии Opus получит отмеченные кадры и соседние, максимум 16; текстовые наблюдения передаются по всем обработанным срезам.'}</p>
+   <p>{!visualEnabled?'Opus составит заключение по описаниям без отдельного просмотра изображений.':visualMode==='selected'&&plan.budget.overviewIndices.length<=16?'Opus независимо просмотрит выбранные кадры в пределах размера передачи, даже если Gemini не отметил изменений.':'Для длинной серии Opus получит отмеченные кадры и соседние, максимум 16; текстовые наблюдения передаются по всем обработанным срезам.'}</p>
    <p>Выбрано {plan.budget.overviewIndices.length} срезов, {basePlan?.batches.length} групп подготовки. В одном запросе — до 4 срезов, для крупных копий меньше. После обзора — предварительное заключение Opus. Перевод и обсуждение доступны по готовому заключению.</p>
-   <button type="button" disabled={!!selectionResult.error} onClick={()=>void start()}>Подготовить выбранные срезы к анализу</button>
+   <button type="button" disabled={!!selectionResult.error||(visualEnabled&&!!physicianSelection.error)} onClick={()=>void start()}>Подготовить выбранные срезы к анализу</button>
   </>}
   {(stage==='review'||stage==='gemini'||stage==='opus')&&<StudyPrivacyReview count={plan.batches.length} modality={series.modality as 'CT'|'MR'}
    load={prepare} onReady={submitAll} canRelease={connected} releaseNotice={"Gemini обработает выбранные срезы группами по размеру копий, затем "+(visualEnabled?"до двух запросов Opus":"один итоговый Opus")+". Порог остановки Gemini: $"+budget.toFixed(2)+"; Opus оплачивается отдельно."} onOpenSlice={onOpenSlice}

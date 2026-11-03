@@ -152,3 +152,18 @@ test('detector-localized source triggers blind review even when Gemini marks no 
  });
  assert.equal(result.status,'completed');
 });
+
+test('physician concern supplements automatic selection, takes priority and preserves exact source mapping',()=>{
+ const packets=Array.from({length:20},(_,i)=>packet(i+1));
+ const source=Array.from({length:20},(_,i)=>i+50);
+ const receipts=[{recheckIndices:source.slice(0,18)} as LocalVolumeReceipt];
+ const selected=selectTargetedVisualInput(packets,receipts,[],source,false,[69,68])!;
+ assert.equal(selected.sliceNumbers.length,16);
+ assert.deepEqual(selected.sliceNumbers.slice(0,3),[70,69,51]);
+ assert.equal(selected.packets[0].frames[0].sha256,packets[19].frames[0].sha256);
+ assert.ok(selected.sliceNumbers.includes(51));
+ const physicianOnly=selectTargetedVisualInput(packets,[],[],source,false,[69])!;
+ assert.equal(physicianOnly.sliceNumbers[0],70);
+ assert.equal(selectTargetedVisualInput(packets,[],[],source,false),null);
+ assert.throws(()=>selectTargetedVisualInput(packets,[],[],source,false,source));
+});
