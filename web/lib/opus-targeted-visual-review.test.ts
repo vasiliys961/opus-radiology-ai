@@ -100,6 +100,14 @@ test('no focal/uncertain frame means no extra paid Opus request; description alo
  assert.equal(selectTargetedVisualInput([packet()],[{findings:[{sourceIndex:0}],recheckIndices:[]} as unknown as LocalVolumeReceipt]),null);
  assert.equal(selectTargetedVisualInput([packet()],[{findings:[{sourceIndex:0}]} as unknown as LocalVolumeReceipt]),null);
 });
+test('physician small-selection mode includes every chosen original even without Gemini focal flags',()=>{
+ const packets=[packet(10),packet(20)];
+ const receipts=[{findings:[],recheckIndices:[]} as unknown as LocalVolumeReceipt];
+ assert.equal(selectTargetedVisualInput(packets,receipts,[],[59,68]),null);
+ const selected=selectTargetedVisualInput(packets,receipts,[],[59,68],true)!;
+ assert.deepEqual(selected.sliceNumbers,[60,69]);
+ assert.deepEqual(selected.packets.flatMap(p=>p.frames).map(f=>f.sha256),packets.flatMap(p=>p.frames).map(f=>f.sha256));
+});
 test('all flagged slices are selected up to sixteen, no duplicates; larger set is capped',()=>{
  const packets=Array.from({length:20},()=>packet());
  const selected=selectTargetedVisualInput(packets,[{findings:[],recheckIndices:Array.from({length:20},(_,i)=>i)} as unknown as LocalVolumeReceipt])!;

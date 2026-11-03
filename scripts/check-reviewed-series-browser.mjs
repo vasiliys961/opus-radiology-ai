@@ -59,11 +59,11 @@ try{
     return route.fulfill({json:{schema:'opus-full-volume-radiologist/v1',modality:'CT',overviewReviewed:4,plannedFrames:4,finalReport:'Частичное предварительное заключение: 4 из 9 срезов. Не медицинский результат.',physicianSignatureRequired:true,receipt:{inputTokens:500,outputTokens:100}}});
    }
    let visualReview;
-   if(noFocal){assert.equal(body.visualReview,undefined,'No focal frames: no second paid Opus request');}else{
+   {
    assert.ok(body.visualReview,'Independent visual reread enabled by default');
-   assert.deepEqual(body.visualReview.sliceNumbers,coordinateTest?[7,6,8,5]:[1,5,9,2]);
+   assert.deepEqual(body.visualReview.sliceNumbers,Array.from({length:9},(_,i)=>i+1));
    if(coordinateTest){assert.ok(!JSON.stringify(body).includes('sopInstanceUid'));assert.ok(!JSON.stringify(body).includes('sourceNiftiSha256'));assert.equal(body.visualReview.candidateAnchors[0].candidateId,42);assert.equal(body.visualReview.candidateAnchors[0].sliceNumber,7);assert.equal(body.visualReview.candidateAnchors[0].xFraction,20.5/64);assert.equal(body.visualReview.candidateAnchors[0].yFraction,30.5/64);assert.equal(clnUploads,1);}
-   assert.equal(body.visualReview.packets.flatMap(p=>p.frames).length,4);
+   assert.equal(body.visualReview.packets.flatMap(p=>p.frames).length,9);
    assert.ok(body.visualReview.packets.flatMap(p=>p.frames).every(f=>f.pixelReviewSha256===f.sha256));
    visualReview={status:'completed',sliceNumbers:body.visualReview.sliceNumbers,observations:[{id:'blind',imageId:'frame-1',sliceNumber:body.visualReview.sliceNumbers[0],anatomy:'synthetic phantom',sign:'Independent synthetic visual observation',uncertainty:'Not medical evidence'}],limitations:['Selected images only'],receipt:{inputTokens:500,outputTokens:100}};
    body=body.synthesis;

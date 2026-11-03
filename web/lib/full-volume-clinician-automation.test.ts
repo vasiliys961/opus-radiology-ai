@@ -72,8 +72,9 @@ test("Automatic public PNG batch is exact hash-bound, not misrepresented as huma
   assert.equal(s.includes("SOPInstanceUID"),false);
   return {choices:[{finish_reason:"stop",message:{content:JSON.stringify({
    role:"observations",reviewedImageIds:["frame-1"],
+   structuredReview:{structures:[{imageIds:['frame-1'],anatomy:'synthetic chest',visibility:'partial',description:'Synthetic visible chest',importantNegatives:[],limitations:'Single synthetic frame'}],imageQuality:[{imageId:'frame-1',quality:'limited',limitations:'Synthetic'}]},
    observations:[{id:"f1",imageId:"frame-1",anatomy:"synthetic chest",
-    sign:"synthetic object",uncertainty:"nonclinical"}],
+    sign:"synthetic object",uncertainty:"nonclinical",localization:"sampled region",morphology:"Synthetic pixels"}],
    limitations:["Sliced fixture"]})}}],
    usage:{prompt_tokens:300,completion_tokens:80}};
  },undefined,"auto-ocr-public-study");

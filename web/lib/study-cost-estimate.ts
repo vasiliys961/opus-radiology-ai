@@ -8,7 +8,7 @@ export function opusUsageEstimate(usage:{inputTokens:number;outputTokens:number}
 }
 export function estimateStudyCost(frames:number,batches:number,receipts:readonly LocalVolumeReceipt[],reviewed:number,visual:boolean){
  const spent=receipts.reduce((n,r)=>n+(r.usage.inputTokens*GEMINI_INPUT_RATE_USD_PER_M+r.usage.outputTokens*GEMINI_OUTPUT_RATE_USD_PER_M)/1e6,0);
- const gemini=reviewed>0?spent*frames/reviewed:(frames*2500*GEMINI_INPUT_RATE_USD_PER_M+batches*2000*GEMINI_OUTPUT_RATE_USD_PER_M)/1e6;
+ const gemini=reviewed>0?spent*frames/reviewed:(frames*2500*GEMINI_INPUT_RATE_USD_PER_M+batches*3500*GEMINI_OUTPUT_RATE_USD_PER_M)/1e6;
  // Planning assumptions, not measured usage: 3 concise findings per batch,
  // source-bound reconciliation context, up to 3500 output tokens per Opus call.
  const opus=opusUsageEstimate({inputTokens:6000+batches*700,outputTokens:3500})+

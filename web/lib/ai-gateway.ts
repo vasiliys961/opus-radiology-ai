@@ -40,10 +40,10 @@ export async function callAiGateway(request: AiGatewayRequest, signal?: AbortSig
   const apiKey = process.env[config.env];
   if (!apiKey) throw new Error(`Provider ${request.provider} is not configured`);
   // A structured specialist report is longer than a per-frame JSON observation.
-  // Allow up to 3500 output tokens ONLY for the known Opus model with strict
-  // provider-enforced JSON; all other requests retain their previous ceilings.
+  // Allow up to 3500 tokens for known Opus reports and rich Gemini observations
+  // with provider-enforced JSON. Other models retain their previous ceilings.
   const tokenCeiling=request.responseFormat&&
-    request.provider==="openrouter"&&request.model==="anthropic/claude-opus-5.5"
+    request.provider==="openrouter"&&["anthropic/claude-opus-5.5","google/gemini-3.8-flash"].includes(request.model)
     ?3500:request.responseFormat?2000:1500;
   const response = await fetch(config.url, {
     method: "POST",

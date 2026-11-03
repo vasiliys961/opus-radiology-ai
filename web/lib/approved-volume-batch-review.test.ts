@@ -31,8 +31,9 @@ function packet(count=4,modality:"CT"|"MR"|"CR"="CT"){
 const answer=(ids:string[],usage={prompt_tokens:830,completion_tokens:106})=>({
   choices:[{finish_reason:"stop",message:{content:JSON.stringify({
     role:"observations",reviewedImageIds:ids,
+    structuredReview:{structures:[{imageIds:ids,anatomy:'sampled region',visibility:'partial',description:'Visible synthetic region',importantNegatives:[],limitations:'Synthetic, incomplete'}],imageQuality:ids.map(imageId=>({imageId,quality:'limited',limitations:'Synthetic'}))},
     observations:[{id:"obs1",imageId:ids[0],anatomy:"sampled region",
-      sign:"Visible pixels only",uncertainty:"Limited slice context"}],
+      sign:"Visible pixels only",uncertainty:"Limited slice context",localization:"Visible sampled region",morphology:"Synthetic pixels"}],
     limitations:["Not the entire CT/MR volume"],
   })}}],
   usage,

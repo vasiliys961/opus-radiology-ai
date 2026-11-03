@@ -105,7 +105,7 @@ export default function ReviewedSeriesAnalysis({series,files,onOpenSlice,detecto
   }
   signal.throwIfAborted();const d=detector.current;
   attemptedDetectorKeys.current=new Set(locationsRef.current.anchors.map(detectorKey));
-  targetedVisual.current=visualEnabled?selectTargetedVisualInput(approvedPackets.current.slice(0,done.length),done,locationsRef.current.anchors,completedIndices):null;
+  targetedVisual.current=visualEnabled?selectTargetedVisualInput(approvedPackets.current.slice(0,done.length),done,locationsRef.current.anchors,completedIndices,plan.budget.overviewIndices.length<=16):null;
   if(targetedVisual.current)targetedVisual.current.windows={primary:reviewWindow,...(additionalWindow==='NONE'?{}:{additional:additionalWindow})};
   const input=makeSafeVolumeOpusInput(series.modality as 'CT'|'MR',completedBudget,completedBatches,done,d.evidence,
    d.stage==='running'?'timeout':d.evidence?.facts.some(f=>f.status==='completed')?'completed':'unavailable');
@@ -113,6 +113,8 @@ export default function ReviewedSeriesAnalysis({series,files,onOpenSlice,detecto
   input.sourceTotalFrames=series.members.length;input.sourceSliceNumbers=completedIndices.map(n=>n+1);
   input.limitations=[...input.limitations.slice(0,28),'Оценены только '+completedIndices.length+' из '+series.members.length+' исходных срезов. Остальные не оценены; это не исключает патологию вне выборки.'];
   if(series.modality==='CT')input.limitations=[...input.limitations.slice(0,29),'Окна обзора: '+CT_REVIEW_WINDOWS[reviewWindow].label+(additionalWindow==='NONE'?'':'; справа '+CT_REVIEW_WINDOWS[additionalWindow].label)+'. Остальные окна не оценены.'];
+  const excludedBySize=plan.budget.overviewIndices.length<=16?completedIndices.filter(n=>!targetedVisual.current?.sliceNumbers.includes(n+1)):[];
+  if(visualEnabled&&excludedBySize.length)input.limitations=[...input.limitations.slice(0,29),'В независимый просмотр Opus не поместились срезы '+excludedBySize.map(n=>n+1).join(', ')+'. Они требуют проверки врачом; ограничение размера передачи сохранено.'];
   if(done.some(r=>r.recheckIndices===undefined))input.limitations=[...input.limitations.slice(0,29),'Для части групп Gemini не вернул структурированный список спорных/очаговых кадров. Отсутствие списка не является отсутствием патологии.'];
   if(visualEnabled){const eligible=new Set([...done.flatMap(r=>r.recheckIndices??[]),...locationsRef.current.anchors.map(a=>a.sourceIndex)]).size;
    if(eligible>16)input.limitations=[...input.limitations.slice(0,29),'Для визуальной перепроверки отмечено '+eligible+' срезов. Из-за потолка 16 остальные '+(eligible-16)+' требуют проверки врачом.'];}
@@ -226,7 +228,7 @@ export default function ReviewedSeriesAnalysis({series,files,onOpenSlice,detecto
    {series.modality==='CT'&&<label>Второй вид того же среза <select value={additionalWindow} onChange={e=>setAdditionalWindow(e.target.value as CtReviewWindow|'NONE')}>
     <option value="NONE">Без дополнительного окна</option>{Object.entries(CT_REVIEW_WINDOWS).filter(([id])=>id!==reviewWindow).map(([id,w])=><option key={id} value={id}>{w.label}</option>)}
    </select></label>}
-   <label><input type="checkbox" checked={visualEnabled} onChange={e=>setVisualEnabled(e.target.checked)}/>Opus дополнительно просматривает до 16 отмеченных кадров</label>
+   <label><input type="checkbox" checked={visualEnabled} onChange={e=>setVisualEnabled(e.target.checked)}/>Независимый просмотр Opus: небольшой выбор целиком, длинная серия — отмеченные кадры (до 16)</label>
    <label>Лимит расходов на обзор Gemini, USD <select value={budget} onChange={e=>setBudget(Number(e.target.value))}>
     {[0.5,1,2,3,5].map(v=><option key={v} value={v}>${v.toFixed(2)}</option>)}
    </select></label>
@@ -234,6 +236,7 @@ export default function ReviewedSeriesAnalysis({series,files,onOpenSlice,detecto
    <p>«Окно» — настройка яркости и контраста, не введение контрастного препарата. Лёгочное окно показывает лёгкие; мягкие ткани в нём выглядят почти белыми — это ожидаемо. Второй вид справа показывает тот же срез в другом окне. ИИ получает именно подготовленные копии, исходный DICOM не изменяется.</p>
    <p>Если обзор прервётся, Opus автоматически составит заключение по уже обработанной части. Стоимость — расчётный ориентир по тарифам OpenRouter от 03.11.2026, не точный счёт; объём ответа и маршрутизация могут его изменить. Неудачные запросы могут отсутствовать в квитанциях. Повтор Gemini — только по команде продолжения.</p>
    </details>
+   <p>{plan.budget.overviewIndices.length<=16?'Opus независимо просмотрит выбранные кадры в пределах размера передачи, даже если Gemini не отметил изменений.':'Для длинной серии Opus получит отмеченные кадры и соседние, максимум 16; текстовые наблюдения передаются по всем обработанным срезам.'}</p>
    <p>Выбрано {plan.budget.overviewIndices.length} срезов, {basePlan?.batches.length} групп подготовки. В одном запросе — до 4 срезов, для крупных копий меньше. После обзора — предварительное заключение Opus. Перевод и обсуждение доступны по готовому заключению.</p>
    <button type="button" disabled={!!selectionResult.error} onClick={()=>void start()}>Подготовить выбранные срезы к анализу</button>
   </>}

@@ -1,3 +1,4 @@
+import {bindStructuredRadiologyReview,type SourceRadiologyReview} from './structured-radiology-review.ts';
 /** Locally binds each paid Gemini batch to original ordered DICOM frame indices.
  * Native UID, paths, patient metadata and source pixels never enter Opus input.
  */
@@ -9,17 +10,17 @@ import {validateSanitizedDetectorBundle,type SanitizedDetectorBundle} from "./de
 
 export type LocalVolumeFinding={
   sourceIndex:number;pass:"overview"|"targeted";
-  anatomy:string;sign:string;uncertainty:string;
+  anatomy:string;sign:string;uncertainty:string;localization?:string;morphology?:string;
 };
 export type LocalVolumeReceipt={
   batchIndex:number;usage:ModelUsage;findings:LocalVolumeFinding[];
   limitations:string[];
-  recheckIndices?:number[];
+  recheckIndices?:number[];structuredReview?:SourceRadiologyReview;
 };
 export const GEMINI_INPUT_RATE_USD_PER_M=0.75;
 export const GEMINI_OUTPUT_RATE_USD_PER_M=3.75;
 export const GEMINI_RESERVE_INPUT_PER_FRAME=2500;
-export const GEMINI_RESERVE_OUTPUT_PER_BATCH=2000;
+export const GEMINI_RESERVE_OUTPUT_PER_BATCH=3500;
 function safeText(x:unknown,max:number):x is string{
   return typeof x==="string"&&x.trim().length>0&&x.length<=max;
 }
@@ -55,12 +56,14 @@ export function appendGeminiVolumeReceipt(
     if(pos<0||!safeText(o.anatomy,180)||!safeText(o.sign,500)||
        !safeText(o.uncertainty,500)||!safeText(o.id,90))
       throw Error("Gemini finding lacks exact source-bound frame");
-    return {sourceIndex:batch.indices[pos],pass:batch.pass,
+    if(o.localization!==undefined&&!safeText(o.localization,200)||o.morphology!==undefined&&!safeText(o.morphology,300))throw Error('Invalid rich morphology');
+    return {sourceIndex:batch.indices[pos],pass:batch.pass,...(o.localization?{localization:o.localization}:{}),...(o.morphology?{morphology:o.morphology}:{}),
       anatomy:o.anatomy,sign:o.sign,uncertainty:o.uncertainty};
   });
   return [...previous,{
     batchIndex,usage:{inputTokens:receipt.inputTokens,outputTokens:receipt.outputTokens},
     findings,limitations:[...answer.limitations],
+    ...(answer.structuredReview?{structuredReview:bindStructuredRadiologyReview(answer.structuredReview,batch.indices)}:{}),
     ...(answer.visualRecheck===undefined?{}:{recheckIndices:answer.visualRecheck.map(x=>batch.indices[ids.indexOf(x.imageId)])}),
   }];
 }
@@ -83,13 +86,14 @@ export type SafeVolumeOpusInput={
   modality:"CT"|"MR";
   plannedFrames:number;
   clinicalContext?:string;
+  structuredReviews?:SourceRadiologyReview[];
   sourceTotalFrames?:number;sourceSliceNumbers?:number[];
   overviewReviewed:number;
   targetedReviewed:number;
   completedBatches:number;
   totalBatches:number;
   observations:Array<{sliceNumber:number;pass:"overview"|"targeted";
-    anatomy:string;sign:string;uncertainty:string}>;
+    anatomy:string;sign:string;uncertainty:string;localization?:string;morphology?:string}>;
   limitations:string[];
   detectorState:"completed"|"unavailable"|"timeout";
   detectorEvidence:SanitizedDetectorBundle|null;
@@ -116,8 +120,9 @@ export function makeSafeVolumeOpusInput(
     overviewReviewed:ledger.processedOverviewFrames,
     targetedReviewed:ledger.processedTargetedFrames,
     completedBatches:receipts.length,totalBatches:batches.length,
+    ...(receipts.some(r=>r.structuredReview)?{structuredReviews:receipts.flatMap(r=>r.structuredReview?[r.structuredReview]:[])}:{}),
     observations:findings.map(f=>({sliceNumber:f.sourceIndex+1,pass:f.pass,
-      anatomy:f.anatomy,sign:f.sign,uncertainty:f.uncertainty})),
+      anatomy:f.anatomy,sign:f.sign,uncertainty:f.uncertainty,...(f.localization?{localization:f.localization}:{}),...(f.morphology?{morphology:f.morphology}:{})})),
     limitations,detectorState,detectorEvidence,acknowledgePaidOpusSynthesis:true,
   };
   if(JSON.stringify(result).length>110000)throw Error("Opus input context too large");
