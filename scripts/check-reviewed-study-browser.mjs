@@ -41,7 +41,7 @@ try{
  await page.getByText("Локальное рабочее место подключено.",{exact:false}).waitFor({timeout:60_000});
  assert.ok(connectionChecks>0,"Analyze connects the preapproved local workstation without a second click");
  const send=page.getByRole("button",{name:"Подготовить всю серию к последовательному анализу",exact:true});
- assert.equal(await send.isDisabled(),true,"No inference without privacy review and transfer consent");
+ assert.equal(await send.isDisabled(),false,"Local preparation needs no cloud-transfer permission; upload still requires final review");
  assert.deepEqual(paid,[],"Opening, analyzing and connecting must not send unreviewed pixels");
  console.log("PASS: primary Analyze connects automatically without another click or token; opening files does not connect; unreviewed upload blocked (synthetic only)");
  // Synthetic readiness followed by an explicit failure tests physician-facing

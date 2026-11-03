@@ -1,3 +1,5 @@
+import {pairReviewWindows} from './review-window-pair.ts';
+import {ctReviewWindow,requireCtReviewCalibration,type CtReviewWindow} from './ct-review-window.ts';
 /**
  * Deliberately limited DICOM Part 10 parser for research preview ONLY.
  * Supports single-frame, uncompressed monochrome Little Endian DICOM.
@@ -382,7 +384,7 @@ async function parseDicomFrameWithSequences(buffer:ArrayBuffer):Promise<DicomFra
  };
 }
 
-export async function decodeDicomPreview(file: File,options:{maxPixels?:number}={}): Promise<{url: string; metadata: DicomPreviewMetadata}> {
+export async function decodeDicomPreview(file: File,options:{maxPixels?:number;reviewWindow?:CtReviewWindow;additionalWindow?:CtReviewWindow}={}): Promise<{url: string; metadata: DicomPreviewMetadata}> {
   if (file.size > MAX_PREVIEW_FILE_BYTES) {
     throw new DicomPreviewError("Файл больше 64 МБ. Не загружаем его целиком в память; нужен потоковый DICOM-декодер.");
   }
@@ -396,9 +398,22 @@ export async function decodeDicomPreview(file: File,options:{maxPixels?:number}=
   }
   if(options.maxPixels!==undefined&&(!Number.isSafeInteger(options.maxPixels)||options.maxPixels<1||frame.metadata.width*frame.metadata.height>options.maxPixels))
     throw new DicomPreviewError("Кадр превышает лимит локальной копии. Откройте исходный срез в Cornerstone.");
-  const pixels = renderDicomPixels(frame);
+  if(options.reviewWindow&&options.reviewWindow!=='SOURCE'||options.additionalWindow){
+   const {readDicomSeriesHeader}=await import('./dicom-series.ts');
+   requireCtReviewCalibration(await readDicomSeriesHeader(file),options.reviewWindow??'SOURCE',options.additionalWindow);
+  }
+  const window=ctReviewWindow(options.reviewWindow??'SOURCE',frame.metadata.modality);
+  let pixels = renderDicomPixels(window.center===null?frame:{...frame,metadata:{...frame.metadata,
+    windowCenter:window.center,windowWidth:window.width}});
+  let outputWidth=frame.metadata.width;
+  if(options.additionalWindow){
+   const extra=ctReviewWindow(options.additionalWindow,frame.metadata.modality);
+   const right=renderDicomPixels(extra.center===null?frame:{...frame,metadata:{...frame.metadata,windowCenter:extra.center,windowWidth:extra.width}});
+   const pair=pairReviewWindows(pixels,right,frame.metadata.width,frame.metadata.height,options.maxPixels??1048576);
+   pixels=pair.pixels;outputWidth=pair.width;
+  }
   const canvas = document.createElement("canvas");
-  canvas.width = frame.metadata.width;
+  canvas.width = outputWidth;
   canvas.height = frame.metadata.height;
   const context = canvas.getContext("2d");
   if (!context) throw new DicomPreviewError("Не удалось создать графический контекст.");

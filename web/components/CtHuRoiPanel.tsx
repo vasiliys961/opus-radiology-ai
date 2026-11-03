@@ -16,9 +16,9 @@ type Saved={
  label:Label;sourceSeriesUid:string;sourceSopUid:string;
  roi:CtRoiMeasurement;
 };
-type Props={file:File|null;metadata:TechnicalDicomMetadata|null;seriesKey:string|null};
+type Props={file:File|null;metadata:TechnicalDicomMetadata|null;seriesKey:string|null;onSave?:(measurement:CtRoiMeasurement)=>void};
 
-export default function CtHuRoiPanel({file,metadata,seriesKey}:Props){
+export default function CtHuRoiPanel({file,metadata,seriesKey,onSave}:Props){
  const canvas=useRef<HTMLCanvasElement|null>(null);
  const frame=useRef<DicomFrame|null>(null);
  const [loaded,setLoaded]=useState(false);
@@ -83,6 +83,7 @@ export default function CtHuRoiPanel({file,metadata,seriesKey}:Props){
  };
  const add=()=>{
    if(!measurement||!metadata?.seriesUid||!metadata.sopInstanceUid||saved.length>=16)return;
+   onSave?.(measurement);
    setSaved(prev=>[...prev,{
      label,sourceSeriesUid:metadata.seriesUid!,sourceSopUid:metadata.sopInstanceUid!,
      roi:measurement,

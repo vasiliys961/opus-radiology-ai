@@ -7,7 +7,8 @@ import {localResearchEnabled,validateVolumeSession,VOLUME_SESSION_COOKIE} from "
 import {validReviewedFrameSession,REVIEWED_FRAME_COOKIE} from "../../../../lib/reviewed-frame-session";
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
-export const maxDuration=180;
+export const maxDuration=300;
+const BODY_LIMIT=9_600_000;
 const HEADERS={"Cache-Control":"no-store","X-Content-Type-Options":"nosniff","Referrer-Policy":"no-referrer"};
 const HOST=/^(?:localhost|127\.0\.0\.1)(?::[0-9]{1,5})?$/;
 const limiter=createSyntheticTrialLimiter(2,20*60_000);
@@ -39,7 +40,7 @@ export async function POST(req:NextRequest){
  if(!/^application\/json(?:\s*;.*)?$/i.test(req.headers.get("content-type")??""))
    return reply(415,"JSON only");
  const len=Number(req.headers.get("content-length")??0);
- if(!Number.isSafeInteger(len)||len<0||len>120000)return reply(413,"Synthesis input too large");
+ if(!Number.isSafeInteger(len)||len<0||len>BODY_LIMIT)return reply(413,"Synthesis input too large");
  let raw:unknown;
  try{
    const reader=req.body?.getReader();if(!reader)throw Error("Missing body");
@@ -47,7 +48,7 @@ export async function POST(req:NextRequest){
    try{
      while(true){
        const {value,done}=await reader.read();if(done)break;
-       if(value){size+=value.byteLength;if(size>120000)throw Error("Oversized");
+       if(value){size+=value.byteLength;if(size>BODY_LIMIT)throw Error("Oversized");
          bytes.push(value);}
      }
    }finally{await reader.cancel().catch(()=>{});reader.releaseLock();}
@@ -59,9 +60,9 @@ export async function POST(req:NextRequest){
  if(!release)return reply(429,"Opus request already running or limited");
  try{
    const result=await synthesizeSafeFullVolumeOpus(raw,callAiGateway,
-      AbortSignal.any([req.signal,AbortSignal.timeout(165000)]));
+      AbortSignal.any([req.signal,AbortSignal.timeout(270000)]));
    return NextResponse.json(result,{headers:HEADERS});
  }catch{
-   return reply(502,"Text-only Opus report failed validation or provider execution");
+   return reply(502,"Opus report failed validation or provider execution");
  }finally{release();}
 }

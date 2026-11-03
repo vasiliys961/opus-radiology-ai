@@ -1,5 +1,6 @@
-/** Final single text-only Claude Opus synthesis after complete, verified Gemini volume.
- * Never receives images, native DICOM identifiers, filenames or patient metadata.
+import {reviewTargetedOpus,normalizeTargetedVisualInput,type TargetedVisualResult} from './opus-targeted-visual-review.ts';
+/** Final text-only synthesis, optionally preceded by a separate bounded blind
+ * visual read. Native DICOM identifiers, filenames and patient metadata stay local.
  */
 import type {SafeVolumeOpusInput} from "./full-volume-receipts.ts";
 import {SENIOR_RADIOLOGIST_PROMPT,hasRadiologistReportSections,
@@ -14,6 +15,7 @@ export type FullVolumeOpusResult={
   modality:"CT"|"MR";overviewReviewed:number;plannedFrames:number;
   finalReport:string;limitations:string[];
   clinicalValidation:false;physicianSignatureRequired:true;
+  visualReview?:TargetedVisualResult|{status:"unavailable";sliceNumbers:number[]};
   receipt:{inputTokens:number;outputTokens:number};
 };
 export function validateSafeFullVolumeOpusInput(value:unknown):value is SafeVolumeOpusInput{
@@ -59,8 +61,19 @@ export async function synthesizeSafeFullVolumeOpus(
   }>,
   signal?:AbortSignal,
 ):Promise<FullVolumeOpusResult>{
-  if(!validateSafeFullVolumeOpusInput(raw))throw Error("Invalid complete volume input");
-  const study=raw;
+  let summary=raw,visual:unknown;
+  if(raw&&typeof raw==='object'&&!Array.isArray(raw)&&Object.keys(raw).sort().join(',')==='synthesis,visualReview'){
+   const envelope=raw as {synthesis:unknown;visualReview:unknown};summary=envelope.synthesis;visual=envelope.visualReview;
+  }
+  if(!validateSafeFullVolumeOpusInput(summary))throw Error("Invalid complete volume input");
+  const study=summary;
+  let visualReview:FullVolumeOpusResult['visualReview'];
+  if(visual!==undefined){
+   const {numbers}=normalizeTargetedVisualInput(visual,study.modality,study.plannedFrames);
+   signal?.throwIfAborted();
+   try{visualReview=await reviewTargetedOpus(visual,study.modality,study.plannedFrames,call,signal);}
+   catch{signal?.throwIfAborted();visualReview={status:'unavailable',sliceNumbers:[...numbers]};}
+  }
   const response=await call({
     provider:"openrouter",role:"reasoning",model:FULL_VOLUME_OPUS,maxTokens:3500,
     responseFormat:{type:"json_schema",json_schema:{
@@ -77,8 +90,12 @@ export async function synthesizeSafeFullVolumeOpus(
         SENIOR_RADIOLOGIST_PROMPT+"\n"+
         "ADDITIONAL INSTRUCTION: You receive text-only independent Gemini observations "+
         "from a frame-by-frame overview of the complete selected CT/MR DICOM series. "+
-        "You did NOT directly see all original pixels, only Gemini observations. "+
-        "Detector candidate data are separate and can be incomplete or discordant. "+
+        "You did NOT directly see all original pixels. You receive Gemini observations and, when available, "+
+        "a separately produced blind Opus visual read of explicitly numbered selected copies. "+
+        "That read was made without Gemini diagnoses; it covers ONLY its supplied slice numbers. "+
+        "Compare signs from both reads and detector facts, explicitly preserve disagreement. "+
+        "If blind visual review was unavailable, state that it did not run successfully. "+
+        "Detector candidate data are separate and can be incomplete or discordant. These aggregate facts contain no lesion coordinates; never claim lesion-by-lesion spatial reconciliation from aggregate counts alone. "+
         "Reconcile repeated descriptions on neighboring slices as potentially the same finding; "+
         "never sum slice observations into a lesion count without explicit spatial evidence. "+
         "Keep contradictory morphology, laterality or detector evidence visible as unresolved. "+
@@ -101,7 +118,8 @@ export async function synthesizeSafeFullVolumeOpus(
         totalBatches:study.totalBatches,
         sourceBoundGeminiObservations:study.observations,
         limitations:study.limitations,
-        sourceImagesGivenToOpus:false,
+        sourceImagesGivenToThisSynthesis:false,
+        independentOpusVisualReview:visualReview??null,
         originalDetectorEvidenceGivenToOpus:study.detectorEvidence!==null,
         detectorState:study.detectorState,
         verifiedDetectorFacts:study.detectorEvidence?.facts??[],
@@ -125,11 +143,15 @@ export async function synthesizeSafeFullVolumeOpus(
   if(!usage||!Number.isSafeInteger(usage.prompt_tokens)||!Number.isSafeInteger(usage.completion_tokens)||
      usage.prompt_tokens!<0||usage.completion_tokens!<0)
     throw Error("Opus token receipt missing");
+  const coverage=visualReview?.status==='completed'?
+   'Opus визуально просмотрел срезы: '+visualReview.sliceNumbers.join(', ')+'. Остальные срезы Opus не просматривал.':
+   'Визуальная перепроверка Opus не выполнена. Изображения остальных срезов Opus не просматривал; итог основан на переданных наблюдениях и фактических результатах детекторов.';
   return {
     schema:"opus-full-volume-radiologist/v1",
     modality:study.modality,overviewReviewed:study.overviewReviewed,
-    plannedFrames:study.plannedFrames,finalReport:report,limitations:data.limitations as string[],
+    plannedFrames:study.plannedFrames,finalReport:report+'\n\nОхват визуальной перепроверки: '+coverage+'\nСравнение с предыдущим исследованием не выполнено.',limitations:data.limitations as string[],
     clinicalValidation:false,physicianSignatureRequired:true,
+    ...(visualReview?{visualReview}:{}),
     receipt:{inputTokens:usage.prompt_tokens!,outputTokens:usage.completion_tokens!},
   };
 }

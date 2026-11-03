@@ -7,9 +7,9 @@ import type {TechnicalDicomMetadata} from "../lib/dicom-series";
 type Point={x:number;y:number};
 type Saved={sourceSopInstanceUid:string;sourceSeriesInstanceUid:string;
   measurement:DicomCaliperMeasurement};
-type Props={file:File|null;metadata:TechnicalDicomMetadata|null;seriesKey:string|null};
+type Props={file:File|null;metadata:TechnicalDicomMetadata|null;seriesKey:string|null;onSave?:(measurement:DicomCaliperMeasurement)=>void};
 
-export default function DicomCaliperPanel({file,metadata,seriesKey}:Props){
+export default function DicomCaliperPanel({file,metadata,seriesKey,onSave}:Props){
   const canvas=useRef<HTMLCanvasElement|null>(null);
   const frame=useRef<DicomFrame|null>(null);
   const [ready,setReady]=useState(false);
@@ -70,6 +70,7 @@ export default function DicomCaliperPanel({file,metadata,seriesKey}:Props){
   };
   const add=()=>{
     if(!current||!metadata?.seriesUid||!metadata.sopInstanceUid||saved.length>=16)return;
+    onSave?.(current);
     setSaved(items=>[...items,{
       sourceSeriesInstanceUid:metadata.seriesUid!,sourceSopInstanceUid:metadata.sopInstanceUid!,
       measurement:current,

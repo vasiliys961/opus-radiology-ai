@@ -1,14 +1,14 @@
 "use client";
 import {useEffect,useRef,useState} from 'react';
 import {autoPrepareVisionPrivacy,type AutomaticPrivacyPreparation} from '../lib/auto-privacy-preparation';
-import {buildVisionPrivacyPacket,markPrivacyReview,type VisionPrivacyPacket} from '../lib/vision-privacy';
-import {createPrivacyJournal} from '../lib/privacy-review-journal';
+import {type VisionPrivacyPacket} from '../lib/vision-privacy';
+import {reviewPreparedStudy} from '../lib/review-prepared-study';
 import VisionPrivacyPreparation from './VisionPrivacyPreparation';
 
 // Compressed copies only, ephemeral tab memory. No IndexedDB, disk or source DICOM copy.
 const MAX_REVIEW_MEMORY=96*1024*1024;
-export default function StudyPrivacyReview({count,modality,load,onReady,onOpenSlice,sourceIds}:{
- count:number;modality:'CT'|'MR';load:(index:number,signal:AbortSignal)=>Promise<string[]>;
+export default function StudyPrivacyReview({count,modality,load,onReady,onOpenSlice,sourceIds,canRelease=false,releaseNotice}:{
+ canRelease?:boolean;releaseNotice?:string;count:number;modality:'CT'|'MR';load:(index:number,signal:AbortSignal)=>Promise<string[]>;
  onReady:(packets:VisionPrivacyPacket[])=>Promise<void>;onOpenSlice:(id:string)=>void;sourceIds:string[][];
 }){
  const [groups,setGroups]=useState<AutomaticPrivacyPreparation[]>([]),[index,setIndex]=useState(0);
@@ -41,14 +41,14 @@ export default function StudyPrivacyReview({count,modality,load,onReady,onOpenSl
  const suspects=groups.flatMap((g,i)=>g.unresolved>0&&!resolved.has(i)?[i]:[]);
  const group=groups[index];
  async function release(){
-  if(!approved||suspects.length||preparing||error||started.current||groups.length!==count)return;
+  if(!canRelease||!approved||preparing||error||started.current||groups.length!==count)return;
   started.current=true;setSending(true);
   try{
    // This is the physician's ONE explicit attestation of these exact copies,
    // not an inference from OCR absence or thumbnail loading.
-   const packets=groups.map(g=>buildVisionPrivacyPacket(g.frames.map(f=>
-    markPrivacyReview(markPrivacyReview(f,'pixel',true),'visual',true)),crypto.randomUUID()));
-   await onReady(packets);
+   const reviewed=reviewPreparedStudy(groups,approved);
+   setGroups(previous=>previous.map((g,i)=>({...g,journal:reviewed[i].journal,frames:reviewed[i].packet.frames})));
+   await onReady(reviewed.map(g=>g.packet));
   }catch(e){setError(e instanceof Error?e.message:'Анализ не завершён.');}
   finally{setSending(false);}
  }
@@ -57,24 +57,30 @@ export default function StudyPrivacyReview({count,modality,load,onReady,onOpenSl
   {error&&!preparing&&!started.current&&<button type="button" onClick={()=>setAttempt(n=>n+1)}>Повторить локальную подготовку</button>}
   {preparing&&<button type="button" onClick={()=>{cancel.current?.abort();setPreparing(false);setError('Подготовка остановлена. Изображения не отправлялись.');}}>Отменить подготовку</button>}
   {!preparing&&group&&!sending&&<>
-   <p>Наборов с возможными надписями осталось: {suspects.length}. OCR может пропустить текст и не проверяет узнаваемое лицо. Изображения автоматически не закрашиваются.</p>
+   <p>Наборов с отметками OCR для проверки: {suspects.length}. OCR может пропустить текст и не проверяет узнаваемое лицо. Изображения автоматически не закрашиваются.</p>
    <label>Просмотр срезов <input aria-label="Группа срезов для просмотра" type="range" min={0} max={groups.length-1} value={index}
     onChange={e=>{setIndex(Number(e.target.value));setEditing(false);setApproved(false);}}/> {index*4+1}–{index*4+group.frames.length}</label>
    <div style={{display:'flex',flexWrap:'wrap',gap:8}}>{group.frames.map((f,i)=><figure key={f.frameId} style={{margin:0}}>
-    <img src={'data:image/png;base64,'+f.pngBase64} width={256} height={256} style={{objectFit:'contain'}} alt={'Копия среза '+(index*4+i+1)}/>
+    <div style={{position:'relative',width:256,height:256*f.height/f.width}}>
+     <img src={'data:image/png;base64,'+f.pngBase64} width={256} height={256*f.height/f.width} alt={'Копия среза '+(index*4+i+1)}/>
+     {group.ocr[f.frameId]?.sha256===f.sha256&&group.ocr[f.frameId].regions.map((r,n)=><span key={n} aria-hidden="true" style={{position:'absolute',pointerEvents:'none',border:'1px solid #f59e0b',left:100*r.rectangle.x/f.width+'%',top:100*r.rectangle.y/f.height+'%',width:100*r.rectangle.width/f.width+'%',height:100*r.rectangle.height/f.height+'%'}}/>)}
+    </div>
     <figcaption><button type="button" onClick={()=>onOpenSlice(sourceIds[index][i])}>Исходный срез {index*4+i+1}</button></figcaption>
    </figure>)}</div>
    {suspects.length>0&&<button type="button" onClick={()=>{setIndex(suspects[0]);setEditing(true);setApproved(false);}}>Разобрать кадры с возможными надписями</button>}
    <button type="button" onClick={()=>{setEditing(v=>!v);setApproved(false);}}>Скрыть данные или проверить надписи на этих кадрах</button>
    {editing&&<VisionPrivacyPreparation key={index} previews={group.frames.map(f=>'data:image/png;base64,'+f.pngBase64)} modality={modality}
     originalLocalFileIds={sourceIds[index]} onOpenOriginalSlice={onOpenSlice} initialPreparation={group} reviewedBatchLabel="Сохранить проверку этих кадров"
-    onReviewedBatch={async packet=>{
-     setGroups(previous=>previous.map((g,i)=>i===index?{...g,frames:packet.frames,journal:createPrivacyJournal(packet.frames,crypto.randomUUID(),new Date().toISOString())}:g));
+    onReviewedBatch={async (packet,preparation)=>{
+     if(!preparation)throw Error('Не сохранена история проверки кадров.');
+     setGroups(previous=>previous.map((g,i)=>i===index?{...preparation,frames:packet.frames}:g));
      setResolved(previous=>new Set([...previous,index]));setApproved(false);setEditing(false);
     }}/> }
-   <label><input type="checkbox" disabled={suspects.length>0} checked={approved} onChange={e=>setApproved(e.target.checked)}/>
-    Я просмотрел подготовленные копии всей серии: идентифицирующих надписей и узнаваемых признаков нет. Разрешаю отправить эту серию для анализа.</label>
-   <button type="button" disabled={!approved||suspects.length>0||!!error} onClick={()=>void release()}>Отправить всю проверенную серию в анализ</button>
+   {releaseNotice&&<p>{releaseNotice}</p>}
+   {!canRelease&&<p role="status">Передача недоступна: подключите разрешённое рабочее место. Копии остаются локально.</p>}
+   <label><input type="checkbox" checked={approved} onChange={e=>setApproved(e.target.checked)}/>
+    Я просмотрел подготовленные копии всей серии, включая все отметки OCR: идентифицирующих надписей и узнаваемых признаков нет; оставшиеся отметки — ложные срабатывания или неидентифицирующий текст. Имею право передачи и проверил условия обработки медицинских данных. Разрешаю отправить эту серию для анализа.</label>
+   <button type="button" disabled={!canRelease||!approved||!!error} onClick={()=>void release()}>Отправить всю проверенную серию в анализ</button>
   </>}
  </section>;
 }

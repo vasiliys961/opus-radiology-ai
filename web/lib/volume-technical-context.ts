@@ -1,6 +1,8 @@
+import {validCtReviewWindow,type CtReviewWindow} from './ct-review-window.ts';
 /** Outbound technical allowlist. Never include raw DICOM strings or clinical free text. */
 import type {DicomSeries} from './dicom-series.ts';
 export type VolumeTechnicalContext={
+ window?:CtReviewWindow;additionalWindow?:CtReviewWindow;
  region:'HEAD'|'NECK'|'CHEST'|'ABDOMEN'|'PELVIS'|'SPINE'|'EXTREMITY'|'UNKNOWN';
  sliceSpacingMm:number|null;pixelSpacingMm:[number,number]|null;
  contrast:'DECLARED'|'UNKNOWN';phase:'UNKNOWN';mrWeighting:'UNKNOWN';
@@ -11,7 +13,9 @@ const positive=(n:unknown)=>typeof n==='number'&&Number.isFinite(n)&&n>0&&n<=100
 export function validVolumeTechnicalContext(value:unknown):value is VolumeTechnicalContext{
  if(!value||typeof value!=='object'||Array.isArray(value))return false;
  const v=value as VolumeTechnicalContext;
- return Object.keys(v).sort().join(',')==='contrast,mrSequenceCodes,mrWeighting,phase,pixelSpacingMm,region,sliceSpacingMm'&&
+ return Object.keys(v).every(k=>['contrast','mrSequenceCodes','mrWeighting','phase','pixelSpacingMm','region','sliceSpacingMm','window','additionalWindow'].includes(k))&&
+ ['contrast','mrSequenceCodes','mrWeighting','phase','pixelSpacingMm','region','sliceSpacingMm'].every(k=>Object.hasOwn(v,k))&&
+ (v.window===undefined||validCtReviewWindow(v.window))&&(v.additionalWindow===undefined||validCtReviewWindow(v.additionalWindow))&&
  regions.includes(v.region)&&['DECLARED','UNKNOWN'].includes(v.contrast)&&v.phase==='UNKNOWN'&&v.mrWeighting==='UNKNOWN'&&
  (v.sliceSpacingMm===null||positive(v.sliceSpacingMm))&&
  (v.pixelSpacingMm===null||Array.isArray(v.pixelSpacingMm)&&v.pixelSpacingMm.length===2&&v.pixelSpacingMm.every(positive))&&

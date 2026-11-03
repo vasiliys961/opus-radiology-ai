@@ -34,7 +34,7 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
   frameRelativeClnEvidence?:ClnFrameRelativeEvidence|null;
   autoStartAfterDetectors?:boolean;
   primaryAnalysisStage?:"idle"|"running"|"completed"|"vision-only"|"cancelled";
-  onReviewedBatch?:(packet:ReturnType<typeof buildVisionPrivacyPacket>)=>Promise<void>;
+  onReviewedBatch?:(packet:ReturnType<typeof buildVisionPrivacyPacket>,preparation?:import("../lib/auto-privacy-preparation").AutomaticPrivacyPreparation)=>Promise<void>;
   batchSubmitting?:boolean;
   reviewedBatchLabel?:string;
   initialPreparation?:import("../lib/auto-privacy-preparation").AutomaticPrivacyPreparation;
@@ -343,7 +343,7 @@ export default function VisionPrivacyPreparation({previews,modality,originalLoca
     </details>
     </>}
     {frames.length>0&&onReviewedBatch&&<button type="button" disabled={!pilotReady||batchSubmitting}
-      onClick={()=>void onReviewedBatch(makePilotPacket()).catch(e=>setError(e instanceof Error?e.message:"Пакет не обработан."))}>
+      onClick={()=>void onReviewedBatch(makePilotPacket(),{frames,ocr,journal:journalRef.current!,unresolved:0,redacted:frames.reduce((sum,f)=>sum+f.redactions.length,0)}).catch(e=>setError(e instanceof Error?e.message:"Пакет не обработан."))}>
       {batchSubmitting?"Gemini анализирует проверенные кадры…":reviewedBatchLabel}
     </button>}
     {frames.length>0&&!onReviewedBatch&&<DeidentifiedOpenRouterPanel

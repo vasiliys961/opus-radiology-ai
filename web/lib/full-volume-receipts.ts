@@ -14,6 +14,7 @@ export type LocalVolumeFinding={
 export type LocalVolumeReceipt={
   batchIndex:number;usage:ModelUsage;findings:LocalVolumeFinding[];
   limitations:string[];
+  recheckIndices?:number[];
 };
 export const GEMINI_INPUT_RATE_USD_PER_M=0.75;
 export const GEMINI_OUTPUT_RATE_USD_PER_M=3.75;
@@ -37,6 +38,9 @@ export function appendGeminiVolumeReceipt(
      answer.reviewedImageIds.length!==ids.length||
      ids.some((id,i)=>answer.reviewedImageIds[i]!==id))
     throw Error("Provider did not review this exact local batch");
+  if(answer.visualRecheck!==undefined&&(!Array.isArray(answer.visualRecheck)||answer.visualRecheck.length>4||
+   new Set(answer.visualRecheck.map(x=>x.imageId)).size!==answer.visualRecheck.length||
+   answer.visualRecheck.some(x=>!ids.includes(x.imageId)||!['focal','uncertain'].includes(x.reason))))throw Error('Invalid focal-frame triage');
   const receipt=answer.receipt;
   if(!receipt||!Number.isSafeInteger(receipt.inputTokens)||
      !Number.isSafeInteger(receipt.outputTokens)||
@@ -57,6 +61,7 @@ export function appendGeminiVolumeReceipt(
   return [...previous,{
     batchIndex,usage:{inputTokens:receipt.inputTokens,outputTokens:receipt.outputTokens},
     findings,limitations:[...answer.limitations],
+    ...(answer.visualRecheck===undefined?{}:{recheckIndices:answer.visualRecheck.map(x=>batch.indices[ids.indexOf(x.imageId)])}),
   }];
 }
 export function volumeLedger(plan:VisionBudgetPlan,batches:readonly VisionBatch[],

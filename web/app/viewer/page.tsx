@@ -240,7 +240,7 @@ export default function ViewerPage() {
             </button>}
 
             {visionOpen && <AnalysisSoundProvider>
-              <VisionFramePlanningPanel key={"vision-"+selected.key} series={visionSeries}
+              <VisionFramePlanningPanel key={"vision-"+selected.key} series={visionSeries} comparisonSeries={series}
                 activeSeriesKey={selected.key} fileById={indexedById}
                 originalDetectorEvidence={visionDetectorEvidence?.seriesKey===selected.key?visionDetectorEvidence.bundle:null}
                  clnVerifiedLocal={clnVerified?.seriesKey===selected.key?clnVerified.value:null}
