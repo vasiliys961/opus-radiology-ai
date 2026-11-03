@@ -19,6 +19,8 @@ import MrSeriesComparison from './MrSeriesComparison';
 import StudyPrivacyReview from './StudyPrivacyReview';
 import StudyReportDiscussion from './StudyReportDiscussion';
 import {estimateStudyCost,opusUsageEstimate} from '../lib/study-cost-estimate';
+import {splitReviewedTransport} from '../lib/reviewed-packet-transport';
+import type {VisionBatch} from '../lib/vision-batch-ledger';
 import {parseStudySliceSelection} from '../lib/study-slice-selection';
 type Stage='idle'|'preparing'|'review'|'gemini'|'interrupted'|'opus'|'completed';
 export default function ReviewedSeriesAnalysis({series,files,onOpenSlice,detectorStage,detectorEvidence,allSeries=[],clnVerifiedLocal=null}:{
@@ -26,6 +28,7 @@ export default function ReviewedSeriesAnalysis({series,files,onOpenSlice,detecto
  detectorStage:'idle'|'running'|'completed'|'vision-only'|'cancelled';
  detectorEvidence:SanitizedDetectorBundle|null;
 }){
+ const [executionBatches,setExecutionBatches]=useState<VisionBatch[]|null>(null);
  const [opusSpent,setOpusSpent]=useState(0);
  const [stopReason,setStopReason]=useState('');
  const [clinicalContext,setClinicalContext]=useState('');
@@ -52,10 +55,12 @@ export default function ReviewedSeriesAnalysis({series,files,onOpenSlice,detecto
  const detector=useRef({stage:detectorStage,evidence:detectorEvidence});
  useEffect(()=>{detector.current={stage:detectorStage,evidence:detectorEvidence};},[detectorStage,detectorEvidence]);
  const selectionResult=useMemo(()=>{try{return {indices:selection==='all'?series.members.map((_,i)=>i):parseStudySliceSelection(selectionText,series.members.length),error:''};}catch(e){return {indices:[] as number[],error:e instanceof Error?e.message:'Ошибка выбора срезов'};}},[selection,selectionText,series]);
- const plan=useMemo(()=>{try{return planOriginalVolumeSource(series,{maxGeminiUSD:budget,selectedIndices:selectionResult.error?undefined:selectionResult.indices});}catch{return null;}},[series,budget,selectionResult]);
+ const basePlan=useMemo(()=>{try{return planOriginalVolumeSource(series,{maxGeminiUSD:budget,selectedIndices:selectionResult.error?undefined:selectionResult.indices});}catch{return null;}},[series,budget,selectionResult]);
+ const plan=useMemo(()=>basePlan?(executionBatches?{...basePlan,batches:executionBatches}:basePlan):null,[basePlan,executionBatches]);
+ useEffect(()=>{setExecutionBatches(null);},[selection,selectionText]);
  useEffect(()=>{
   ctl.current?.abort();ctl.current=null;sending.current=false;targetedVisual.current=null;approvedPackets.current=[];attemptedDetectorKeys.current=new Set();setVisualResult(undefined);setOpusUsage(undefined);setReviewWindow(suggestCtReviewWindows(series).primary);setAdditionalWindow(suggestCtReviewWindows(series).additional);
-  setOpusSpent(0);setStopReason('');setClinicalContext('');setSelection('all');setSelectionText('1');setMeasureSource(null);setAcceptedMeasurements([]);setStage('idle');setReceipts([]);setReport('');
+  setExecutionBatches(null);setOpusSpent(0);setStopReason('');setClinicalContext('');setSelection('all');setSelectionText('1');setMeasureSource(null);setAcceptedMeasurements([]);setStage('idle');setReceipts([]);setReport('');
  },[series,files]);
  useEffect(()=>{const c=new AbortController();void fetch('/api/ai/deidentified-openrouter-review',{
   cache:'no-store',credentials:'same-origin',signal:c.signal}).then(async r=>r.ok?r.json():null)
@@ -87,7 +92,8 @@ export default function ReviewedSeriesAnalysis({series,files,onOpenSlice,detecto
   const c=new AbortController();ctl.current=c;
   setStage('review');
  }
- async function finalize(done:LocalVolumeReceipt[],signal:AbortSignal){
+ async function finalize(done:LocalVolumeReceipt[],signal:AbortSignal,executionPlan=plan){
+  const plan=executionPlan;
   if(!plan)throw Error('План серии потерян.');
   const completedBatches=plan.batches.slice(0,done.length);
   const completedIndices=completedBatches.flatMap(b=>b.indices);
@@ -126,17 +132,20 @@ export default function ReviewedSeriesAnalysis({series,files,onOpenSlice,detecto
  }
  async function submitAll(packets:VisionPrivacyPacket[],resume=false){
   if(!plan||!connected||sending.current||(!resume&&stage!=='review')||packets.length!==plan.batches.length)return;
+  let execution:{packets:VisionPrivacyPacket[];batches:VisionBatch[]};
+  try{execution=resume?{packets,batches:plan.batches}:splitReviewedTransport(packets,plan.batches);}catch(e){interrupted(e);return;}
+  packets=execution.packets;const batchPlan={...plan,batches:execution.batches};setExecutionBatches(execution.batches);
   approvedPackets.current=packets;
   let current=receipts;
-  if(!canPayForNextBatch(plan.budget,plan.batches,current)){
+  if(!canPayForNextBatch(plan.budget,batchPlan.batches,current)){
    interrupted(Error('Достигнут лимит расходов Gemini. Частичный результат сохранён.'));return;
   }
   const signal=ctl.current!.signal;sending.current=true;setStage('gemini');setStopReason('');let synthesizing=false;
   try{
-   for(let batchIndex=current.length;batchIndex<plan.batches.length;batchIndex++){
+   for(let batchIndex=current.length;batchIndex<batchPlan.batches.length;batchIndex++){
    signal.throwIfAborted();
-   if(!canPayForNextBatch(plan.budget,plan.batches,current))throw Error('Достигнут лимит расходов Gemini. Частичный результат сохранён.');
-   const packet=packets[batchIndex],batch=plan.batches[batchIndex];
+   if(!canPayForNextBatch(plan.budget,batchPlan.batches,current))throw Error('Достигнут лимит расходов Gemini. Частичный результат сохранён.');
+   const packet=packets[batchIndex],batch=batchPlan.batches[batchIndex];
    if(packet.frames.length!==batch.indices.length)throw Error('Проверенная группа не совпадает с планом серии.');
    const response=await fetch('/api/ai/approved-volume-gemini-batch',{method:'POST',credentials:'same-origin',signal,
     headers:{'Content-Type':'application/json','X-Opus-Reviewed-Volume':'1'},
@@ -150,18 +159,18 @@ export default function ReviewedSeriesAnalysis({series,files,onOpenSlice,detecto
    const answer=await response.json() as VolumeGeminiBatchResult;
    signal.throwIfAborted();
    if(answer.modality!==series.modality)throw Error('Ответ относится к другой модальности.');
-   const done=appendGeminiVolumeReceipt(current,plan.batches,batchIndex,answer);setReceipts(done);
+   const done=appendGeminiVolumeReceipt(current,batchPlan.batches,batchIndex,answer);setReceipts(done);
    current=done;
    }
    approvedPackets.current=packets;
-   synthesizing=true;await finalize(current,signal);
+   synthesizing=true;await finalize(current,signal,batchPlan);
   }catch(e){
    if(ctl.current?.signal===signal){
     if(!synthesizing&&current.length>0&&!signal.aborted){
      setStopReason(e instanceof Error?e.message:'Обзор Gemini прервался.');
      // One authorized final synthesis from actual completed receipts; never retry
      // the failed Gemini call or a failed Opus request automatically.
-     try{await finalize(current,signal);}catch(finalError){if(ctl.current?.signal===signal)interrupted(finalError);}
+     try{await finalize(current,signal,batchPlan);}catch(finalError){if(ctl.current?.signal===signal)interrupted(finalError);}
     }else interrupted(e);
    }
   }finally{if(ctl.current?.signal===signal)sending.current=false;}
@@ -221,26 +230,26 @@ export default function ReviewedSeriesAnalysis({series,files,onOpenSlice,detecto
    <label>Лимит расходов на обзор Gemini, USD <select value={budget} onChange={e=>setBudget(Number(e.target.value))}>
     {[0.5,1,2,3,5].map(v=><option key={v} value={v}>${v.toFixed(2)}</option>)}
    </select></label>
-   <p>До {plan.batches.length} запросов Gemini и {visualEnabled?'до двух запросов Opus (перепроверка и заключение)':'один итоговый Opus'}. Подготовка выполняется локально; разрешение на отправку будет после просмотра копий.</p>
+   <p>До {plan.budget.overviewIndices.length} запросов Gemini (по размеру подготовленных копий) и {visualEnabled?'до двух запросов Opus (перепроверка и заключение)':'один итоговый Opus'}. Подготовка выполняется локально; разрешение на отправку будет после просмотра копий.</p>
    <p>«Окно» — настройка яркости и контраста, не введение контрастного препарата. Лёгочное окно показывает лёгкие; мягкие ткани в нём выглядят почти белыми — это ожидаемо. Второй вид справа показывает тот же срез в другом окне. ИИ получает именно подготовленные копии, исходный DICOM не изменяется.</p>
    <p>Если обзор прервётся, Opus автоматически составит заключение по уже обработанной части. Стоимость — расчётный ориентир по тарифам OpenRouter от 03.11.2026, не точный счёт; объём ответа и маршрутизация могут его изменить. Неудачные запросы могут отсутствовать в квитанциях. Повтор Gemini — только по команде продолжения.</p>
    </details>
-   <p>Выбрано {plan.budget.overviewIndices.length} срезов, {plan.batches.length} групп отправки (до 4 срезов за раз). После обзора — предварительное заключение Opus. Перевод и обсуждение доступны по готовому заключению.</p>
+   <p>Выбрано {plan.budget.overviewIndices.length} срезов, {basePlan?.batches.length} групп подготовки. В одном запросе — до 4 срезов, для крупных копий меньше. После обзора — предварительное заключение Opus. Перевод и обсуждение доступны по готовому заключению.</p>
    <button type="button" disabled={!!selectionResult.error} onClick={()=>void start()}>Подготовить выбранные срезы к анализу</button>
   </>}
   {(stage==='review'||stage==='gemini'||stage==='opus')&&<StudyPrivacyReview count={plan.batches.length} modality={series.modality as 'CT'|'MR'}
-   load={prepare} onReady={submitAll} canRelease={connected} releaseNotice={"Передача через OpenRouter: до "+plan.batches.length+" запросов Gemini и "+(visualEnabled?"до двух запросов Opus":"один итоговый Opus")+". Порог остановки Gemini: $"+budget.toFixed(2)+"; Opus оплачивается отдельно."} onOpenSlice={onOpenSlice}
+   load={prepare} onReady={submitAll} canRelease={connected} releaseNotice={"Gemini обработает выбранные срезы группами по размеру копий, затем "+(visualEnabled?"до двух запросов Opus":"один итоговый Opus")+". Порог остановки Gemini: $"+budget.toFixed(2)+"; Opus оплачивается отдельно."} onOpenSlice={onOpenSlice}
    clinicalContext={clinicalContext} sourceNumbers={plan.batches.map(b=>b.indices.map(i=>i+1))} sourceIds={plan.batches.map(b=>b.indices.map(i=>series.members[i].id))}/>}
   {busy&&<button type="button" onClick={()=>{ctl.current?.abort();setStage('interrupted');setNotice('Остановлено. Полученные наблюдения сохранены; весь ряд не объявляется оценённым.');}}>Остановить анализ</button>}
   {stage==='review'&&<button type="button" onClick={()=>{ctl.current?.abort();setStage('idle');setNotice('Подготовка отменена. Выберите срезы заново; отправка не выполнялась.');}}>Вернуться к выбору срезов</button>}
   {(stage==='interrupted'||stage==='completed')&&receipts.length<plan.batches.length&&approvedPackets.current.length===plan.batches.length&&<button type="button" disabled={!connected} onClick={()=>{const c=new AbortController();ctl.current=c;void submitAll(approvedPackets.current,true);}}>Продолжить обработку оставшихся срезов</button>}
   {stage==='interrupted'&&!canPayForNextBatch(plan.budget,plan.batches,receipts)&&receipts.length<plan.batches.length&&<details><summary>Настройки расходов</summary><label>Лимит Gemini для продолжения <select value={budget} onChange={e=>setBudget(Number(e.target.value))}>{[0.5,1,2,3,5].map(v=><option key={v} value={v}>${v.toFixed(2)}</option>)}</select></label></details>}
   {stage==='interrupted'&&receipts.length>0&&receipts.length<plan.batches.length&&<button type="button" onClick={()=>{const c=new AbortController();ctl.current=c;void finalize(receipts,c.signal).catch(interrupted);}}>Получить заключение по обработанным срезам</button>}
-  {stage==='interrupted'&&!receipts.length&&<button type="button" onClick={()=>setStage('idle')}>Вернуться к выбору срезов</button>}
+  {stage==='interrupted'&&!receipts.length&&<button type="button" onClick={()=>{setExecutionBatches(null);setStage('idle');}}>Вернуться к выбору срезов</button>}
   {stage==='interrupted'&&receipts.length===plan.batches.length&&<button type="button" onClick={()=>{
    const c=new AbortController();ctl.current=c;void finalize(receipts,c.signal).catch(interrupted);
   }}>Получить заключение</button>}
-  {stage==='completed'&&<button type="button" onClick={()=>{ctl.current?.abort();approvedPackets.current=[];setReceipts([]);setReport('');setOpusSpent(0);setVisualResult(undefined);setOpusUsage(undefined);setAcceptedMeasurements([]);setMeasureSource(null);setStage('idle');setNotice('Можно выбрать другие срезы. Сохраните предыдущий результат заранее: новый анализ оплачивается отдельно.');}}>Новый анализ — выбрать другие срезы</button>}
+  {stage==='completed'&&<button type="button" onClick={()=>{ctl.current?.abort();approvedPackets.current=[];setExecutionBatches(null);setReceipts([]);setReport('');setOpusSpent(0);setVisualResult(undefined);setOpusUsage(undefined);setAcceptedMeasurements([]);setMeasureSource(null);setStage('idle');setNotice('Можно выбрать другие срезы. Сохраните предыдущий результат заранее: новый анализ оплачивается отдельно.');}}>Новый анализ — выбрать другие срезы</button>}
   {stage==='completed'&&visualEnabled&&(visualResult?.status==='unavailable'||detectorLocations.anchors.some(a=>!attemptedDetectorKeys.current.has(detectorKey(a))))&&<button type="button" onClick={()=>{
    const c=new AbortController();ctl.current=c;void finalize(receipts,c.signal).catch(interrupted);
   }}>Перепроверить отмеченные срезы</button>}

@@ -1,3 +1,4 @@
+import {partitionReviewedFrames} from './reviewed-packet-transport.ts';
 import type {BoundDetectorRecheck} from './cln-detector-recheck.ts';
 import {SOURCE_REVIEW_BOUNDARIES} from './source-review-boundaries.ts';
 import {validCtReviewWindow,type CtReviewWindow} from './ct-review-window.ts';
@@ -35,7 +36,8 @@ export function selectTargetedVisualInput(packets:readonly VisionPrivacyPacket[]
   return markPrivacyReview(markPrivacyReview(next,'pixel',true),'visual',true);
  });
  const selectedPackets:VisionPrivacyPacket[]=[];
- for(let i=0;i<frames.length;i+=4)selectedPackets.push(buildVisionPrivacyPacket(frames.slice(i,i+4),crypto.randomUUID()));
+ for(const group of partitionReviewedFrames(frames).slice(0,4))selectedPackets.push(buildVisionPrivacyPacket(group.map((f,n)=>({...f,frameId:'frame-'+(n+1)})),crypto.randomUUID()));
+ const retained=selectedPackets.reduce((n,p)=>n+p.frames.length,0);indices.splice(retained);
  return {packets:selectedPackets,sliceNumbers:indices.map(n=>source[n]+1),...(detectorAnchors.length?{candidateAnchors:detectorAnchors.filter(a=>indices.some(n=>source[n]===a.sourceIndex)).map(a=>({candidateId:a.candidateId,sliceNumber:a.sourceIndex+1,xFraction:a.xFraction,yFraction:a.yFraction}))}:{})};
 }
 export function normalizeTargetedVisualInput(raw:unknown,modality:'CT'|'MR',total:number){

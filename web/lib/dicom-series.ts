@@ -1,3 +1,4 @@
+import {standardCtRescaleUnit} from './ct-standard-rescale-unit.ts';
 /**
  * Metadata-only DICOM Part 10 reader for study/series browsing (research prototype).
  * No patient tags or identifying descriptions are extracted, stored or displayed.
@@ -132,9 +133,6 @@ function ctTransformNumber(value:string|null,kind:"slope"|"intercept"):number|nu
     parsed>0 && parsed<=1024?parsed:null:
     Math.abs(parsed)<=65536?parsed:null;
 }
-function rescaleUnit(raw:string|null):"HU"|"OTHER"|"UNSPECIFIED"{
-  return raw===null?"UNSPECIFIED":raw.toUpperCase()==="HU"?"HU":"OTHER";
-}
 
 export function parseDicomSeriesHeader(buffer: ArrayBuffer): TechnicalDicomMetadata {
   const bytes = new Uint8Array(buffer);
@@ -154,6 +152,7 @@ export function parseDicomSeriesHeader(buffer: ArrayBuffer): TechnicalDicomMetad
     burnedInAnnotation:"UNKNOWN", recognizableVisualFeatures:"UNKNOWN",
     patientIdentityRemoved:"UNKNOWN",
   };
+  let ctSopClass:string|null=null,ctImageType:string|null=null,ctMultiEnergy:string|null=null,ctRawUnit:string|null=null;
   let offset = 132;
   let explicit = true;
   let meta = true;
@@ -200,7 +199,9 @@ export function parseDicomSeriesHeader(buffer: ArrayBuffer): TechnicalDicomMetad
       case 0x00082218: codedAnatomySequencePresent = true; break;
       case 0x00020010: result.transferSyntax = getText(); break;
       case 0x00080060: result.modality = getText().slice(0, 16); break;
-      case 0x00080008: result.imageRole = imageRole(getText()); break;
+      case 0x00080016: ctSopClass=getText(); break;
+      case 0x00189361: ctMultiEnergy=getText(); break;
+      case 0x00080008: ctImageType=getText();result.imageRole = imageRole(ctImageType); break;
       case 0x00180015: result.bodyRegion = allowedRegion(getText()); break;
       case 0x00180020: result.mrSequenceCodes = scanCodes(getText()); break;
       case 0x00180080: result.repetitionTimeMs = boundedDs(getText()); break;
@@ -210,7 +211,7 @@ export function parseDicomSeriesHeader(buffer: ArrayBuffer): TechnicalDicomMetad
       case 0x00180010: result.contrastAgentDeclared = length > 0 && getText().length > 0; break;
       case 0x00281052: result.rescaleIntercept=ctTransformNumber(getText(),"intercept"); break;
       case 0x00281053: result.rescaleSlope=ctTransformNumber(getText(),"slope"); break;
-      case 0x00281054: result.rescaleUnit=rescaleUnit(getText()); break;
+      case 0x00281054: ctRawUnit=getText(); break;
       case 0x00280301: result.burnedInAnnotation = privacyFlag(getText()); break;
       case 0x00280302: result.recognizableVisualFeatures = privacyFlag(getText()); break;
       case 0x00120062: result.patientIdentityRemoved = privacyFlag(getText()); break;
@@ -250,6 +251,7 @@ export function parseDicomSeriesHeader(buffer: ArrayBuffer): TechnicalDicomMetad
   }
   // A coded anatomical region can contradict BodyPartExamined. The cheap
   // reader must delegate any SQ to dicom-parser instead of trusting one tag.
+  result.rescaleUnit=standardCtRescaleUnit(ctRawUnit,result.modality,ctSopClass,ctImageType,ctMultiEnergy);
   if (codedAnatomySequencePresent) result.bodyRegion = null;
   return result;
 }
@@ -331,7 +333,7 @@ async function parseComplexDicomHeader(buffer: ArrayBuffer): Promise<TechnicalDi
     pixelSpacing: spacing?.every((v) => v > 0) ? spacing as [number, number] : null,
     rescaleSlope:ctTransformNumber(str('x00281053'),"slope"),
     rescaleIntercept:ctTransformNumber(str('x00281052'),"intercept"),
-    rescaleUnit:rescaleUnit(str('x00281054')),
+    rescaleUnit:standardCtRescaleUnit(str('x00281054'),str('x00080060')??'',str('x00080016'),str('x00080008'),str('x00189361')),
     transferSyntax: str('x00020010') ?? (hasPart10 ? '' : rawSyntax),
     imageRole: imageRole(str('x00080008')),
     bodyRegion: region,
