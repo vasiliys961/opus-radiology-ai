@@ -65,10 +65,13 @@ export function planOriginalVolumeSource(
     frameIndex:0 as const,
     // The validated series has consistent orientation/geometry.
     slicePositionMm:(()=>{
-      const p=member.metadata.imagePositionPatient!;
-      const [rx,ry,rz,cx,cy,cz]=member.metadata.imageOrientationPatient!;
+      const p=member.metadata.imagePositionPatient;
+      const orient=member.metadata.imageOrientationPatient;
+      if(!p||!orient||!p.every(Number.isFinite)||!orient.every(Number.isFinite))return null;
+      const [rx,ry,rz,cx,cy,cz]=orient;
       const n=[ry*cz-rz*cy,rz*cx-rx*cz,rx*cy-ry*cx];
       const length=Math.hypot(...n);
+      if(!Number.isFinite(length)||length<0.98||length>1.02)return null;
       return p.reduce((sum,v,i)=>sum+v*n[i]/length,0);
     })(),
   }));

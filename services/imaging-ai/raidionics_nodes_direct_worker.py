@@ -7,7 +7,7 @@ Source CT must be axial and have known contrast-enhanced mediastinal protocol.
 """
 from __future__ import annotations
 import argparse, asyncio, configparser, gzip, hashlib, importlib.metadata
-import json, math, os, platform, secrets, shutil, signal, stat, sys, tempfile
+import json, math, os, platform, re, secrets, shutil, signal, stat, sys, tempfile
 import uuid, zipfile
 from pathlib import Path
 
@@ -293,10 +293,12 @@ def main():
     p.add_argument("--origin",default="http://127.0.0.1:3000")
     p.add_argument("--port",type=int,default=8777)
     args=p.parse_args()
-    token=secrets.token_urlsafe(36).replace("-","_")
+    supplied=os.environ.get("OPUS_NODES_WORKER_TOKEN","")
+    token=supplied if re.fullmatch(r"[A-Za-z0-9_-]{32,128}",supplied) else secrets.token_urlsafe(36).replace("-","_")
     app=create_app(token=token,origin=args.origin,model_zip=args.model_archive,
                    lungmask_weights=args.lungmask_weights,port=args.port)
-    print("Raidionics original research worker token: "+token,flush=True)
+    if token!=supplied:
+        print("Raidionics original research worker token: "+token,flush=True)
     import uvicorn
     uvicorn.run(app,host="127.0.0.1",port=args.port,access_log=False)
 

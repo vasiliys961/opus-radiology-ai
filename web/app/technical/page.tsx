@@ -1,4 +1,6 @@
+import DetectorAvailabilityGuide from "../../components/DetectorAvailabilityGuide";
 import WorkspaceNavigation from "../../components/WorkspaceNavigation";
+import DetectorDeployButton from "../../components/DetectorDeployButton";
 import OriginalWorkerFleetReadiness from "../../components/OriginalWorkerFleetReadiness";
 import TechnicalConnectionStatus from "./TechnicalConnectionStatus";
 import "./technical.css";
@@ -16,10 +18,14 @@ export default function TechnicalPage(){
     <section className="hub-panel">
      <h2>Оригинальные модели</h2>
      <p>Приложение автоматически определяет доступные локальные CPU/GPU-исполнители. Это реальная проверка работающих worker и весов, а не список обещанных диагнозов.</p>
+     <DetectorDeployButton/>
      <OriginalWorkerFleetReadiness/>
      <a href="/guide#architecture">Как выбираются модели</a>
     </section>
    </div>
+   <section className="hub-panel">
+    <DetectorAvailabilityGuide/>
+   </section>
    <section className="hub-panel">
     <h2>Сохранённые исследовательские инструменты</h2>
     <p>Все прежние технические панели оставлены в приложении. Для врача они не нужны, но доступны по отдельным ссылкам.</p>

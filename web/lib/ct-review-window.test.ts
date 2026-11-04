@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {ctReviewWindow,validCtReviewWindow,requireCtReviewCalibration,suggestCtReviewWindows} from './ct-review-window.ts';
+import {ctReviewWindow,validCtReviewWindow,requireCtReviewCalibration,suggestCtReviewWindows,separateWindowPass,withSeparateWindowBatches} from './ct-review-window.ts';
 import {windowDecodedPlane} from './decoded-vision-preview.ts';
 test('CT presets change display of the same source samples, not source values',()=>{
  const source=new Int16Array([-900,-600,0,40,1000]);const before=[...source];
@@ -21,9 +21,14 @@ test('HU presets refuse an uncalibrated CT or MR instead of guessing quantitativ
 
 test('Mac defaults select useful paired windows only with confirmed region, HU and bounded copy size',()=>{
  const metadata={bodyRegion:'CHEST',rows:512,columns:512,rescaleUnit:'HU',rescaleSlope:1,rescaleIntercept:-1000};
- assert.deepEqual(suggestCtReviewWindows({modality:'CT',members:[{metadata}]}),{primary:'LUNG',additional:'SOFT'});
- assert.deepEqual(suggestCtReviewWindows({modality:'CT',members:[{metadata:{...metadata,rows:1024,columns:1024}}]}),{primary:'LUNG',additional:'NONE'});
- assert.deepEqual(suggestCtReviewWindows({modality:'CT',members:[{metadata:{...metadata,rescaleUnit:'UNSPECIFIED'}}]}),{primary:'SOURCE',additional:'NONE'});
- assert.deepEqual(suggestCtReviewWindows({modality:'MR',members:[{metadata}]}),{primary:'SOURCE',additional:'NONE'});
- assert.deepEqual(suggestCtReviewWindows({modality:'CT',members:[{metadata},{metadata:{...metadata,bodyRegion:'HEAD'}}]}),{primary:'SOURCE',additional:'NONE'});
+ assert.deepEqual(suggestCtReviewWindows({modality:'CT',members:[{metadata}]}),{primary:'LUNG',additional:'SOFT',delivery:'paired'});
+ assert.deepEqual(suggestCtReviewWindows({modality:'CT',members:[{metadata:{...metadata,rows:1024,columns:1024}}]}),{primary:'LUNG',additional:'SOFT',delivery:'separate'});
+ assert.deepEqual(suggestCtReviewWindows({modality:'CT',members:[{metadata:{...metadata,rescaleUnit:'UNSPECIFIED'}}]}),{primary:'SOURCE',additional:'NONE',delivery:'single'});
+ assert.deepEqual(suggestCtReviewWindows({modality:'MR',members:[{metadata}]}),{primary:'SOURCE',additional:'NONE',delivery:'single'});
+ assert.deepEqual(suggestCtReviewWindows({modality:'CT',members:[{metadata},{metadata:{...metadata,bodyRegion:'HEAD'}}]}),{primary:'SOURCE',additional:'NONE',delivery:'single'});
+ const wide=suggestCtReviewWindows({modality:'CT',members:[{metadata:{...metadata,rows:1024,columns:1024}}]});
+ assert.equal(separateWindowPass(wide.delivery,wide.additional,16),true);
+ assert.equal(separateWindowPass(wide.delivery,wide.additional,17),false);
+ const batches=withSeparateWindowBatches([{pass:'overview' as const,indices:[0,1]}],true);
+ assert.deepEqual(batches,[{pass:'overview',indices:[0,1]},{pass:'targeted',indices:[0,1]}]);
 });

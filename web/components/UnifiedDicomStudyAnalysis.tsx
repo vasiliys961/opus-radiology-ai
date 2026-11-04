@@ -711,7 +711,9 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,resear
      plan.route==="xrv-cxr"?"Рентгенография":"Исследование DICOM"}</strong>
      {plan.route?" · подходящие модели выбираются автоматически":""}</p>}
   {plan.reason&&<p role="status">{visionOnlyAvailable?
-     (series.members.some(m=>m.metadata.imageRole==="DERIVED")?
+     (series.members.length===1?
+       "Один DICOM-файл. Объёмные детекторы не запускаются: для них нужна серия срезов. Разбор этого снимка через Gemini и Opus доступен.":
+     series.members.some(m=>m.metadata.imageRole==="DERIVED")?
        "Серия помечена DICOM как производная (DERIVED). Доступен визуальный анализ проверенных кадров; количественные детекторы для исходной серии не назначены.":
        "Локальный детектор не назначен: "+plan.reason+" Доступен независимый Gemini + Opus."):
      "Не запущено: "+plan.reason}</p>}

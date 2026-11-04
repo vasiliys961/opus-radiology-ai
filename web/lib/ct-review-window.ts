@@ -20,18 +20,29 @@ export function requireCtReviewCalibration(header:{modality:string;rescaleUnit?:
  if(header.modality!=='CT'||header.rescaleUnit!=='HU'||typeof header.rescaleSlope!=='number'||!Number.isFinite(header.rescaleSlope)||header.rescaleSlope<=0||
  typeof header.rescaleIntercept!=='number'||!Number.isFinite(header.rescaleIntercept))throw Error('Для окон КТ нужна подтверждённая шкала HU исходного DICOM. Выберите исходное окно или корректную КТ-серию.');
 }
+export type ReviewWindowDelivery='paired'|'separate'|'single';
+export type ReviewWindowPlan={primary:CtReviewWindow;additional:CtReviewWindow|'NONE';delivery:ReviewWindowDelivery};
+/** A second full-resolution window stays inside one review only for a short selection. */
+export const SEPARATE_WINDOW_SLICE_CAP=16;
 /** Lightweight defaults from consistent allowlisted headers, never from free text.
- * They configure display copies only and do not assert a diagnosis or phase. */
-export function suggestCtReviewWindows(series:{modality:string;members:readonly {metadata:{bodyRegion?:string|null;rows:number|null;columns:number|null;rescaleUnit?:string;rescaleSlope?:number|null;rescaleIntercept?:number|null}}[]}):{primary:CtReviewWindow;additional:CtReviewWindow|'NONE'}{
- const fallback={primary:'SOURCE',additional:'NONE'} as const;
- if(series.modality!=='CT'||!series.members.length)return fallback;
- if(series.members.some(({metadata:m})=>m.rescaleUnit!=='HU'||typeof m.rescaleSlope!=='number'||!Number.isFinite(m.rescaleSlope)||m.rescaleSlope<=0||typeof m.rescaleIntercept!=='number'||!Number.isFinite(m.rescaleIntercept)))return fallback;
+ * They configure display copies only and do not assert a diagnosis or phase.
+ * When two windows exceed the copy limit, the second window stays recommended
+ * and is rendered as its own copy on a short selection. */
+export function suggestCtReviewWindows(series:{modality:string;members:readonly {metadata:{bodyRegion?:string|null;rows:number|null;columns:number|null;rescaleUnit?:string;rescaleSlope?:number|null;rescaleIntercept?:number|null}}[]}):ReviewWindowPlan{
+ const single={primary:'SOURCE' as const,additional:'NONE' as const,delivery:'single' as const};
+ if(series.modality!=='CT'||!series.members.length)return single;
+ if(series.members.some(({metadata:m})=>m.rescaleUnit!=='HU'||typeof m.rescaleSlope!=='number'||!Number.isFinite(m.rescaleSlope)||m.rescaleSlope<=0||typeof m.rescaleIntercept!=='number'||!Number.isFinite(m.rescaleIntercept)))return single;
  const region=series.members[0].metadata.bodyRegion;
- if(!region||series.members.some(x=>x.metadata.bodyRegion!==region))return fallback;
+ if(!region||series.members.some(x=>x.metadata.bodyRegion!==region))return single;
  const pair=series.members.every(({metadata:m})=>typeof m.rows==='number'&&typeof m.columns==='number'&&m.rows>0&&m.columns>0&&m.rows*m.columns*2<=1048576);
- if(region==='CHEST')return {primary:'LUNG',additional:pair?'SOFT':'NONE'};
- if(region==='HEAD')return {primary:'BRAIN',additional:pair?'BONE':'NONE'};
- if(region==='SPINE')return {primary:'BONE',additional:pair?'SOFT':'NONE'};
- if(['ABDOMEN','PELVIS','NECK'].includes(region))return {primary:'SOFT',additional:'NONE'};
- return fallback;
+ const wanted=region==='CHEST'?{primary:'LUNG' as const,additional:'SOFT' as const}:region==='HEAD'?{primary:'BRAIN' as const,additional:'BONE' as const}:region==='SPINE'?{primary:'BONE' as const,additional:'SOFT' as const}:['ABDOMEN','PELVIS','NECK'].includes(region)?{primary:'SOFT' as const,additional:'NONE' as const}:null;
+ if(!wanted||wanted.additional==='NONE')return wanted?{...wanted,delivery:'single'}:single;
+ return {...wanted,delivery:pair?'paired':'separate'};
+}
+export function separateWindowPass(delivery:ReviewWindowDelivery,additional:CtReviewWindow|'NONE',selectedCount:number){
+ return delivery==='separate'&&additional!=='NONE'&&selectedCount>=1&&selectedCount<=SEPARATE_WINDOW_SLICE_CAP;
+}
+export function withSeparateWindowBatches<T extends {pass:'overview'|'targeted';indices:number[]}>(batches:readonly T[],enabled:boolean):T[]{
+ if(!enabled)return [...batches];
+ return [...batches,...batches.filter(b=>b.pass==='overview').map(b=>({...b,pass:'targeted' as const}))];
 }

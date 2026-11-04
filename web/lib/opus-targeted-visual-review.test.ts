@@ -59,7 +59,7 @@ test('blind visual Opus sees reviewed pixels and ordinals, no Gemini claims; syn
   // these assertions check request wiring, not clinical compliance of a model.
   assert.match(text,/Unknown contrast stays unknown/);
   assert.match(text,/Patient orientation is not provided/);
-  assert.match(text,/separate physician-review paragraph/);
+  assert.match(text,/LEADING RADIOLOGICAL DIAGNOSIS/);
   if(n===2)assert.match(text,/a reader's claim about patient side or contrast is NOT verified technical metadata/);
   if(n===1){assert.match(text,/OBSERVATION FIRST/);assert.ok(text.includes('data:image/png;base64,'));assert.ok(!text.includes('GEMINI_ONLY_MARKER'));return response(blind);}
   assert.ok(text.includes('GEMINI_ONLY_MARKER'));assert.ok(text.includes('OPUS_BLIND_MARKER'));
@@ -107,6 +107,14 @@ test('physician small-selection mode includes every chosen original even without
  const selected=selectTargetedVisualInput(packets,receipts,[],[59,68],true)!;
  assert.deepEqual(selected.sliceNumbers,[60,69]);
  assert.deepEqual(selected.packets.flatMap(p=>p.frames).map(f=>f.sha256),packets.flatMap(p=>p.frames).map(f=>f.sha256));
+});
+test('neighbors of each finding fill the sixteen-image visual cap before distant slices',()=>{
+ const packets=Array.from({length:20},()=>packet());
+ const selected=selectTargetedVisualInput(packets,[{findings:[],recheckIndices:[10]} as unknown as LocalVolumeReceipt])!;
+ assert.equal(selected.sliceNumbers[0],11);
+ assert.deepEqual(selected.sliceNumbers.slice(1,5),[10,12,9,13]);
+ assert.equal(selected.sliceNumbers.length,16);
+ assert.equal(new Set(selected.sliceNumbers).size,16);
 });
 test('all flagged slices are selected up to sixteen, no duplicates; larger set is capped',()=>{
  const packets=Array.from({length:20},()=>packet());

@@ -62,8 +62,9 @@ export function suggestPrimaryDicomSeries(series:readonly DicomSeries[],
  */
 export function canAutoPrepareLocalVision(series:DicomSeries|undefined):boolean{
  if(!series||(series.modality!=="CT"&&series.modality!=="MR")||
-    !series.volumeReady||!series.spatiallySorted||series.members.length<2||
     series.members.some(m=>m.metadata.imageRole==="LOCALIZER"))return false;
+ const singleFile=series.members.length===1;
+ if(!singleFile&&(!series.volumeReady||!series.spatiallySorted||series.members.length<2))return false;
  // DERIVED is not permission for quantitative/native model inference. It can
  // still be a valid source-linked reconstructed image for reviewed 2-D Vision.
  // Preserve the original tag and leave planNativeStudyAnalysis unchanged.

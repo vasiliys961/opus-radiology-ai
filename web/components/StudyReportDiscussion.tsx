@@ -21,12 +21,13 @@ export default function StudyReportDiscussion({report,coverage}:{report:string;c
   finally{if(active.current===c)setBusy(false);}
  }
  function saveEnglish(){const u=URL.createObjectURL(new Blob([english],{type:'text/plain;charset=utf-8'}));const a=document.createElement('a');a.href=u;a.download='provisional-report-en.txt';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);}
- return <section aria-label="Перевод и обсуждение заключения"><h3>Заключение на английском и вопросы Opus</h3>
-  <p>Русское заключение можно редактировать выше. Ориентир за перевод или ответ: около $0.05–0.15, зависит от длины контекста и ответа. Обсуждение получает текст и охват, а не новые снимки. После изменения русского текста перевод и обсуждение сбрасываются.</p>
+ return <section aria-label="Перевод и обсуждение заключения"><h3>Английский перевод заключения</h3>
+  <p>На перевод уходит всё предварительное заключение целиком: описание, заключение и рекомендации. Ориентир: около $0.05–0.15. Снимки повторно не отправляются. После правки русского текста перевод сбрасывается.</p>
+  <label><input type="checkbox" disabled={busy} checked={reviewed} onChange={e=>setReviewed(e.target.checked)}/>В тексте нет идентификаторов пациента. Разрешаю отправить всё заключение на перевод.</label>
+  <button type="button" disabled={busy||!reviewed||!report.trim()} onClick={()=>void send('translate')}>Перевести всё заключение на английский</button>
+  {english&&<><label>English report · physician review required<textarea rows={16} style={{width:'100%'}} value={english} onChange={e=>setEnglish(e.target.value)}/></label><button type="button" onClick={saveEnglish}>Сохранить английское заключение TXT</button></>}
+  <h3>Вопросы по заключению</h3>
   <label>Клинические данные без идентификации пациента<textarea disabled={busy} maxLength={4000} value={context} onChange={e=>{setContext(e.target.value);setReviewed(false);}} placeholder="Жалобы, длительность, значимый анамнез, лабораторные данные. Без ФИО, дат рождения и контактов."/></label>
-  <label><input type="checkbox" disabled={busy} checked={reviewed} onChange={e=>setReviewed(e.target.checked)}/>Проверил текст заключения, вопроса и клинических данных: идентифицирующих сведений нет, передача разрешена.</label>
-  <button type="button" disabled={busy||!reviewed} onClick={()=>void send('translate')}>Перевести заключение на английский</button>
-  {english&&<><label>English provisional report · physician review required<textarea rows={16} style={{width:'100%'}} value={english} onChange={e=>setEnglish(e.target.value)}/></label><button type="button" onClick={saveEnglish}>Сохранить английское заключение TXT</button></>}
   {history.map((m,i)=><p key={i} style={{whiteSpace:'pre-wrap'}}><strong>{m.role==='user'?'Вопрос врача: ':'Ответ Opus: '}</strong>{m.content}</p>)}
   <label>Вопрос по результату<textarea disabled={busy} maxLength={2000} value={question} onChange={e=>setQuestion(e.target.value)} placeholder="Какие признаки поддерживают этот вывод? Что уточнить с учётом анамнеза?"/></label>
   <button type="button" disabled={busy||!reviewed||!question.trim()} onClick={()=>void send('discuss')}>Обсудить с Opus</button>

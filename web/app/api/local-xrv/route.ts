@@ -3,6 +3,7 @@
  */
 import {NextRequest,NextResponse} from "next/server";
 import {createHash} from "node:crypto";
+import {tokenFor} from "../../../lib/loopback-session";
 
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
@@ -23,7 +24,7 @@ function localhost(req:NextRequest){
   !req.nextUrl.search;
 }
 function backend(){
- const token=process.env.OPUS_XRV_WORKER_TOKEN??"";
+ const token=tokenFor("OPUS_XRV_WORKER_TOKEN");
  if(!/^[A-Za-z0-9_-]{32,128}$/.test(token))return null;
  return token;
 }

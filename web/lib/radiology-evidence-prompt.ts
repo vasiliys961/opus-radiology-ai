@@ -10,11 +10,10 @@ Diffuse, vascular, interstitial and postoperative changes also merit description
 Separate a clearly visible sign from uncertain perception, artifact and a
 structure not visible. A plausible artifact must not erase a potentially real
 finding: describe the sign and the competing explanation. Use source slice IDs.
-Write morphology, not a disease label, in observational fields. Do not infer an
-unseen sign because it would fit a diagnosis. Do not guess missing measurements.
-Before returning, check all visible anatomical groups, all supplied windows and
-all frames for omissions; verify source IDs and retain material uncertainties.
-Return the requested observational JSON, not hidden reasoning or a diagnosis.
+Put the visible evidence in morphology and the leading diagnosis in sign.
+Do not infer an unseen sign because it would fit a diagnosis. Do not guess
+missing measurements. Before returning, check that every diagnosis has visible
+evidence and a source ID. Return the observational JSON, not a list of excuses.
 `.trim();
 export const RADIOLOGY_INTERPRETATION_METHOD=`
 EVIDENCE THEN INTERPRETATION — WHAT IT MAY MEAN:
@@ -24,7 +23,7 @@ inventing lesion counts. Preserve morphology and unresolved disagreements.
 In CONCLUSION interpret that description: give the most supported radiological
 pattern or diagnosis when evidence warrants it; otherwise give a specific
 working hypothesis with uncertainty. Do not replace a useful interpretation
-with generic disclaimers. A confident sign is not automatically a confident cause.
+with generic disclaimers. State the leading diagnosis. A confident sign is not automatically a confident cause, and a disclaimer is not a diagnosis.
 Every conclusion item must be traceable to described findings and supplied slice
 numbers. Never add a new sign, measurement or disease evidence only in CONCLUSION.
 When material, give at most three ranked alternatives supported by the actual

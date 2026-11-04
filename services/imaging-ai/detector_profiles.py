@@ -8,14 +8,11 @@ from dataclasses import dataclass
 STATES = {"auto", "on_demand", "disabled", "archived"}
 PROFILES = {
     "economy": {"lung_nodules": "on_demand", "pleural_effusion": "on_demand",
-                "compai_lnq_model7": "archived", "lungscape191": "archived",
-                "nih_bone_lesions": "archived"},
+                "lungscape191": "archived", "nih_bone_lesions": "archived"},
     "clinical": {"lung_nodules": "auto", "pleural_effusion": "auto",
-                 "compai_lnq_model7": "on_demand", "lungscape191": "on_demand",
-                 "nih_bone_lesions": "on_demand"},
+                 "lungscape191": "on_demand", "nih_bone_lesions": "on_demand"},
     "research": {"lung_nodules": "auto", "pleural_effusion": "auto",
-                 "compai_lnq_model7": "on_demand", "lungscape191": "on_demand",
-                 "nih_bone_lesions": "on_demand"},
+                 "lungscape191": "on_demand", "nih_bone_lesions": "on_demand"},
 }
 # Only source-verified, explicitly approved clinical validation may turn
 # an automatic candidate into a clinically routed detector.

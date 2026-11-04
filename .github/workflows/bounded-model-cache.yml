@@ -24,15 +24,15 @@ jobs:
           spec.loader.exec_module(m)
           with tempfile.TemporaryDirectory() as td:
               p=Path(td)
-              for n in ("compai.zip","lungscape.zip","busy.zip"):
+              for n in ("stale.zip","lungscape.zip","busy.zip"):
                   (p/n).write_bytes(b"data")
-              rows=[{"id":"compai","filename":"compai.zip","bytes":4,"lastUsedUnix":1},
+              rows=[{"id":"stale","filename":"stale.zip","bytes":4,"lastUsedUnix":1},
                     {"id":"lungscape","filename":"lungscape.zip","bytes":4,"lastUsedUnix":2},
                     {"id":"busy","filename":"busy.zip","bytes":4,"lastUsedUnix":0}]
               x=m.plan_eviction(p,rows,4,["busy"])
-              assert [e["id"] for e in x["evict"]]==["compai","lungscape"],x
+              assert [e["id"] for e in x["evict"]]==["stale","lungscape"],x
               assert x["afterBytes"]==4 and x["unresolvedExcessBytes"]==0
-              assert all((p/n).exists() for n in ("compai.zip","lungscape.zip","busy.zip"))
+              assert all((p/n).exists() for n in ("stale.zip","lungscape.zip","busy.zip"))
               (p/"other.zip").symlink_to(p/"busy.zip")
               try:
                   m.plan_eviction(p,[{"id":"other","filename":"other.zip","bytes":4}],4)

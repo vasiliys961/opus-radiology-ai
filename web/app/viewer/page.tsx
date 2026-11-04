@@ -10,6 +10,7 @@ import { validateViewerFileSelection } from "../../lib/viewer-limits";
 import "./viewer.css";
 import "../radiology.css";
 import {AnalysisSoundProvider} from "../../components/AnalysisSoundProvider";
+import DetectorAvailabilityGuide from "../../components/DetectorAvailabilityGuide";
 import WorkspaceNavigation from "../../components/WorkspaceNavigation";
 import type {WorkerSession} from "../../lib/local-worker";
 import type {BoundNoduleReport} from "../../lib/live-nodule-report";
@@ -63,6 +64,7 @@ export default function ViewerPage() {
   const [indexed, setIndexed] = useState<Indexed[]>([]);
   const [currentSeriesKey, setCurrentSeriesKey] = useState("");
   const [wmhSlice,setWmhSlice]=useState<number|undefined>(undefined);
+  const [displayWindow,setDisplayWindow]=useState<{width:number;center:number;nonce:number}|null>(null);
   const [viewMode,setViewMode]=useState<"2d"|"mpr"|"3d">("2d");
   const [visionOpen,setVisionOpen]=useState(false);
   const [researchOpen,setResearchOpen]=useState(false);
@@ -198,6 +200,7 @@ export default function ViewerPage() {
             })}/>}
           {researchMode&&<details className="cs-geometry" onToggle={event=>setResearchOpen(event.currentTarget.open)}><summary>Дополнительные диагностические инструменты</summary>
           {researchOpen&&<>
+          <DetectorAvailabilityGuide compact/>
           <LungNoduleResearchResults key={selected?.key ?? "empty"} isChestCT={!!selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="CHEST")}/>
           <ChestEffusionResearchResults key={"fluid-"+(selected?.key??"empty")} isChestCT={!!selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="CHEST")}/>
           <IldGgoExpertResearch key={"ild-"+(selected?.key??"empty")} isChestCT={!!selected && selected.modality==="CT" && selected.members.every(m=>m.metadata.bodyRegion==="CHEST")}/>
@@ -232,7 +235,7 @@ export default function ViewerPage() {
               onShow3DChange={enabled=>setViewMode(enabled?"3d":"mpr")}/>:
             selectedFiles.length?
              <CornerstoneStack key={selected?.key} files={selectedFiles} modality={selected?.modality}
-               selectedIndex={wmhSlice} onSliceChange={setWmhSlice}/>:
+               selectedIndex={wmhSlice} onSliceChange={setWmhSlice} displayWindow={displayWindow}/>:
              <div className="cs-placeholder"><span>✚</span><strong>Область DICOM-изображений</strong><p>Выберите файлы или папку DICOM.</p></div>}
           {selected && (selected.modality==="CT"||selected.modality==="MR") && <section className="cs-geometry" aria-label="Подготовка Gemini и Opus по открытому DICOM">
             {visionFromPrimary&&<h3>Описание и заключение</h3>}
@@ -256,6 +259,10 @@ export default function ViewerPage() {
                     const owner=series.find(s=>s.members.some(m=>m.id===id));
                     if(owner){setCurrentSeriesKey(owner.key);setWmhSlice(owner.members.findIndex(m=>m.id===id));setViewMode('2d');setVisionOpen(false);setVisionFromPrimary(false);setPrimaryStage(null);setVisionDetectorEvidence(null);setClnVerified(null);}
                   }
+                }}
+                onInspectFinding={(id,window)=>{
+                  const index=selected.members.findIndex(m=>m.id===id);
+                  if(index>=0){setViewMode('2d');setWmhSlice(index);if(window)setDisplayWindow({...window,nonce:Date.now()});document.querySelector('.cs-stack')?.scrollIntoView({block:'start',behavior:'smooth'});}
                 }}/>
             </AnalysisSoundProvider>}
           </section>}

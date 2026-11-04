@@ -108,6 +108,21 @@ test("Invalid or duplicated SOPs are rejected before creating the manifest", () 
   group.members[2].metadata.sopInstanceUid = "contains patient name";
   assert.equal(planVisionFrameSamples([group],group.key).status,"blocked");
 });
+test("One CT or MR file is reviewable without a spatial volume", () => {
+  const one = series(1, {
+    imagePositionPatient: null, imageOrientationPatient: null, frameOfReferenceUid: null,
+  }, {spatiallySorted: false, volumeReady: false, sliceSpacingMm: null, modality: "CT"});
+  one.modality = "CT";
+  one.members[0].metadata.modality = "CT";
+  const report = planVisionFrameSamples([one], one.key);
+  assert.equal(report.status, "ready-for-local-preview");
+  assert.equal(report.frames.length, 1);
+  assert.equal(report.frames[0].slicePositionMm, null);
+  assert.equal(report.frames[0].sopInstanceUid, one.members[0].metadata.sopInstanceUid);
+  assert.match(report.warnings.join(" "), /Один файл/);
+  const blank = series(1, {rows: null, columns: null}, {volumeReady: false, spatiallySorted: false});
+  assert.equal(planVisionFrameSamples([blank], blank.key).status, "blocked");
+});
 test("Unsupported modality and unresolved series do not create a plausible plan", () => {
   const other = series(8, {modality:"US"}, {modality:"US"});
   assert.equal(planVisionFrameSamples([other],other.key).status,"blocked");

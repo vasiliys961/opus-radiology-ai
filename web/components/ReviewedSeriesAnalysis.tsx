@@ -10,7 +10,7 @@ import {volumeTechnicalContext} from '../lib/volume-technical-context';
 import type {VolumeGeminiBatchResult} from '../lib/approved-volume-batch-review';
 import type {FullVolumeOpusResult} from '../lib/full-volume-opus-synthesis';
 import type {SanitizedDetectorBundle} from '../lib/detector-consilium-evidence';
-import {CT_REVIEW_WINDOWS,suggestCtReviewWindows,type CtReviewWindow} from '../lib/ct-review-window';
+import {CT_REVIEW_WINDOWS,separateWindowPass,suggestCtReviewWindows,withSeparateWindowBatches,type CtReviewWindow} from '../lib/ct-review-window';
 import {selectTargetedVisualInput,type TargetedVisualInput} from '../lib/opus-targeted-visual-review';
 import type {ClnVerifiedLocalEvidence} from '../lib/cln-physician-local-review';
 import {clnDetectorRecheck,type BoundDetectorRecheck} from '../lib/cln-detector-recheck';
@@ -23,8 +23,9 @@ import {splitReviewedTransport} from '../lib/reviewed-packet-transport';
 import type {VisionBatch} from '../lib/vision-batch-ledger';
 import {parseStudySliceSelection} from '../lib/study-slice-selection';
 type Stage='idle'|'preparing'|'review'|'gemini'|'interrupted'|'opus'|'completed';
-export default function ReviewedSeriesAnalysis({series,files,onOpenSlice,detectorStage,detectorEvidence,allSeries=[],clnVerifiedLocal=null}:{
+export default function ReviewedSeriesAnalysis({series,files,onOpenSlice,onInspectFinding,detectorStage,detectorEvidence,allSeries=[],clnVerifiedLocal=null}:{
  clnVerifiedLocal?:ClnVerifiedLocalEvidence|null;allSeries?:readonly DicomSeries[];series:DicomSeries;files:ReadonlyMap<string,File>;onOpenSlice:(id:string)=>void;
+ onInspectFinding?:(id:string,window:{width:number;center:number}|null)=>void;
  detectorStage:'idle'|'running'|'completed'|'vision-only'|'cancelled';
  detectorEvidence:SanitizedDetectorBundle|null;
 }){
@@ -59,8 +60,11 @@ export default function ReviewedSeriesAnalysis({series,files,onOpenSlice,detecto
  useEffect(()=>{detector.current={stage:detectorStage,evidence:detectorEvidence};},[detectorStage,detectorEvidence]);
  const selectionResult=useMemo(()=>{try{return {indices:selection==='all'?series.members.map((_,i)=>i):parseStudySliceSelection(selectionText,series.members.length),error:''};}catch(e){return {indices:[] as number[],error:e instanceof Error?e.message:'Ошибка выбора срезов'};}},[selection,selectionText,series]);
  const physicianSelection=useMemo(()=>{try{const indices=physicianSlices.trim()?parseStudySliceSelection(physicianSlices,series.members.length):[];if(indices.length>16)throw Error('Для дополнительной проверки выберите не более 16 срезов.');if(indices.some(n=>!selectionResult.indices.includes(n)))throw Error('Добавьте указанные для Opus срезы в основной выбор анализа.');return {indices,error:''};}catch(e){return {indices:[] as number[],error:e instanceof Error?e.message:'Ошибка выбора для Opus'};}},[physicianSlices,selectionResult,series]);
+ const windowPlan=useMemo(()=>suggestCtReviewWindows(series),[series]);
+ const separate=separateWindowPass(windowPlan.delivery,additionalWindow,selectionResult.error?0:selectionResult.indices.length);
  const basePlan=useMemo(()=>{try{return planOriginalVolumeSource(series,{maxGeminiUSD:budget,selectedIndices:selectionResult.error?undefined:selectionResult.indices});}catch{return null;}},[series,budget,selectionResult]);
- const plan=useMemo(()=>basePlan?(executionBatches?{...basePlan,batches:executionBatches}:basePlan):null,[basePlan,executionBatches]);
+ const expandedPlan=useMemo(()=>basePlan?{...basePlan,batches:withSeparateWindowBatches(basePlan.batches,separate)}:null,[basePlan,separate]);
+ const plan=useMemo(()=>expandedPlan?(executionBatches?{...expandedPlan,batches:executionBatches}:expandedPlan):null,[expandedPlan,executionBatches]);
  useEffect(()=>{setExecutionBatches(null);},[selection,selectionText]);
  useEffect(()=>{
   ctl.current?.abort();ctl.current=null;sending.current=false;targetedVisual.current=null;approvedPackets.current=[];attemptedDetectorKeys.current=new Set();setVisualResult(undefined);setOpusUsage(undefined);setReviewWindow(suggestCtReviewWindows(series).primary);setAdditionalWindow(suggestCtReviewWindows(series).additional);
@@ -79,15 +83,23 @@ export default function ReviewedSeriesAnalysis({series,files,onOpenSlice,detecto
   if(!plan)throw Error('Исходная серия не подтверждена.');
 
   const next:string[]=[];
-  for(const n of plan.batches[index].indices){
+  const batch=plan.batches[index];
+  const paired=windowPlan.delivery==='paired'&&additionalWindow!=='NONE'&&batch.pass!=='targeted';
+  const active:CtReviewWindow=batch.pass==='targeted'&&additionalWindow!=='NONE'?additionalWindow:reviewWindow;
+  for(const n of batch.indices){
    signal.throwIfAborted();const file=files.get(series.members[n].id);
    if(!file||file.size>6*1024*1024)throw Error('Не удалось подготовить исходный срез '+(n+1)+'. Серия не будет помечена полностью просмотренной.');
    let url:string;
-   try{url=(await decodeDicomPreview(file,{maxPixels:MAX_PRIVACY_PIXELS,reviewWindow,additionalWindow:additionalWindow==='NONE'?undefined:additionalWindow})).url;}
-   catch{const {decodeCornerstoneVisionPreview}=await import('../lib/cornerstone-vision-preview');url=await decodeCornerstoneVisionPreview(file,MAX_PRIVACY_PIXELS,signal,reviewWindow,additionalWindow==='NONE'?undefined:additionalWindow);}
+   try{url=(await decodeDicomPreview(file,{maxPixels:MAX_PRIVACY_PIXELS,reviewWindow:active,additionalWindow:paired?additionalWindow:undefined})).url;}
+   catch{const {decodeCornerstoneVisionPreview}=await import('../lib/cornerstone-vision-preview');url=await decodeCornerstoneVisionPreview(file,MAX_PRIVACY_PIXELS,signal,active,paired?additionalWindow:undefined);}
    signal.throwIfAborted();next.push(url);
   }
   return next;
+ }
+ function inspect(id:string){
+  const preset=series.modality==='CT'?CT_REVIEW_WINDOWS[reviewWindow]:null;
+  const window=preset&&preset.center!==null&&preset.width!==null?{width:preset.width,center:preset.center}:null;
+  if(onInspectFinding)onInspectFinding(id,window);else onOpenSlice(id);
  }
  function interrupted(e:unknown){setStage('interrupted');setNotice(ctl.current?.signal.aborted?
   'Анализ остановлен. Уже полученные наблюдения сохранены в этой вкладке.':e instanceof Error?e.message:'Анализ не завершён.');}
@@ -100,7 +112,7 @@ export default function ReviewedSeriesAnalysis({series,files,onOpenSlice,detecto
   const plan=executionPlan;
   if(!plan)throw Error('План серии потерян.');
   const completedBatches=plan.batches.slice(0,done.length);
-  const completedIndices=completedBatches.flatMap(b=>b.indices);
+  const completedIndices=completedBatches.filter(b=>b.pass==='overview').flatMap(b=>b.indices);
   const completedBudget={...plan.budget,overviewIndices:completedIndices,targetedIndices:[]};
   setStage('opus');setNotice('Opus составляет заключение по '+completedIndices.length+' из '+series.members.length+' исходных срезов. Остальные не оцениваются.');
   const pendingCln=()=>!locationsRef.current.error&&!locationsRef.current.anchors.length&&detector.current.evidence?.facts.some(f=>f.task==='lung_tumor'&&f.status==='completed'&&(f.candidateCount??0)>0);
@@ -110,17 +122,24 @@ export default function ReviewedSeriesAnalysis({series,files,onOpenSlice,detecto
   signal.throwIfAborted();const d=detector.current;
   attemptedDetectorKeys.current=new Set(locationsRef.current.anchors.map(detectorKey));
   const previousVisual=targetedVisual.current;
-  targetedVisual.current=visualEnabled?selectTargetedVisualInput(approvedPackets.current.slice(0,done.length),done,locationsRef.current.anchors,completedIndices,visualMode==='selected'&&plan.budget.overviewIndices.length<=16,physicianSelection.indices):null;
+  const overviewSlots=completedBatches.flatMap((b,i)=>b.pass==='overview'?[i]:[]);
+  const overviewPackets=overviewSlots.map(i=>approvedPackets.current[i]);
+  targetedVisual.current=visualEnabled&&overviewPackets.length===overviewSlots.length&&overviewPackets.every(Boolean)?selectTargetedVisualInput(overviewPackets,overviewSlots.map(i=>done[i]),locationsRef.current.anchors,completedIndices,visualMode==='selected'&&completedIndices.length<=16,physicianSelection.indices):null;
   // Keep identical reviewed packets stable so explicit retries reuse the server checkpoint.
   targetedVisual.current?.packets.forEach((packet,i)=>{const previous=previousVisual?.packets[i];if(previous&&JSON.stringify(previous.frames)===JSON.stringify(packet.frames))packet.packetId=previous.packetId;});
-  if(targetedVisual.current)targetedVisual.current.windows={primary:reviewWindow,...(additionalWindow==='NONE'?{}:{additional:additionalWindow})};
+  const separateRan=completedBatches.some(b=>b.pass==='targeted');
+  const pairedWindows=windowPlan.delivery==='paired'&&additionalWindow!=='NONE';
+  if(targetedVisual.current)targetedVisual.current.windows={primary:reviewWindow,...(pairedWindows?{additional:additionalWindow}:{})};
   const input=makeSafeVolumeOpusInput(series.modality as 'CT'|'MR',completedBudget,completedBatches,done,d.evidence,
    d.stage==='running'?'timeout':d.evidence?.facts.some(f=>f.status==='completed')?'completed':'unavailable');
-  input.reviewWindows={primary:reviewWindow,...(additionalWindow==='NONE'?{}:{additional:additionalWindow})};
+  input.reviewWindows={primary:reviewWindow,...(additionalWindow!=='NONE'&&(pairedWindows||separateRan)?{additional:additionalWindow}:{})};
   if(clinicalContext.trim())input.clinicalContext=clinicalContext.trim();
   input.sourceTotalFrames=series.members.length;input.sourceSliceNumbers=completedIndices.map(n=>n+1);
   input.limitations=[...input.limitations.slice(0,28),'Оценены только '+completedIndices.length+' из '+series.members.length+' исходных срезов. Остальные не оценены; это не исключает патологию вне выборки.'];
-  if(series.modality==='CT')input.limitations=[...input.limitations.slice(0,29),'Окна обзора: '+CT_REVIEW_WINDOWS[reviewWindow].label+(additionalWindow==='NONE'?'':'; справа '+CT_REVIEW_WINDOWS[additionalWindow].label)+'. Остальные окна не оценены.'];
+  if(series.modality==='CT'){
+   const windowText=separateRan?'Окна отдельными копиями одного среза: '+CT_REVIEW_WINDOWS[reviewWindow].label+' и '+CT_REVIEW_WINDOWS[additionalWindow as CtReviewWindow].label+'. Это не два среза. Остальные окна не оценены.':pairedWindows?'Окна обзора: '+CT_REVIEW_WINDOWS[reviewWindow].label+'; справа '+CT_REVIEW_WINDOWS[additionalWindow].label+'. Остальные окна не оценены.':'Окно обзора: '+CT_REVIEW_WINDOWS[reviewWindow].label+'. Второе окно на копиях не готовилось. Остальные окна не оценены.';
+   input.limitations=[...input.limitations.slice(0,29),windowText];
+  }
   const excludedBySize=visualMode==='selected'&&plan.budget.overviewIndices.length<=16?completedIndices.filter(n=>!targetedVisual.current?.sliceNumbers.includes(n+1)):[];
   const physicianNotReviewed=physicianSelection.indices.filter(n=>!targetedVisual.current?.sliceNumbers.includes(n+1));
   if(visualEnabled&&physicianNotReviewed.length)input.limitations=[...input.limitations.slice(0,28),'Указанные врачом срезы не просмотрены Opus: '+physicianNotReviewed.map(n=>n+1).join(', ')+'. Они могли не пройти обзор Gemini или не поместиться в передачу.'];
@@ -163,10 +182,12 @@ export default function ReviewedSeriesAnalysis({series,files,onOpenSlice,detecto
     headers:{'Content-Type':'application/json','X-Opus-Reviewed-Volume':'1'},
     body:JSON.stringify({packet,acknowledgeClinicianLawfulDisclosure:true,acknowledgeProviderHealthDataTerms:true,
      acknowledgePixelIdentityReviewed:true,acknowledgeOnePaidGeminiBatch:true,
-     frameContext:{totalFrames:series.members.length,sliceNumbers:batch.indices.map(n=>n+1),technical:{...volumeTechnicalContext(series),window:reviewWindow,...(additionalWindow==='NONE'?{}:{additionalWindow})}}})});
+     frameContext:{totalFrames:series.members.length,sliceNumbers:batch.indices.map(n=>n+1),technical:{...volumeTechnicalContext(series),window:batch.pass==='targeted'&&additionalWindow!=='NONE'?additionalWindow:reviewWindow,...(windowPlan.delivery==='paired'&&additionalWindow!=='NONE'&&batch.pass!=='targeted'?{additionalWindow}:{})}}})});
    if(!response.ok){
     const detail=await response.json().catch(()=>null);
-    throw Error('Анализ остановлен на срезах '+batch.indices.map(n=>n+1).join(', ')+': '+(detail?.message??('ошибка сервера '+response.status))+'. Полученные результаты сохранены.');
+    const done=batchPlan.batches.slice(0,current.length).flatMap(b=>b.indices).map(n=>n+1);
+    const next=batch.indices[0]+1;
+    throw Error((done.length?'Подтверждено '+done.length+' срезов, последний — '+done[done.length-1]+'. ':'Ни один срез ещё не подтверждён. ')+'Следующий запрос — со среза '+next+'. Уже полученные ответы повторно не отправляются. '+(detail?.message??('Ответ сервера '+response.status))+'.');
    }
    const answer=await response.json() as VolumeGeminiBatchResult;
    signal.throwIfAborted();
@@ -191,7 +212,7 @@ export default function ReviewedSeriesAnalysis({series,files,onOpenSlice,detecto
   const count=ledger?.processedOverviewFrames??0;
   const text=report||['НЕПОЛНЫЙ АНАЛИЗ. Оценено '+count+' из '+series.members.length+' срезов.',
    'Ниже — наблюдения Gemini, не итоговое заключение врача.',
-   ...receipts.flatMap(r=>r.findings.map(f=>'Срез '+(f.sourceIndex+1)+': '+f.anatomy+' — '+f.sign+'. Ограничения: '+f.uncertainty)),
+   ...receipts.flatMap(r=>r.findings.map(f=>'Срез '+(f.sourceIndex+1)+': '+f.anatomy+' — диагноз: '+f.sign+(f.morphology?'. Основание: '+f.morphology:'')+'.')),
    ...receipts.flatMap(r=>r.limitations)].join('\n');
   const url=URL.createObjectURL(new Blob([text.trim()+'\n'],{type:'text/plain;charset=utf-8'}));
   const a=document.createElement('a');a.href=url;a.download=report?'opus-study-report.txt':'opus-partial-observations.txt';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
@@ -214,9 +235,23 @@ export default function ReviewedSeriesAnalysis({series,files,onOpenSlice,detecto
   <h2>Анализ КТ/МРТ · в серии {series.members.length} срезов</h2>
   <p role="status"><strong>Обработано {processed} из {plan.budget.overviewIndices.length} выбранных срезов.</strong> Всего в серии: {series.members.length}. Не оценено в серии: {series.members.length-processed}.</p>
   <p role="status">{stage==='gemini'?'Gemini просматривает снимки. Затем результаты автоматически поступят Opus для заключения.':stage==='opus'?'Результаты Gemini переданы Opus. Формируется заключение…':stage==='completed'?(processed<series.members.length?'Предварительное заключение готово по обработанной части исследования.':'Предварительное заключение готово.') :stage==='interrupted'?'Обработка приостановлена. Полученные результаты сохранены.':'Выберите снимки, проверьте подготовленные копии и запустите анализ.'}</p>
+  {(report||receipts.length>0)&&<section aria-label="Диагноз по обработанным срезам">
+   {report&&<label>Предварительное заключение · проверьте и отредактируйте<textarea rows={18} style={{width:'100%'}} value={report} onChange={e=>setReport(e.target.value)}/></label>}
+   {receipts.length>0&&<button type="button" onClick={save}>{report?'Сохранить заключение TXT':'Сохранить промежуточный результат'}</button>}
+   {report&&<StudyReportDiscussion report={report} coverage={(ledger?.processedOverviewFrames??0)+' из '+series.members.length+' срезов'}/>}
+   {visualResult&&<section aria-label="Независимая визуальная перепроверка Opus">
+    <h3>Визуальная перепроверка Opus</h3>
+    <p>{visualResult.status==='completed'?'Независимо просмотрены срезы: ':'Перепроверка не завершилась. Были выбраны срезы: '}{visualResult.sliceNumbers.join(', ')}. Остальные срезы Opus визуально не проверял.</p>
+    {visualResult.status==='completed'&&<p>Расход визуальной перепроверки Opus: {visualResult.receipt.inputTokens} входных и {visualResult.receipt.outputTokens} выходных токенов.</p>}
+    {visualResult.status==='completed'&&visualResult.observations.map((f,i)=><p key={i}><button type="button" onClick={()=>inspect(series.members[f.sliceNumber-1].id)}>Срез {f.sliceNumber}</button> Диагноз: {f.anatomy}: {f.sign}</p>)}
+   </section>}
+   {receipts.length>0&&<div><h3>Диагнозы по срезам</h3>{receipts.flatMap((r,ri)=>r.findings.map((f,i)=><p key={ri+':'+i}>
+    <button type="button" onClick={()=>inspect(series.members[f.sourceIndex].id)}>Срез {f.sourceIndex+1}</button> Диагноз: {f.anatomy}: {f.sign}{f.morphology?` Основание: ${f.morphology}`:''} <button type="button" onClick={()=>setMeasureSource({sourceIndex:f.sourceIndex,findingKey:ri+':'+i})}>Проверить на снимке / измерить при необходимости</button>
+   </p>))}</div>}
+  </section>}
   {processed>0&&<section aria-label="Срезы для проверки"><h3>Срезы, требующие внимания: {flagged.length}</h3>
    <p>Это отмеченные ИИ изменения или неясные участки, а не подтверждённые диагнозы.</p>
-   {flagged.map(n=><button type="button" key={n} onClick={()=>onOpenSlice(series.members[n].id)}>Срез {n+1}</button>)}
+   {flagged.map(n=><button type="button" key={n} onClick={()=>inspect(series.members[n].id)}>Срез {n+1}</button>)}
    {!flagged.length&&<p>Пока нет отмеченных кадров. Это не исключает патологию.</p>}
   </section>}
   <p>Примерная стоимость выбранного анализа с заключением: около ${estimate.total.toFixed(2)}. {opusCost!==null?'По полученным квитанциям Gemini + Opus: около $'+((ledger?.totalUSD??0)+opusCost).toFixed(2)+'.':'Gemini по полученным квитанциям: около $'+(ledger?.totalUSD??0).toFixed(2)+'.'}</p>
@@ -235,6 +270,7 @@ export default function ReviewedSeriesAnalysis({series,files,onOpenSlice,detecto
    <p>Эти данные будут переданы Opus вместе с наблюдениями после вашего разрешения на отправку. Они не заменяют признаки на снимках.</p>
    <details><summary>Настройки изображения, перепроверки и расходов</summary>
    {series.modality==='CT'&&<p>Окна подобраны по подтверждённым заголовкам и шкале HU. При неизвестной области сохраняется исходное окно. Их можно изменить перед подготовкой.</p>}
+   {series.modality==='CT'&&windowPlan.delivery==='separate'&&additionalWindow!=='NONE'&&(separate?<p>Матрица не позволяет два окна на одной копии. Каждый выбранный срез готовится дважды: основное окно и второе. Обе копии нужно проверить перед отправкой.</p>:<p>Матрица не позволяет два окна на одной копии. Второе окно добавляется само, если выбрано не больше 16 срезов. Сейчас на копиях только основное окно, средостение или кость в нём не разобраны.</p>)}
    {series.modality==='CT'&&<label>Как показывать ткани на копиях для ИИ <select value={reviewWindow} onChange={e=>{setReviewWindow(e.target.value as CtReviewWindow);setAdditionalWindow('NONE');}}>
     {Object.entries(CT_REVIEW_WINDOWS).map(([id,w])=><option key={id} value={id}>{w.label}</option>)}
    </select></label>}
@@ -254,15 +290,19 @@ export default function ReviewedSeriesAnalysis({series,files,onOpenSlice,detecto
     {[0.5,1,2,3,5].map(v=><option key={v} value={v}>${v.toFixed(2)}</option>)}
    </select></label>
    <p>До {plan.budget.overviewIndices.length} запросов Gemini (по размеру подготовленных копий) и {visualEnabled?'до двух запросов Opus (перепроверка и заключение)':'один итоговый Opus'}. Подготовка выполняется локально; разрешение на отправку будет после просмотра копий.</p>
-   <p>«Окно» — настройка яркости и контраста, не введение контрастного препарата. Лёгочное окно показывает лёгкие; мягкие ткани в нём выглядят почти белыми — это ожидаемо. Второй вид справа показывает тот же срез в другом окне. ИИ получает именно подготовленные копии, исходный DICOM не изменяется.</p>
+   <p>«Окно» — настройка яркости и контраста, не введение контрастного препарата. Лёгочное окно показывает лёгкие; мягкие ткани в нём выглядят почти белыми. Если пара помещается, второй вид стоит справа на той же копии. Если нет и срезов не больше 16, второе окно уходит отдельной копией того же среза. ИИ получает именно эти копии.</p>
    <p>Если обзор прервётся, Opus автоматически составит заключение по уже обработанной части. Стоимость — расчётный ориентир по тарифам OpenRouter от 03.11.2026, не точный счёт; объём ответа и маршрутизация могут его изменить. Неудачные запросы могут отсутствовать в квитанциях. Повтор Gemini — только по команде продолжения.</p>
    </details>
-   <p>{!visualEnabled?'Opus составит заключение по описаниям без отдельного просмотра изображений.':visualMode==='selected'&&plan.budget.overviewIndices.length<=16?'Opus независимо просмотрит выбранные кадры в пределах размера передачи, даже если Gemini не отметил изменений.':'Для длинной серии Opus получит отмеченные кадры и соседние, максимум 16; текстовые наблюдения передаются по всем обработанным срезам.'}</p>
+   <p>{!visualEnabled?'Opus составит заключение по описаниям без отдельного просмотра изображений.':visualMode==='selected'&&plan.budget.overviewIndices.length<=16?'Opus независимо просмотрит выбранные кадры в пределах размера передачи, даже если Gemini не отметил изменений.':'Для длинной серии Opus получит отмеченные кадры и соседние срезы вокруг каждой находки, максимум 16. Если отметок нет, Opus изображения не смотрит, и это не подтверждение вторым читателем.'}</p>
    <p>Выбрано {plan.budget.overviewIndices.length} срезов, {basePlan?.batches.length} групп подготовки. В одном запросе — до 4 срезов, для крупных копий меньше. После обзора — предварительное заключение Opus. Перевод и обсуждение доступны по готовому заключению.</p>
-   <button type="button" disabled={!!selectionResult.error||(visualEnabled&&!!physicianSelection.error)} onClick={()=>void start()}>Подготовить выбранные срезы к анализу</button>
+   {plan.budget.overviewIndices.length>40&&<p role="status">Выбрано {plan.budget.overviewIndices.length} срезов и {basePlan?.batches.length??plan.batches.length} групп локальной подготовки. Копии будут видны по мере готовности. Отправка начнётся только после просмотра всех групп.</p>}
+   {physicianSelection.error&&<p role="alert">{physicianSelection.error}</p>}
+   <button type="button" disabled={!!selectionResult.error||(visualEnabled&&!!physicianSelection.error)} onClick={()=>void start()}>{selection==='custom'?'Подготовить указанные срезы':'Подготовить выбранные срезы к анализу'}</button>
   </>}
+  {stage==='review'&&<button type="button" onClick={()=>{ctl.current?.abort();setSelection('custom');setStage('idle');setNotice('Подготовка папки остановлена. Укажите номера срезов и нажмите «Подготовить указанные срезы». Отправка не выполнялась.');}}>Остановить и выбрать отдельные срезы</button>}
   {(stage==='review'||stage==='gemini'||stage==='opus')&&<StudyPrivacyReview count={plan.batches.length} modality={series.modality as 'CT'|'MR'}
-   load={prepare} onReady={submitAll} canRelease={connected} releaseNotice={"Gemini обработает выбранные срезы группами по размеру копий, затем "+(visualEnabled?"до двух запросов Opus":"один итоговый Opus")+". Порог остановки Gemini: $"+budget.toFixed(2)+"; Opus оплачивается отдельно."} onOpenSlice={onOpenSlice}
+   load={prepare} onReady={submitAll} canRelease={connected} releaseNotice={"Gemini обработает выбранные срезы группами по размеру копий, затем "+(visualEnabled?"до двух запросов Opus":"один итоговый Opus")+". Порог остановки Gemini: $"+budget.toFixed(2)+"; Opus оплачивается отдельно."} onOpenSlice={inspect}
+   windows={series.modality==='CT'?{primary:CT_REVIEW_WINDOWS[reviewWindow].label,...(additionalWindow!=='NONE'&&(windowPlan.delivery==='paired'||separate)?{additional:CT_REVIEW_WINDOWS[additionalWindow].label,...(separate?{separateAfter:plan.batches.filter(b=>b.pass==='overview').length}:{})}:{})}:undefined}
    clinicalContext={clinicalContext} sourceNumbers={plan.batches.map(b=>b.indices.map(i=>i+1))} sourceIds={plan.batches.map(b=>b.indices.map(i=>series.members[i].id))}/>}
   {busy&&<button type="button" onClick={()=>{ctl.current?.abort();setStage('interrupted');setNotice('Остановлено. Полученные наблюдения сохранены; весь ряд не объявляется оценённым.');}}>Остановить анализ</button>}
   {stage==='review'&&<button type="button" onClick={()=>{ctl.current?.abort();setStage('idle');setNotice('Подготовка отменена. Выберите срезы заново; отправка не выполнялась.');}}>Вернуться к выбору срезов</button>}
@@ -275,23 +315,11 @@ export default function ReviewedSeriesAnalysis({series,files,onOpenSlice,detecto
   }}>Перепроверить отмеченные срезы</button>}
   {opusUsage&&<p>Фактический расход итогового Opus: {opusUsage.inputTokens} входных и {opusUsage.outputTokens} выходных токенов.</p>}
   {recheckCount>16&&<p role="alert">Для перепроверки отмечено {recheckCount} срезов; Opus получает максимум 16. Остальные отмеченные срезы требуют проверки врачом.</p>}
-  {visualResult&&<section aria-label="Независимая визуальная перепроверка Opus">
-   <h3>Визуальная перепроверка Opus</h3>
-   <p>{visualResult.status==='completed'?'Независимо просмотрены срезы: ':'Перепроверка не завершилась. Были выбраны срезы: '}{visualResult.sliceNumbers.join(', ')}. Остальные срезы Opus визуально не проверял.</p>
-   {visualResult.status==='completed'&&<p>Расход визуальной перепроверки Opus: {visualResult.receipt.inputTokens} входных и {visualResult.receipt.outputTokens} выходных токенов.</p>}
-   {visualResult.status==='completed'&&visualResult.observations.map((f,i)=><p key={i}><button type="button" onClick={()=>onOpenSlice(series.members[f.sliceNumber-1].id)}>Срез {f.sliceNumber}</button> {f.anatomy}: {f.sign} · {f.uncertainty}</p>)}
-  </section>}
-  {report&&<label>Предварительное заключение · проверьте и отредактируйте<textarea rows={18} style={{width:'100%'}} value={report} onChange={e=>setReport(e.target.value)}/></label>}
-  {receipts.length>0&&<button type="button" onClick={save}>{report?'Сохранить заключение TXT':'Сохранить промежуточный результат'}</button>}
-  {report&&<StudyReportDiscussion report={report} coverage={(ledger?.processedOverviewFrames??0)+' из '+series.members.length+' срезов'}/>}
   {measureSource!==null&&<FindingMeasurementReview key={measureSource.findingKey} findingKey={measureSource.findingKey} member={series.members[measureSource.sourceIndex]} file={files.get(series.members[measureSource.sourceIndex].id)??null}
    sliceNumber={measureSource.sourceIndex+1} onAccept={m=>{setAcceptedMeasurements(previous=>[...previous.filter(x=>x.findingKey!==m.findingKey),m]);setMeasureSource(null);}}/>}
   {acceptedMeasurements.length>0&&<section aria-label="Принятые врачом измерения"><h3>Измерения принятых находок</h3>
    {acceptedMeasurements.map(m=><p key={m.findingKey}>Срез {m.sliceNumber}: {m.lengthMm.toFixed(2)} мм{m.meanHu!==null?', средняя плотность '+m.meanHu.toFixed(2)+' HU':''}.</p>)}
    <button type="button" disabled={!report} onClick={()=>setReport(previous=>previous+'\n\nИзмерения врача по исходным изображениям:\n'+acceptedMeasurements.map(m=>'Срез '+m.sliceNumber+': размер на срезе '+m.lengthMm.toFixed(2)+' мм'+(m.meanHu!==null?', средняя плотность выбранной области '+m.meanHu.toFixed(2)+' HU':'')+'.').join('\n'))}>Добавить измерения в текст заключения</button>
   </section>}
-  {receipts.length>0&&<details><summary>Все наблюдения Gemini</summary>{receipts.flatMap((r,ri)=>r.findings.map((f,i)=><p key={ri+':'+i}>
-   <button type="button" onClick={()=>onOpenSlice(series.members[f.sourceIndex].id)}>Срез {f.sourceIndex+1}</button> {f.anatomy}: {f.sign} · {f.uncertainty} <button type="button" onClick={()=>setMeasureSource({sourceIndex:f.sourceIndex,findingKey:ri+':'+i})}>Проверить на снимке / измерить при необходимости</button>
-  </p>))}</details>}
  </section>;
 }

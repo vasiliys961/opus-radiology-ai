@@ -1,6 +1,7 @@
 /** Original research-model readiness; localhost-only, no patient data. */
 import {NextRequest,NextResponse} from "next/server";
 import {probeOriginalFleet,WORKERS} from "../../../lib/original-worker-fleet";
+import {readLoopbackTokens} from "../../../lib/loopback-session";
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
 const HEAD={"Cache-Control":"no-store","X-Content-Type-Options":"nosniff"};
@@ -17,7 +18,8 @@ function allowedHost(req:NextRequest){
 export async function GET(req:NextRequest){
  if(!allowedHost(req))return NextResponse.json({error:"Private research local-only"},
    {status:404,headers:HEAD});
- const secrets=Object.fromEntries(WORKERS.map(w=>[w.env,process.env[w.env]]));
+ const saved=readLoopbackTokens();
+ const secrets:Record<string,string|undefined>=Object.fromEntries(WORKERS.map(w=>[w.env,process.env[w.env]||saved[w.env]]));
  for(const key of ["OPUS_NODULE_WORKER_TOKEN","OPUS_MONAI_PRIVATE_TUNNEL_URL","OPUS_MONAI_PRIVATE_WORKER_TOKEN"])
   secrets[key]=process.env[key];
  const origin=process.env.OPUS_LOCAL_WORKER_ORIGIN??"http://127.0.0.1:3000";

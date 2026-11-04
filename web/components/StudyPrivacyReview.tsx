@@ -7,9 +7,10 @@ import VisionPrivacyPreparation from './VisionPrivacyPreparation';
 
 // Compressed copies only, ephemeral tab memory. No IndexedDB, disk or source DICOM copy.
 const MAX_REVIEW_MEMORY=96*1024*1024;
-export default function StudyPrivacyReview({count,modality,load,onReady,onOpenSlice,sourceIds,sourceNumbers,clinicalContext,canRelease=false,releaseNotice}:{
+export default function StudyPrivacyReview({count,modality,load,onReady,onOpenSlice,sourceIds,sourceNumbers,clinicalContext,canRelease=false,releaseNotice,windows}:{
  clinicalContext?:string;sourceNumbers?:number[][];canRelease?:boolean;releaseNotice?:string;count:number;modality:'CT'|'MR';load:(index:number,signal:AbortSignal)=>Promise<string[]>;
  onReady:(packets:VisionPrivacyPacket[])=>Promise<void>;onOpenSlice:(id:string)=>void;sourceIds:string[][];
+ windows?:{primary:string;additional?:string;separateAfter?:number};
 }){
  const [expanded,setExpanded]=useState<number|null>(null);
  const [groups,setGroups]=useState<AutomaticPrivacyPreparation[]>([]),[index,setIndex]=useState(0);
@@ -30,9 +31,10 @@ export default function StudyPrivacyReview({count,modality,load,onReady,onOpenSl
     c.signal.throwIfAborted();
     bytes+=group.frames.reduce((n,f)=>n+f.pngBase64.length*2,0);
     if(bytes>MAX_REVIEW_MEMORY)throw Error('Копии превысили безопасный объём памяти предварительного просмотра. Уменьшите выбранную серию; отправка не началась.');
-    prepared.push(group);
+    prepared.push(group);setGroups(prepared.slice());
+    setNotice('Готово групп: '+prepared.length+' из '+count+'. Уже можно смотреть копии. Отправка начнётся только после всех групп и отдельного разрешения.');
    }
-   c.signal.throwIfAborted();setGroups(prepared);setNotice('Подготовка завершена. Просмотрите копии и разберите отмеченные кадры. Затем разрешите отправку всей серии один раз.');
+   c.signal.throwIfAborted();setNotice('Подготовка завершена. Просмотрите копии и разберите отмеченные кадры. Затем разрешите отправку всей серии один раз.');
   })().catch(e=>{if(!c.signal.aborted)setError(e instanceof Error?e.message:'Подготовка не завершена.');})
    .finally(()=>{if(!c.signal.aborted)setPreparing(false);});
   return()=>{c.abort();};
@@ -57,8 +59,9 @@ export default function StudyPrivacyReview({count,modality,load,onReady,onOpenSl
   <p role="status">{notice}</p>{error&&<p role="alert">{error}</p>}
   {error&&!preparing&&!started.current&&<button type="button" onClick={()=>setAttempt(n=>n+1)}>Повторить локальную подготовку</button>}
   {preparing&&<button type="button" onClick={()=>{cancel.current?.abort();setPreparing(false);setError('Подготовка остановлена. Изображения не отправлялись.');}}>Отменить подготовку</button>}
-  {!preparing&&group&&!sending&&<>
+  {group&&!sending&&<>
    <p>Нажмите на изображение, чтобы проверить его в полном размере. Миниатюра с двумя окнами может выглядеть слишком мелкой. Жёлтые рамки — предполагаемые надписи, они не меняют контраст снимка.</p>
+   {windows&&<p>{windows.separateAfter!==undefined&&windows.additional?(index<windows.separateAfter?`Окно этой группы: ${windows.primary}. Те же срезы дальше идут отдельно в окне «${windows.additional}».`:`Окно этой группы: ${windows.additional}. Номера те же, это не новые срезы.`):windows.additional?`Слева: ${windows.primary}. Справа: ${windows.additional}. Это один и тот же срез.`:`Окно копии: ${windows.primary}.`}</p>}
    <p>Наборов с отметками OCR для проверки: {suspects.length}. OCR может пропустить текст и не проверяет узнаваемое лицо. Изображения автоматически не закрашиваются.</p>
    <label>Просмотр срезов <input aria-label="Группа срезов для просмотра" type="range" min={0} max={groups.length-1} value={index}
     onChange={e=>{setIndex(Number(e.target.value));setExpanded(null);setEditing(false);setApproved(false);}}/> {sourceNumbers?.[index]?.join(', ')??(index*4+1)+'–'+(index*4+group.frames.length)}</label>
@@ -79,12 +82,15 @@ export default function StudyPrivacyReview({count,modality,load,onReady,onOpenSl
      setGroups(previous=>previous.map((g,i)=>i===index?{...preparation,frames:packet.frames}:g));
      setResolved(previous=>new Set([...previous,index]));setApproved(false);setEditing(false);
     }}/> }
-   {clinicalContext&&<p style={{whiteSpace:'pre-wrap'}}>Клинические данные для передачи: {clinicalContext}</p>}
-   {releaseNotice&&<p>{releaseNotice}</p>}
-   {!canRelease&&<p role="status">Передача недоступна: подключите разрешённое рабочее место. Копии остаются локально.</p>}
-   <label><input type="checkbox" checked={approved} onChange={e=>setApproved(e.target.checked)}/>
-    Я просмотрел выбранные подготовленные копии и клинический текст, включая все отметки OCR: идентифицирующих надписей и узнаваемых признаков нет; оставшиеся отметки — ложные срабатывания или неидентифицирующий текст. Имею право передачи и проверил условия обработки медицинских данных. Разрешаю отправить эту серию для анализа.</label>
-   <button type="button" disabled={!canRelease||!approved||!!error} onClick={()=>void release()}>Отправить всю проверенную серию в анализ</button>
+   {preparing&&<p role="status">Кнопка отправки пока не нажимается: остальные группы ещё готовятся локально. Она появится после всех выбранных срезов и отметки проверки.</p>}
+   {!preparing&&clinicalContext&&<p style={{whiteSpace:'pre-wrap'}}>Клинические данные для передачи: {clinicalContext}</p>}
+   {!preparing&&releaseNotice&&<p>{releaseNotice}</p>}
+   {!preparing&&!canRelease&&<p role="status">Передача недоступна: подключите разрешённое рабочее место. Копии остаются локально.</p>}
+   {!preparing&&groups.length===count&&!error&&<>
+    <label><input type="checkbox" checked={approved} onChange={e=>setApproved(e.target.checked)}/>
+     Я просмотрел выбранные подготовленные копии и клинический текст, включая все отметки OCR: идентифицирующих надписей и узнаваемых признаков нет; оставшиеся отметки — ложные срабатывания или неидентифицирующий текст. Имею право передачи и проверил условия обработки медицинских данных. Разрешаю отправить эту серию для анализа.</label>
+    <button type="button" disabled={!canRelease||!approved} onClick={()=>void release()}>Отправить всю проверенную серию в анализ</button>
+   </>}
   </>}
  </section>;
 }

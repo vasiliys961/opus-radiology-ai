@@ -53,13 +53,31 @@ test("Four approved PNGs perform exactly one real provider-interface Gemini call
   const payload=JSON.stringify(calls[0].messages);
   assert.match(payload,/Unknown contrast stays unknown/);
   assert.match(payload,/OBSERVATION FIRST/);
-  assert.match(payload,/Evaluate ALL visible anatomical structures using ALL supplied display windows/);
-  assert.match(payload,/actively evaluate visible mediastinum, nodes, heart, vessels/);
+  assert.match(payload,/LEADING RADIOLOGICAL DIAGNOSIS/);
+  assert.match(payload,/Name the body region shown and diagnose only that region/);
+  assert.doesNotMatch(payload,/not a diagnosing clinician/);
+  assert.doesNotMatch(payload,/No diagnoses, differential/);
   assert.match(payload,/Patient orientation is not provided/);
   assert.match(payload,/Describe ground-glass opacity and consolidation separately/);
   assert.match(payload,/data:image\/png;base64,/);
   for(const forbidden of ["SOPInstanceUID","StudyInstanceUID","PatientName",UUID])
     assert.ok(!payload.includes(forbidden));
+});
+test("Abdomen context asks for solid-organ diagnoses and omits the chest checklist",async()=>{
+  const calls:AiGatewayRequest[]=[];
+  const technical={region:"ABDOMEN" as const,sliceSpacingMm:5,pixelSpacingMm:[0.7,0.7] as [number,number],contrast:"UNKNOWN" as const,phase:"UNKNOWN" as const,mrWeighting:"UNKNOWN" as const,mrSequenceCodes:[] as const,window:"SOFT" as const};
+  await reviewApprovedVolumeGeminiBatch(packet(),async req=>{calls.push(req);return answer(["frame-1","frame-2","frame-3","frame-4"]);},
+    undefined,"clinician-reviewed",{totalFrames:4,sliceNumbers:[1,2,3,4],technical});
+  const payload=JSON.stringify(calls[0].messages);
+  assert.match(payload,/liver and intrahepatic ducts/);
+  assert.doesNotMatch(payload,/Actively evaluate visible mediastinum/);
+});
+test("Chest context includes mediastinum, nodes, heart and vessels",async()=>{
+  const calls:AiGatewayRequest[]=[];
+  const technical={region:"CHEST" as const,sliceSpacingMm:5,pixelSpacingMm:[0.7,0.7] as [number,number],contrast:"UNKNOWN" as const,phase:"UNKNOWN" as const,mrWeighting:"UNKNOWN" as const,mrSequenceCodes:[] as const,window:"LUNG" as const};
+  await reviewApprovedVolumeGeminiBatch(packet(),async req=>{calls.push(req);return answer(["frame-1","frame-2","frame-3","frame-4"]);},
+    undefined,"clinician-reviewed",{totalFrames:4,sliceNumbers:[1,2,3,4],technical});
+  assert.match(JSON.stringify(calls[0].messages),/Actively evaluate visible mediastinum, nodes, heart, vessels/);
 });
 test("One real MR frame can be reviewed without asserting absent disease",async()=>{
   const r=await reviewApprovedVolumeGeminiBatch(packet(1,"MR"),

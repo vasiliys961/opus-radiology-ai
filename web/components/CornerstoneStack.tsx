@@ -41,11 +41,13 @@ type SafariFullscreenDocument = Document & {
   webkitExitFullscreen?: () => void | Promise<void>;
 };
 
-export default function CornerstoneStack({ files, selectedIndex, onSliceChange, modality }: {
+export default function CornerstoneStack({ files, selectedIndex, onSliceChange, modality, displayWindow }: {
   files: File[];
   selectedIndex?: number;
   onSliceChange?: (index: number) => void;
   modality?: string;
+  /** Reapplies after the slice settles, so a diagnosis opens in the window the model used. */
+  displayWindow?: { width: number; center: number; nonce: number } | null;
 }) {
   const container = useRef<HTMLElement>(null);
   const element = useRef<HTMLDivElement>(null);
@@ -245,6 +247,14 @@ export default function CornerstoneStack({ files, selectedIndex, onSliceChange, 
       setError("");
     } catch (err: unknown) { setError(errorText(err)); }
   };
+  const appliedWindow = useRef("");
+  useEffect(() => {
+    if (!displayWindow || !ready || busy || !viewport.current) return;
+    const mark = displayWindow.nonce + ":" + current;
+    if (appliedWindow.current === mark) return;
+    appliedWindow.current = mark;
+    applyWindow(displayWindow.width, displayWindow.center);
+  }, [displayWindow, ready, busy, current]);
 
   const zoomBy = (factor: number) => {
     const target = viewport.current;
@@ -344,8 +354,9 @@ export default function CornerstoneStack({ files, selectedIndex, onSliceChange, 
       <label>WW <input aria-label="Ширина окна WW" type="number" inputMode="decimal" min={1} value={ww} placeholder="—" onChange={e => setWw(e.target.value)}/></label>
       <label>WC <input aria-label="Уровень окна WC" type="number" inputMode="decimal" value={wc} placeholder="—" onChange={e => setWc(e.target.value)}/></label>
       <button type="button" disabled={!ready} onClick={() => applyWindow(Number(ww), Number(wc))}>Применить</button>
-      {modality?.toUpperCase() === "CT" && <div className="cs-preset-list" role="group" aria-label="Стандартные окна КТ">
-        {Object.entries(CT_WINDOW_PRESETS).map(([key, preset]) => <button type="button" key={key} disabled={!ready} title={`WW ${preset.width} / WC ${preset.center} HU`} onClick={() => applyWindow(preset.width, preset.center)}>{preset.label}</button>)}
+      {modality?.toUpperCase() === "CT" && <div className="cs-preset-list" role="group" aria-label="Окна для просмотра врачом, на анализ не влияют">
+        <span>Для врача</span>
+        {Object.entries(CT_WINDOW_PRESETS).map(([key, preset]) => <button type="button" key={key} disabled={!ready} title={`Только экран врача. WW ${preset.width} / WC ${preset.center} HU. Копии для анализа не меняются.`} onClick={() => applyWindow(preset.width, preset.center)}>{preset.label}</button>)}
       </div>}
     </div>
     <div

@@ -24,7 +24,7 @@ def route_heavy_detector(*, model: str, local_ram_gib: float,
                          clinician_cloud_approved: bool = False,
                          provider_permits_transfer: bool = False,
                          manual_mode: str | None = None):
-    if model not in {"lungscape191", "compai_lnq_model7", "nih_bone_lesions"}:
+    if model not in {"lungscape191", "nih_bone_lesions"}:
         raise ValueError("unsupported_detector")
     if not 0 < local_ram_gib <= 2048:
         raise ValueError("invalid_local_memory_capacity")

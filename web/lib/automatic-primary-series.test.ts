@@ -64,6 +64,14 @@ assert.equal(canAutoPrepareLocalVision({...chest,members:chest.members.map((m,i)
 const pelvis=series("pelvis","CT","PELVIS",100,true);
 const knee=series("knee","MR","EXTREMITY",28,true);
 const allIds=(study:DicomSeries)=>new Set(study.members.map(m=>m.id));
+const oneFile=series("one-slice","CT","ABDOMEN",1,false);
+oneFile.members[0].metadata.rows=512;
+oneFile.members[0].metadata.columns=512;
+assert.equal(canAutoPrepareLocalVision(oneFile),true,
+ "A single CT or MR file can be reviewed without a spatial volume");
+assert.equal(canUseVisionOnlyAsPrimary(oneFile,allIds(oneFile)),true);
+assert.equal(select([oneFile]).visionOnly,true);
+assert.equal(select([oneFile]).runnable,false,"One file must not start a volume detector");
 assert.equal(canUseVisionOnlyAsPrimary(pelvis,allIds(pelvis)),true,
  "Verified CT pelvis without a local detector must have a universal Vision path");
 assert.equal(canUseVisionOnlyAsPrimary(knee,allIds(knee)),true,

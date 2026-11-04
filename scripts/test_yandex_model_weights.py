@@ -11,7 +11,7 @@ from yandex_model_weights import fetch,validate
 class StoreTest(unittest.TestCase):
  def setUp(self):
   self.content=b"example public model checkpoint"
-  self.manifest={"modelId":"compai_model7","diskPath":"disk:/opus-models/compai/checkpoint.pth",
+  self.manifest={"modelId":"public_checkpoint","diskPath":"disk:/opus-models/public/checkpoint.pth",
     "sha256":hashlib.sha256(self.content).hexdigest(),"sizeBytes":len(self.content)}
  def test_rejects_patient_or_untrusted_paths(self):
   for path in ["disk:/patients/ct.nii.gz","https://evil.example/file",

@@ -43,9 +43,8 @@ model as if it can exclude disease. Research-only, offline and clinician-review 
 - `renal-neoplasm-3phase-ct`: retain as specialized future protocol, not another active kidney-tumor target.
 - `brain-metastases-4seq`: retain BraTS Orchestrator as alternative; QTIM T1CE leads.
 - `vertebral-fracture-ct` and `cervical-spine-fracture-ct`: consolidate into one fracture workstream.
-- Bouget/CompAI MediastinalLymphNodeSegmentation: preserve genuine source evidence and
-  code as alternatives; Raidionics ONNX leads. Stop standalone repeated CompAI metric
-  contract PRs without genuine positive improvement.
+- Mediastinal lymph nodes use Raidionics only. The CompAI Model7 scripts were removed
+  from this repository.
 - Six TorchXRayVision NIH DenseNet121 radiograph heads (pneumothorax, cardiomegaly,
   effusion, pneumonia, edema, lung mass) share a single image-level checkpoint and
   belong to a separately parked XR subsystem; NOT six independently localizing CT/MRI

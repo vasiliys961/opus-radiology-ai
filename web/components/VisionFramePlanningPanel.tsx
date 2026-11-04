@@ -25,13 +25,14 @@ import {sameSeriesR231Facts,type CapturedLocalSpecialist} from "../lib/same-seri
 import {sameSeriesLaa950ForReview,type CapturedLocalLaa950} from "../lib/same-series-laa950-review";
 
 export default function VisionFramePlanningPanel({
-  series, comparisonSeries=series, activeSeriesKey, fileById, onOpenSlice,capturedSpecialist,capturedLaa950,ichRuntime,publicResearchAuthorized=false,originalDetectorEvidence=null,clnVerifiedLocal=null,fromPrimaryAnalysis=false,primaryActionAvailable=false,primaryAnalysisStage="idle",researchMode=false,
+  series, comparisonSeries=series, activeSeriesKey, fileById, onOpenSlice, onInspectFinding, capturedSpecialist,capturedLaa950,ichRuntime,publicResearchAuthorized=false,originalDetectorEvidence=null,clnVerifiedLocal=null,fromPrimaryAnalysis=false,primaryActionAvailable=false,primaryAnalysisStage="idle",researchMode=false,
 }: {
   series: readonly DicomSeries[];
   comparisonSeries?:readonly DicomSeries[];
   activeSeriesKey: string | null;
   fileById: ReadonlyMap<string, File>;
   onOpenSlice: (fileId: string) => void;
+  onInspectFinding?: (fileId: string, window: { width: number; center: number } | null) => void;
   capturedSpecialist?:CapturedLocalSpecialist|null;
   capturedLaa950?:CapturedLocalLaa950|null;
   /** Present only when a verified local ICH worker is really connected. */
@@ -484,7 +485,7 @@ export default function VisionFramePlanningPanel({
   const selected=series.find(s=>s.key===choice.seriesKey);
   if(!researchMode&&fromPrimaryAnalysis&&selected&&["CT","MR"].includes(selected.modality))
     return <ReviewedSeriesAnalysis key={"reviewed-series-"+selected.key}
-      series={selected} allSeries={comparisonSeries} clnVerifiedLocal={clnVerifiedLocal} files={fileById} onOpenSlice={onOpenSlice}
+      series={selected} allSeries={comparisonSeries} clnVerifiedLocal={clnVerifiedLocal} files={fileById} onOpenSlice={onOpenSlice} onInspectFinding={onInspectFinding}
       detectorStage={primaryAnalysisStage} detectorEvidence={originalDetectorEvidence}/>;
   // Ordinary studies use exact-copy OCR/redaction, physician review and an
   // explicit transfer decision. Never send them through public-only auto OCR.

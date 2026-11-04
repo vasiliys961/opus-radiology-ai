@@ -1,5 +1,6 @@
 /** Fixed loopback CLN bridge. No arbitrary host, no browser-visible worker token. */
 import {NextRequest,NextResponse} from "next/server";
+import {tokenFor} from "../../../../lib/loopback-session";
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
 export const maxDuration=800;
@@ -27,7 +28,7 @@ async function handler(req:NextRequest,ctx:{params:Promise<{parts:string[]}>},me
    (method==="POST"&&origin!=="http://"+host)||
    (req.headers.get("sec-fetch-site")??"same-origin")!=="same-origin")
   return fail(404);
- const token=process.env.OPUS_CLN_WORKER_TOKEN??"";
+ const token=tokenFor("OPUS_CLN_WORKER_TOKEN");
  const workerOrigin=process.env.OPUS_CLN_WORKER_ORIGIN??"http://127.0.0.1:3000";
  if(!/^[a-zA-Z0-9_-]{32,128}$/.test(token)||workerOrigin!=="http://"+host)return fail(503);
  if(method==="POST"&&(req.headers.get("content-type")!=="application/octet-stream"||

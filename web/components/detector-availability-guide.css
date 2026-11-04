@@ -1,0 +1,14 @@
+.dag{margin:0 0 16px}
+.dag h2{font-size:18px;margin:0 0 6px}
+.dag>p{margin:0 0 12px;color:#526b7a}
+.dag-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:12px}
+.dag-card{border:1px solid #dce7ea;border-radius:10px;padding:14px 14px 6px;background:#fff}
+.dag-card h3{font-size:15px;margin:0 0 6px}
+.dag-card p{margin:0 0 8px;color:#526b7a;font-size:13px}
+.dag-card ul{margin:0;padding:0 0 8px 18px}
+.dag-card li{margin:0 0 8px}
+.dag-now{background:#f3faf6;border-color:#c9e6d4}
+.dag-server{background:#f4f8fb;border-color:#d3e1ea}
+.dag-later{background:#fbf8f2;border-color:#eadfc8}
+.dag-more{font-size:12px}
+.dag-more a{color:#006f67}

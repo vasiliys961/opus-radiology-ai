@@ -71,6 +71,19 @@ test("Actual lazy decoder and local OCR/redaction execute every frame, no networ
   assert.equal(got[1].sources[0].sopInstanceUid,s.members[4].metadata.sopInstanceUid);
   assert.ok(got.every(x=>!x.transmissionPermitted&&!x.physicianReviewed));
 });
+test("One original file plans a single local review without inventing slice spacing",()=>{
+  const s=originalSeries(1);
+  s.volumeReady=false;s.spatiallySorted=false;s.sliceSpacingMm=null;
+  s.members[0].metadata.imagePositionPatient=null;
+  s.members[0].metadata.imageOrientationPatient=null;
+  s.members[0].metadata.frameOfReferenceUid=null;
+  const p=planOriginalVolumeSource(s);
+  assert.equal(p.batches.length,1);
+  assert.deepEqual(p.batches[0].indices,[0]);
+  assert.equal(p.sourceFrames[0].slicePositionMm,null);
+  assert.equal(p.sourceFrames[0].sopInstanceUid,s.members[0].metadata.sopInstanceUid);
+  assert.equal(p.transmissionPermitted,false);
+});
 test("Corrupt geometry and repeated source SOP cannot start a local full review",()=>{
   const s=originalSeries(8);
   s.members[5].metadata.sopInstanceUid=s.members[0].metadata.sopInstanceUid;

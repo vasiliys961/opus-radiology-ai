@@ -64,10 +64,16 @@ export function planVisionFrameSamples(
   else {
     if (!["CT", "MR"].includes(selected.modality))
       blockers.push("Только КТ или МРТ.");
-    if (!selected.volumeReady || !selected.spatiallySorted)
+    const singleFile = selected.members.length === 1;
+    if (!singleFile && (!selected.volumeReady || !selected.spatiallySorted))
       blockers.push("Геометрия срезов не подтверждена. Выборка запрещена.");
     if (!selected.members.length)
       blockers.push("Нет DICOM-кадров.");
+    if (singleFile) {
+      const pixels = selected.members[0]?.metadata;
+      if (!pixels?.rows || !pixels.columns || pixels.rows < 1 || pixels.columns < 1)
+        blockers.push("В файле нет матрицы изображения.");
+    }
     const uid = selected.members[0]?.metadata.seriesUid;
     if (!validUid(uid))
       blockers.push("Отсутствует корректный SeriesInstanceUID.");
@@ -76,9 +82,13 @@ export function planVisionFrameSamples(
     const referenceFrame = selected.members[0]?.metadata.frameOfReferenceUid;
     for (const member of selected.members) {
       const m = member.metadata;
+      const frameOfReferenceOk = singleFile
+        ? m.frameOfReferenceUid === null || m.frameOfReferenceUid === undefined ||
+          (validUid(m.frameOfReferenceUid) && m.frameOfReferenceUid === referenceFrame)
+        : validUid(m.frameOfReferenceUid) && m.frameOfReferenceUid === referenceFrame;
       if (!validUid(m.sopInstanceUid) || m.seriesUid !== uid ||
           !validUid(m.studyUid) || m.studyUid !== referenceStudy ||
-          !validUid(m.frameOfReferenceUid) || m.frameOfReferenceUid !== referenceFrame ||
+          !frameOfReferenceOk ||
           m.modality !== selected.modality || (m.numberOfFrames ?? 1) !== 1) {
         blockers.push("Источник содержит неподдерживаемый много-кадровый DICOM или несовпадающие идентификаторы.");
         break;
@@ -88,11 +98,13 @@ export function planVisionFrameSamples(
         break;
       }
       sops.add(m.sopInstanceUid);
-      if (position(member) === null) {
+      if (!singleFile && position(member) === null) {
         blockers.push("Неполная физическая геометрия кадра.");
         break;
       }
     }
+    if (singleFile)
+      warnings.push("Один файл: шаг срезов и объём не подтверждены. Оценивается только это изображение.");
     if (selected.members.length > count)
       warnings.push("Выбираются лишь отдельные кадры; этот набор не описывает весь объём исследования.");
     warnings.push("DICOM-коды анатомической области, контрастная фаза, полнота протокола и патологии не оцениваются.");
