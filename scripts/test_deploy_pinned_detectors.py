@@ -38,6 +38,14 @@ class Decide(unittest.TestCase):
         self.assertIn(deploy.LUNG_SHA, lung)
         self.assertIn(deploy.LUNG_URL, lung)
         self.assertNotIn("huggingface_hub", Path(deploy.__file__).read_text())
+
+    def test_full_scope_names_the_programs_it_installs(self):
+        specs = deploy.programs_for(
+            ["chest_xray_six", "chest_nodes", "lungmask_r231", "brain_hemorrhage", "lung_tumor_cln"])
+        self.assertEqual(specs, [
+            "torchxrayvision==1.5.7", "raidionicsseg==1.5.2", "lungmask==0.2.20",
+            "nnunetv2==2.7.0", "fastapi==0.115.12", "uvicorn==0.34.2"])
+        self.assertEqual(deploy.programs_for(["lungmask_r231", "brain_hemorrhage"]), [])
         ich = deploy.load("run-ianpan-ich-research.py")
         self.assertEqual(
             deploy.publisher_file_url(ich.MODEL_REPO, ich.MODEL_REV, "classifier/model.safetensors"),

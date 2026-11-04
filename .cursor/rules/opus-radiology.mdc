@@ -12,8 +12,9 @@ For any task in this repository, read:
 Current main is dca3def (2026-11-04). The physician path is /viewer and
 «Анализировать исследование»: local frame preparation, then remote Gemini and
 Opus. A detector runs only when its loopback service answers with verified
-weights. /technical downloads pinned weights on eligible Linux and never on a
-Mac. Hemorrhage stays limited to a pre-approved public study. PE is not deployed.
+weights. /technical downloads pinned weights on eligible Linux, installs their
+pinned Python programs, and never does either on a Mac. Hemorrhage stays limited
+to a pre-approved public study. PE is not deployed.
 Do not claim universal pathology detection, a browser one-click clinical worker,
 or patient-cloud AI. Inspect live main before changing anything. Existing export
 is capped at 8,388,608 voxels; do not raise it to force a run.

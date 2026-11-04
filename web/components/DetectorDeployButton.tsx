@@ -50,7 +50,7 @@ export default function DetectorDeployButton(){
   }
   return <section aria-label="Развернуть детекторы">
     <h3>Развернуть детекторы</h3>
-    <p>После сверки весов приложение запускает те службы, для которых на сервере уже стоит нужная программа. Минимум: Linux, {state?.minimum.ramGib??16} ГБ памяти, {state?.minimum.freeDiskGib??30} ГБ свободно.</p>
+    <p>После сверки весов приложение само ставит нужные программы Python и запускает службы. Минимум: Linux, {state?.minimum.ramGib??16} ГБ памяти, {state?.minimum.freeDiskGib??30} ГБ свободно.</p>
     {state&&<p role="status">{state.message}</p>}
     {state?.services?.length ? <ul>{state.services.map(item=><li key={item.id}>
       {SERVICE_NAME[item.id]??item.id}: {item.started?"служба отвечает.":"служба не запустилась."} {item.reason??""}
@@ -60,7 +60,7 @@ export default function DetectorDeployButton(){
       <h3>Первая кнопка</h3>
       {list(BASIC_CATALOG,state?.basic.items)}
       <button type="button" disabled={!state?.basic.eligible||busy!==null} onClick={()=>void deploy("basic")}>
-        {busy==="basic"?"Скачиваем вес…":"Развернуть рентген грудной клетки"}
+        {busy==="basic"?"Скачиваем и ставим программу…":"Развернуть рентген грудной клетки"}
       </button>
     </div>
     <div className="deploy-block">
@@ -68,7 +68,7 @@ export default function DetectorDeployButton(){
       {list(FULL_CATALOG,state?.full.items)}
       <p>{NOT_DEPLOYED}</p>
       <button type="button" disabled={!state?.full.eligible||busy!==null} onClick={()=>void deploy("full")}>
-        {busy==="full"?"Скачиваем веса…":"Развернуть все возможные"}
+        {busy==="full"?"Скачиваем веса и ставим программы…":"Развернуть все возможные"}
       </button>
     </div>
   </section>;

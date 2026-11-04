@@ -1,6 +1,6 @@
 # Opus Imaging AI Engine — dependency profiles and installation
 
-**State as of 2026-11-04:** this directory holds the workers the physician path can call when a loopback service answers, plus their dependency profiles. Weights are not in git. On an eligible Linux host `scripts/deploy_pinned_detectors.py` downloads the pinned set and starts a service only if its package is already installed. The Mac does not download. The 2026-10-11 R231 notes in [the worker guide](../../docs/LOCAL_LUNGMASK_WORKER.md) record that day's checks. Full-chest, Safari and M1 memory acceptance stay open. `scripts/run-local-onnx.py` remains the synthetic-weight ONNX runner.
+**State as of 2026-11-04:** this directory holds the workers the physician path can call when a loopback service answers, plus their dependency profiles. Weights are not in git. On an eligible Linux host `scripts/deploy_pinned_detectors.py` downloads the pinned set, installs the pinned Python programs into a cache virtual environment, and starts the service. The Mac does not download. The 2026-10-11 R231 notes in [the worker guide](../../docs/LOCAL_LUNGMASK_WORKER.md) record that day's checks. Full-chest, Safari and M1 memory acceptance stay open. `scripts/run-local-onnx.py` remains the synthetic-weight ONNX runner.
 
 [Canonical roadmap](../../docs/OPUS_RADIOLOGY_MASTER_SPEC.md) · [Acceptance requirements](../../REQUIREMENTS.md) · [Existing ONNX usage](../../docs/LOCAL_ONNX_AI.md)
 

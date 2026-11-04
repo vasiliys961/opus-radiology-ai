@@ -256,8 +256,9 @@ Before any implementation: inspect live GitHub \`main\`, its CI status, branch d
 local privacy preparation, then remote Gemini and Opus on the frames and windows
 actually sent. A specialty detector runs only when its loopback service answers
 with verified weights. Otherwise the task stays not assessed. `/technical` can
-download the pinned weights on Linux with 16 GiB RAM and 30 GiB free and start a
-service only if the required Python package is already installed. Darwin never
+download the pinned weights on Linux with 16 GiB RAM and 30 GiB free, install the
+pinned Python programs into a cache virtual environment, and start the service.
+Darwin never
 downloads. Hemorrhage stays limited to a pre-approved public study. PE is not
 deployed. The one-off experiment script layer was removed. The NIfTI export cap
 remains 8,388,608 voxels. `/api/ai` stays HTTP 410. No clinical validation is claimed.

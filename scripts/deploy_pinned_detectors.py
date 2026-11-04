@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Download pinned detector weights on a capable Linux server.
+"""Download pinned detector weights on a capable Linux server and install their programs.
 
-Refuses macOS and small disks before any network call. Does not read or
-write web/.env.local and does not start a worker. The full scope downloads
-only weights whose URL, size and SHA are already pinned. It does not download
-the weak pulmonary-embolism model.
+Refuses macOS and small disks before any network call or package install.
+Does not read or write web/.env.local. The full scope downloads only weights
+whose URL, size and SHA are already pinned, then installs the pinned Python
+programs into a cache virtual environment and starts the services that can answer.
 """
 from __future__ import annotations
 import hashlib
@@ -33,6 +33,13 @@ LUNG_MAX = 150 * 1024 * 1024
 CLN_SHA = "8c08ec796fa2b786fe99ddfad4fe6314e98fdd8820c59527be3c4105f7955d87"
 BASIC = ["chest_xray_six"]
 FULL = ["chest_xray_six", "chest_nodes", "lungmask_r231", "brain_hemorrhage"]
+COMMON_PROGRAMS = ("fastapi==0.115.12", "uvicorn==0.34.2")
+PINNED_PROGRAMS = {
+    "chest_xray_six": ("torchxrayvision==1.5.7",),
+    "chest_nodes": ("raidionicsseg==1.5.2", "lungmask==0.2.20"),
+    "lung_tumor_cln": ("nnunetv2==2.7.0",),
+}
+TORCH_CPU = "https://download.pytorch.org/whl/cpu"
 
 
 def decide(system: str, ram: int, disk: int) -> str:
@@ -175,6 +182,51 @@ def install(model_id: str, cache: Path) -> dict:
     raise ValueError("unknown_detector")
 
 
+def programs_for(model_ids: list[str]) -> list[str]:
+    wanted: list[str] = []
+    for model_id in model_ids:
+        for spec in PINNED_PROGRAMS.get(model_id, ()):
+            if spec not in wanted:
+                wanted.append(spec)
+    if wanted:
+        for spec in COMMON_PROGRAMS:
+            if spec not in wanted:
+                wanted.append(spec)
+    return wanted
+
+
+def runtime_python(cache: Path) -> Path:
+    return cache / "venv" / "bin" / "python"
+
+
+def install_programs(cache: Path, model_ids: list[str]) -> str | None:
+    """Install pinned programs into the cache virtual environment. Linux only."""
+    specs = programs_for(model_ids)
+    if not specs:
+        return None
+    if platform.system() != "Linux":
+        return "программы ставятся только на Linux"
+    cache.mkdir(parents=True, exist_ok=True, mode=0o700)
+    python = runtime_python(cache)
+    if not python.is_file():
+        subprocess.run([sys.executable, "-m", "venv", str(cache / "venv")], check=True, timeout=180)
+    if any(spec.startswith(("torchxrayvision", "raidionicsseg", "lungmask", "nnunetv2")) for spec in specs):
+        torch = subprocess.run(
+            [str(python), "-m", "pip", "install", "--disable-pip-version-check", "torch",
+             "--index-url", TORCH_CPU],
+            timeout=1800, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
+        )
+        if torch.returncode != 0:
+            return "программа PyTorch не установилась"
+    installed = subprocess.run(
+        [str(python), "-m", "pip", "install", "--disable-pip-version-check", *specs],
+        timeout=1800, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
+    )
+    if installed.returncode != 0:
+        return "нужная программа не установилась"
+    return None
+
+
 def launch_blocker(model_id: str, packages: set[str], tools: set[str]) -> str | None:
     if model_id == "brain_hemorrhage":
         return "эта служба считает только заранее разрешённое публичное исследование"
@@ -189,9 +241,29 @@ def launch_blocker(model_id: str, packages: set[str], tools: set[str]) -> str | 
     return None
 
 
-def _packages() -> tuple[set[str], set[str]]:
+def _packages(python: Path | None = None) -> tuple[set[str], set[str]]:
+    if python is not None and python.is_file():
+        probe = subprocess.run(
+            [str(python), "-c",
+             "import importlib.metadata,importlib.util,json,shutil,sys\n"
+             "from pathlib import Path\n"
+             "found=[]\n"
+             "pairs=(('torchxrayvision','1.5.7'),('raidionicsseg','1.5.2'),('lungmask','0.2.20'),('nnunetv2','2.7.0'))\n"
+             "for name,version in pairs:\n"
+             "  try:\n"
+             "    if importlib.metadata.version(name)==version: found.append(name+'=='+version)\n"
+             "  except importlib.metadata.PackageNotFoundError: pass\n"
+             "for name in ('fastapi','uvicorn'):\n"
+             "  if importlib.util.find_spec(name): found.append(name)\n"
+             "tools=['nnUNetv2_predict'] if (Path(sys.executable).parent/'nnUNetv2_predict').is_file() or shutil.which('nnUNetv2_predict') else []\n"
+             "print(json.dumps({'packages':found,'tools':tools}))"],
+            timeout=30, capture_output=True, text=True, check=False,
+        )
+        if probe.returncode == 0 and probe.stdout.strip():
+            report = json.loads(probe.stdout)
+            return set(report["packages"]), set(report["tools"])
     found = set()
-    for name, version in (("torchxrayvision", "1.5.7"), ("raidionicsseg", "1.5.2"), ("lungmask", "0.2.20")):
+    for name, version in (("torchxrayvision", "1.5.7"), ("raidionicsseg", "1.5.2"), ("lungmask", "0.2.20"), ("nnunetv2", "2.7.0")):
         try:
             if importlib.metadata.version(name) == version:
                 found.add(name + "==" + version)
@@ -253,16 +325,16 @@ def _save_session(cache: Path, workers: dict[str, str]) -> None:
     os.chmod(target, 0o600)
 
 
-def _start_one(cache: Path, repo: Path, origin: str, session: dict[str, str], model_id: str) -> dict:
+def _start_one(cache: Path, repo: Path, origin: str, session: dict[str, str], model_id: str, python: str) -> dict:
     if model_id == "chest_xray_six":
         key, port, probe = "OPUS_XRV_WORKER_TOKEN", 8779, "/v1/cxr/capabilities"
         weight = cache / "xrv" / "nih-densenet121-d121-tw-lr001-rot45-tr15-sc15-seed0-best.pt"
-        command = [sys.executable, str(repo / "services/imaging-ai/cxr_xrv_direct_worker.py"),
+        command = [python, str(repo / "services/imaging-ai/cxr_xrv_direct_worker.py"),
                    "--weights", str(weight), "--port", "8779", "--origin", origin]
         extra: dict[str, str] = {}
     elif model_id == "chest_nodes":
         key, port, probe = "OPUS_NODES_WORKER_TOKEN", 8777, "/v1/nodes/capabilities"
-        command = [sys.executable, str(repo / "services/imaging-ai/raidionics_nodes_direct_worker.py"),
+        command = [python, str(repo / "services/imaging-ai/raidionics_nodes_direct_worker.py"),
                    "--model-archive", str(cache / "raidionics" / "Raidionics-CT_LymphNodes-v13.zip"),
                    "--lungmask-weights", str(cache / "lungmask" / "unet_r231-d5d2fc3d.pth"),
                    "--origin", origin, "--port", "8777"]
@@ -276,12 +348,13 @@ def _start_one(cache: Path, repo: Path, origin: str, session: dict[str, str], mo
         original = cache / "cln" / "fold_0" / "checkpoint_best.pth"
         if not linked.exists():
             os.link(original, linked)
-        command = [sys.executable, str(repo / "services/imaging-ai/cln_native_upload_worker.py")]
+        command = [python, str(repo / "services/imaging-ai/cln_native_upload_worker.py")]
         extra = {"OPUS_CLN_CHECKPOINT_SHA256": CLN_SHA, "OPUS_CLN_MODEL_ROOT": str(root),
                  "OPUS_CLN_WORKER_ORIGIN": origin}
     token = session.get(key) or _token()
     if not _answers(port, probe, token):
         env = os.environ.copy()
+        env["PATH"] = str(Path(python).parent) + os.pathsep + env.get("PATH", "")
         env[key] = token
         env.update(extra)
         subprocess.Popen(command, env=env, start_new_session=True,
@@ -292,8 +365,10 @@ def _start_one(cache: Path, repo: Path, origin: str, session: dict[str, str], mo
     return {"id": model_id, "started": True}
 
 
-def start_services(cache: Path, installed: list[str]) -> list[dict]:
-    packages, tools = _packages()
+def start_services(cache: Path, installed: list[str], *, program_error: str | None = None) -> list[dict]:
+    python_path = runtime_python(cache)
+    python = str(python_path if python_path.is_file() else Path(sys.executable))
+    packages, tools = _packages(python_path if python_path.is_file() else None)
     session = _session(cache)
     repo = Path(__file__).resolve().parents[1]
     origin = "http://127.0.0.1:3000"
@@ -302,11 +377,13 @@ def start_services(cache: Path, installed: list[str]) -> list[dict]:
         if model_id == "lungmask_r231":
             continue
         reason = launch_blocker(model_id, packages, tools)
+        if program_error and reason and reason.startswith("нет программы"):
+            reason = program_error
         if reason:
             services.append({"id": model_id, "started": False, "reason": reason})
             continue
         try:
-            services.append(_start_one(cache, repo, origin, session, model_id))
+            services.append(_start_one(cache, repo, origin, session, model_id, python))
         except Exception as error:
             services.append({"id": model_id, "started": False, "reason": str(error)[:160]})
     if any(item["started"] for item in services):
@@ -336,7 +413,9 @@ def main() -> int:
             installed.append(install(model_id, cache))
         except Exception as error:
             failed.append({"id": model_id, "message": str(error)[:200]})
-    services = start_services(cache, [item["id"] for item in installed]) if installed else []
+    ids = [item["id"] for item in installed]
+    program_error = install_programs(cache, ids) if ids else None
+    services = start_services(cache, ids, program_error=program_error) if ids else []
     print(json.dumps({
         "eligible": not failed, "reason": "ok" if not failed else "download_failed",
         "installed": installed, "failed": failed, "services": services,
