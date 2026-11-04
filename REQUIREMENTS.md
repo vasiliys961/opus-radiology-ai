@@ -1,5 +1,14 @@
 # OPUS RADIOLOGY AI — PRODUCT REQUIREMENTS (PRD)
 
+## Live status — 2026-11-04 (`main` `dca3def`)
+
+The dated table below remains the 2026-10-11 checklist. These rows moved:
+
+- **LLM-01 / LLM-03:** «Анализировать исследование» prepares local copies and calls remote Gemini, then Opus, on the frames and windows actually sent. That path is no longer only the synthetic OpenRouter trial. It is an unsigned draft. It does not measure sensitivity.
+- **MODEL-04:** loopback workers are called only after they answer with verified weights. The `/technical` deploy buttons fetch the pinned set on eligible Linux and start a service only when its Python package is already installed. The Mac never downloads. Hemorrhage stays limited to a pre-approved public study. PE is not deployed. One-off experiment scripts were removed. A silent worker stays «not assessed».
+- **EXEC-02:** still PARTIAL. The deploy route and the existing loopback workers do not make a private GPU worker or a one-click clinical fleet.
+- **MODEL-02:** still PARTIAL. R231 can be downloaded by the Linux button and used where its worker already answers. Full-chest, Safari and M1 memory acceptance are not closed.
+- **DATA-01 / PRIV-01:** unchanged. The export cap stays 8,388,608 voxels. `/api/ai` stays HTTP 410.
 
 ## Live implementation addendum — 2026-10-13 (PR #72 proposed)
 

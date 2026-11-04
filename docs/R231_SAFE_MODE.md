@@ -137,7 +137,7 @@ opt-in real checker uses the pinned public 32-of-103 native-slice reference.
 
 ## Previous verification on Linux (before streaming; not M1 acceptance)
 
-[Technical report](verification/r231-safe-mode-linux.json): actual official R231
+Measured on Linux before streaming: actual official R231
 on the unchanged public 32-of-103 LCTSC reference, CPU Safe Mode, one thread.
 
 * 257 chunks / 33,554,784 input bytes; source/weight/mask SHA and grid verified.

@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Source-native MONAI DiNTS pancreas tumor task on a supplied ORIGINAL HU CT.
 
-Reuses verified preprocessing and original 3-class TorchScript inference from
-scripts/real-msd-pancreatic-tumor-dints.py, but does NOT require an expert
-training-case mask. A candidate is a model label 2, not a cancer diagnosis.
+Runs original 3-class TorchScript inference on the supplied HU volume and does
+not require an expert training-case mask. A candidate is a model label 2, not a cancer diagnosis.
 Private, isolated, rights-cleared PUBLIC research only. No weights downloaded.
 """
 from __future__ import annotations

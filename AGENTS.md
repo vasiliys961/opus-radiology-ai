@@ -250,20 +250,21 @@ Before any implementation: inspect live GitHub \`main\`, its CI status, branch d
 - **LLM layer:** Gemini, Claude Opus, GPT or legally usable open models are optional. Expert models and LLM may work in parallel, but conflicting output stays visible. No invented diagnoses or "normal" findings when source/model unsupported.
 - **MedGemma excluded** under the user's regional/licensing constraints.
 
-## Current verified boundary (2026-10-11)
+## Current verified boundary (2026-11-04)
 
-PRs #6–#14 are merged into `main`. DICOM/Cornerstone/MPR/3D, Study Intelligence,
-NIfTI package/mask import, experimental ONNX CPU runner **with synthetic Identity
-weights**, OpenRouter **with generated nonpatient PNGs**, and the opt-in real R231
-research-only CPU loopback worker/browser action exist. Checkpoints are installed
-separately; they are not included in the repository. Actual R231 was verified on
-two public CT slices over HTTP on Linux, not complete chest/M1/browser acceptance.
-No clinically validated universal pathology detector exists.
+`main` is `dca3def`. The physician path is `/viewer` and «Анализировать исследование»:
+local privacy preparation, then remote Gemini and Opus on the frames and windows
+actually sent. A specialty detector runs only when its loopback service answers
+with verified weights. Otherwise the task stays not assessed. `/technical` can
+download the pinned weights on Linux with 16 GiB RAM and 30 GiB free and start a
+service only if the required Python package is already installed. Darwin never
+downloads. Hemorrhage stays limited to a pre-approved public study. PE is not
+deployed. The one-off experiment script layer was removed. The NIfTI export cap
+remains 8,388,608 voxels. `/api/ai` stays HTTP 410. No clinical validation is claimed.
 
-Next **R1**: legally cleared complete native chest CT, actual R231 mask in MPR,
-bounded viewer/model/mask memory and Mac M1/8GB/Safari benchmark. Keep existing
-limits until whole-pipeline evidence supports larger inputs. Do not claim that
-chunked transport alone completes large-study support or R1.
+The 2026-10-11 R1 note below is a historical increment, not the next task.
+Keep the voxel and memory guards. Do not treat a green UI test or agreement
+between Gemini and Opus as accuracy.
 
 ## Patient safety, cost, workflow
 
@@ -272,11 +273,11 @@ chunked transport alone completes large-study support or R1.
 - Existing \`web/.env.local\` contains user's key: NEVER show, overwrite, commit, upload or replicate it. Never use obsolete \`Downloads/install-opus-radiology-ai.sh\`.
 - Cost caps / budgets / cancel and model availability must be real, not mock; LLM providers may be regionally unavailable and must never be prerequisites for offline mode.
 - Python dependencies are in root \`requirements.txt\` and separate \`services/imaging-ai/requirements-*.txt\`. Next.js uses \`web/package.json\`. Heavy PyTorch/MONAI stacks are opt-in only.
-- Use **feature branches and manual PR merge**. No push straight to \`main\`; no auto-merge. Show actual commands, checks and open PR links. Preserve working DICOM/MPR/3D and browser tests. No success signal before real validated completion.
+- Feature work stays on a branch. The owner may ask to move a finished branch onto `main`; do not force-push. Preserve the DICOM/MPR/3D path and the physician analysis path. No success signal before the checks that were actually run.
 
 ## Paste into a new chat
 
-> Продолжай проект Opus Radiology AI по \`docs/OPUS_RADIOLOGY_MASTER_SPEC.md\`, \`REQUIREMENTS.md\` и \`AGENTS.md\`. Сначала проверь реальный GitHub \`main\`, CI и состояние модели. Приоритет R1: настоящий Lungmask R231 на легальной исследовательской КТ грудной клетки, локальный AI Worker и возврат маски в MPR на Mac M1/8 GB. Реальные пациенты не отправляются в облако. Не меняй \`.env.local\` и не сливай PR сам. Разделяй готовые возможности и планы.
+> Продолжай Opus Radiology AI с `main` `dca3def`. Врач работает в `/viewer`: «Анализировать исследование» готовит кадры локально и вызывает внешние Gemini и Opus. Детектор считается только если его служба уже ответила. Кнопки на `/technical` качают закреплённые веса на подходящем Linux и не качают их на Mac. ТЭЛА не ставится. Экспорт ограничен 8 388 608 вокселями. `/api/ai` отвечает 410. `web/.env.local` не менять и не печатать. Клиническую точность не выводить из зелёных тестов. Сначала проверь живой `main`.
 
 ## R1 engineering increment (verify the branch/CI, do not assume full acceptance)
 

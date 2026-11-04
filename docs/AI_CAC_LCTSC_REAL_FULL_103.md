@@ -32,5 +32,4 @@
 **Next clinical gate:** original Stanford COCA nongated images and separately
 released 203-case expert calcium masks, with lawful access and verified
 scan-to-label exact spatial registration; independent holdout must be checked.
-See [original AI-CAC evidence contract](AI_CAC_ORIGINAL_NON_GATED_RESEARCH.md)
-and [Stanford COCA](https://aimi.stanford.edu/datasets/coca-coronary-calcium-chest-ct).
+See [Stanford COCA](https://aimi.stanford.edu/datasets/coca-coronary-calcium-chest-ct).

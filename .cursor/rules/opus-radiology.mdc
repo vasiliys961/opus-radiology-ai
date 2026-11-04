@@ -9,14 +9,17 @@ For any task in this repository, read:
 - @AGENTS.md (workflow and safety)
 - @HANDOFF_NEXT_CHAT.md (context for new chats)
 
-Do not claim that medical weights, universal pathology detection, browser one-click
-local worker or patient-cloud AI are already connected. Main PRs #6-#11 are merged
-as of 2026-10-11; inspect current main before changing anything. Next task R1:
-real licensed Lungmask R231 on legal open chest CT, secure loopback worker,
-mask overlay in MPR, RAM/time benchmark on Mac M1 8GB. Existing export is capped
-at 8,388,608 voxels; streaming must be engineered before scaling up.
+Current main is dca3def (2026-11-04). The physician path is /viewer and
+«Анализировать исследование»: local frame preparation, then remote Gemini and
+Opus. A detector runs only when its loopback service answers with verified
+weights. /technical downloads pinned weights on eligible Linux and never on a
+Mac. Hemorrhage stays limited to a pre-approved public study. PE is not deployed.
+Do not claim universal pathology detection, a browser one-click clinical worker,
+or patient-cloud AI. Inspect live main before changing anything. Existing export
+is capped at 8,388,608 voxels; do not raise it to force a run.
 
-No direct main pushes or auto-merges. No editing, printing or committing
-web/.env.local. No real patient cloud upload; leave privacy gate fail-closed.
-Do not silently replace specialist model failures with LLM guesses. Always
-report what actually passed CI and what remains untested on Mac.
+Feature work stays on a branch. Do not force-push main. No editing, printing or
+committing web/.env.local. No real patient cloud upload; leave the privacy gate
+fail-closed. Do not replace a silent specialist model with an LLM guess. Report
+what actually ran and what remains untested on the Mac. The 2026-10-11 R1 note
+is history, not the next task.
