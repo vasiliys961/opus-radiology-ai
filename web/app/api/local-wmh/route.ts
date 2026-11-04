@@ -1,6 +1,7 @@
 /** Private local WMH FLAIR runner bridge. Public nonpatient research only. */
 import {NextRequest,NextResponse} from "next/server";
 import {readyWmhOriginal} from "../../../lib/auto-wmh-ready";
+import {tokenFor} from "../../../lib/loopback-session";
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
 export const maxDuration=800;
@@ -15,7 +16,7 @@ function allowed(req:NextRequest,post:boolean):boolean{
  (req.headers.get("sec-fetch-site")??"same-origin")==="same-origin";
 }
 function creds(){
- const token=process.env.OPUS_WMH_WORKER_TOKEN??"";
+ const token=tokenFor("OPUS_WMH_WORKER_TOKEN");
  const origin=process.env.OPUS_LOCAL_WORKER_ORIGIN??"http://127.0.0.1:3000";
  return /^[A-Za-z0-9_-]{32,128}$/.test(token)&&
  /^http:\/\/(127\.0\.0\.1|localhost):[0-9]{1,5}$/.test(origin)?{token,origin}:null;

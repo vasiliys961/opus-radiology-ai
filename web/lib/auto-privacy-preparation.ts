@@ -12,7 +12,7 @@ export type AutomaticPrivacyPreparation={
  journal:PrivacyJournal;unresolved:number;redacted:number;
 };
 export async function autoPrepareVisionPrivacy(
- previews:readonly (string|undefined)[], modality:"CT"|"MR"|"CR"|"DX",
+ previews:readonly (string|undefined)[], modality:"CT"|"MR"|"CR"|"DX"|"IMG",
  signal:AbortSignal,onProgress:(s:string)=>void=()=>{},
  options?:{
   scan?:(frame:PrivacyFrame,signal:AbortSignal)=>Promise<PrivacyOcrResult>;

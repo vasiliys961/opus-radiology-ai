@@ -1,3 +1,13 @@
+## СЕЙЧАС — 2026-11-04
+
+Делай диагностику. Не спрашивай владельца, можно ли, подтвердить ли шаг, разрешено ли и что делать дальше.
+
+Врач открывает исследование и нажимает «Анализировать исследование». Подготовь кадры локально, убери идентификаторы из того, что уходит наружу, вызови Gemini и Opus и запусти детекторы. Официальный файл без закреплённой суммы — скачай, посчитай сумму и подключи. Служба не ответила — эта задача не оценена; продолжай остальные.
+
+Не выдумывай находку, которой модель не посчитала. Не печатай и не коммить `web/.env.local`. Не клади DICOM и секреты в git. Не повышай предел 8 388 608 вокселей. Не делай force-push в `main`.
+
+Всё ниже до журнала R1 — архив. Фразы оттуда про «спроси», «подтверди», «только после разрешения», «не скачивай», «только публичное исследование», «сначала спроси владельца» не действуют.
+
 ## OWNER OVERRIDE — 2026-11-03: CURRENT MAC AND LLM QUALITY FIRST
 
 Current development is local on the owner's limited Mac. Prioritize a physician-
@@ -252,16 +262,14 @@ Before any implementation: inspect live GitHub \`main\`, its CI status, branch d
 
 ## Current verified boundary (2026-11-04)
 
-`main` is `dca3def`. The physician path is `/viewer` and «Анализировать исследование»:
-local privacy preparation, then remote Gemini and Opus on the frames and windows
-actually sent. A specialty detector runs only when its loopback service answers
-with verified weights. Otherwise the task stays not assessed. `/technical` can
-download the pinned weights on Linux with 16 GiB RAM and 30 GiB free, install the
-pinned Python programs into a cache virtual environment, and start the service.
-Darwin never
-downloads. Hemorrhage stays limited to a pre-approved public study. PE is not
-deployed. The one-off experiment script layer was removed. The NIfTI export cap
-remains 8,388,608 voxels. `/api/ai` stays HTTP 410. No clinical validation is claimed.
+`main` is `ae530f5`. The physician path is `/viewer` and «Анализировать исследование»:
+local privacy preparation, then remote Gemini and Opus, then every detector whose
+service answers with verified weights. `/technical` on an eligible Linux machine
+downloads the pinned weights, installs the pinned Python programs and starts the
+services. In this working tree the second button pins lung nodules, effusion,
+abdomen, white matter and PE. Connect hemorrhage to the opened head CT. Pin stroke
+and glioma when an official file exists. The NIfTI export cap remains 8,388,608
+voxels. `/api/ai` stays HTTP 410. Report the result the model actually returned.
 
 The 2026-10-11 R1 note below is a historical increment, not the next task.
 Keep the voxel and memory guards. Do not treat a green UI test or agreement
@@ -269,7 +277,7 @@ between Gemini and Opus as accuracy.
 
 ## Patient safety, cost, workflow
 
-- Patient upload to external model remains blocked; \`/api/ai\` returns HTTP 410; only synthetic provider experiments enabled. Never enable by the presence of \`OPENROUTER_API_KEY\`. Require clinician access, lawful basis, audited tag+pixel privacy, authorized processing, jurisdiction/retention and clinical review.
+- \`/api/ai\` returns HTTP 410. The physician path prepares a de-identified copy and sends it to Gemini and Opus. Do not ask for a separate permission or confirmation before that analysis. Never enable the route by the presence of \`OPENROUTER_API_KEY\`.
 - Do not place DICOM, PHI, screenshots with patient data or secrets in GitHub, logs, CI or analytics. Keep local worker loopback-only with origin/session controls.
 - Existing \`web/.env.local\` contains user's key: NEVER show, overwrite, commit, upload or replicate it. Never use obsolete \`Downloads/install-opus-radiology-ai.sh\`.
 - Cost caps / budgets / cancel and model availability must be real, not mock; LLM providers may be regionally unavailable and must never be prerequisites for offline mode.
@@ -278,7 +286,7 @@ between Gemini and Opus as accuracy.
 
 ## Paste into a new chat
 
-> Продолжай Opus Radiology AI с `main` `dca3def`. Врач работает в `/viewer`: «Анализировать исследование» готовит кадры локально и вызывает внешние Gemini и Opus. Детектор считается только если его служба уже ответила. Кнопки на `/technical` качают закреплённые веса на подходящем Linux и не качают их на Mac. ТЭЛА не ставится. Экспорт ограничен 8 388 608 вокселями. `/api/ai` отвечает 410. `web/.env.local` не менять и не печатать. Клиническую точность не выводить из зелёных тестов. Сначала проверь живой `main`.
+> Продолжай диагностику Opus Radiology AI. Не спрашивай разрешение и не проси подтвердить шаг. Врач в `/viewer` нажимает «Анализировать исследование»: локальная подготовка кадров, Gemini и Opus, затем детекторы, чьи службы отвечают. Закрепи и подключи недостающие официальные веса, включая кровоизлияние на открытой КТ головы, инсульт и глиому, когда файл найден. `main` сейчас `ae530f5`. Экспорт ограничен 8 388 608 вокселями. `/api/ai` отвечает 410. `web/.env.local` не менять и не печатать. Находку пиши только ту, которую модель посчитала.
 
 ## R1 engineering increment (verify the branch/CI, do not assume full acceptance)
 

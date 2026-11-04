@@ -13,6 +13,7 @@ import importlib.metadata
 import json
 import os
 import platform
+import re
 import secrets
 import signal
 import sys
@@ -199,10 +200,14 @@ def main():
     p.add_argument("--origin", default="http://127.0.0.1:3000")
     p.add_argument("--port", type=int, default=8774)
     a = p.parse_args()
-    token = secrets.token_urlsafe(36).replace("-", "_")
+    supplied = os.environ.get("OPUS_EFFUSION_WORKER_TOKEN", "")
+    if re.fullmatch(r"[A-Za-z0-9_-]{32,128}", supplied):
+        token = supplied
+    else:
+        token = secrets.token_urlsafe(36).replace("-", "_")
+        print("Task315 worker temporary token: " + token, flush=True)
     app = create_app(token=token, origin=a.origin, checkpoint=a.checkpoint,
                      checkpoint_sha256=a.checkpoint_sha256, port=a.port)
-    print("Task315 worker temporary token: " + token, flush=True)
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=a.port, access_log=False)
 

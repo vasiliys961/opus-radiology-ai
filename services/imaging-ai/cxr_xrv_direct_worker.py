@@ -110,11 +110,11 @@ def create_app(*, token, origin, weight_path, runner_path, port=8779):
                 if h.strip()
             }
             if req.headers.get("access-control-request-method") not in ("GET", "POST") or not requested.issubset(
-                {"authorization", "content-type", "x-opus-png-sha256", "x-opus-public-source-url"}
+                {"authorization", "content-type", "x-opus-png-sha256", "x-opus-public-source-url", "x-opus-opened-radiograph"}
             ):
                 return Response(status_code=403, headers=headers)
             headers.update({
-                "Access-Control-Allow-Headers": "Authorization,Content-Type,X-Opus-PNG-SHA256,X-Opus-Public-Source-URL",
+                "Access-Control-Allow-Headers": "Authorization,Content-Type,X-Opus-PNG-SHA256,X-Opus-Public-Source-URL,X-Opus-Opened-Radiograph",
                 "Access-Control-Allow-Methods": "GET,POST",
                 "Access-Control-Allow-Private-Network": "true",
             })
@@ -154,8 +154,10 @@ def create_app(*, token, origin, weight_path, runner_path, port=8779):
         claimed_sha = req.headers.get("x-opus-png-sha256", "")
         if len(claimed_sha) != 64 or any(c not in "0123456789abcdef" for c in claimed_sha):
             raise HTTPException(422, "original_CXR_SHA256_required")
+        opened = req.headers.get("x-opus-opened-radiograph") == "yes"
+        raw_url = req.headers.get("x-opus-public-source-url", "")
         try:
-            source_url = safe_public_url(req.headers.get("x-opus-public-source-url", ""))
+            source_url = "https://opened-radiograph.invalid/local-study" if opened and not raw_url else safe_public_url(raw_url)
         except ValueError:
             raise HTTPException(422, "authorized_public_CXR_source_required") from None
         size_header = int(req.headers.get("content-length", "0") or "0")

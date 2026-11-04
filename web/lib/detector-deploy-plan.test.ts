@@ -26,7 +26,13 @@ test("the first button installs only the chest radiograph weights",()=>{
 });
 test("the full button lists pinned weights and keeps the lung tumor behind 64 GiB",()=>{
   const small=planDetectorDeploy({platform:"linux",ramBytes:16*GiB,freeDiskBytes:30*GiB},"full");
-  assert.deepEqual(small.installs,["chest_xray_six","chest_nodes","lungmask_r231","brain_hemorrhage"]);
+  assert.deepEqual(small.installs,["chest_xray_six","chest_nodes","lungmask_r231","lung_nodules","brain_hemorrhage",
+    "chest_effusion","abdomen_ct","brain_wmh","chest_pe"]);
+  assert.match(small.items.find(item=>item.id==="lung_nodules")?.size??"",/83 709 381/);
+  assert.match(small.items.find(item=>item.id==="chest_effusion")?.size??"",/233 744 954/);
+  assert.match(small.items.find(item=>item.id==="abdomen_ct")?.size??"",/230 940 114/);
+  assert.match(small.items.find(item=>item.id==="brain_wmh")?.size??"",/246 100 637/);
+  assert.match(small.items.find(item=>item.id==="chest_pe")?.size??"",/566 265 379/);
   const tumor=small.items.find(item=>item.id==="lung_tumor_cln");
   assert.equal(tumor?.willInstall,false);
   assert.match(tumor?.requirement??"",/64 ГБ/);
@@ -35,5 +41,7 @@ test("the full button lists pinned weights and keeps the lung tumor behind 64 Gi
   assert.equal(large.items.find(item=>item.id==="lung_tumor_cln")?.willInstall,true);
   assert.match(small.items.find(item=>item.id==="chest_nodes")?.size??"",/105 186 900/);
   assert.match(small.items.find(item=>item.id==="brain_hemorrhage")?.size??"",/161 042 978/);
-  assert.match(NOT_DEPLOYED,/ТЭЛА/);
+  assert.match(NOT_DEPLOYED,/Инсульт и глиома/);
+  assert.match(NOT_DEPLOYED,/не исключает эмболию/);
+  assert.doesNotMatch(NOT_DEPLOYED,/Выпот, живот/);
 });

@@ -21,7 +21,7 @@ export const CLOUD_PILOT_MAX_FRAMES=4;
 export const PILOT_GEMINI="google/gemini-3.8-flash";
 export const PILOT_OPUS="anthropic/claude-opus-5.5";
 export type NormalizedCloudPilot={
-  modality:"CT"|"MR"|"CR"|"DX";
+  modality:"CT"|"MR"|"CR"|"DX"|"IMG";
   frames:Array<{imageId:string;base64:string}>;
   localFrameHashes:Array<{imageId:string;reviewedPixelSha256:string}>;
 };
@@ -63,7 +63,7 @@ export function validateOpusIntegratedSynthesis(
 }
 export type SanitizedModelReview={
   schema:"opus-sanitized-cloud-pilot/v1";
-  modality:"CT"|"MR"|"CR"|"DX";
+  modality:"CT"|"MR"|"CR"|"DX"|"IMG";
   coverage:"sampled-frames-only";
   results:Array<{reviewer:"gemini"|"opus";model:string;review:RoleResponse}>;
   sourceFrames:Array<{imageId:string;reviewedPixelSha256:string}>;
@@ -100,7 +100,7 @@ export function normalizeReviewedCloudPilot(value:unknown):NormalizedCloudPilot{
      raw.frames.length>CLOUD_PILOT_MAX_FRAMES)
     throw Error("nonlocal_or_unreviewed_packet");
   const modality=raw.frames[0]?.modality;
-  if(!["CT","MR","CR","DX"].includes(String(modality))||raw.frames.some(f=>f.modality!==modality))
+  if(!["CT","MR","CR","DX","IMG"].includes(String(modality))||raw.frames.some(f=>f.modality!==modality))
     throw Error("mixed_modalities_not_permitted");
   // The original local-review packet is deliberately marked non-transmittable:
   // this separate PILOT requires server-side opt-in and trusted clinician action.
@@ -199,10 +199,17 @@ function reviewMessages(data:NormalizedCloudPilot):AiGatewayRequest["messages"] 
        "This is a radiograph. Independently describe the cardiac silhouette, lung fields, pleura, and image-quality limits. "+
        "Evaluate projection (AP/PA), patient positioning, inspiration and magnification only if visible or ascertainable; "+
        "if uncertain report unknown. Do not invent cardiac enlargement diagnoses or a cardiothoracic ratio without "+
-       "sufficient geometric and projection evidence. Assess the image independently of external classifier outputs.":"")},
+       "sufficient geometric and projection evidence. Assess the image independently of external classifier outputs."+
+       (data.frames.length>1?" Several frames are different projections of one study. Compare them. A sign on one projection stays reportable when another projection does not show it.":""):
+       data.modality==="IMG"?
+       "This is a PNG or JPEG picture, not a DICOM volume. Describe only what is visible. "+
+       "Do not invent scale, measurements, window settings, or a negative diagnosis."+
+       (data.frames.length>1?" Several pictures are different views of one study. Compare them. A sign on one view stays reportable when another view does not show it.":""):"")},
     {role:"user",content:[
       {type:"text",text:"Modality "+data.modality+". Sampled frames only: "+frameIds.join(", ")+
-        ". Each image has no original DICOM metadata or source file name. Review each independently."},
+        ". Each image has no original DICOM metadata or source file name. "+
+        (data.frames.length>1&&(data.modality==="CR"||data.modality==="DX"||data.modality==="IMG")
+          ?"Compare these projections of one study.":"Review each independently.")},
       ...data.frames.flatMap(f=>[
         {type:"text",text:"Synthetic image ID: "+f.imageId},
         {type:"image_url",image_url:{url:"data:image/png;base64,"+f.base64}},

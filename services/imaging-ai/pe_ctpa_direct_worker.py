@@ -6,7 +6,7 @@ native HU CTPA. Patient data and cloud egress FORBIDDEN; original vendor model
 weights CC BY-NC 4.0. A candidate cannot diagnose/exclude PE.
 """
 from __future__ import annotations
-import argparse, asyncio, hashlib, json, math, os, platform, secrets, signal
+import argparse, asyncio, hashlib, json, math, os, platform, re, secrets, signal
 import subprocess, sys, tempfile
 from pathlib import Path
 
@@ -229,11 +229,15 @@ def main():
     parser.add_argument("--origin",default="http://127.0.0.1:3000")
     parser.add_argument("--port",type=int,default=8776)
     args=parser.parse_args()
-    token=secrets.token_urlsafe(36).replace("-","_")
+    supplied=os.environ.get("OPUS_PE_WORKER_TOKEN","")
+    if re.fullmatch(r"[A-Za-z0-9_-]{32,128}", supplied):
+        token=supplied
+    else:
+        token=secrets.token_urlsafe(36).replace("-","_")
+        print("Original PE worker temporary token: "+token,flush=True)
     app=create_app(token=token,origin=args.origin,model_dir=args.model_dir,
                    vendor_repo=args.vendor_code,model_sha256=args.weights_sha,
                    port=args.port)
-    print("Original PE worker temporary token: "+token,flush=True)
     import uvicorn
     uvicorn.run(app,host="127.0.0.1",port=args.port,access_log=False)
 

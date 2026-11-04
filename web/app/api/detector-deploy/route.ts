@@ -46,7 +46,7 @@ function run(script: string, scope: DeployScope) {
   return new Promise<{code: number; out: string}>((resolve, reject) => {
     const child = spawn("python3", [script, scope], {stdio: ["ignore", "pipe", "pipe"]});
     let out = "";
-    const timer = setTimeout(() => child.kill("SIGKILL"), scope === "full" ? 2_700_000 : 1_200_000);
+    const timer = setTimeout(() => child.kill("SIGKILL"), scope === "full" ? 5_400_000 : 1_200_000);
     child.stdout.on("data", chunk => {
       out += chunk;
       if (out.length > 100_000) out = out.slice(-100_000);

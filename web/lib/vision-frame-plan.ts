@@ -62,11 +62,14 @@ export function planVisionFrameSamples(
     "Нет геометрически подтверждённой КТ/МРТ-серии. Сперва загрузите подходящие DICOM.",
   );
   else {
-    if (!["CT", "MR"].includes(selected.modality))
-      blockers.push("Только КТ или МРТ.");
+    const projection = selected.modality === "CR" || selected.modality === "DX";
+    if (!["CT", "MR", "CR", "DX"].includes(selected.modality))
+      blockers.push("Только КТ, МРТ или рентгенограмма.");
     const singleFile = selected.members.length === 1;
-    if (!singleFile && (!selected.volumeReady || !selected.spatiallySorted))
+    if (!projection && !singleFile && (!selected.volumeReady || !selected.spatiallySorted))
       blockers.push("Геометрия срезов не подтверждена. Выборка запрещена.");
+    if (projection && selected.members.length > 4)
+      blockers.push("За один раз разбираются не больше четырёх рентгенограмм.");
     if (!selected.members.length)
       blockers.push("Нет DICOM-кадров.");
     if (singleFile) {
@@ -82,7 +85,7 @@ export function planVisionFrameSamples(
     const referenceFrame = selected.members[0]?.metadata.frameOfReferenceUid;
     for (const member of selected.members) {
       const m = member.metadata;
-      const frameOfReferenceOk = singleFile
+      const frameOfReferenceOk = singleFile || projection
         ? m.frameOfReferenceUid === null || m.frameOfReferenceUid === undefined ||
           (validUid(m.frameOfReferenceUid) && m.frameOfReferenceUid === referenceFrame)
         : validUid(m.frameOfReferenceUid) && m.frameOfReferenceUid === referenceFrame;
@@ -98,7 +101,7 @@ export function planVisionFrameSamples(
         break;
       }
       sops.add(m.sopInstanceUid);
-      if (!singleFile && position(member) === null) {
+      if (!singleFile && !projection && position(member) === null) {
         blockers.push("Неполная физическая геометрия кадра.");
         break;
       }

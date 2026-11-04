@@ -4,7 +4,8 @@
  */
 import {NextRequest,NextResponse} from "next/server";
 import {selectMonaiExecutor,boundMonaiExecutor,monaiJobBinding,
- monaiExecutorHeaders,boundedMonaiJson} from "../../../../lib/monai-executor-selection";
+ monaiExecutorHeaders,boundedMonaiJson,withMonaiLoopbackTokens} from "../../../../lib/monai-executor-selection";
+import {readLoopbackTokens} from "../../../../lib/loopback-session";
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
 export const maxDuration=800;
@@ -54,8 +55,9 @@ async function handle(req:NextRequest,ctx:{params:Promise<{parts:string[]}>},met
   // Only admission probes readiness. Poll/report/delete must remain available
   // after the original job consumes RAM or another executor becomes ready.
   const isJob=parts[2]==="jobs";
-  const selection=isJob?null:await selectMonaiExecutor(process.env,req.signal);
-  const executor=isJob?boundMonaiExecutor(process.env,
+  const env=withMonaiLoopbackTokens(process.env,readLoopbackTokens());
+  const selection=isJob?null:await selectMonaiExecutor(env,req.signal);
+  const executor=isJob?boundMonaiExecutor(env,
     req.headers.get("x-opus-monai-job-binding"),parts[3]):selection?.executor;
   if(target==="/v1/nodule/capabilities"){
    const safe:Record<string,unknown>={};

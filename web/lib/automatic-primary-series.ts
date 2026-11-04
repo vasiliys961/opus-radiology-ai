@@ -61,8 +61,13 @@ export function suggestPrimaryDicomSeries(series:readonly DicomSeries[],
  * silently sent to Vision; this gate NEVER permits an external request.
  */
 export function canAutoPrepareLocalVision(series:DicomSeries|undefined):boolean{
- if(!series||(series.modality!=="CT"&&series.modality!=="MR")||
+ const projection=series?.modality==="CR"||series?.modality==="DX";
+ if(!series||(!projection&&series.modality!=="CT"&&series.modality!=="MR")||
     series.members.some(m=>m.metadata.imageRole==="LOCALIZER"))return false;
+ if(projection){
+  if(series.members.length<1||series.members.length>4)return false;
+  return planVisionFrameSamples([series],series.key).status==="ready-for-local-preview";
+ }
  const singleFile=series.members.length===1;
  if(!singleFile&&(!series.volumeReady||!series.spatiallySorted||series.members.length<2))return false;
  // DERIVED is not permission for quantitative/native model inference. It can

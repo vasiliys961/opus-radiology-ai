@@ -12,6 +12,16 @@ export type MonaiSelection={executor:MonaiExecutor|null;capability:Record<string
 const TOKEN=/^[a-zA-Z0-9_-]{32,128}$/;
 const JOB=/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const AGE=4*60*60*1000;
+/** An environment token wins. A token saved after the Linux deploy is used only when the environment has none. */
+export function withMonaiLoopbackTokens(env:Env,saved:Readonly<Record<string,string>>):Env{
+ const out:Record<string,string|undefined>={...env};
+ for(const name of ["OPUS_MONAI_WORKER_TOKEN","OPUS_NODULE_WORKER_TOKEN"] as const){
+  if(TOKEN.test(env[name]??""))continue;
+  const stored=saved[name]??"";
+  if(TOKEN.test(stored))out[name]=stored;
+ }
+ return out;
+}
 export function configuredMonaiExecutors(env:Env):MonaiExecutor[]{
  const origin=env.OPUS_LOCAL_WORKER_ORIGIN??"http://127.0.0.1:3000";
  if(!/^http:\/\/(?:127\.0\.0\.1|localhost):[0-9]{1,5}$/.test(origin))return [];

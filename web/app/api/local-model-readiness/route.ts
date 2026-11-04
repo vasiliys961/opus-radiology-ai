@@ -21,7 +21,7 @@ export async function GET(req:NextRequest){
  const saved=readLoopbackTokens();
  const secrets:Record<string,string|undefined>=Object.fromEntries(WORKERS.map(w=>[w.env,process.env[w.env]||saved[w.env]]));
  for(const key of ["OPUS_NODULE_WORKER_TOKEN","OPUS_MONAI_PRIVATE_TUNNEL_URL","OPUS_MONAI_PRIVATE_WORKER_TOKEN"])
-  secrets[key]=process.env[key];
+  secrets[key]=process.env[key]||saved[key];
  const origin=process.env.OPUS_LOCAL_WORKER_ORIGIN??"http://127.0.0.1:3000";
  if(!/^http:\/\/(?:127\.0\.0\.1|localhost):[0-9]{1,5}$/.test(origin))
    return NextResponse.json({error:"Invalid local origin"},

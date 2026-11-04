@@ -3,6 +3,7 @@
  */
 import {NextRequest,NextResponse} from "next/server";
 import {readyEffusionTask315} from "../../../lib/real-effusion-worker";
+import {tokenFor} from "../../../lib/loopback-session";
 
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
@@ -25,7 +26,7 @@ function allowed(req:NextRequest,post:boolean){
    !req.nextUrl.search;
 }
 function secret(){
- const token=process.env.OPUS_EFFUSION_WORKER_TOKEN??"";
+ const token=tokenFor("OPUS_EFFUSION_WORKER_TOKEN");
  return /^[a-zA-Z0-9_-]{32,128}$/.test(token)?token:null;
 }
 function serviceOrigin(){

@@ -11,7 +11,7 @@ export type ObservationDecision="unreviewed"|"needs_original_source_recheck"|"re
 export type LocalObservationAssessment={decision:ObservationDecision;note:string};
 export type LocalDualReviewDraft={
  schema:"opus-local-dual-vision-physician-draft/v1";
- provenance:{sourceScope:"sampled-image-frames";modality:"CT"|"MR"|"CR"|"DX";
+ provenance:{sourceScope:"sampled-image-frames";modality:"CT"|"MR"|"CR"|"DX"|"IMG";
    sourceImagePixelSHA256:string[];clinicalProvenanceServerVerified:false};
  specialistEvidence:SanitizedModelReview["specialistEvidence"]|null;
  observations:{reviewer:"gemini"|"opus";findingId:string;imageId:string;

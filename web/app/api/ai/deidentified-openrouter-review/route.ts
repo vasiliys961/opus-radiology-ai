@@ -13,7 +13,7 @@ export const maxDuration=600; // research-only opt-in for slow paid vision/reaso
 const HEADERS={"Cache-Control":"no-store","X-Content-Type-Options":"nosniff","Referrer-Policy":"no-referrer"};
 const LOCAL_HOST=/^(?:localhost|127\.0\.0\.1)(?::[0-9]{1,5})?$/;
 const BODY_LIMIT=2_350_000;
-const limiter=createSyntheticTrialLimiter(2,20*60_000);
+const limiter=createSyntheticTrialLimiter(30,20*60_000);
 /** Separate pixel-sized bounded reader. Global readLimitedText is intentionally
  * capped at 64 KiB for clinical metadata and must not be weakened for images. */
 async function readPixelJson(req:NextRequest):Promise<unknown>{
@@ -113,7 +113,7 @@ export async function POST(req:NextRequest){
   // executor. Failure is closed. These declarations are NOT an independent
   // deidentification certificate or legal authority; clinical production is off.
   const release=limiter.acquire();
-  if(!release)return reply(429,"One active request; maximum two starts in twenty minutes");
+  if(!release)return reply(429,"Один разбор ещё идёт либо за 20 минут уже начато 30. Подождите окончания текущего.");
   try{
     const result=await reviewSanitizedSamples(
       v.packet,callAiGateway,AbortSignal.any([req.signal,AbortSignal.timeout(process.env.NODE_ENV==="development"&&

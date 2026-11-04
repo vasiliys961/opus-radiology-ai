@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {configuredMonaiExecutors,selectMonaiExecutor,monaiJobBinding,boundMonaiExecutor}
- from "./monai-executor-selection.ts";
+import {configuredMonaiExecutors,selectMonaiExecutor,monaiJobBinding,boundMonaiExecutor,
+ withMonaiLoopbackTokens} from "./monai-executor-selection.ts";
 const local="L".repeat(48),remote="R".repeat(48);
 const env={OPUS_MONAI_WORKER_TOKEN:local,OPUS_MONAI_PRIVATE_WORKER_TOKEN:remote,
  OPUS_MONAI_PRIVATE_TUNNEL_URL:"http://127.0.0.1:18768"};
@@ -51,6 +51,9 @@ test("Private target is an explicit loopback SSH tunnel, never browser SSRF or d
  }
  assert.deepEqual(configuredMonaiExecutors({...env,OPUS_LOCAL_WORKER_ORIGIN:"https://public.invalid"}),[]);
  assert.equal(configuredMonaiExecutors({OPUS_NODULE_WORKER_TOKEN:local})[0].token,local);
+ const saved=withMonaiLoopbackTokens({OPUS_MONAI_WORKER_TOKEN:"short"},{OPUS_MONAI_WORKER_TOKEN:local});
+ assert.equal(configuredMonaiExecutors(saved)[0].token,local);
+ assert.equal(withMonaiLoopbackTokens({OPUS_MONAI_WORKER_TOKEN:remote},{OPUS_MONAI_WORKER_TOKEN:local}).OPUS_MONAI_WORKER_TOKEN,remote);
 });
 test("Poll, result and cancellation stay bound to the original executor after readiness changes",()=>{
  const job="12345678-1234-4123-8123-123456789abc",other="12345678-1234-4123-8123-123456789abd";

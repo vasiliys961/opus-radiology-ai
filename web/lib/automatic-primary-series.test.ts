@@ -50,6 +50,11 @@ assert.equal(canAutoPrepareLocalVision(derived),true,
  "A geometry-verified derived reconstruction may prepare reviewed PNGs without enabling quantitative models");
 assert.equal(canAutoPrepareLocalVision(series("broken","MR","HEAD",30,false)),false);
 assert.equal(canAutoPrepareLocalVision(series("xray","DX","CHEST",1,false)),false);
+const radiograph=series("xray-ready","DX","CHEST",1,false);
+radiograph.members[0].metadata.rows=2048;
+radiograph.members[0].metadata.columns=2048;
+assert.equal(canAutoPrepareLocalVision(radiograph),true,
+ "A single DICOM radiograph prepares a local image for Gemini and Opus");
 assert.equal(canAutoPrepareLocalVision({...chest,members:chest.members.map((m,i)=>i===0?
  {...m,metadata:{...m.metadata,studyUid:null}}:m)}),false);
 assert.equal(canAutoPrepareLocalVision({...chest,members:chest.members.map((m,i)=>i===1?
@@ -64,6 +69,11 @@ assert.equal(canAutoPrepareLocalVision({...chest,members:chest.members.map((m,i)
 const pelvis=series("pelvis","CT","PELVIS",100,true);
 const knee=series("knee","MR","EXTREMITY",28,true);
 const allIds=(study:DicomSeries)=>new Set(study.members.map(m=>m.id));
+const skull=series("skull","DX","HEAD",1,false);
+skull.members[0].metadata.rows=2048;
+skull.members[0].metadata.columns=2048;
+assert.equal(canUseVisionOnlyAsPrimary(skull,allIds(skull)),true,
+ "A non-chest radiograph is still analyzed as an image");
 const oneFile=series("one-slice","CT","ABDOMEN",1,false);
 oneFile.members[0].metadata.rows=512;
 oneFile.members[0].metadata.columns=512;

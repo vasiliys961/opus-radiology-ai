@@ -18,6 +18,7 @@ import { MAX_PRIVACY_PIXELS } from "../lib/vision-privacy";
 import VisionPrivacyPreparation from "./VisionPrivacyPreparation";
 import FullVolumeLocalPreparation from "./FullVolumeLocalPreparation";
 import ReviewedSeriesAnalysis from "./ReviewedSeriesAnalysis";
+import PlainImageAnalysis from "./PlainImageAnalysis";
 import type {SanitizedDetectorBundle} from "../lib/detector-consilium-evidence";
 import type {ClnVerifiedLocalEvidence} from "../lib/cln-physician-local-review";
 import {createClnFrameRelativeEvidence,type ClnFrameRelativeEvidence} from "../lib/cln-frame-relative-evidence";
@@ -483,6 +484,8 @@ export default function VisionFramePlanningPanel({
       сохраняя исходные SOPInstanceUID локально. Выборка не гарантирует обнаружения очагов между срезами.</p>
   </section>;
   const selected=series.find(s=>s.key===choice.seriesKey);
+  if(!researchMode&&fromPrimaryAnalysis&&selected&&["CR","DX"].includes(selected.modality))
+    return <PlainImageAnalysis key={"plain-"+selected.key} series={selected} files={fileById} autoStart/>;
   if(!researchMode&&fromPrimaryAnalysis&&selected&&["CT","MR"].includes(selected.modality))
     return <ReviewedSeriesAnalysis key={"reviewed-series-"+selected.key}
       series={selected} allSeries={comparisonSeries} clnVerifiedLocal={clnVerifiedLocal} files={fileById} onOpenSlice={onOpenSlice} onInspectFinding={onInspectFinding}

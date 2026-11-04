@@ -43,6 +43,38 @@ export function parseOriginalXrvReport(value:unknown,expectedSourceSha?:string):
   throw Error("Нельзя привязать шесть оригинальных оценок CXR к этой модели и снимку.");
  return value as OriginalXrvCxrResult;
 }
+export async function runCxrXrvFromOpenedDicom(
+ file:File,signal:AbortSignal,onStatus:(v:string)=>void=()=>{},
+):Promise<OriginalXrvCxrResult>{
+ const {decodeDicomPreview}=await import("./dicom-lite.ts");
+ onStatus("Создаём PNG из открытой рентгенограммы…");
+ const preview=await decodeDicomPreview(file,{maxPixels:4096*4096});
+ if(preview.metadata.modality!=="CR"&&preview.metadata.modality!=="DX")
+  throw Error("Нужна рентгенограмма CR или DX.");
+ return postCxrPng(preview.url,signal,onStatus,true);
+}
+async function postCxrPng(dataUrl:string,signal:AbortSignal,onStatus:(v:string)=>void,opened:boolean,publicUrl=""):Promise<OriginalXrvCxrResult>{
+ const text=dataUrl.split(",")[1];
+ if(!text)throw Error("Не удалось декодировать рентгенограмму.");
+ const raw=atob(text);
+ if(raw.length<1024||raw.length>25*1024*1024)
+  throw Error("Размер рентгенограммы вне ограничения модели.");
+ const bytes=new Uint8Array(raw.length);
+ for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
+ if(signal.aborted)throw new DOMException("Анализ отменён.","AbortError");
+ onStatus("Модель рентгена считает шесть признаков…");
+ const result=await fetch("/api/local-xrv",{
+  method:"POST",cache:"no-store",credentials:"same-origin",signal,
+  headers:{"Content-Type":"image/png",
+   ...(opened?{"X-Opus-Opened-Radiograph":"yes"}:{
+    "X-Opus-Public-Research-Authorized":"yes","X-Opus-Public-Source-URL":publicUrl})},
+  body:new Blob([bytes],{type:"image/png"}),
+ });
+ if(!result.ok)throw Error("Модель рентгена не ответила (HTTP "+result.status+").");
+ const body=await result.text();
+ if(body.length>16384)throw Error("Ответ модели рентгена слишком большой.");
+ return parseOriginalXrvReport(JSON.parse(body));
+}
 export async function runCxrXrvFromDicom(
  file:File,publicUrl:string,authorized:boolean,signal:AbortSignal,
  onStatus:(v:string)=>void=()=>{},
@@ -55,25 +87,7 @@ export async function runCxrXrvFromDicom(
  const preview=await decodeDicomPreview(file,{maxPixels:4096*4096});
  if(preview.metadata.modality!=="CR"&&preview.metadata.modality!=="DX")
   throw Error("TorchXRayVision требуется настоящая CR/DX рентгенограмма.");
- const text=preview.url.split(",")[1];
- if(!text)throw Error("Не удалось декодировать исходную рентгенограмму.");
- const raw=atob(text);
- if(raw.length<1024||raw.length>25*1024*1024)
-  throw Error("Размер исходной рентгенограммы вне ограничения Linux-модели.");
- const bytes=new Uint8Array(raw.length);
- for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
- if(signal.aborted)throw new DOMException("Анализ отменён.","AbortError");
- onStatus("Настоящий оригинальный TorchXRayVision оценивает шесть NIH-признаков...");
- const result=await fetch("/api/local-xrv",{
-  method:"POST",cache:"no-store",credentials:"same-origin",signal,
-  headers:{"Content-Type":"image/png","X-Opus-Public-Research-Authorized":"yes",
-   "X-Opus-Public-Source-URL":publicUrl},
-  body:new Blob([bytes],{type:"image/png"}),
- });
- if(!result.ok)throw Error("Оригинальная модель CXR не готова (HTTP "+result.status+").");
- const body=await result.text();
- if(body.length>16384)throw Error("Ответ TorchXRayVision превышает допустимый объём.");
- return parseOriginalXrvReport(JSON.parse(body));
+ return postCxrPng(preview.url,signal,onStatus,false,publicUrl);
 }
 export async function checkOriginalXrvReady(signal?:AbortSignal):Promise<boolean>{
  const response=await fetch("/api/local-xrv",{

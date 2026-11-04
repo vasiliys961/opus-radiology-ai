@@ -4,9 +4,10 @@ import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import {checkMprEligibility} from "../../lib/mpr-eligibility";
 import {assessMprQuality} from "../../lib/mpr-quality";
-import { groupDicomSeries, readDicomSeriesHeader, type DicomSeries } from "../../lib/dicom-series";
+import { distinctProjectionTitles, groupDicomSeries, readDicomSeriesHeader, type DicomSeries } from "../../lib/dicom-series";
 import {suggestPrimaryDicomSeries} from "../../lib/automatic-primary-series";
 import { validateViewerFileSelection } from "../../lib/viewer-limits";
+import {appendProjections, MAX_COMPARED_PROJECTIONS, projectionAddedMessage} from "../../lib/projection-load";
 import "./viewer.css";
 import "../radiology.css";
 import {AnalysisSoundProvider} from "../../components/AnalysisSoundProvider";
@@ -20,6 +21,8 @@ import type {ClnVerifiedLocalEvidence} from "../../lib/cln-physician-local-revie
 const NoduleBoundResearchView = dynamic(() => import("../../components/NoduleBoundResearchView"), {ssr:false});
 const WmhSourceReview = dynamic(() => import("../../components/WmhSourceReview"), {ssr:false});
 const VisionFramePlanningPanel = dynamic(() => import("../../components/VisionFramePlanningPanel"), {ssr:false});
+const PlainImageAnalysis = dynamic(() => import("../../components/PlainImageAnalysis"), {ssr:false});
+const RadiographCompare = dynamic(() => import("../../components/RadiographCompare"), {ssr:false});
 const UnifiedDicomStudyAnalysis = dynamic(() => import("../../components/UnifiedDicomStudyAnalysis"), {ssr:false});
 const DirectIchDicomDetector = dynamic(() => import("../../components/DirectIchDicomDetector"), {ssr:false});
 const NativeCtResearchExport = dynamic(() => import("../../components/NativeCtResearchExport"), {ssr:false});
@@ -62,6 +65,7 @@ export default function ViewerPage() {
   const folderPicker = useRef<HTMLInputElement>(null);
   const [sourceMode,setSourceMode] = useState<"dicom"|"nifti"|"nodules"|"colon"|"coverage"|"morphometry">("dicom");
   const [indexed, setIndexed] = useState<Indexed[]>([]);
+  const [photos, setPhotos] = useState<{id:string;file:File;url:string}[]>([]);
   const [currentSeriesKey, setCurrentSeriesKey] = useState("");
   const [wmhSlice,setWmhSlice]=useState<number|undefined>(undefined);
   const [displayWindow,setDisplayWindow]=useState<{width:number;center:number;nonce:number}|null>(null);
@@ -87,6 +91,22 @@ export default function ViewerPage() {
     series.find(item=>item.key===(currentSeriesKey||suggestion.key)) ?? series[0];
   const visionSeries = useMemo(()=>selected?[selected]:[],[selected]);
   const indexedById = useMemo(() => new Map(indexed.map((item) => [item.id, item.file])), [indexed]);
+  const radiographViews = useMemo(() => {
+    const raw = series.flatMap(item => {
+      const modality = item.modality.replace(/\0/g, "").trim();
+      if (modality !== "CR" && modality !== "DX") return [];
+      return item.members.flatMap(member => {
+        const file = indexedById.get(member.id);
+        return file ? [{id: member.id, file, modality: modality as "CR" | "DX", bodyRegion: member.metadata.bodyRegion ?? null, view: member.metadata.viewPosition ?? null}] : [];
+      });
+    }).slice(0, MAX_COMPARED_PROJECTIONS);
+    const titles = distinctProjectionTitles(raw.map(item => item.view));
+    return raw.map((item, index) => ({id: item.id, file: item.file, modality: item.modality, bodyRegion: item.bodyRegion, label: titles[index]}));
+  }, [series, indexedById]);
+  const compareItems = useMemo(() => [
+    ...radiographViews,
+    ...photos.map((photo, index) => ({id: photo.id, label: `Снимок ${index + 1}`, file: photo.file, modality: "IMG" as const, url: photo.url})),
+  ], [radiographViews, photos]);
   const selectedFiles = useMemo(() => selected?.members.map((item) => indexedById.get(item.id)).filter((file): file is File => !!file) ?? [], [selected, indexedById]);
   const mprCheck=useMemo(()=>checkMprEligibility(selected??null,selectedFiles.map(file=>file.size)),[selected,selectedFiles]);
   const mprQuality=useMemo(()=>assessMprQuality(selected??null),[selected]);
@@ -113,7 +133,35 @@ export default function ViewerPage() {
           reasons.set(reason, (reasons.get(reason) ?? 0) + 1);
         }
       }
-      // Replace, rather than merge, series so stale patient data cannot persist.
+      if (parsed.length === 0) {
+        const mostCommon = [...reasons.entries()].sort((a, b) => b[1] - a[1])[0];
+        setMessage(`DICOM не прочитан, открытые проекции сохранены. Пропущено ${rejected}.${mostCommon ? ` ${mostCommon[0]}.` : ""}`);
+        return;
+      }
+      const modalityCode = (value: string) => value.replace(/\0/g, "").trim();
+      const radiograph = (item: Indexed) => {
+        const code = modalityCode(item.header.modality);
+        return code === "CR" || code === "DX";
+      };
+      if (parsed.every(radiograph)) {
+        const existing = indexed.filter(radiograph);
+        const result = appendProjections(
+          existing.map(item => ({item, sopInstanceUid: item.header.sopInstanceUid})),
+          parsed.map(item => ({item, sopInstanceUid: item.header.sopInstanceUid})),
+        );
+        if ("error" in result) { setMessage(result.error); return; }
+        const next = result.items.map(entry => entry.item);
+        setIndexed(next);
+        setPreparedMonaiSource(null);setPreparedMonaiSession(null);setPreparedMonaiResult(null);
+        setWmhSlice(undefined);setViewMode("2d");
+        const added = groupDicomSeries(next.slice(-result.added).map(item => ({id: item.id, name: item.file.name, metadata: item.header})));
+        setCurrentSeriesKey(added[0]?.key ?? "");
+        setVisionOpen(false);setVisionFromPrimary(false);setPrimaryStage(null);setVisionDetectorEvidence(null);setClnVerified(null);
+        setMessage(projectionAddedMessage(next.length + photos.length));
+        return;
+      }
+      // A CT or MR study replaces the previous one so slices from another examination do not stay open.
+      setPhotos(current=>{current.forEach(item=>URL.revokeObjectURL(item.url));return [];});
       setIndexed(parsed);
       setPreparedMonaiSource(null);setPreparedMonaiSession(null);setPreparedMonaiResult(null);
       setWmhSlice(undefined);setViewMode("2d");setCurrentSeriesKey("");
@@ -130,6 +178,41 @@ export default function ViewerPage() {
       const mostCommon = [...reasons.entries()].sort((a, b) => b[1] - a[1])[0];
       setMessage(`Проиндексировано ${parsed.length} DICOM; пропущено ${rejected}.${mostCommon ? ` Основная причина (${mostCommon[1]}): ${mostCommon[0]}.` : ""} Изображения остаются на вашем Mac.`);
     } finally { setReading(false); }
+  }
+
+  function addPictures(files: File[]) {
+    const chosen=files.filter(file=>/^(image\/png|image\/jpeg)$/.test(file.type)||/\.(png|jpe?g)$/i.test(file.name)).slice(0,MAX_COMPARED_PROJECTIONS);
+    if(!chosen.length){setMessage("Нужен файл PNG или JPEG.");return;}
+    const problem=validateViewerFileSelection(chosen);
+    if(problem){setMessage(problem);return;}
+    const code=(value:string)=>value.replace(/\0/g,"").trim();
+    const hasVolume=indexed.some(item=>{const modality=code(item.header.modality);return modality!=="CR"&&modality!=="DX";});
+    const radiographCount=hasVolume?0:indexed.filter(item=>{const modality=code(item.header.modality);return modality==="CR"||modality==="DX";}).length;
+    const result=appendProjections(
+      Array.from({length:radiographCount+photos.length},()=>({sopInstanceUid:null as string|null})),
+      chosen.map(()=>({sopInstanceUid:null as string|null})),
+    );
+    if("error" in result){setMessage(result.error);return;}
+    if(hasVolume){setIndexed([]);setCurrentSeriesKey("");}
+    setPhotos(current=>[...current,...chosen.map(file=>({id:crypto.randomUUID(),file,url:URL.createObjectURL(file)}))]);
+    setVisionOpen(false);setVisionFromPrimary(false);setPrimaryStage(null);setVisionDetectorEvidence(null);setClnVerified(null);
+    setMessage(projectionAddedMessage(radiographCount+photos.length+chosen.length));
+  }
+
+  function onPhotos(event: ChangeEvent<HTMLInputElement>) {
+    const chosen=Array.from(event.target.files??[]);
+    event.target.value="";
+    addPictures(chosen);
+  }
+
+  function onAddOne(event: ChangeEvent<HTMLInputElement>) {
+    const file=event.target.files?.[0];
+    event.target.value="";
+    if(!file)return;
+    if(/^(image\/png|image\/jpeg)$/.test(file.type)||/\.(png|jpe?g)$/i.test(file.name)){addPictures([file]);return;}
+    const list=new DataTransfer();
+    list.items.add(file);
+    void loadFiles(list.files);
   }
 
   function onPick(event: ChangeEvent<HTMLInputElement>) {
@@ -157,7 +240,7 @@ export default function ViewerPage() {
       </div>
       </details>}
       {sourceMode==="nodules" ? <NoduleBoundResearchView initialSource={preparedMonaiSource} initialAutoSession={preparedMonaiSession} initialCompletedReport={preparedMonaiResult}/> : sourceMode==="nifti" ? <NiftiCtResearchView/> : sourceMode==="colon" ? <ColonCancerResearchResults/> : sourceMode==="coverage" ? <PathologyCoverageResearch/> : sourceMode==="morphometry" ? <MorphometryEvidenceReview/> : <>
-      <div className="cs-intro"><div><h1>Исследование КТ / МРТ</h1><p>Загрузите DICOM, просмотрите изображения или нажмите «Анализировать исследование».</p></div></div>
+      <div className="cs-intro"><div><h1>Исследование</h1><p>Загрузите КТ, МРТ, рентгенограмму DICOM или снимок PNG/JPEG и нажмите анализ.</p></div></div>
       {visionFromPrimary&&<p role="status" className="cs-message">
         {primaryStage?.stage==="running"?"Идёт анализ исследования…":
           primaryStage?.stage==="cancelled"?"Анализ остановлен.":
@@ -166,14 +249,20 @@ export default function ViewerPage() {
       <div className="cs-layout">
         <aside className="cs-sidebar">
           <h2>Загрузить DICOM</h2>
-          <p>Учебные или разрешённые обезличенные снимки.</p>
+          <p>Рентгенограмму можно открывать по одной: следующая проекция добавится к сравнению.</p>
+          <div className="cs-load-actions">
           <label className="cs-picker">Выбрать DICOM-файлы <input type="file" multiple accept=".dcm,.dicom,application/dicom" onChange={onPick} disabled={reading||!clientReady}/></label>
+          <label className="cs-picker">PNG или JPEG <input type="file" multiple accept="image/png,image/jpeg,.png,.jpg,.jpeg" onChange={onPhotos} disabled={reading||!clientReady}/></label>
           <button type="button" className="cs-outline" disabled={reading||!clientReady} onClick={() => {
             if (folderPicker.current) {
               (folderPicker.current as HTMLInputElement & { webkitdirectory: boolean }).webkitdirectory = true;
               folderPicker.current.click();
             }
           }}>Выбрать папку DICOM</button>
+          <label className="cs-outline cs-add-projection">Добавить одну проекцию
+            <input type="file" accept=".dcm,.dicom,application/dicom,image/png,image/jpeg,.png,.jpg,.jpeg" onChange={onAddOne} disabled={reading||!clientReady}/>
+          </label>
+          </div>
           <input ref={folderPicker} type="file" className="cs-hidden" multiple onChange={onPick} disabled={reading||!clientReady}/>
           <div className="cs-message" role="status">{reading ? "Идёт индексация…" : message}</div>
           {series.length > 0 && <>
@@ -218,26 +307,31 @@ export default function ViewerPage() {
           {selected && <NativeCtResearchExport key={"native-export-"+selected.key} series={selected} files={selectedFiles} onPreparedSource={(file,session)=>{setPreparedMonaiSession(session??null);setPreparedMonaiSource(file);setPreparedMonaiResult(null);setSourceMode("nodules");}}/> }
           </>}
           </details>}
-          <button type="button" className="cs-clear" disabled={reading || indexed.length === 0} onClick={() => { setIndexed([]); setPreparedMonaiSource(null);setPreparedMonaiSession(null);setPreparedMonaiResult(null); setCurrentSeriesKey(""); setVisionOpen(false); setVisionFromPrimary(false); setPrimaryStage(null); setVisionDetectorEvidence(null);setClnVerified(null); setMessage("Список очищен, файлы на диске не изменены."); }}>Очистить загруженное</button>
+          <button type="button" className="cs-clear" disabled={reading || (indexed.length === 0 && photos.length===0)} onClick={() => { setIndexed([]); setPhotos(current=>{current.forEach(item=>URL.revokeObjectURL(item.url));return [];}); setPreparedMonaiSource(null);setPreparedMonaiSession(null);setPreparedMonaiResult(null); setCurrentSeriesKey(""); setVisionOpen(false); setVisionFromPrimary(false); setPrimaryStage(null); setVisionDetectorEvidence(null);setClnVerified(null); setMessage("Список очищен, файлы на диске не изменены."); }}>Очистить загруженное</button>
         </aside>
         <div className="cs-stage">
-          {selectedFiles.length>0&&<div className="cs-view-modes" role="group" aria-label="Просмотр изображений">
+          {compareItems.length>1&&<RadiographCompare items={compareItems}/>}
+          {photos.length===1&&radiographViews.length===0&&<section aria-label="Открытые снимки PNG или JPEG">
+            <img src={photos[0].url} alt="Снимок" style={{maxWidth:"100%",height:"auto"}}/>
+            <PlainImageAnalysis photos={photos}/>
+          </section>}
+          {selectedFiles.length>0&&photos.length===0&&<div className="cs-view-modes" role="group" aria-label="Просмотр изображений">
             <button type="button" aria-pressed={viewMode==="2d"} onClick={()=>setViewMode("2d")}>Срезы · 2D</button>
             <button type="button" aria-pressed={viewMode==="mpr"} disabled={!mprCheck.eligible}
               title={mprCheck.eligible?undefined:mprCheck.reason} onClick={()=>setViewMode("mpr")}>Три плоскости</button>
             <button type="button" aria-pressed={viewMode==="3d"} disabled={!mprCheck.eligible}
               title={mprCheck.eligible?undefined:mprCheck.reason} onClick={()=>setViewMode("3d")}>3D · вращение</button>
           </div>}
-          {selectedFiles.length>0&&!mprCheck.eligible&&<p role="status">Три плоскости и 3D недоступны: {mprCheck.reason} Это ограничение объёмного просмотра; последовательный анализ выбранных 2D-срезов доступен отдельно.</p>}
-          {selectedFiles.length>0&&selected&&viewMode!=="2d"&&mprCheck.eligible?
+          {photos.length===0&&selectedFiles.length>0&&!mprCheck.eligible&&<p role="status">Три плоскости и 3D недоступны: {mprCheck.reason} Это ограничение объёмного просмотра; последовательный анализ выбранных 2D-срезов доступен отдельно.</p>}
+          {photos.length===0&&(selectedFiles.length>0&&selected&&viewMode!=="2d"&&mprCheck.eligible?
             <CornerstoneMPR key={"mpr-"+selected.key} files={selectedFiles} sourceSeries={selected}
               quality={mprQuality} show3D={viewMode==="3d"}
               onShow3DChange={enabled=>setViewMode(enabled?"3d":"mpr")}/>:
             selectedFiles.length?
              <CornerstoneStack key={selected?.key} files={selectedFiles} modality={selected?.modality}
                selectedIndex={wmhSlice} onSliceChange={setWmhSlice} displayWindow={displayWindow}/>:
-             <div className="cs-placeholder"><span>✚</span><strong>Область DICOM-изображений</strong><p>Выберите файлы или папку DICOM.</p></div>}
-          {selected && (selected.modality==="CT"||selected.modality==="MR") && <section className="cs-geometry" aria-label="Подготовка Gemini и Opus по открытому DICOM">
+             <div className="cs-placeholder"><span>✚</span><strong>Область изображений</strong><p>Выберите DICOM, рентгенограмму, PNG или JPEG.</p></div>)}
+          {photos.length===0&&selected && ["CT","MR","CR","DX"].includes(selected.modality) && <section className="cs-geometry" aria-label="Подготовка Gemini и Opus по открытому DICOM">
             {visionFromPrimary&&<h3>Описание и заключение</h3>}
             {researchMode&&!visionFromPrimary&&<button type="button" disabled={reading} onClick={()=>setVisionOpen(v=>!v)}>
               {visionOpen?"Закрыть дополнительные инструменты":"Анализировать отдельные срезы"}

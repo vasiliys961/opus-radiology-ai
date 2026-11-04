@@ -11,7 +11,11 @@
 .cs-layout{display:grid;grid-template-columns:315px minmax(0,1fr);gap:20px}
 .cs-sidebar{background:white;border:1px solid #dfe8ed;border-radius:13px;padding:20px;align-self:start}
 .cs-sidebar h2{font-size:17px;margin:0 0 5px}.cs-sidebar h3{font-size:12px;margin:20px 0 9px}.cs-sidebar>p{font-size:11px;color:#8296a4;margin:0 0 22px}
-.cs-picker{display:block;background:#109d8b;color:white;text-align:center;font-size:12px;font-weight:700;padding:12px;border-radius:7px;cursor:pointer}.cs-picker input{display:none}
+.cs-load-actions{display:grid;gap:9px}
+.cs-picker{display:block;position:static;background:#109d8b;color:white;text-align:center;font-size:12px;font-weight:700;padding:12px;border-radius:7px;cursor:pointer}.cs-picker input{display:none}
+.cs-load-actions .cs-outline{margin-top:0}
+.cs-add-projection input{display:none}
+.cs-add-projection:has(input:disabled){opacity:.5;cursor:not-allowed}
 .cs-outline,.cs-clear{display:block;width:100%;background:white;border:1px solid #bcd7d4;color:#087d72;text-align:center;padding:11px;margin-top:9px;border-radius:7px;font-size:12px;cursor:pointer}
 .cs-clear{color:#7f909d;border-color:#e0e8eb;margin-top:20px}
 .cs-hidden{display:none}.cs-page button:disabled{opacity:.5;cursor:not-allowed}
@@ -256,6 +260,18 @@
 .cs-page .cs-sidebar section[aria-label="Единый анализ DICOM"]>h2{font-size:17px;margin:0 0 5px}
 .cs-page .cs-sidebar section[aria-label="Единый анализ DICOM"]>p{font-size:12px;line-height:1.45;color:#617783}
 .cs-page .cs-sidebar section[aria-label="Единый анализ DICOM"]>button:not(:disabled){background:#0c9183;color:#fff;border:1px solid #0c9183;border-radius:8px;font-weight:700;padding:13px 16px;width:100%;cursor:pointer}
+.cs-page .cs-sidebar section[aria-label="Единый анализ DICOM"]>button+button{margin-top:8px;background:#fff;color:#087d72;border-color:#bcd7d4}
+.cs-compare{display:grid;gap:12px;margin-bottom:14px}
+.cs-compare h3{margin:0;font-size:16px}
+.cs-compare-controls{display:flex;flex-wrap:wrap;gap:10px}
+.cs-compare-controls label{display:grid;gap:4px;font-size:12px;color:#34584d;min-width:min(100%,220px)}
+.cs-compare-controls select{padding:8px;border-radius:7px;border:1px solid #bcd7d4;background:#fff;color:#234452}
+.cs-compare-pair{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.cs-compare-pair figure{margin:0;background:#132633;border-radius:12px;overflow:hidden;border:1px solid #304656}
+.cs-compare-pair img{width:100%;height:min(70vh,720px);object-fit:contain;display:block;background:#070f17}
+.cs-compare-pair figcaption,.cs-compare-pair p{color:#d5e5eb;font-size:12px;padding:8px 12px;margin:0}
+.cs-analyze{display:block;margin-top:12px;background:#0c9183;color:#fff;border:1px solid #0c9183;border-radius:8px;font-weight:700;padding:12px 16px;cursor:pointer}
+@media(max-width:800px){.cs-compare-pair{grid-template-columns:1fr}}
 .cs-page .cs-clinician-consent{display:flex;gap:9px;align-items:flex-start;font-size:12px;line-height:1.45;color:#354c58;margin:12px 0}
 .cs-page .cs-clinician-consent input{flex:0 0 auto;margin-top:3px}
 .cs-page .cs-intro{margin-bottom:17px}

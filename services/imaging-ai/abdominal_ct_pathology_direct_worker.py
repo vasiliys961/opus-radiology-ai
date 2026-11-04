@@ -14,6 +14,7 @@ import importlib.metadata
 import json
 import os
 import platform
+import re
 import secrets
 import signal
 import sys
@@ -309,10 +310,14 @@ def main():
         specs["liver_lesions"]=(a.liver_checkpoint,a.liver_sha)
     if a.pancreas_checkpoint and a.pancreas_sha:
         specs[PANCREAS_TASK]=(a.pancreas_checkpoint,a.pancreas_sha)
-    token=secrets.token_urlsafe(36).replace("-","_")
+    supplied=os.environ.get("OPUS_ABDOMEN_WORKER_TOKEN","")
+    if re.fullmatch(r"[A-Za-z0-9_-]{32,128}", supplied):
+        token=supplied
+    else:
+        token=secrets.token_urlsafe(36).replace("-","_")
+        print("Abdominal original research worker token: "+token,flush=True)
     calculus=(a.renal_calculus_public_license,a.renal_calculus_public_url) if (a.renal_calculus_public_license and a.renal_calculus_public_url) else None
     app=create_app(token=token,origin=a.origin,checkpoints=specs,port=a.port,calculus_source=calculus)
-    print("Abdominal original research worker token: "+token,flush=True)
     import uvicorn
     uvicorn.run(app,host="127.0.0.1",port=a.port,access_log=False)
 

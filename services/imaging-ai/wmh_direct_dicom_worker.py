@@ -6,7 +6,7 @@ DICOM, decodes native MR signal, runs the installed pinned original model and
 returns a source-bound report. No mock/LLM inference or patient-cloud upload.
 """
 from __future__ import annotations
-import argparse,asyncio,hashlib,json,os,secrets,shutil,sys,tempfile
+import argparse,asyncio,hashlib,json,os,re,secrets,shutil,sys,tempfile
 from pathlib import Path
 from types import SimpleNamespace
 import importlib.util
@@ -106,10 +106,14 @@ def main():
     p.add_argument("--origin",default="http://127.0.0.1:3000")
     p.add_argument("--port",type=int,default=8772)
     a=p.parse_args()
-    token=secrets.token_urlsafe(36).replace("-","_")
+    supplied=os.environ.get("OPUS_WMH_WORKER_TOKEN","")
+    if re.fullmatch(r"[A-Za-z0-9_-]{32,128}", supplied):
+        token=supplied
+    else:
+        token=secrets.token_urlsafe(36).replace("-","_")
+        print("WMH research worker session token: "+token,flush=True)
     app=create_app(token=token,origin=a.origin,model_dir=a.model_dir,
       checkpoint_sha256=a.checkpoint_sha256,port=a.port)
-    print("WMH research worker session token: "+token,flush=True)
     import uvicorn
     uvicorn.run(app,host="127.0.0.1",port=a.port,access_log=False)
 if __name__=="__main__":main()

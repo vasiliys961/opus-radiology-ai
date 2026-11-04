@@ -266,7 +266,7 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,resear
    plan.route==="ianpan-ich"?autoIchChecking:
    plan.route==="wmh-flair"?(brainTask==="wmh"?autoWmhChecking:autoBrainChecking):false;
  const ready=(!!plan.route||visionOnlyAvailable)&&authorized&&!busy&&!readinessChecksPending&&
-   ((visionOnlyAvailable||brainVisionOnly)?true:xrvPlan?(researchMode&&xrvStatus==="ready"&&xrvChestConfirmed&&sourceUrl.startsWith("https://")):plan.route==="totalseg-abdomen"?true:chestPlan?true:
+   ((visionOnlyAvailable||brainVisionOnly)?true:xrvPlan?(!researchMode||(xrvStatus==="ready"&&xrvChestConfirmed&&sourceUrl.startsWith("https://"))):plan.route==="totalseg-abdomen"?true:chestPlan?true:
      (plan.route==="ianpan-ich"?true:
       plan.route==="wmh-flair"?true:
       (!!token&&!!endpoint.trim())))&&
@@ -278,6 +278,14 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,resear
 
  async function launch(){
    if(!ready||(!plan.route&&!visionOnlyAvailable))return;
+   if(xrvPlan&&!researchMode){
+     onDetectorEvidence?.(series.key,null);
+     onAnalysisStage?.(series.key,"vision-only");
+     setError("");
+     setStatus("Рентгенограмма открыта. Gemini и Opus разбирают снимок; шесть признаков добавляются, если служба рентгена отвечает.");
+     onReadyForVision?.(series.key);
+     return;
+   }
    if(!plan.route){
      // No original detector is available for this anatomy. Open the same
      // source-bound Vision/OCR/privacy workflow from the primary action.
@@ -286,7 +294,9 @@ export default function UnifiedDicomStudyAnalysis({series,allSeries,files,resear
      onDetectorEvidence?.(series.key,null);
      onAnalysisStage?.(series.key,"vision-only");
      setError("");
-     setStatus("Для этой КТ/МРТ оригинальный патологический детектор не назначен. Локальная подготовка кадров Gemini + Opus открыта; передача в облако требует отдельного разрешения.");
+     setStatus(series.modality==="CR"||series.modality==="DX"?
+       "Рентгенограмма открыта. Gemini и Opus разбирают снимок.":
+       "Для этой КТ/МРТ оригинальный патологический детектор не назначен. Открыта подготовка кадров Gemini и Opus.");
      onReadyForVision?.(series.key);
      return;
    }

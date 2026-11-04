@@ -14,7 +14,12 @@ type DeployState={
 const SERVICE_NAME:Record<string,string>={
   chest_xray_six:"Рентген грудной клетки",
   chest_nodes:"Узлы средостения",
+  lung_nodules:"Узлы лёгких",
   brain_hemorrhage:"Кровоизлияние",
+  chest_effusion:"Выпот",
+  abdomen_ct:"Живот",
+  brain_wmh:"Белое вещество",
+  chest_pe:"ТЭЛА",
   lung_tumor_cln:"Опухоль лёгкого",
 };
 export default function DetectorDeployButton(){

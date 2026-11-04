@@ -40,6 +40,8 @@ export type TechnicalDicomMetadata = {
   burnedInAnnotation?: "YES" | "NO" | "UNKNOWN";
   recognizableVisualFeatures?: "YES" | "NO" | "UNKNOWN";
   patientIdentityRemoved?: "YES" | "NO" | "UNKNOWN";
+  /** Coded View Position only. Free text is never kept. */
+  viewPosition?: ViewPosition | null;
 };
 
 export type SeriesMember = {
@@ -67,6 +69,36 @@ const EXPLICIT_LE = '1.2.840.10008.1.2.1';
 const BIG_ENDIAN = '1.2.840.10008.1.2.2';
 const HEADER_BYTES = 512 * 1024;
 type Region = NonNullable<TechnicalDicomMetadata["bodyRegion"]>;
+const VIEW_CODES = ["PA", "AP", "LATERAL", "LL", "RL", "RPO", "LPO", "RAO", "LAO"] as const;
+export type ViewPosition = (typeof VIEW_CODES)[number];
+const VIEW_NAMES: Record<ViewPosition, string> = {
+  PA: "Прямая PA", AP: "Прямая AP", LATERAL: "Боковая",
+  LL: "Левая боковая", RL: "Правая боковая",
+  RPO: "Правая задняя косая", LPO: "Левая задняя косая",
+  RAO: "Правая передняя косая", LAO: "Левая передняя косая",
+};
+
+export function knownView(value: string): ViewPosition | null {
+  const code = value.replace(/\0/g, "").trim().toUpperCase();
+  return (VIEW_CODES as readonly string[]).includes(code) ? code as ViewPosition : null;
+}
+
+export function projectionTitle(position: ViewPosition | null | undefined, index: number): string {
+  return position ? VIEW_NAMES[position] : `Проекция ${index + 1}`;
+}
+
+export function distinctProjectionTitles(positions: readonly (ViewPosition | null | undefined)[]): string[] {
+  const titles = positions.map((position, index) => projectionTitle(position, index));
+  const counts = new Map<string, number>();
+  for (const title of titles) counts.set(title, (counts.get(title) ?? 0) + 1);
+  const seen = new Map<string, number>();
+  return titles.map(title => {
+    if ((counts.get(title) ?? 0) < 2) return title;
+    const next = (seen.get(title) ?? 0) + 1;
+    seen.set(title, next);
+    return `${title} · ${next}`;
+  });
+}
 const ALLOWED_REGIONS: Readonly<Record<string, Region>> = {
   HEAD:"HEAD", BRAIN:"HEAD", NECK:"NECK",
   CHEST:"CHEST", THORAX:"CHEST", LUNG:"CHEST",
@@ -203,6 +235,7 @@ export function parseDicomSeriesHeader(buffer: ArrayBuffer): TechnicalDicomMetad
       case 0x00189361: ctMultiEnergy=getText(); break;
       case 0x00080008: ctImageType=getText();result.imageRole = imageRole(ctImageType); break;
       case 0x00180015: result.bodyRegion = allowedRegion(getText()); break;
+      case 0x00185101: result.viewPosition = knownView(getText()); break;
       case 0x00180020: result.mrSequenceCodes = scanCodes(getText()); break;
       case 0x00180080: result.repetitionTimeMs = boundedDs(getText()); break;
       case 0x00180081: result.echoTimeMs = boundedDs(getText()); break;
@@ -504,9 +537,11 @@ export function groupDicomSeries(members: SeriesMember[]): DicomSeries[] {
   }
   return Array.from(groups.entries()).map(([key, data], i) => {
     const sorted = sortMembers(data);
+    const named = [...new Set(data.map(member => member.metadata.viewPosition).filter((value): value is ViewPosition => !!value))];
+    const viewPart = named.length === 1 ? ` · ${VIEW_NAMES[named[0]]}` : "";
     return {
       key,
-      label: `Серия ${i + 1} · ${data[0].metadata.modality || 'DICOM'} · ${data.length} срез(ов)`,
+      label: `Серия ${i + 1} · ${data[0].metadata.modality || 'DICOM'}${viewPart} · ${data.length} срез(ов)`,
       modality: data[0].metadata.modality,
       ...sorted,
     };

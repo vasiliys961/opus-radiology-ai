@@ -64,10 +64,12 @@ export async function POST(req:NextRequest){
   return error(404,"Private local research only");
  if(req.headers.get("content-type")!=="image/png")
   return error(415,"PNG raster only");
- if(req.headers.get("x-opus-public-research-authorized")!=="yes")
+ const opened=req.headers.get("x-opus-opened-radiograph")==="yes";
+ if(!opened&&req.headers.get("x-opus-public-research-authorized")!=="yes")
   return error(403,"Research and original public image rights not confirmed");
  const sourceUrl=req.headers.get("x-opus-public-source-url")??"";
- if(!/^https:\/\/[^@?#\s]{4,1024}$/.test(sourceUrl))
+ if(opened&&sourceUrl)return error(422,"Opened radiograph does not take a public URL");
+ if(!opened&&!/^https:\/\/[^@?#\s]{4,1024}$/.test(sourceUrl))
   return error(422,"Public nonpatient CXR source URL required");
  const token=backend();
  if(!token)return error(503,"Research worker is not configured");
@@ -100,7 +102,8 @@ export async function POST(req:NextRequest){
   const result=await workerRequest("/v1/cxr/analyze",{
    method:"POST",signal:AbortSignal.any([req.signal,AbortSignal.timeout(275000)]),
    headers:{"Content-Type":"image/png","X-Opus-PNG-SHA256":digest,
-    "X-Opus-Public-Source-URL":sourceUrl},body:Buffer.from(bytes)},token);
+    ...(opened?{"X-Opus-Opened-Radiograph":"yes"}:{"X-Opus-Public-Source-URL":sourceUrl})},
+   body:Buffer.from(bytes)},token);
   if(!result.ok)return error(422,"Original model unable to assess this image");
   const text=await result.text();
   if(text.length>16384)return error(422,"Unexpected original research report size");
